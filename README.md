@@ -20,8 +20,18 @@ A multi-tenant, modular business management platform. See [CLAUDE.md](CLAUDE.md)
 cp .env.example .env        # then change POSTGRES_PASSWORD and DATABASE_URL to match
 docker compose up -d        # start PostgreSQL
 cd backend && uv sync       # install backend dependencies
+uv run alembic upgrade head # create the database tables
+uv run python -m app.scripts.seed_dev   # development organizations and users
 cd ../frontend && npm install
 ```
+
+## Development identity
+
+There is no login yet. With `APP_ENV=development` and `AUTH_MODE=dev` (set in `.env.example`) the backend identifies the caller from the `X-Dev-User-Email` header, falling back to `DEV_USER_EMAIL`. If `AUTH_MODE=dev` is set in any other `APP_ENV`, the backend refuses to start. Without those settings there is no identity at all.
+
+A user in several organizations picks one with `X-Organization-Id`. This only *selects* among the user's own memberships; the backend verifies the membership, and an organization the user does not belong to returns 404.
+
+Seeded users (see `backend/app/scripts/seed_dev.py`): `fredrik@dev.test` (owner of Fredrik Horse Therapy, admin of Umeå Stable Services) and `maria@dev.test` (employee of Umeå Stable Services only). Try `GET /api/me`.
 
 ## Run
 

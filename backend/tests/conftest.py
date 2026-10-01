@@ -1,9 +1,12 @@
 from collections.abc import Iterator
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.core.db import engine
+from app.core.config import settings
+from app.core.db import engine, get_db
+from app.main import app
 
 
 @pytest.fixture
@@ -21,3 +24,21 @@ def db_session() -> Iterator[Session]:
         session.close()
         transaction.rollback()
         connection.close()
+
+
+@pytest.fixture
+def dev_auth(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Force dev identity on, regardless of the developer's .env."""
+    monkeypatch.setattr(settings, "app_env", "development")
+    monkeypatch.setattr(settings, "auth_mode", "dev")
+    monkeypatch.setattr(settings, "dev_user_email", None)
+
+
+@pytest.fixture
+def client(db_session: Session, dev_auth: None) -> Iterator[TestClient]:
+    """API client whose requests share the rollback-only test session."""
+    app.dependency_overrides[get_db] = lambda: db_session
+    try:
+        yield TestClient(app)
+    finally:
+        app.dependency_overrides.clear()

@@ -6,10 +6,10 @@
 - [x] Set Git `user.name` / `user.email` and make the first commit
 - [x] Verify frontend runs (`npm run dev`) and reaches the backend
 - [x] Create Organization model and migration (start of Phase 1)
+- [x] Users, organization memberships and development identity (`/api/me`, tenant context)
 
 ## Next
-- [ ] Users / memberships, or a temporary development identity strategy
-- [ ] Add tenant context and tenant-scoped queries
+- [ ] Add tenant-scoped query helpers for tenant-owned tables (first user: Customer)
 - [ ] Tenant isolation tests
 - [ ] Create Customer model and migration
 
@@ -21,4 +21,6 @@
 - [ ] Invoicing
 
 ## Bugs / technical debt
-- None yet
+- Tests run against the dev database (rollback-only); consider a dedicated test database.
+- Roles are stored on memberships but not enforced anywhere yet.
+- Production authentication must replace the `AUTH_MODE=dev` branch in `app/core/auth.py`.
