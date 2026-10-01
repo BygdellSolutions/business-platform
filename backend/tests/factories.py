@@ -13,6 +13,7 @@ from app.models import (
     Role,
     User,
 )
+from app.modules.equine.models import Horse
 
 
 def make_org(db: Session, name: str = "Test Org") -> Organization:
@@ -84,3 +85,28 @@ def make_item(
     db.add(item)
     db.flush()
     return item
+
+
+def make_horse(
+    db: Session,
+    org: Organization,
+    name: str = "Kalle",
+    owner: Customer | None = None,
+    stable: Customer | None = None,
+    **fields,
+) -> Horse:
+    """A horse whose defaults look identical in every organization (including its owner)."""
+    owner = owner or make_customer(db, org)  # "Anna Andersson", like the seed
+    fields.setdefault("birth_year", 2015)
+    fields.setdefault("sex", "gelding")
+    fields.setdefault("breed", "Swedish Warmblood")
+    horse = Horse(
+        organization_id=org.id,
+        name=name,
+        owner_customer_id=owner.id,
+        stable_customer_id=stable.id if stable is not None else None,
+        **fields,
+    )
+    db.add(horse)
+    db.flush()
+    return horse

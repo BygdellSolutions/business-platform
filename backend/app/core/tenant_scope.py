@@ -7,6 +7,10 @@ the validated TenantContext, never from request input.
 A record that belongs to another organization is indistinguishable from one
 that does not exist: `get_scoped` returns None and `get_scoped_or_404` raises
 the same 404 as for a random UUID.
+
+References between records (a transaction's billing customer, an item on a sale line)
+are validated with `resolve_reference`, which applies the same rule to ids that
+arrive in a request body.
 """
 
 import uuid
@@ -36,6 +40,41 @@ def get_scoped_or_404(db: Session, ctx: TenantContext, model: type[T], record_id
     if record is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Not found")
     return record
+
+
+def resolve_reference(
+    db: Session,
+    ctx: TenantContext,
+    model: type[T],
+    record_id: uuid.UUID,
+    field: str,
+    *,
+    label: str | None = None,
+    require_active: bool = True,
+) -> T:
+    """Validate that a referenced record exists in the ACTIVE organization.
+
+    Raises a 422 on `field`. A record in another organization and a nonexistent id
+    produce exactly the same error, so a reference cannot be used to probe other
+    tenants. Use it whenever a request body contains the id of another tenant-owned
+    record. `require_active` rejects records that have been deactivated; callers
+    skip the check for references that did not change (existing links stay valid).
+    """
+    label = label or model.__name__
+    record = get_scoped(db, ctx, model, record_id)
+    if record is None:
+        _reference_error(field, f"{label} not found", "reference.not_found")
+    if require_active and not getattr(record, "active", True):
+        _reference_error(field, f"{label} is inactive", "reference.inactive")
+    return record
+
+
+def _reference_error(field: str, message: str, error_type: str):
+    # Same shape as FastAPI's own validation errors, so clients handle both alike.
+    raise HTTPException(
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail=[{"loc": ["body", field], "msg": message, "type": error_type}],
+    )
 
 
 def create_scoped(db: Session, ctx: TenantContext, model: type[T], **fields) -> T:

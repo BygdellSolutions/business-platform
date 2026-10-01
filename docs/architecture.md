@@ -77,15 +77,17 @@ horses
 - id
 - organization_id
 - name
-- owner_customer_id
-- stable_customer_id (optional)
-- birth_year (optional)
-- sex (optional)
-- breed (optional)
-- notes (optional)
+- owner_customer_id        # required, Customer of the SAME organization
+- stable_customer_id       # optional, Customer of the SAME organization
+- birth_year (optional)    # integer 1900..current year; no age calculation
+- sex (optional)           # mare | stallion | gelding (CHECK constraint, no lookup table)
+- breed (optional)         # free text
+- active
 - created_at
 - updated_at
 ```
+
+Implemented in `app/modules/equine/`. `notes` is deferred.
 
 `owner_customer_id` references a Customer record belonging to the SAME organization.
 
@@ -469,3 +471,22 @@ How tenant isolation (CLAUDE.md section 6) is enforced in code. Follow this for 
 - **Currency** is not on Item. It will be an Organization financial setting.
 - **API input.** Money/percent values are sent as a decimal string (`"19.99"`) or an integer. JSON numbers with decimals are rejected because the client's number has already been parsed into a binary float. The pattern also rejects exponents, signs, spaces, `NaN`/`Infinity`, and more than 2 decimals (never silently rounded). Shared types: `app/schemas/money.py`.
 - **API output.** Always a string with two decimals (`"850.00"`, `"25.00"`).
+
+---
+
+## Implementation notes: domain modules and references
+
+**Module-defined fields vs UDFs (architectural rule).** Fields a domain module defines are the normal, stable attributes of that domain entity (a horse's birth year, sex and breed). They are real columns with validation and do not require UDF configuration. UDFs extend an entity with organization-specific fields; they never replace normal domain modeling.
+
+**Boundary.** A domain module (`app/modules/<name>/`) may import core and the generic modules (customers, catalog). Nothing else may import it or mention its concepts. Only `app/main.py` (mounts the router), `alembic/env.py` (imports the models) and the dev seed know a module exists. `tests/test_module_boundaries.py` fails if core, Customers or Catalog mention horses. There is no `customer.horses`; use `GET /api/horses?owner_customer_id=...`. Per-organization enabling of modules is not built yet.
+
+**Tenant-safe references (three layers).**
+1. API: `resolve_reference(db, ctx, Model, id, field)` (`app/core/tenant_scope.py`) checks the id exists in the active organization. A foreign id and a nonexistent id give the same 422 on the field (`reference.not_found`), so references cannot probe other tenants. Inactive records are refused for new assignments (`reference.inactive`); an unchanged existing reference stays valid after the target is deactivated.
+2. Database: composite foreign keys `(organization_id, <ref>_id) -> target(organization_id, id)`, which need `UNIQUE (organization_id, id)` on the target table (added to `customers`; add it to any table that other tables will reference). The database itself refuses a cross-tenant link.
+3. Tests: the shared tenant contract plus module-specific reference tests, including direct SQL that bypasses the API.
+
+**Deleting referenced records.** References use `ON DELETE RESTRICT`. `delete_or_409` (`app/core/query.py`) turns the foreign-key violation into `409` with a generic message that does not name the referencing module. Deactivate (`active=false`) instead.
+
+**Owner, stable and billing are separate.** `Horse.owner_customer_id` and `Horse.stable_customer_id` are independent Customer references; neither implies the other. The billing customer belongs to the future transaction, never to the horse.
+
+**Owner -> Horse filtering later (section 12).** The horse list already filters by `owner_customer_id` and `stable_customer_id`. A future UDF reference field is configuration data (source `horses`, `depends_on` owner, filter parameter `owner_customer_id`); Sales and the UDF engine need no horse-specific code. When UDFs arrive, modules register their reference sources in a small registry. Polymorphic references cannot use composite foreign keys, so they are validated with `resolve_reference` instead.

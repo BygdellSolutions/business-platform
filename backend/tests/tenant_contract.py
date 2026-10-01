@@ -8,14 +8,19 @@ Contract requirements for a resource:
 - `make(db, org, **overrides)` creates a record whose defaults look IDENTICAL in every
   organization (same names, same values) so a missing organization filter is visible.
 - the API lives at `path` with POST / GET list+search (`?q=`) / GET, PATCH, DELETE `/{id}`.
+- `create_body` is a dict, or a function `(db, org) -> dict` for resources whose valid body
+  contains references (ids) that must belong to the acting organization.
 """
 
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from app.models import Customer, Item
-from tests.factories import make_customer, make_item
+from sqlalchemy.orm import Session
+
+from app.models import Customer, Item, Organization
+from app.modules.equine.models import Horse
+from tests.factories import make_customer, make_horse, make_item
 
 
 @dataclass(frozen=True)
@@ -24,13 +29,21 @@ class Resource:
     path: str
     model: type
     make: Callable[..., Any]
-    create_body: dict[str, Any]  # a valid POST body (must not contain organization_id)
+    create_body: dict[str, Any] | Callable[[Session, Organization], dict[str, Any]]
+    # ^ a valid POST body for the acting organization (must not contain organization_id)
     patch_body: dict[str, Any]  # a valid PATCH body changing exactly one field
     patch_field: str  # the model attribute that patch_body changes
     patch_value: Any  # its value after the patch
     twin_search: str  # `?q=` text matching the identical-looking record in both orgs
     unique_overrides: dict[str, Any]  # make() overrides giving a record only `unique_search` finds
     unique_search: str
+
+
+def body_for(resource: Resource, db: Session, org: Organization) -> dict[str, Any]:
+    """A valid create body for `resource`, built for the acting organization."""
+    if callable(resource.create_body):
+        return resource.create_body(db, org)
+    return dict(resource.create_body)
 
 
 CUSTOMERS = Resource(
@@ -67,4 +80,24 @@ ITEMS = Resource(
     unique_search="zelda",
 )
 
-RESOURCES = [CUSTOMERS, ITEMS]
+
+def _horse_create_body(db: Session, org: Organization) -> dict[str, Any]:
+    owner = make_customer(db, org, "Contract Owner")
+    return {"name": "Contract Created", "owner_customer_id": str(owner.id)}
+
+
+HORSES = Resource(
+    name="horses",
+    path="/api/horses",
+    model=Horse,
+    make=make_horse,
+    create_body=_horse_create_body,
+    patch_body={"name": "Renamed"},
+    patch_field="name",
+    patch_value="Renamed",
+    twin_search="kalle",
+    unique_overrides={"name": "Zelda"},
+    unique_search="zelda",
+)
+
+RESOURCES = [CUSTOMERS, ITEMS, HORSES]

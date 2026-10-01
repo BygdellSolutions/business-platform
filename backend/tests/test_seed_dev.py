@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models import Customer, Item, OrganizationUser, Role, User
+from app.modules.equine.models import Horse
 from app.scripts import seed_dev
 
 
@@ -56,6 +57,24 @@ def test_seed_creates_expected_layout_and_is_idempotent(db_session: Session):
     assert {(i.name, i.type, i.unit, i.price_ex_vat, i.vat_rate) for i in items} == {
         ("Horse massage", "service", "session", Decimal("850.00"), Decimal("25.00"))
     }
+
+    horses = {
+        h.organization_id: h
+        for h in db_session.scalars(
+            select(Horse).where(
+                Horse.organization_id.in_(
+                    [seed_dev.ORG_HORSE_THERAPY_ID, seed_dev.ORG_STABLE_SERVICES_ID]
+                )
+            )
+        )
+    }
+    assert {h.name for h in horses.values()} == {"Kalle"}
+    names = {c.id: c.name for c in db_session.scalars(select(Customer))}
+    therapy = horses[seed_dev.ORG_HORSE_THERAPY_ID]
+    assert names[therapy.owner_customer_id] == "Anna Andersson"
+    assert names[therapy.stable_customer_id] == "Umeå HK"
+    assert (therapy.birth_year, therapy.sex, therapy.breed) == (2015, "gelding", "Swedish Warmblood")
+    assert horses[seed_dev.ORG_STABLE_SERVICES_ID].stable_customer_id is None
 
 
 def test_seed_refuses_outside_development(monkeypatch: pytest.MonkeyPatch):

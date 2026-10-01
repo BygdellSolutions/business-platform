@@ -1,6 +1,6 @@
 from enum import StrEnum
 
-from sqlalchemy import Boolean, CheckConstraint, String, text
+from sqlalchemy import Boolean, CheckConstraint, String, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -17,6 +17,9 @@ class Customer(TenantOwned, Base):
 
     __tablename__ = "customers"
     __table_args__ = (
+        # Target for tenant-safe composite foreign keys: other tables reference
+        # (organization_id, id), so the database itself refuses cross-tenant links.
+        UniqueConstraint("organization_id", "id", name="uq_customers_organization_id_id"),
         CheckConstraint(
             "customer_type IN ('" + "', '".join(CustomerType) + "')",
             name="ck_customers_customer_type",

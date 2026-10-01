@@ -9,10 +9,11 @@
 - [x] Users, organization memberships and development identity (`/api/me`, tenant context)
 - [x] Tenant-scoped query helpers, Customer model/migration, minimal tenant-safe Customer API, cross-tenant tests
 - [x] Catalog: Item model/migration, tenant-safe Items API, exact money/VAT handling, shared tenant-isolation contract
+- [x] Equine module: Horse with Customer owner/stable references, composite tenant-safe FKs, module boundary test
 
 ## Next
 - [ ] Customer list page and New Customer form (frontend)
-- [ ] Phase 4: Equine test module (Horse with Customer owner references), reusing `TenantOwned` and the isolation contract
+- [ ] Phase 5: basic UDF engine (text, number, select, reference) and dependent references such as Owner -> Horse
 
 ## Later
 - [ ] UDF engine
@@ -21,7 +22,10 @@
 
 ## Bugs / technical debt
 - Tests run against the dev database (rollback-only); consider a dedicated test database.
-- Customer and Item DELETE are hard deletes; revisit deletion semantics (deactivate, FK RESTRICT) once they are referenced by transactions/invoices.
+- Customer, Item and Horse DELETE are hard deletes; revisit deletion semantics (deactivate) once they are referenced by transactions/invoices/sessions. Item DELETE should use `delete_or_409` once something references Items.
+- Module enable/disable per organization is not built; the Equine router is mounted for everyone.
+- Horse has no `notes` yet (deferred) and one owner only (a `horse_owners` table is the planned path to multiple ownership).
+- When another table references Items, add `UNIQUE (organization_id, id)` to `items` and use a composite foreign key.
 - Customer fields are minimal (no billing info yet); email is not format-validated.
 - Consider PostgreSQL Row Level Security as defense in depth (see docs/architecture.md).
 - Currency is not modelled yet; it is planned as an Organization financial setting.

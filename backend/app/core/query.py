@@ -2,7 +2,11 @@
 
 from typing import Any
 
+from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+
+FOREIGN_KEY_VIOLATION = "23503"  # PostgreSQL SQLSTATE
 
 
 def contains_pattern(text: str) -> str:
@@ -18,6 +22,24 @@ def commit_and_refresh(db: Session, record: Any) -> None:
     """Persist pending changes and reload server-generated values (ids, timestamps, numerics)."""
     db.flush()
     db.refresh(record)
+    db.commit()
+
+
+def delete_or_409(db: Session, record: Any, detail: str) -> None:
+    """Delete `record`, or answer 409 if other records still reference it.
+
+    The message stays generic on purpose: the module that owns the delete must not
+    know which other modules reference its records.
+    """
+    try:
+        # Savepoint: a refused delete must not poison the surrounding transaction.
+        with db.begin_nested():
+            db.delete(record)
+            db.flush()
+    except IntegrityError as exc:
+        if getattr(exc.orig, "sqlstate", None) == FOREIGN_KEY_VIOLATION:
+            raise HTTPException(status.HTTP_409_CONFLICT, detail=detail)
+        raise
     db.commit()
 
 

@@ -7,9 +7,9 @@ Layout (chosen to exercise tenant selection and negative membership cases):
     fredrik@dev.test  owner of Fredrik Horse Therapy, admin of Umeå Stable Services
     maria@dev.test    employee of Umeå Stable Services only
 
-Both organizations have a customer named "Anna Andersson" and an item named
-"Horse massage" (identical-looking data in different tenants), which is what
-isolation checks should be run against.
+Both organizations have a customer named "Anna Andersson", an item named
+"Horse massage" and a horse named "Kalle" (identical-looking data in different
+tenants), which is what isolation checks should be run against.
 """
 
 import uuid
@@ -31,6 +31,7 @@ from app.models import (
     Role,
     User,
 )
+from app.modules.equine.models import Horse
 
 # Fixed ids make the seed idempotent and let docs/tests refer to known tenants.
 ORG_HORSE_THERAPY_ID = uuid.UUID("00000000-0000-4000-8000-0000000000a1")
@@ -72,6 +73,20 @@ ITEMS = (
     (ORG_HORSE_THERAPY_ID, "Horse massage", ItemType.SERVICE, "session", "850.00", "25.00"),
     (ORG_STABLE_SERVICES_ID, "Horse massage", ItemType.SERVICE, "session", "850.00", "25.00"),
 )
+
+
+# (organization, name, owner customer, stable customer or None, birth year, sex, breed)
+# Owner and stable are looked up by customer name within the same organization.
+HORSES = (
+    (ORG_HORSE_THERAPY_ID, "Kalle", "Anna Andersson", "Umeå HK", 2015, "gelding", "Swedish Warmblood"),
+    (ORG_STABLE_SERVICES_ID, "Kalle", "Anna Andersson", None, 2015, "gelding", "Swedish Warmblood"),
+)
+
+
+def _customer_id(db: Session, org_id: uuid.UUID, name: str) -> uuid.UUID:
+    return db.scalar(
+        select(Customer.id).where(Customer.organization_id == org_id, Customer.name == name)
+    )
 
 
 def seed(db: Session) -> None:
@@ -121,6 +136,24 @@ def seed(db: Session) -> None:
                     unit=unit,
                     price_ex_vat=Decimal(price),
                     vat_rate=Decimal(vat),
+                )
+            )
+    db.flush()
+
+    for org_id, name, owner, stable, birth_year, sex, breed in HORSES:
+        exists = db.scalar(
+            select(Horse.id).where(Horse.organization_id == org_id, Horse.name == name)
+        )
+        if exists is None:
+            db.add(
+                Horse(
+                    organization_id=org_id,
+                    name=name,
+                    owner_customer_id=_customer_id(db, org_id, owner),
+                    stable_customer_id=_customer_id(db, org_id, stable) if stable else None,
+                    birth_year=birth_year,
+                    sex=sex,
+                    breed=breed,
                 )
             )
     db.flush()

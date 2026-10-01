@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import customers, health, items, me
 from app.core.config import settings
+from app.modules import equine
 
 app = FastAPI(title="business-platform")
 
@@ -18,3 +19,4 @@ app.include_router(health.router)
 app.include_router(me.router)
 app.include_router(customers.router)
 app.include_router(items.router)
+app.include_router(equine.router)

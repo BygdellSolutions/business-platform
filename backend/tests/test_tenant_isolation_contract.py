@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Organization, Role, User
 from tests.factories import add_member, make_org, make_user
-from tests.tenant_contract import RESOURCES, Resource
+from tests.tenant_contract import RESOURCES, Resource, body_for
 
 
 @dataclass
@@ -267,7 +267,9 @@ def test_deleting_own_record_leaves_the_identical_looking_twin(
 def test_create_takes_the_organization_from_the_tenant_context(
     client: TestClient, db_session: Session, world: World
 ):
-    response = client.post(world.res.path, json=world.res.create_body, headers=h(world.a_only))
+    body = body_for(world.res, db_session, world.org_a)
+
+    response = client.post(world.res.path, json=body, headers=h(world.a_only))
 
     assert response.status_code == 201
     created = db_session.get(world.res.model, uuid.UUID(response.json()["id"]))
@@ -277,9 +279,9 @@ def test_create_takes_the_organization_from_the_tenant_context(
 def test_multi_organization_user_creates_in_the_selected_organization_only(
     client: TestClient, db_session: Session, world: World
 ):
-    response = client.post(
-        world.res.path, json=world.res.create_body, headers=h(world.shared, world.org_b)
-    )
+    body = body_for(world.res, db_session, world.org_b)
+
+    response = client.post(world.res.path, json=body, headers=h(world.shared, world.org_b))
 
     created = db_session.get(world.res.model, uuid.UUID(response.json()["id"]))
     assert created.organization_id == world.org_b.id
@@ -292,11 +294,12 @@ def test_create_rejects_a_client_supplied_organization_id(
     client: TestClient, db_session: Session, world: World, target: str
 ):
     org_id = {"own": world.org_a.id, "foreign": world.org_b.id, "random": uuid.uuid4()}[target]
+    body = body_for(world.res, db_session, world.org_a)
     before = count(db_session, world.res.model)
 
     response = client.post(
         world.res.path,
-        json={**world.res.create_body, "organization_id": str(org_id)},
+        json={**body, "organization_id": str(org_id)},
         headers=h(world.a_only),
     )
 
@@ -308,8 +311,9 @@ def test_create_rejects_a_client_supplied_organization_id(
 
 
 def test_selecting_an_organization_you_do_not_belong_to_blocks_every_route(
-    client: TestClient, world: World
+    client: TestClient, db_session: Session, world: World
 ):
+    body = body_for(world.res, db_session, world.org_a)
     foreign = h(world.a_only, world.org_b)  # a_only is not a member of B
     target = f"{world.res.path}/{world.b_twin.id}"
     path = world.res.path
@@ -320,13 +324,14 @@ def test_selecting_an_organization_you_do_not_belong_to_blocks_every_route(
         client.get(target, headers=foreign),
         client.patch(target, json=world.res.patch_body, headers=foreign),
         client.delete(target, headers=foreign),
-        client.post(path, json=world.res.create_body, headers=foreign),
+        client.post(path, json=body, headers=foreign),
     ]
 
     assert [r.status_code for r in responses] == [404] * 6
 
 
-def test_every_route_requires_authentication(client: TestClient, world: World):
+def test_every_route_requires_authentication(client: TestClient, db_session: Session, world: World):
+    body = body_for(world.res, db_session, world.org_a)
     target = f"{world.res.path}/{world.a_twin.id}"
     path = world.res.path
 
@@ -335,7 +340,7 @@ def test_every_route_requires_authentication(client: TestClient, world: World):
         client.get(target),
         client.patch(target, json=world.res.patch_body),
         client.delete(target),
-        client.post(path, json=world.res.create_body),
+        client.post(path, json=body),
     ]
 
     assert [r.status_code for r in responses] == [401] * 5

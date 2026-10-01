@@ -27,12 +27,22 @@ All notable changes to `business-platform` will be documented in this file.
 - Shared tenant-isolation contract (`tests/tenant_contract.py`, `tests/test_tenant_isolation_contract.py`) that runs the same cross-tenant checks against Customers and Items.
 - Money round-trip tests (API to PostgreSQL and back) and a guard test that fails if any table uses a floating-point column.
 - Development seed now includes a "Horse massage" item (850.00 excl. VAT, 25.00 % VAT) in both organizations.
+- Equine domain module (`app/modules/equine/`): `Horse` model and migration with `name`, required `owner_customer_id`, optional `stable_customer_id`, `birth_year`, `sex` (mare/stallion/gelding), free-text `breed` and `active`. Owner and stable are Customer references; there is no billing field on Horse.
+- Tenant-safe Horses API at `/api/horses` (create, list with `q`/`owner_customer_id`/`stable_customer_id`/`active` filters, read, update, delete) returning compact owner and stable summaries.
+- Generic `resolve_reference` helper for validating ids in a request body against the active organization (identical 422 for foreign and nonexistent ids; inactive targets refused for new assignments).
+- Composite foreign keys from horses to customers and `UNIQUE (organization_id, id)` on customers, so PostgreSQL itself refuses cross-tenant references.
+- Generic `409` when deleting a record that other records still reference (`delete_or_409`); applied to Customers.
+- Module boundary test: core, Customers and Catalog must not import or mention the Equine module.
+- Horses registered with the shared tenant-isolation contract, plus tests for references, inactive customers, deletion, filters and field validation.
+- Development seed now includes the horse Kalle (owner Anna Andersson, stable Umeå HK) in Fredrik Horse Therapy and an identical-looking Kalle in the other organization.
 
 ### Changed
 - Shared helpers extracted from the Customers router into `app/core/query.py` (literal LIKE search, commit/refresh, update) and `app/api/deps.py` (pagination) so resources do not duplicate them.
+- Tenant contract `create_body` may now be a function of the acting organization (needed for resources with references).
 - Customer type `organization` renamed to `company`; "organization" now only means the tenant.
 
 ### Fixed
+- Replaced the deprecated `HTTP_422_UNPROCESSABLE_ENTITY` constant with `HTTP_422_UNPROCESSABLE_CONTENT`.
 
 ### Security
-- Tenant-owned records can no longer have their `organization_id` changed after creation (ORM guard); Customer and Item requests containing `organization_id` are rejected.
+- Tenant-owned records can no longer have their `organization_id` changed after creation (ORM guard); Customer, Item and Horse requests containing `organization_id` are rejected. Cross-tenant references from horses to customers are rejected by both the API and PostgreSQL composite foreign keys.
