@@ -3,7 +3,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.models import OrganizationUser, Role, User
+from app.models import Customer, OrganizationUser, Role, User
 from app.scripts import seed_dev
 
 
@@ -31,6 +31,15 @@ def test_seed_creates_expected_layout_and_is_idempotent(db_session: Session):
         select(func.count()).select_from(User).where(User.email.like("%@dev.test"))
     )
     assert seeded_users == 2
+
+    names_by_org = {
+        org_id: sorted(
+            db_session.scalars(select(Customer.name).where(Customer.organization_id == org_id))
+        )
+        for org_id in (seed_dev.ORG_HORSE_THERAPY_ID, seed_dev.ORG_STABLE_SERVICES_ID)
+    }
+    assert names_by_org[seed_dev.ORG_HORSE_THERAPY_ID] == ["Anna Andersson", "Umeå HK"]
+    assert names_by_org[seed_dev.ORG_STABLE_SERVICES_ID] == ["Anna Andersson"]
 
 
 def test_seed_refuses_outside_development(monkeypatch: pytest.MonkeyPatch):

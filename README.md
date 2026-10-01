@@ -33,6 +33,16 @@ A user in several organizations picks one with `X-Organization-Id`. This only *s
 
 Seeded users (see `backend/app/scripts/seed_dev.py`): `fredrik@dev.test` (owner of Fredrik Horse Therapy, admin of Umeå Stable Services) and `maria@dev.test` (employee of Umeå Stable Services only). Try `GET /api/me`.
 
+## Customers API
+
+`/api/customers` (`POST`, `GET ?q=&limit=&offset=`, `GET|PATCH|DELETE /{id}`) is the first tenant-owned resource. Every customer belongs to exactly one organization, taken from the validated tenant context — never from the request. A body containing `organization_id` is rejected with 422, and a customer UUID from another organization returns 404, exactly like a nonexistent one. Example, as the shared dev user in the second organization:
+
+```bash
+curl http://localhost:8000/api/customers \
+  -H "X-Dev-User-Email: fredrik@dev.test" \
+  -H "X-Organization-Id: 00000000-0000-4000-8000-0000000000b2"
+```
+
 ## Run
 
 ```bash

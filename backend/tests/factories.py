@@ -2,7 +2,7 @@ import uuid
 
 from sqlalchemy.orm import Session
 
-from app.models import Organization, OrganizationUser, Role, User
+from app.models import Customer, CustomerType, Organization, OrganizationUser, Role, User
 
 
 def make_org(db: Session, name: str = "Test Org") -> Organization:
@@ -28,3 +28,25 @@ def add_member(
     db.add(membership)
     db.flush()
     return membership
+
+
+def make_customer(
+    db: Session,
+    org: Organization,
+    name: str = "Anna Andersson",
+    customer_type: CustomerType = CustomerType.PERSON,
+    email: str | None = "anna@example.test",
+    phone: str | None = "070-000 00 00",
+    **fields,
+) -> Customer:
+    customer = Customer(
+        organization_id=org.id,
+        name=name,
+        customer_type=customer_type,
+        email=email,
+        phone=phone,
+        **fields,
+    )
+    db.add(customer)
+    db.flush()
+    return customer

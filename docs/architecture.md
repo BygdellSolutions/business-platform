@@ -446,3 +446,15 @@ Umeå HK               Company
 
 Do not spend excessive time on visual perfection before the CRUD flow works end to end.
 
+---
+
+## Implementation notes: tenant-scoped data access
+
+How tenant isolation (CLAUDE.md section 6) is enforced in code. Follow this for every tenant-owned table.
+
+- **Model:** inherit `TenantOwned` (`app/models/mixins.py`). It provides `id`, a NOT NULL `organization_id` foreign key (indexed) and timestamps. It also refuses any flush that changes `organization_id` on an existing record.
+- **Reads and writes:** go through `app/core/tenant_scope.py` — `scoped_select`, `get_scoped`, `get_scoped_or_404`, `create_scoped` — which take the organization from the `TenantContext` produced by `get_tenant_context`. Do not start a query from a bare `select(Model)` in an endpoint.
+- **Schemas:** request schemas have no `organization_id` field and use `extra="forbid"`, so a client-supplied value is a 422. Response schemas do not expose it.
+- **Foreign ids:** a record from another organization behaves as nonexistent (404, same body as a random UUID).
+- **Tests:** each tenant-owned resource needs cross-tenant list, search, read, update, delete and create tests with identical-looking data in two organizations (see `backend/tests/test_customers_isolation.py`).
+- **Deferred:** PostgreSQL Row Level Security as defense in depth; bulk `UPDATE`/`DELETE` statements bypass the ORM guard, so they must also start from `scoped_select`-style filters.

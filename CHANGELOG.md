@@ -17,6 +17,10 @@ All notable changes to `business-platform` will be documented in this file.
 - `GET /api/me` returning the current user, active organization and role.
 - `python -m app.scripts.seed_dev`: idempotent development seed with two organizations, a shared multi-organization user and a single-organization user.
 - Tests for membership constraints, organization selection/switching, cross-tenant selection and the seed.
+- Tenant-scoped data access: `TenantOwned` model mixin (`id`, `organization_id`, timestamps) and `app/core/tenant_scope.py` helpers (`scoped_select`, `get_scoped_or_404`, `create_scoped`).
+- `Customer` model (person/company) and migration, with tenant-safe CRUD and search API at `/api/customers`.
+- Cross-tenant isolation tests for Customers: list, search, read, update, delete and create, using identical-looking customers in two organizations, including a multi-organization user and non-member selection.
+- Development seed now includes customers (Anna Andersson in both organizations, Umeå HK in one).
 
 ### Changed
 - Customer type `organization` renamed to `company`; "organization" now only means the tenant.
@@ -24,3 +28,4 @@ All notable changes to `business-platform` will be documented in this file.
 ### Fixed
 
 ### Security
+- Tenant-owned records can no longer have their `organization_id` changed after creation (ORM guard); Customer requests containing `organization_id` are rejected.
