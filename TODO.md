@@ -1,12 +1,13 @@
 # TODO — business-platform
 
 ## Now
-- [ ] Install Docker Desktop and run `docker compose up -d`
-- [ ] Verify `/health/db` returns `{"database":"ok"}` (backend can connect to PostgreSQL)
-- [ ] Set Git `user.name` / `user.email` and make the first commit
+- [x] Install Docker Desktop and run `docker compose up -d`
+- [x] Verify `/health/db` returns `{"database":"ok"}` (backend can connect to PostgreSQL)
+- [x] Set Git `user.name` / `user.email` and make the first commit
+- [x] Verify frontend runs (`npm run dev`) and reaches the backend
+- [ ] Create Organization model and migration (start of Phase 1)
 
 ## Next
-- [ ] Create Organization model and migration
 - [ ] Users / memberships, or a temporary development identity strategy
 - [ ] Add tenant context and tenant-scoped queries
 - [ ] Tenant isolation tests
