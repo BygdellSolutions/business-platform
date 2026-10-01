@@ -8,15 +8,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models import Customer, Role
-from tests.factories import add_member, make_customer, make_org, make_user
-
-
-@pytest.fixture
-def member(db_session: Session):
-    org, user = make_org(db_session, "Solo"), make_user(db_session)
-    add_member(db_session, org, user, Role.OWNER)
-    return org, {"X-Dev-User-Email": user.email}
+from app.models import Customer
+from tests.factories import make_customer, make_org
 
 
 def test_create_read_list_update_delete_roundtrip(client: TestClient, member):

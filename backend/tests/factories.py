@@ -1,8 +1,18 @@
 import uuid
+from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
-from app.models import Customer, CustomerType, Organization, OrganizationUser, Role, User
+from app.models import (
+    Customer,
+    CustomerType,
+    Item,
+    ItemType,
+    Organization,
+    OrganizationUser,
+    Role,
+    User,
+)
 
 
 def make_org(db: Session, name: str = "Test Org") -> Organization:
@@ -50,3 +60,27 @@ def make_customer(
     db.add(customer)
     db.flush()
     return customer
+
+
+def make_item(
+    db: Session,
+    org: Organization,
+    name: str = "Horse massage",
+    type: ItemType = ItemType.SERVICE,
+    unit: str = "session",
+    price_ex_vat: Decimal | str = "850.00",
+    vat_rate: Decimal | str = "25.00",
+    **fields,
+) -> Item:
+    item = Item(
+        organization_id=org.id,
+        name=name,
+        type=type,
+        unit=unit,
+        price_ex_vat=Decimal(price_ex_vat),
+        vat_rate=Decimal(vat_rate),
+        **fields,
+    )
+    db.add(item)
+    db.flush()
+    return item

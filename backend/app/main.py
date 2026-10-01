@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import customers, health, me
+from app.api import customers, health, items, me
 from app.core.config import settings
 
 app = FastAPI(title="business-platform")
@@ -17,3 +17,4 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(me.router)
 app.include_router(customers.router)
+app.include_router(items.router)

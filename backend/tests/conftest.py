@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.db import engine, get_db
 from app.main import app
+from app.models import Role
+from tests.factories import add_member, make_org, make_user
 
 
 @pytest.fixture
@@ -42,3 +44,11 @@ def client(db_session: Session, dev_auth: None) -> Iterator[TestClient]:
         yield TestClient(app)
     finally:
         app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def member(db_session: Session):
+    """(organization, auth headers) for a user who belongs to exactly one organization."""
+    org, user = make_org(db_session, "Solo"), make_user(db_session)
+    add_member(db_session, org, user, Role.OWNER)
+    return org, {"X-Dev-User-Email": user.email}

@@ -7,19 +7,30 @@ Layout (chosen to exercise tenant selection and negative membership cases):
     fredrik@dev.test  owner of Fredrik Horse Therapy, admin of Umeå Stable Services
     maria@dev.test    employee of Umeå Stable Services only
 
-Both organizations have a customer named "Anna Andersson" (identical-looking
-data in different tenants), which is what isolation checks should be run against.
+Both organizations have a customer named "Anna Andersson" and an item named
+"Horse massage" (identical-looking data in different tenants), which is what
+isolation checks should be run against.
 """
 
 import uuid
 from dataclasses import dataclass
+from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.db import SessionLocal
-from app.models import Customer, CustomerType, Organization, OrganizationUser, Role, User
+from app.models import (
+    Customer,
+    CustomerType,
+    Item,
+    ItemType,
+    Organization,
+    OrganizationUser,
+    Role,
+    User,
+)
 
 # Fixed ids make the seed idempotent and let docs/tests refer to known tenants.
 ORG_HORSE_THERAPY_ID = uuid.UUID("00000000-0000-4000-8000-0000000000a1")
@@ -56,6 +67,13 @@ CUSTOMERS = (
 )
 
 
+# (organization, name, type, unit, price excl. VAT, VAT %) - identified by organization + name.
+ITEMS = (
+    (ORG_HORSE_THERAPY_ID, "Horse massage", ItemType.SERVICE, "session", "850.00", "25.00"),
+    (ORG_STABLE_SERVICES_ID, "Horse massage", ItemType.SERVICE, "session", "850.00", "25.00"),
+)
+
+
 def seed(db: Session) -> None:
     """Create any missing seed rows. Does not commit."""
     for org_id, name in ORGANIZATIONS.items():
@@ -87,6 +105,23 @@ def seed(db: Session) -> None:
         if exists is None:
             db.add(
                 Customer(organization_id=org_id, name=name, customer_type=customer_type, email=email)
+            )
+    db.flush()
+
+    for org_id, name, item_type, unit, price, vat in ITEMS:
+        exists = db.scalar(
+            select(Item.id).where(Item.organization_id == org_id, Item.name == name)
+        )
+        if exists is None:
+            db.add(
+                Item(
+                    organization_id=org_id,
+                    name=name,
+                    type=item_type,
+                    unit=unit,
+                    price_ex_vat=Decimal(price),
+                    vat_rate=Decimal(vat),
+                )
             )
     db.flush()
 

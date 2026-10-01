@@ -47,12 +47,12 @@ Example:
 items
 - id
 - organization_id
-- item_type       # service | product
+- type            # service | product
 - name
 - description
-- unit
-- price
-- vat_rate
+- unit            # free text for now ("hour", "session", "pcs")
+- price_ex_vat    # NUMERIC(12,2), excludes VAT; no gross price is stored
+- vat_rate        # NUMERIC(5,2) percent, 0-100
 - active
 - created_at
 - updated_at
@@ -458,3 +458,14 @@ How tenant isolation (CLAUDE.md section 6) is enforced in code. Follow this for 
 - **Foreign ids:** a record from another organization behaves as nonexistent (404, same body as a random UUID).
 - **Tests:** each tenant-owned resource needs cross-tenant list, search, read, update, delete and create tests with identical-looking data in two organizations (see `backend/tests/test_customers_isolation.py`).
 - **Deferred:** PostgreSQL Row Level Security as defense in depth; bulk `UPDATE`/`DELETE` statements bypass the ORM guard, so they must also start from `scoped_select`-style filters.
+
+---
+
+## Implementation notes: money and VAT
+
+- **Exact types only.** Money and percentages are PostgreSQL `NUMERIC` and Python `Decimal`. No float/real/double column may exist; `tests/test_item_money.py` fails if one is added to any table.
+- **Item price is net.** `price_ex_vat` excludes VAT and `vat_rate` is a percentage. Gross/net/VAT amounts, rounding policy and discounts belong to the later pricing/transaction layer, not to Item.
+- **Items are current state.** Transactions must copy name, price and VAT at the time of sale so that editing an Item never changes history (section 14).
+- **Currency** is not on Item. It will be an Organization financial setting.
+- **API input.** Money/percent values are sent as a decimal string (`"19.99"`) or an integer. JSON numbers with decimals are rejected because the client's number has already been parsed into a binary float. The pattern also rejects exponents, signs, spaces, `NaN`/`Infinity`, and more than 2 decimals (never silently rounded). Shared types: `app/schemas/money.py`.
+- **API output.** Always a string with two decimals (`"850.00"`, `"25.00"`).

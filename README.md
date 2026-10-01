@@ -43,6 +43,18 @@ curl http://localhost:8000/api/customers \
   -H "X-Organization-Id: 00000000-0000-4000-8000-0000000000b2"
 ```
 
+## Items API
+
+`/api/items` (same shape as Customers, plus `?type=service|product&active=true|false` filters) is the catalog of services and products. Items reuse the same tenant-scoped infrastructure and the same isolation tests (`backend/tests/test_tenant_isolation_contract.py` runs every tenant-owned resource through one contract).
+
+Money is exact: `price_ex_vat` (excluding VAT, `NUMERIC(12,2)`) and `vat_rate` (percent, `NUMERIC(5,2)`) are sent as decimal **strings**, and returned as strings with two decimals. JSON numbers with decimals are rejected.
+
+```bash
+curl -X POST http://localhost:8000/api/items \
+  -H "X-Dev-User-Email: maria@dev.test" -H "Content-Type: application/json" \
+  -d '{"type":"service","name":"Saddle fitting","unit":"hour","price_ex_vat":"850.00","vat_rate":"25"}'
+```
+
 ## Run
 
 ```bash
