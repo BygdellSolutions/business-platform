@@ -47,7 +47,7 @@ The frontend calls the backend at `http://localhost:8000`. To change that, set `
 
 ```bash
 cd backend
-uv run pytest                                  # tests
+uv run pytest                                  # tests (run `alembic upgrade head` first; DB tests roll back their data)
 uv run alembic revision --autogenerate -m "…"  # create a migration
 uv run alembic upgrade head                    # apply migrations
 

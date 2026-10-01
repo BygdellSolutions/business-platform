@@ -10,6 +10,7 @@ All notable changes to `business-platform` will be documented in this file.
 - FastAPI backend with `/health` and `/health/db` endpoints, SQLAlchemy session setup and Alembic.
 - Next.js + TypeScript + Tailwind frontend with a home page showing backend status.
 - `docs/architecture.md` (domain design, split out of `CLAUDE.md`) and `docs/lessons.md`.
+- `Organization` model (tenant) with Alembic migration creating the `organizations` table, plus tests using a rollback-only database session.
 
 ### Changed
 - Customer type `organization` renamed to `company`; "organization" now only means the tenant.
