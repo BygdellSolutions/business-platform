@@ -11,6 +11,10 @@ Both organizations have a customer named "Anna Andersson", an item named
 "Horse massage", a horse named "Kalle" and a completed transaction for one
 "Horse massage" (identical-looking data in different tenants), which is what
 isolation checks should be run against.
+
+Each organization also configures two custom fields on transaction lines, Owner (a
+customer) and Horse (a horse, narrowed to the selected owner), and the seeded line
+carries Anna Andersson / Kalle in them.
 """
 
 import uuid
@@ -33,6 +37,7 @@ from app.models import (
     Role,
     User,
 )
+from app.modules.custom_fields.models import CustomFieldDefinition, CustomFieldValue
 from app.modules.equine.models import Horse
 from app.modules.sales.models import Transaction, TransactionLine, TransactionStatus
 from app.modules.sales.pricing import calculate_line
@@ -95,6 +100,42 @@ TRANSACTIONS = (
     (ORG_HORSE_THERAPY_ID, "Umeå HK"),
     (ORG_STABLE_SERVICES_ID, "Anna Andersson"),
 )
+
+
+def _definition(db: Session, org_id: uuid.UUID, key: str, **fields) -> CustomFieldDefinition:
+    definition = db.scalar(
+        select(CustomFieldDefinition).where(
+            CustomFieldDefinition.organization_id == org_id,
+            CustomFieldDefinition.entity_type == "transaction_line",
+            CustomFieldDefinition.key == key,
+        )
+    )
+    if definition is None:
+        definition = CustomFieldDefinition(
+            organization_id=org_id, entity_type="transaction_line", key=key, field_type="reference", **fields
+        )
+        db.add(definition)
+        db.flush()
+    return definition
+
+
+def _set_reference(db: Session, org_id: uuid.UUID, definition: CustomFieldDefinition, entity_id, target_id) -> None:
+    exists = db.scalar(
+        select(CustomFieldValue.id).where(
+            CustomFieldValue.definition_id == definition.id, CustomFieldValue.entity_id == entity_id
+        )
+    )
+    if exists is None:
+        db.add(
+            CustomFieldValue(
+                organization_id=org_id,
+                definition_id=definition.id,
+                entity_type=definition.entity_type,
+                field_type=definition.field_type,
+                entity_id=entity_id,
+                value_reference_id=target_id,
+            )
+        )
 
 
 def _customer_id(db: Session, org_id: uuid.UUID, name: str) -> uuid.UUID:
@@ -212,6 +253,34 @@ def seed(db: Session) -> None:
                 gross_amount=amounts.gross,
             )
         )
+    db.flush()
+
+    # Custom fields on transaction lines: Owner (customer) -> Horse (filtered by that owner).
+    for org_id in (ORG_HORSE_THERAPY_ID, ORG_STABLE_SERVICES_ID):
+        owner = _definition(
+            db, org_id, "owner", label="Owner", position=10, reference_source="customer"
+        )
+        horse = _definition(
+            db,
+            org_id,
+            "horse",
+            label="Horse",
+            position=20,
+            reference_source="horse",
+            depends_on_definition_id=owner.id,
+            depends_on_filter="owner_customer_id",
+        )
+        line = db.scalar(
+            select(TransactionLine)
+            .join(Transaction, Transaction.id == TransactionLine.transaction_id)
+            .where(
+                Transaction.organization_id == org_id,
+                Transaction.transaction_date == SEED_TRANSACTION_DATE,
+            )
+        )
+        kalle = db.scalar(select(Horse.id).where(Horse.organization_id == org_id, Horse.name == "Kalle"))
+        _set_reference(db, org_id, owner, line.id, _customer_id(db, org_id, "Anna Andersson"))
+        _set_reference(db, org_id, horse, line.id, kalle)
     db.flush()
 
 

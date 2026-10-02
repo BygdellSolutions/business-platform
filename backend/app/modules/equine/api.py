@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, aliased
 
 from app.api.deps import Pagination, pagination
 from app.core.db import get_db
-from app.core.query import apply_update, commit_and_refresh, contains_pattern
+from app.core.query import apply_update, commit_and_refresh, contains_pattern, delete_or_409
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import (
     create_scoped,
@@ -147,6 +147,5 @@ def delete_horse(
     db: Session = Depends(get_db),
 ) -> Response:
     horse = get_scoped_or_404(db, ctx, Horse, horse_id)
-    db.delete(horse)
-    db.commit()
+    delete_or_409(db, horse, "Horse is referenced by other records")
     return Response(status_code=status.HTTP_204_NO_CONTENT)

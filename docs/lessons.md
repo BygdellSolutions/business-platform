@@ -7,3 +7,7 @@ Rules learned from corrections by the project owner. Review at session start; ad
 - **A transaction's lifecycle status is not its invoicing state.** `draft` / `completed` / `cancelled` describe the transaction only; `completed` means finalized and ready for future invoicing, not "uninvoiced". Invoice state will be its own relationship, not another lifecycle status.
 - **Totals and VAT breakdowns sum the stored line amounts.** Never recompute grouped VAT from grouped net totals; per-line half-up rounding is the single rounding rule.
 - **Keep the header minimal.** The Transaction header has no note or other free text until a real need appears.
+- **Boundary tests enforce imports and registrations, not vocabulary.** Generic code and docs may use ordinary domain words. What must hold is who imports whom: core, generic capabilities and modules meet only through the core registry.
+- **Required custom fields participate in finalizing a record, without Sales importing Custom Fields.** Core exposes a generic lifecycle-validation seam: capabilities register validators and modules call the seam. Failures carry the record type, id, field and label so a client can locate the problem.
+- **`show_on_invoice` means "eligible to be snapshotted".** Invoices store the rendered label and value at issuance and never resolve live custom-field or reference data for an existing invoice.
+- **Role checks live in core, not in feature modules.** Use `require_role` / `roles_required`; the role is always the one in the active membership.

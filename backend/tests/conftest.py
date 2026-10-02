@@ -3,13 +3,24 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.db import engine, get_db
 from app.main import app
 from app.models import CustomerType, Role
-from tests.factories import add_member, make_customer, make_item, make_org, make_user
+from app.modules.sales.models import TransactionLine
+from tests.factories import (
+    add_member,
+    make_customer,
+    make_definition,
+    make_horse,
+    make_item,
+    make_org,
+    make_transaction,
+    make_user,
+)
 
 
 @pytest.fixture
@@ -65,4 +76,35 @@ def sales(db_session: Session, member):
         headers=headers,
         billing=make_customer(db_session, org, "Umeå HK", CustomerType.COMPANY, None, None),
         item=make_item(db_session, org, "Horse massage", unit="session", price_ex_vat="850.00", vat_rate="25.00"),
+    )
+
+
+@pytest.fixture
+def cf(db_session: Session, sales):
+    """Custom fields on transaction lines in one organization: Owner (reference to a customer)
+    and Horse (reference to a horse that depends on Owner), over a draft transaction with two
+    lines. Customers Anna and Erik own the horses Kalle and Storm."""
+    org = sales.org
+    anna = make_customer(db_session, org, "Anna Andersson")
+    erik = make_customer(db_session, org, "Erik Svensson", email=None)
+    kalle = make_horse(db_session, org, "Kalle", owner=anna)
+    storm = make_horse(db_session, org, "Storm", owner=erik)
+    tx = make_transaction(db_session, org, billing_customer=sales.billing, lines=[{}, {}])
+    owner = make_definition(
+        db_session, org, key="owner", label="Owner", field_type="reference",
+        reference_source="customer", position=10,
+    )
+    horse = make_definition(
+        db_session, org, key="horse", label="Horse", field_type="reference",
+        reference_source="horse", depends_on=owner, depends_on_filter="owner_customer_id", position=20,
+    )
+    lines = list(
+        db_session.scalars(
+            select(TransactionLine).where(TransactionLine.transaction_id == tx.id).order_by(TransactionLine.position)
+        )
+    )
+    return SimpleNamespace(
+        org=org, headers=sales.headers, billing=sales.billing, item=sales.item,
+        anna=anna, erik=erik, kalle=kalle, storm=storm, tx=tx, lines=lines,
+        owner=owner, horse=horse,
     )

@@ -50,8 +50,10 @@ def world(db_session: Session, res: Resource) -> World:
     shared, a_only, b_only = (make_user(db_session) for _ in range(3))
     add_member(db_session, org_a, shared, Role.OWNER)
     add_member(db_session, org_b, shared, Role.ADMIN)
-    add_member(db_session, org_a, a_only, Role.EMPLOYEE)
-    add_member(db_session, org_b, b_only, Role.EMPLOYEE)
+    # ADMIN, so resources whose writes are role-restricted also run through the contract;
+    # isolation does not depend on the role.
+    add_member(db_session, org_a, a_only, Role.ADMIN)
+    add_member(db_session, org_b, b_only, Role.ADMIN)
     return World(
         res=res,
         org_a=org_a,
@@ -239,6 +241,10 @@ def test_update_cannot_change_organization_or_id(
 
 
 def test_foreign_record_cannot_be_deleted(client: TestClient, db_session: Session, world: World):
+    if not world.res.supports_delete:
+        for record in (world.a_twin, world.b_twin):  # no DELETE exists at all, for anyone
+            assert client.delete(f"{world.res.path}/{record.id}", headers=h(world.a_only)).status_code == 405
+        return
     response = client.delete(f"{world.res.path}/{world.b_twin.id}", headers=h(world.a_only))
 
     assert response.status_code == 404
@@ -248,6 +254,8 @@ def test_foreign_record_cannot_be_deleted(client: TestClient, db_session: Sessio
 def test_delete_of_a_foreign_uuid_looks_like_delete_of_a_nonexistent_uuid(
     client: TestClient, world: World
 ):
+    if not world.res.supports_delete:
+        pytest.skip("no DELETE route (checked in test_foreign_record_cannot_be_deleted)")
     foreign = client.delete(f"{world.res.path}/{world.b_twin.id}", headers=h(world.a_only))
     missing = client.delete(f"{world.res.path}/{uuid.uuid4()}", headers=h(world.a_only))
 
@@ -258,6 +266,8 @@ def test_delete_of_a_foreign_uuid_looks_like_delete_of_a_nonexistent_uuid(
 def test_deleting_own_record_leaves_the_identical_looking_twin(
     client: TestClient, db_session: Session, world: World
 ):
+    if not world.res.supports_delete:
+        pytest.skip("no DELETE route (checked in test_foreign_record_cannot_be_deleted)")
     response = client.delete(f"{world.res.path}/{world.a_twin.id}", headers=h(world.a_only))
 
     assert response.status_code == 204
@@ -327,11 +337,11 @@ def test_selecting_an_organization_you_do_not_belong_to_blocks_every_route(
         client.get(path, params={"q": world.res.twin_search or "x"}, headers=foreign),
         client.get(target, headers=foreign),
         client.patch(target, json=world.res.patch_body, headers=foreign),
-        client.delete(target, headers=foreign),
+        *([client.delete(target, headers=foreign)] if world.res.supports_delete else []),
         client.post(path, json=body, headers=foreign),
     ]
 
-    assert [r.status_code for r in responses] == [404] * 6
+    assert [r.status_code for r in responses] == [404] * len(responses)
 
 
 def test_every_route_requires_authentication(client: TestClient, db_session: Session, world: World):
@@ -343,11 +353,11 @@ def test_every_route_requires_authentication(client: TestClient, db_session: Ses
         client.get(path),
         client.get(target),
         client.patch(target, json=world.res.patch_body),
-        client.delete(target),
+        *([client.delete(target)] if world.res.supports_delete else []),
         client.post(path, json=body),
     ]
 
-    assert [r.status_code for r in responses] == [401] * 5
+    assert [r.status_code for r in responses] == [401] * len(responses)
 
 
 # --- resources do not leak into each other -------------------------------------------------

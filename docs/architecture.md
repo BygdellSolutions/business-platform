@@ -478,7 +478,7 @@ How tenant isolation (CLAUDE.md section 6) is enforced in code. Follow this for 
 
 **Module-defined fields vs UDFs (architectural rule).** Fields a domain module defines are the normal, stable attributes of that domain entity (a horse's birth year, sex and breed). They are real columns with validation and do not require UDF configuration. UDFs extend an entity with organization-specific fields; they never replace normal domain modeling.
 
-**Boundary.** A domain module (`app/modules/<name>/`) may import core and the generic modules (customers, catalog). Nothing else may import it or mention its concepts. Only `app/main.py` (mounts the router), `alembic/env.py` (imports the models) and the dev seed know a module exists. `tests/test_module_boundaries.py` fails if core, Customers or Catalog mention horses. There is no `customer.horses`; use `GET /api/horses?owner_customer_id=...`. Per-organization enabling of modules is not built yet.
+**Boundary.** A domain module (`app/modules/<name>/`) may import core and the generic modules (customers, catalog). Nothing else may import it. Only `app/main.py` (mounts the router and registers it), `alembic/env.py` (imports the models) and the dev seed know a module exists. `tests/test_module_boundaries.py` enforces these import rules (not vocabulary: ordinary domain words may appear anywhere). There is no `customer.horses`; use `GET /api/horses?owner_customer_id=...`. Per-organization enabling of modules is not built yet.
 
 **Tenant-safe references (three layers).**
 1. API: `resolve_reference(db, ctx, Model, id, field)` (`app/core/tenant_scope.py`) checks the id exists in the active organization. A foreign id and a nonexistent id give the same 422 on the field (`reference.not_found`), so references cannot probe other tenants. Inactive records are refused for new assignments (`reference.inactive`); an unchanged existing reference stays valid after the target is deactivated.
@@ -495,7 +495,7 @@ How tenant isolation (CLAUDE.md section 6) is enforced in code. Follow this for 
 
 ## Implementation notes: sales / transactions
 
-Implemented in `app/modules/sales/`. Sales is industry-neutral: it imports core, Customers and Catalog only, never a domain module, and nothing but the wiring files may import Sales (both directions are enforced by `tests/test_module_boundaries.py`).
+Implemented in `app/modules/sales/`. Sales is industry-neutral: it imports core, Customers and Catalog only, never a domain module or the custom-fields module, and nothing but the wiring files may import Sales (both directions are enforced as import rules by `tests/test_module_boundaries.py`).
 
 **Header and lines.** `transactions` (billing customer, date, status) and `transaction_lines`. The **billing customer is on the header**, one per transaction, required, and never inferred from or assumed equal to any other customer. A transaction has any number of lines; a draft may have none, but completing needs at least one.
 
@@ -520,3 +520,49 @@ Each line is rounded on its own and the three amounts are **stored** on the line
 **Future custom fields (UDFs) without Sales knowing the referenced module.** Custom-field definitions will name an `entity_type` such as `transaction` or `transaction_line`; values are stored against `(organization_id, definition_id, entity_type, entity_id)`. Modules register their entity types (and reference sources) at startup in a small registry, so the UDF engine validates entity and reference ids through the registry and `resolve_reference` without importing Sales or any domain module. Whether a field lives on the header or on each line is the field definition's choice. Sales will register a small "is this entity editable" check so a completed transaction locks its lines' custom values without the UDF engine learning what `completed` means. Known gap: polymorphic references cannot use composite foreign keys, so deleting a referenced record will need a registered "is referenced" check.
 
 **Invoicing later.** Creating an invoice will lock the completed transactions of one billing customer and copy, not recalculate: customer name and address, each line's description, unit, quantity, price, VAT rate and the three stored amounts, plus a text snapshot of the resolved custom-field context. Invoice lines will reference their source transaction line with a restrictive composite foreign key. Corrections will use credit notes. Partial invoicing of lines within one transaction is out of scope.
+
+---
+
+## Implementation notes: core registry and lifecycle seam
+
+Generic capabilities and modules never import each other. They meet in **core**:
+
+```text
+customers, catalog, sales, domain modules ──► core registry ◄── custom fields (and future capabilities)
+```
+
+**Entity registry (`app/core/entity_registry.py`).** Each module calls `register(registry)` explicitly from `main.py` and says what it exposes: `EntityType(key, label, model)` plus optionally `custom_fields` (organizations may add fields to it), `reference` (other records may point at it: label/search/active columns and `FilterSpec`s, meaning "column X of this entity points at entity type Y"), `parent` (belongs to another entity type through a column) and `is_editable` (a callback answering "may this record's custom values change now?"). Registration fails fast on a misspelled column, a duplicate key or an unknown entity key (`registry.validate()` at startup). `registry.isolated()` lets a test register extras without leaving a trace.
+
+**Lifecycle validation (`app/core/lifecycle.py`).** A module that owns a lifecycle step calls `ensure_valid(db, ctx, event, entity_key, entity_id)` before performing it (Sales does this for `complete`). Anything registered on the registry may veto by returning `Problem`s. A veto is a 409 with `{code: "validation_failed", event, message, total, problems: [{code, message, entity_type, entity_id, field, label}]}`, enough for a frontend to locate the record and field. Validators receive the `TenantContext` and only look at that organization.
+
+**Authorization (`app/core/authz.py`).** `require_role(ctx, allowed_roles)` and the dependency factory `roles_required(*roles)`. The role is always the one in the ACTIVE membership, so a user who is an owner in one organization and a viewer in another gets the right answer in each; selecting an organization you do not belong to is still a 404.
+
+**Polymorphic delete guard.** `delete_or_409` also asks registered reference guards, so a record pointed at from somewhere a foreign key cannot express (a custom-field reference) cannot be deleted.
+
+---
+
+## Implementation notes: custom fields (UDFs)
+
+Implemented in `app/modules/custom_fields/`. It depends on core only and never names a concrete entity: everything it knows about entities comes from the registry. Attributes that are normal and stable for an entity stay real columns in that entity's module; custom fields extend an entity with organization-specific fields and never replace normal domain modeling.
+
+**Definitions** (`custom_field_definitions`, tenant-owned): `entity_type` (registry key), `key` (slug, unique per organization and entity type), `label` (organization-defined), `field_type` (`text`, `number`, `date`, `boolean`, `select`, `reference`), `required`, `position`, `enabled`, `show_in_form`, `show_in_table`, `show_on_invoice`, and for references a `reference_source` plus an optional single dependency (`depends_on_definition_id`, `depends_on_filter`). Structural properties (`entity_type`, `key`, `field_type`, `reference_source`, the dependency) are immutable; label, required, position, enabled and the `show_*` flags can change. Definitions are disabled, never deleted. A field with enabled dependents cannot be disabled, and a dependent field cannot be enabled while its parent is disabled. Money and percent field types are deferred until currency exists.
+
+**`show_on_invoice`** means the field is *eligible to be snapshotted* when an invoice is created. A future invoice must store the rendered label and value it needs at issuance; it must never resolve current definitions or reference targets to display an existing invoice.
+
+**Options** (`custom_field_options`): the choices of a select field, each with a stable UUID that values store. Relabelling or disabling an option never touches values, and options are never deleted. Disabled options keep displaying on existing records but cannot be newly chosen.
+
+**Values** (`custom_field_values`): one polymorphic table with one typed column per type (`value_text`, `value_number NUMERIC(18,4)`, `value_date`, `value_boolean`, `value_option_id`, `value_reference_id`). A CHECK requires exactly one column, matching `field_type`. Composite foreign keys make PostgreSQL verify that a row's type and entity type match its definition and that an option belongs to that definition, all within one organization. `entity_id` and `value_reference_id` are polymorphic, so the API validates them through the registry. "No value" is no row. Numbers use the strict decimal-string contract and dates are `YYYY-MM-DD`.
+
+**References and dependencies.** A reference value stores the target UUID and display text is resolved live: a rename shows everywhere, a deactivated target shows with `active: false`, and a missing target renders `missing: true`. Only a new or changed value must exist in the active organization and be active (the same 422 for foreign and nonexistent ids). A dependent field is configuration: `source`, `depends_on` (a field key on the same entity type) and `filter` (a filter key the source registered). At definition time the engine checks that the source is referenceable, the filter exists, and the parent is an enabled reference field whose source equals what the filter references. At write time the child must satisfy `column = parent's value`; a child without its parent, or a parent changed or cleared with the child left behind, is refused. Existing pairs are history and are re-checked only when one of them changes. A chain (A, then B, then C) is simply several such definitions; `tests/test_generic_dependency_proof.py` proves Customer -> Project -> Work Order with a synthetic module and no engine change.
+
+**Choices** (`GET /api/custom-fields/definitions/{id}/choices`): the engine queries the registered model through `scoped_select`, using only registry-declared columns and narrowing by `depends_on_value`. An id from another organization matches nothing.
+
+**Required fields** are enforced when values are written (on the resulting set) and before a record is finalized: the capability registers a validator on the lifecycle seam that checks every enabled required field on the record and on all records below it (found through the registry's `parent` links). Making a field required later never invalidates existing records or unlocks completed ones; the next value write, or the next completion, must satisfy it.
+
+**Locking.** The engine calls the entity's `is_editable` callback before validating or writing. Sales' callback row-locks the transaction (`FOR UPDATE`) and allows only drafts. It is the same lock every Sales lifecycle step takes, so a value write and a completion are serialized and each re-checks state after acquiring the lock, with neither side knowing the other's rules. `tests/test_custom_fields_concurrency.py` proves this with real, separate connections.
+
+**Delete protection.** The custom-fields reference guard is registered on core. It counts only values of records that still exist, in the record's own organization, so values orphaned by a deleted line never block anything and one organization's data never protects another's records. Raw SQL deletes bypass guards, which is why dangling references render safely.
+
+**Administration.** Creating or changing definitions and options is owner/admin only (via `roles_required`). Reading definitions, listing choices and writing values is open to every member.
+
+**Not in V1:** filtering lists by custom fields, text search indexes, money/percent types, multiple dependencies per field, operators other than equality, formulas, deleting definitions, and orphan clean-up.

@@ -6,6 +6,8 @@ from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.entity_registry import registry
+
 FOREIGN_KEY_VIOLATION = "23503"  # PostgreSQL SQLSTATE
 
 
@@ -29,8 +31,11 @@ def delete_or_409(db: Session, record: Any, detail: str) -> None:
     """Delete `record`, or answer 409 if other records still reference it.
 
     The message stays generic on purpose: the module that owns the delete must not
-    know which other modules reference its records.
+    know which other modules reference its records. Foreign keys protect most links;
+    registered reference guards protect polymorphic ones a foreign key cannot express.
     """
+    if registry.is_referenced(db, record):
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=detail)
     try:
         # Savepoint: a refused delete must not poison the surrounding transaction.
         with db.begin_nested():

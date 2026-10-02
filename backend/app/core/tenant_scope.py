@@ -82,13 +82,13 @@ def resolve_reference(
     label = label or model.__name__
     record = get_scoped(db, ctx, model, record_id)
     if record is None:
-        _reference_error(field, f"{label} not found", "reference.not_found")
+        reference_error(field, f"{label} not found", "reference.not_found")
     if require_active and not getattr(record, "active", True):
-        _reference_error(field, f"{label} is inactive", "reference.inactive")
+        reference_error(field, f"{label} is inactive", "reference.inactive")
     return record
 
 
-def _reference_error(field: "str | tuple[str | int, ...]", message: str, error_type: str):
+def reference_error(field: "str | tuple[str | int, ...]", message: str, error_type: str):
     # Same shape as FastAPI's own validation errors, so clients handle both alike.
     path = [field] if isinstance(field, str) else list(field)
     raise HTTPException(

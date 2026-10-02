@@ -14,6 +14,11 @@ from app.models import (
     Role,
     User,
 )
+from app.modules.custom_fields.models import (
+    CustomFieldDefinition,
+    CustomFieldOption,
+    CustomFieldValue,
+)
 from app.modules.equine.models import Horse
 from app.modules.sales.models import Transaction, TransactionLine
 from app.modules.sales.pricing import calculate_line
@@ -181,3 +186,73 @@ def make_line(
     db.add(line)
     db.flush()
     return line
+
+
+def make_definition(
+    db: Session,
+    org: Organization,
+    *,
+    entity_type: str = "transaction_line",
+    key: str = "note",
+    label: str | None = None,
+    field_type: str = "text",
+    required: bool = False,
+    position: int = 10,
+    enabled: bool = True,
+    show_in_form: bool = True,
+    show_in_table: bool = False,
+    show_on_invoice: bool = False,
+    reference_source: str | None = None,
+    depends_on: CustomFieldDefinition | None = None,
+    depends_on_filter: str | None = None,
+    options: list[str] | None = None,
+) -> CustomFieldDefinition:
+    definition = CustomFieldDefinition(
+        organization_id=org.id,
+        entity_type=entity_type,
+        key=key,
+        label=label or key.replace("_", " ").title(),
+        field_type=field_type,
+        required=required,
+        position=position,
+        enabled=enabled,
+        show_in_form=show_in_form,
+        show_in_table=show_in_table,
+        show_on_invoice=show_on_invoice,
+        reference_source=reference_source,
+        depends_on_definition_id=depends_on.id if depends_on else None,
+        depends_on_filter=depends_on_filter,
+    )
+    db.add(definition)
+    db.flush()
+    for index, label_text in enumerate(options or [], start=1):
+        make_option(db, org, definition, label_text, position=index * 10)
+    return definition
+
+
+def make_option(
+    db: Session, org: Organization, definition: CustomFieldDefinition, label: str, *, position: int = 10, enabled: bool = True
+) -> CustomFieldOption:
+    option = CustomFieldOption(
+        organization_id=org.id, definition_id=definition.id, label=label, position=position, enabled=enabled
+    )
+    db.add(option)
+    db.flush()
+    return option
+
+
+def make_value(
+    db: Session, org: Organization, definition: CustomFieldDefinition, entity_id, **typed
+) -> CustomFieldValue:
+    """A stored value; pass the typed column, e.g. value_text="x" or value_reference_id=id."""
+    value = CustomFieldValue(
+        organization_id=org.id,
+        definition_id=definition.id,
+        entity_type=definition.entity_type,
+        field_type=definition.field_type,
+        entity_id=entity_id,
+        **typed,
+    )
+    db.add(value)
+    db.flush()
+    return value

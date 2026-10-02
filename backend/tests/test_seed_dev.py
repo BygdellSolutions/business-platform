@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models import Customer, Item, OrganizationUser, Role, User
+from app.modules.custom_fields.models import CustomFieldDefinition, CustomFieldValue
 from app.modules.equine.models import Horse
 from app.modules.sales.models import Transaction, TransactionLine
 from app.scripts import seed_dev
@@ -88,6 +89,26 @@ def test_seed_creates_expected_layout_and_is_idempotent(db_session: Session):
         assert (line.description, line.unit, line.quantity) == ("Horse massage", "session", Decimal("1"))
         assert (line.net_amount, line.vat_amount, line.gross_amount) == (
             Decimal("850.00"), Decimal("212.50"), Decimal("1062.50"))
+
+    for org_id in (seed_dev.ORG_HORSE_THERAPY_ID, seed_dev.ORG_STABLE_SERVICES_ID):
+        definitions = {
+            d.key: d
+            for d in db_session.scalars(
+                select(CustomFieldDefinition).where(CustomFieldDefinition.organization_id == org_id)
+            )
+        }
+        assert set(definitions) == {"owner", "horse"}  # the same keys in both organizations
+        assert definitions["horse"].depends_on_definition_id == definitions["owner"].id
+        assert definitions["horse"].depends_on_filter == "owner_customer_id"
+        shown = {
+            d.key: db_session.scalar(
+                select(CustomFieldValue.value_reference_id).where(CustomFieldValue.definition_id == d.id)
+            )
+            for d in definitions.values()
+        }
+        assert names[shown["owner"]] == "Anna Andersson"
+        horse = db_session.get(Horse, shown["horse"])
+        assert horse.name == "Kalle" and horse.organization_id == org_id and horse.owner_customer_id == shown["owner"]
 
 
 def test_seed_refuses_outside_development(monkeypatch: pytest.MonkeyPatch):

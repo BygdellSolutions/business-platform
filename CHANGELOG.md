@@ -32,7 +32,7 @@ All notable changes to `business-platform` will be documented in this file.
 - Generic `resolve_reference` helper for validating ids in a request body against the active organization (identical 422 for foreign and nonexistent ids; inactive targets refused for new assignments).
 - Composite foreign keys from horses to customers and `UNIQUE (organization_id, id)` on customers, so PostgreSQL itself refuses cross-tenant references.
 - Generic `409` when deleting a record that other records still reference (`delete_or_409`); applied to Customers.
-- Module boundary test: core, Customers and Catalog must not import or mention the Equine module.
+- Module boundary tests: the modules do not import each other and only the wiring files import a module (enforced as import rules, see below).
 - Horses registered with the shared tenant-isolation contract, plus tests for references, inactive customers, deletion, filters and field validation.
 - Development seed now includes the horse Kalle (owner Anna Andersson, stable Umeå HK) in Fredrik Horse Therapy and an identical-looking Kalle in the other organization.
 - Sales module (`app/modules/sales/`): industry-neutral `transactions` (billing customer, date, lifecycle status) and `transaction_lines` with migration. Lines snapshot the Item's description, unit, price and VAT; quantities are `NUMERIC(12,3)`.
@@ -42,8 +42,19 @@ All notable changes to `business-platform` will be documented in this file.
 - Items can no longer be deleted while a transaction line references them (generic `409`); `UNIQUE (organization_id, id)` added to `items` and `transactions` for composite foreign keys.
 - Tests: pricing edge cases and parity with PostgreSQL `round`, database constraints, item-snapshot guarantees (item edits change nothing on existing lines; the same item can carry different overrides on different lines), nested-resource tenant isolation, lifecycle rules and locking, and Transactions registered with the shared tenant-isolation contract.
 - Development seed now includes a completed transaction with one "Horse massage" line in both organizations.
+- Core entity registry (`app/core/entity_registry.py`): modules explicitly register what they expose (custom-field targets, referenceable entities with the filters they offer, parent links, an `is_editable` callback). Registration fails fast on a misspelled column or unknown key. Customers, Horses and Sales register themselves from `main.py`.
+- Core lifecycle validation seam (`app/core/lifecycle.py`): any capability can register validators, and Sales asks them before completing a transaction. A veto is a `409` with structured `problems` (record type, id, field, label).
+- Core authorization helper (`app/core/authz.py`): `require_role` and `roles_required`, using the role of the active membership only.
+- Custom fields (UDF) module (`app/modules/custom_fields/`) with migration: definitions (text, number, date, boolean, select, reference; required, position, enabled, `show_in_form`, `show_in_table`, `show_on_invoice`), stable-UUID select options, and one typed polymorphic value table whose composite foreign keys and CHECK constraint keep rows consistent with their definition within one organization.
+- Dependent reference fields with equality filters (Owner, then Horse narrowed to that owner), configured as data from the filters modules register; choices lookup, dependency validation, and a bulk values endpoint for tables. Customer -> Project -> Work Order is proven with a synthetic module and no engine change.
+- Custom-fields API at `/api/custom-fields`: entity types, definitions, options, choices and values; definition and option changes are owner/admin only.
+- Required custom fields block transaction completion (on the transaction and on every line) without Sales importing Custom Fields; completed or cancelled transactions lock their custom values through the registered `is_editable` callback. Row locking is shared with Sales' lifecycle steps and proven with real concurrent connections.
+- Polymorphic delete guard: `delete_or_409` consults registered reference guards, so records pointed at by custom-field references cannot be deleted. Horse DELETE now uses `delete_or_409`.
+- Development seed configures Owner and Horse on transaction lines in both organizations, with values on the seeded line.
+- Tests: registry rules, authorization across organizations with different roles, definition and value validation matrices, reference lifecycle (rename, deactivate, delete, dangling), completion validation, concurrency, tenant isolation (also through the shared contract, which gained a no-delete option), and the generic dependency proof.
 
 ### Changed
+- Architecture tests now enforce imports and registrations instead of banning domain vocabulary from source files and docs.
 - Shared helpers extracted from the Customers router into `app/core/query.py` (literal LIKE search, commit/refresh, update) and `app/api/deps.py` (pagination) so resources do not duplicate them.
 - `CustomerRef` moved to the shared customer schemas (used by Horses and Transactions); the tenant contract allows resources without search; `get_scoped*` accept `for_update`.
 - Tenant contract `create_body` may now be a function of the acting organization (needed for resources with references).

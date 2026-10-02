@@ -21,9 +21,10 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.models import Customer, Item, Organization
+from app.modules.custom_fields.models import CustomFieldDefinition
 from app.modules.equine.models import Horse
 from app.modules.sales.models import Transaction
-from tests.factories import make_customer, make_horse, make_item, make_transaction
+from tests.factories import make_customer, make_definition, make_horse, make_item, make_transaction
 
 
 @dataclass(frozen=True)
@@ -40,6 +41,7 @@ class Resource:
     twin_search: str | None  # `?q=` text matching the identical-looking record in both orgs
     unique_overrides: dict[str, Any]  # make() overrides giving a record only `unique_search` finds
     unique_search: str | None
+    supports_delete: bool = True  # False: the API has no DELETE (the contract then expects 405)
 
 
 def body_for(resource: Resource, db: Session, org: Organization) -> dict[str, Any]:
@@ -123,4 +125,28 @@ TRANSACTIONS = Resource(
     unique_search=None,
 )
 
-RESOURCES = [CUSTOMERS, ITEMS, HORSES, TRANSACTIONS]
+def _definition_create_body(db: Session, org: Organization) -> dict[str, Any]:
+    return {
+        "entity_type": "transaction_line",
+        "key": "contract_created",
+        "label": "Contract Created",
+        "field_type": "text",
+    }
+
+
+CUSTOM_FIELD_DEFINITIONS = Resource(
+    name="custom_field_definitions",
+    path="/api/custom-fields/definitions",
+    model=CustomFieldDefinition,
+    make=make_definition,  # identical-looking by default: key "note", label "Note", text
+    create_body=_definition_create_body,
+    patch_body={"label": "Renamed"},
+    patch_field="label",
+    patch_value="Renamed",
+    twin_search=None,
+    unique_overrides={"key": "zelda"},
+    unique_search=None,
+    supports_delete=False,  # definitions are disabled, never deleted
+)
+
+RESOURCES = [CUSTOMERS, ITEMS, HORSES, TRANSACTIONS, CUSTOM_FIELD_DEFINITIONS]

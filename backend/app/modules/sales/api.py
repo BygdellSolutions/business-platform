@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import Pagination, pagination
 from app.core.db import get_db
+from app.core.lifecycle import COMPLETE as EVENT_COMPLETE, ensure_valid
 from app.core.query import apply_update, commit_and_refresh
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import (
@@ -327,6 +328,10 @@ def _transition(
                 status.HTTP_409_CONFLICT,
                 detail="A transaction needs at least one line to be completed",
             )
+        # Anything registered on the core lifecycle seam may object (for example required
+        # custom fields). The row is locked, so what the validators see cannot change
+        # underneath us before the status is written.
+        ensure_valid(db, ctx, EVENT_COMPLETE, "transaction", tx.id)
     tx.status = to
     commit_and_refresh(db, tx)
     return _read_one(db, ctx, transaction_id)

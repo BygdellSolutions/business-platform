@@ -1,82 +1,157 @@
-"""Import-direction rule: domain modules depend on core, never the other way round.
+"""Import-direction rules between core, generic capabilities and modules.
 
-Core, Customers, Catalog and everything that will come later (Sales, UDF engine, ...)
-must not import the Equine module or contain horse-specific concepts. Only the
-places that wire a module in may mention it. This keeps "a specialized module can
-reference generic entities without contaminating them" a failing test, not a convention.
+These tests enforce DEPENDENCIES (who imports whom) and REGISTRATIONS (what each module
+registers), not vocabulary: ordinary domain words may appear in generic code and docs.
+
+    core  ◄── customers / catalog / sales / custom fields / domain modules
+    domain modules, sales, custom fields do not import each other;
+    they meet only through the core registry (see app/core/entity_registry.py).
 """
 
-import re
+import ast
 from pathlib import Path
+
+import pytest
 
 BACKEND = Path(__file__).resolve().parents[1]
 APP = BACKEND / "app"
-EQUINE = APP / "modules" / "equine"
-SALES = APP / "modules" / "sales"
+MODULES = APP / "modules"
 
-# The only files outside the module allowed to know it exists.
-WIRING = {
-    APP / "main.py",  # mounts the router
-    APP / "scripts" / "seed_dev.py",  # dev data
+# The only files that wire modules into the application.
+WIRING = {APP / "main.py", APP / "scripts" / "seed_dev.py"}
+
+MODULE_PREFIX = {
+    "equine": "app.modules.equine",
+    "sales": "app.modules.sales",
+    "custom_fields": "app.modules.custom_fields",
 }
-FORBIDDEN_WORDS = ("horse", "equine")
-IMPORTS_SALES = re.compile(r"modules\.sales|from app\.modules import .*\bsales\b")
 
 
-def python_files(root: Path):
+def python_files(root: Path) -> list[Path]:
     return [p for p in root.rglob("*.py") if "__pycache__" not in p.parts]
 
 
-def test_nothing_outside_the_module_mentions_it_except_the_wiring_files():
-    offenders = []
-    for path in python_files(APP):
-        if EQUINE in path.parents or path in WIRING:
-            continue
-        text = path.read_text(encoding="utf-8").lower()
-        found = [word for word in FORBIDDEN_WORDS if word in text]
-        if found:
-            offenders.append(f"{path.relative_to(BACKEND)}: {found}")
-
-    assert offenders == []
-
-
-def test_wiring_allowlist_is_not_stale():
-    # If a wiring file stops mentioning a module, shrink WIRING.
-    for path in WIRING:
-        text = path.read_text(encoding="utf-8").lower()
-        assert "equine" in text and "sales" in text, path
+def imports_of(path: Path) -> set[str]:
+    """Absolute module names imported by `path` (`from a import b` yields `a` and `a.b`)."""
+    found: set[str] = set()
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if isinstance(node, ast.Import):
+            found.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+            found.add(node.module)
+            found.update(f"{node.module}.{alias.name}" for alias in node.names)
+    return found
 
 
-def test_sales_is_industry_neutral():
-    # Sales may use core, Customers and Catalog, but must not know any domain module.
-    for path in python_files(SALES):
-        text = path.read_text(encoding="utf-8").lower()
-        assert not any(word in text for word in FORBIDDEN_WORDS), path
+def imports_matching(path: Path, prefix: str) -> list[str]:
+    return sorted(m for m in imports_of(path) if m == prefix or m.startswith(prefix + "."))
 
 
-def test_nothing_imports_sales_except_the_wiring_files():
-    # Core, Customers, Catalog and the domain modules never depend on Sales.
-    offenders = [
+def importers_of(prefix: str, *, allowed_dirs: tuple[Path, ...] = ()) -> list[str]:
+    """App files that import `prefix`, other than wiring files and `allowed_dirs`."""
+    return [
         str(path.relative_to(BACKEND))
         for path in python_files(APP)
-        if SALES not in path.parents
-        and path not in WIRING
-        and IMPORTS_SALES.search(path.read_text(encoding="utf-8"))
+        if path not in WIRING
+        and not any(d in path.parents for d in allowed_dirs)
+        and imports_matching(path, prefix)
     ]
 
+
+# --- modules are only imported by their own package and the wiring files -------------------------
+
+
+@pytest.mark.parametrize("name", MODULE_PREFIX)
+def test_nothing_imports_a_module_except_itself_and_the_wiring_files(name: str):
+    assert importers_of(MODULE_PREFIX[name], allowed_dirs=(MODULES / name,)) == []
+
+
+def test_wiring_files_really_wire_the_modules():
+    # If a wiring file stops importing a module, shrink WIRING (keeps the allowlist honest).
+    for path in WIRING:
+        for name in ("equine", "sales"):
+            assert imports_matching(path, MODULE_PREFIX[name]), (path, name)
+
+
+# --- the modules do not depend on each other ---------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "package,forbidden",
+    [
+        ("sales", ["equine", "custom_fields"]),
+        ("equine", ["sales", "custom_fields"]),
+        ("custom_fields", ["sales", "equine"]),
+    ],
+)
+def test_modules_do_not_import_each_other(package: str, forbidden: list[str]):
+    offenders = [
+        f"{path.relative_to(BACKEND)} -> {MODULE_PREFIX[other]}"
+        for path in python_files(MODULES / package)
+        for other in forbidden
+        if imports_matching(path, MODULE_PREFIX[other])
+    ]
     assert offenders == []
 
 
-def test_only_the_horses_migration_mentions_horses():
-    versions = BACKEND / "alembic" / "versions"
-    mentioning = [
-        p.name for p in versions.glob("*.py") if "horse" in p.read_text(encoding="utf-8").lower()
+# --- core and the standard (non-module) code never import modules ----------------------------------------
+
+
+def test_core_imports_no_modules_apis_or_schemas():
+    offenders = [
+        f"{path.relative_to(BACKEND)} -> {m}"
+        for path in python_files(APP / "core")
+        for prefix in ("app.modules", "app.api", "app.schemas", "app.scripts")
+        for m in imports_matching(path, prefix)
     ]
+    assert offenders == []
 
-    assert len(mentioning) == 1 and "horses" in mentioning[0]
+
+def test_standard_code_does_not_import_modules():
+    # Customers, Catalog and the shared schemas/models are below the modules.
+    standard = [
+        *python_files(APP / "models"),
+        *python_files(APP / "schemas"),
+        APP / "api" / "customers.py",
+        APP / "api" / "items.py",
+        APP / "api" / "me.py",
+        APP / "api" / "deps.py",
+    ]
+    registrations = APP / "registrations.py"
+    if registrations.exists():
+        standard.append(registrations)
+    offenders = [
+        f"{path.relative_to(BACKEND)} -> {m}"
+        for path in standard
+        for m in imports_matching(path, "app.modules")
+    ]
+    assert offenders == []
 
 
-def test_core_models_package_does_not_register_domain_models():
-    # Domain models are registered by alembic/env.py, not by the core models package.
-    init = (APP / "models" / "__init__.py").read_text(encoding="utf-8").lower()
-    assert "modules" not in init and "horse" not in init
+# --- the custom-fields capability depends on core only -----------------------------------------------------
+
+CUSTOM_FIELDS_MAY_IMPORT = (
+    "app.core",
+    "app.models.mixins",
+    "app.models.organization_user",  # the Role enum
+    "app.schemas.money",
+    "app.api.deps",
+    "app.modules.custom_fields",
+)
+
+
+def test_custom_fields_depends_on_core_only():
+    offenders = []
+    for path in python_files(MODULES / "custom_fields"):
+        for name in imports_of(path):
+            if name.split(".")[0] == "app" and not any(
+                name == p or name.startswith(p + ".") for p in CUSTOM_FIELDS_MAY_IMPORT
+            ):
+                offenders.append(f"{path.relative_to(BACKEND)} -> {name}")
+    assert offenders == []
+
+
+def test_alembic_collects_the_models_of_every_module():
+    env = (BACKEND / "alembic" / "env.py").read_text(encoding="utf-8")
+    for module in ("equine", "sales"):
+        assert f"app.modules.{module}" in env
