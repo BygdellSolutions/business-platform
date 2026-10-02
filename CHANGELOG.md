@@ -35,9 +35,17 @@ All notable changes to `business-platform` will be documented in this file.
 - Module boundary test: core, Customers and Catalog must not import or mention the Equine module.
 - Horses registered with the shared tenant-isolation contract, plus tests for references, inactive customers, deletion, filters and field validation.
 - Development seed now includes the horse Kalle (owner Anna Andersson, stable Umeå HK) in Fredrik Horse Therapy and an identical-looking Kalle in the other organization.
+- Sales module (`app/modules/sales/`): industry-neutral `transactions` (billing customer, date, lifecycle status) and `transaction_lines` with migration. Lines snapshot the Item's description, unit, price and VAT; quantities are `NUMERIC(12,3)`.
+- Line net, VAT and gross amounts are calculated per line with half-up rounding (`pricing.py`, Decimal only), stored, and kept consistent with the inputs by PostgreSQL CHECK constraints. Transaction totals and the VAT breakdown are sums of the stored line amounts.
+- Transactions API at `/api/transactions` (create with nested lines, list with `status`/`billing_customer_id`/`date_from`/`date_to` filters, read, update, delete), nested line routes, and lifecycle actions `complete`, `reopen` and `cancel`. Only drafts can be changed or deleted; every mutation locks the transaction row.
+- `QuantityIn`/`QuantityOut` types extend the strict decimal-string contract to quantities (up to 3 decimals, greater than 0; output always three decimals).
+- Items can no longer be deleted while a transaction line references them (generic `409`); `UNIQUE (organization_id, id)` added to `items` and `transactions` for composite foreign keys.
+- Tests: pricing edge cases and parity with PostgreSQL `round`, database constraints, item-snapshot guarantees (item edits change nothing on existing lines; the same item can carry different overrides on different lines), nested-resource tenant isolation, lifecycle rules and locking, and Transactions registered with the shared tenant-isolation contract.
+- Development seed now includes a completed transaction with one "Horse massage" line in both organizations.
 
 ### Changed
 - Shared helpers extracted from the Customers router into `app/core/query.py` (literal LIKE search, commit/refresh, update) and `app/api/deps.py` (pagination) so resources do not duplicate them.
+- `CustomerRef` moved to the shared customer schemas (used by Horses and Transactions); the tenant contract allows resources without search; `get_scoped*` accept `for_update`.
 - Tenant contract `create_body` may now be a function of the acting organization (needed for resources with references).
 - Customer type `organization` renamed to `company`; "organization" now only means the tenant.
 

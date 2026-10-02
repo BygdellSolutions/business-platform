@@ -1,4 +1,5 @@
 import uuid
+from datetime import date
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
@@ -14,6 +15,8 @@ from app.models import (
     User,
 )
 from app.modules.equine.models import Horse
+from app.modules.sales.models import Transaction, TransactionLine
+from app.modules.sales.pricing import calculate_line
 
 
 def make_org(db: Session, name: str = "Test Org") -> Organization:
@@ -110,3 +113,71 @@ def make_horse(
     db.add(horse)
     db.flush()
     return horse
+
+
+def make_transaction(
+    db: Session,
+    org: Organization,
+    billing_customer: Customer | None = None,
+    transaction_date: date = date(2026, 10, 1),
+    status: str = "draft",
+    lines: list[dict] | None = None,
+) -> Transaction:
+    """A transaction whose defaults look identical in every organization.
+
+    `lines` is a list of make_line() keyword dicts; by default one ad-hoc line.
+    """
+    billing_customer = billing_customer or make_customer(
+        db, org, "Umeå HK", CustomerType.COMPANY, "hk@example.test", None
+    )
+    tx = Transaction(
+        organization_id=org.id,
+        billing_customer_id=billing_customer.id,
+        transaction_date=transaction_date,
+        status=status,
+    )
+    db.add(tx)
+    db.flush()
+    for position, fields in enumerate(lines if lines is not None else [{}], start=1):
+        make_line(db, org, tx, position=position, **fields)
+    return tx
+
+
+def make_line(
+    db: Session,
+    org: Organization,
+    transaction: Transaction,
+    item: Item | None = None,
+    description: str = "Horse massage",
+    unit: str = "session",
+    quantity: Decimal | str = "1",
+    unit_price_ex_vat: Decimal | str = "850.00",
+    vat_rate: Decimal | str = "25.00",
+    position: int = 1,
+    **fields,
+) -> TransactionLine:
+    """A line with consistent stored amounts (override net_amount etc. to build bad rows)."""
+    quantity, unit_price_ex_vat, vat_rate = (
+        Decimal(quantity),
+        Decimal(unit_price_ex_vat),
+        Decimal(vat_rate),
+    )
+    amounts = calculate_line(quantity, unit_price_ex_vat, vat_rate)
+    fields.setdefault("net_amount", amounts.net)
+    fields.setdefault("vat_amount", amounts.vat)
+    fields.setdefault("gross_amount", amounts.gross)
+    line = TransactionLine(
+        organization_id=org.id,
+        transaction_id=transaction.id,
+        item_id=item.id if item is not None else None,
+        position=position,
+        description=description,
+        unit=unit,
+        quantity=quantity,
+        unit_price_ex_vat=unit_price_ex_vat,
+        vat_rate=vat_rate,
+        **fields,
+    )
+    db.add(line)
+    db.flush()
+    return line

@@ -7,20 +7,23 @@ under the contract, add one `Resource` to RESOURCES; no new test code is needed.
 Contract requirements for a resource:
 - `make(db, org, **overrides)` creates a record whose defaults look IDENTICAL in every
   organization (same names, same values) so a missing organization filter is visible.
-- the API lives at `path` with POST / GET list+search (`?q=`) / GET, PATCH, DELETE `/{id}`.
+- the API lives at `path` with POST / GET list / GET, PATCH, DELETE `/{id}`, and `?q=` search
+  if the resource has any (`twin_search`/`unique_search` are None for resources without it).
 - `create_body` is a dict, or a function `(db, org) -> dict` for resources whose valid body
   contains references (ids) that must belong to the acting organization.
 """
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from app.models import Customer, Item, Organization
 from app.modules.equine.models import Horse
-from tests.factories import make_customer, make_horse, make_item
+from app.modules.sales.models import Transaction
+from tests.factories import make_customer, make_horse, make_item, make_transaction
 
 
 @dataclass(frozen=True)
@@ -34,9 +37,9 @@ class Resource:
     patch_body: dict[str, Any]  # a valid PATCH body changing exactly one field
     patch_field: str  # the model attribute that patch_body changes
     patch_value: Any  # its value after the patch
-    twin_search: str  # `?q=` text matching the identical-looking record in both orgs
+    twin_search: str | None  # `?q=` text matching the identical-looking record in both orgs
     unique_overrides: dict[str, Any]  # make() overrides giving a record only `unique_search` finds
-    unique_search: str
+    unique_search: str | None
 
 
 def body_for(resource: Resource, db: Session, org: Organization) -> dict[str, Any]:
@@ -100,4 +103,24 @@ HORSES = Resource(
     unique_search="zelda",
 )
 
-RESOURCES = [CUSTOMERS, ITEMS, HORSES]
+
+def _transaction_create_body(db: Session, org: Organization) -> dict[str, Any]:
+    billing = make_customer(db, org, "Contract Billing")
+    return {"billing_customer_id": str(billing.id)}
+
+
+TRANSACTIONS = Resource(
+    name="transactions",
+    path="/api/transactions",
+    model=Transaction,
+    make=make_transaction,
+    create_body=_transaction_create_body,
+    patch_body={"transaction_date": "2026-11-15"},
+    patch_field="transaction_date",
+    patch_value=date(2026, 11, 15),
+    twin_search=None,  # the header has no searchable text
+    unique_overrides={"transaction_date": date(2026, 10, 2)},
+    unique_search=None,
+)
+
+RESOURCES = [CUSTOMERS, ITEMS, HORSES, TRANSACTIONS]

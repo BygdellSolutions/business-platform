@@ -31,12 +31,30 @@ def scoped_select(model: type[T], ctx: TenantContext) -> Select[tuple[T]]:
     return select(model).where(model.organization_id == ctx.organization_id)
 
 
-def get_scoped(db: Session, ctx: TenantContext, model: type[T], record_id: uuid.UUID) -> T | None:
-    return db.scalar(scoped_select(model, ctx).where(model.id == record_id))
+def get_scoped(
+    db: Session,
+    ctx: TenantContext,
+    model: type[T],
+    record_id: uuid.UUID,
+    *,
+    for_update: bool = False,
+) -> T | None:
+    """`for_update` locks the row (SELECT ... FOR UPDATE) until the transaction ends."""
+    query = scoped_select(model, ctx).where(model.id == record_id)
+    if for_update:
+        query = query.with_for_update()
+    return db.scalar(query)
 
 
-def get_scoped_or_404(db: Session, ctx: TenantContext, model: type[T], record_id: uuid.UUID) -> T:
-    record = get_scoped(db, ctx, model, record_id)
+def get_scoped_or_404(
+    db: Session,
+    ctx: TenantContext,
+    model: type[T],
+    record_id: uuid.UUID,
+    *,
+    for_update: bool = False,
+) -> T:
+    record = get_scoped(db, ctx, model, record_id, for_update=for_update)
     if record is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Not found")
     return record
@@ -47,14 +65,15 @@ def resolve_reference(
     ctx: TenantContext,
     model: type[T],
     record_id: uuid.UUID,
-    field: str,
+    field: "str | tuple[str | int, ...]",
     *,
     label: str | None = None,
     require_active: bool = True,
 ) -> T:
     """Validate that a referenced record exists in the ACTIVE organization.
 
-    Raises a 422 on `field`. A record in another organization and a nonexistent id
+    Raises a 422 on `field` (a body field name, or a path such as ("lines", 0, "item_id")
+    for nested bodies). A record in another organization and a nonexistent id
     produce exactly the same error, so a reference cannot be used to probe other
     tenants. Use it whenever a request body contains the id of another tenant-owned
     record. `require_active` rejects records that have been deactivated; callers
@@ -69,11 +88,12 @@ def resolve_reference(
     return record
 
 
-def _reference_error(field: str, message: str, error_type: str):
+def _reference_error(field: "str | tuple[str | int, ...]", message: str, error_type: str):
     # Same shape as FastAPI's own validation errors, so clients handle both alike.
+    path = [field] if isinstance(field, str) else list(field)
     raise HTTPException(
         status.HTTP_422_UNPROCESSABLE_CONTENT,
-        detail=[{"loc": ["body", field], "msg": message, "type": error_type}],
+        detail=[{"loc": ["body", *path], "msg": message, "type": error_type}],
     )
 
 

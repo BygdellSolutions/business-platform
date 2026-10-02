@@ -1,7 +1,7 @@
 from decimal import Decimal
 from enum import StrEnum
 
-from sqlalchemy import Boolean, CheckConstraint, Numeric, String, Text, text
+from sqlalchemy import Boolean, CheckConstraint, Numeric, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -22,6 +22,8 @@ class Item(TenantOwned, Base):
 
     __tablename__ = "items"
     __table_args__ = (
+        # Target for tenant-safe composite foreign keys (transaction lines reference items).
+        UniqueConstraint("organization_id", "id", name="uq_items_organization_id_id"),
         CheckConstraint("type IN ('" + "', '".join(ItemType) + "')", name="ck_items_type"),
         CheckConstraint("price_ex_vat >= 0", name="ck_items_price_ex_vat_nonnegative"),
         CheckConstraint("vat_rate >= 0 AND vat_rate <= 100", name="ck_items_vat_rate_range"),

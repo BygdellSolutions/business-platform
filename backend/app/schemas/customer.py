@@ -44,6 +44,16 @@ class CustomerUpdate(BaseModel):
         return value
 
 
+class CustomerRef(BaseModel):
+    """Compact read-only view of a customer referenced by another record."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    active: bool  # lets a UI flag a record whose customer was deactivated
+
+
 class CustomerRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

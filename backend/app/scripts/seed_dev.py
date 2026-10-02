@@ -8,12 +8,14 @@ Layout (chosen to exercise tenant selection and negative membership cases):
     maria@dev.test    employee of Umeå Stable Services only
 
 Both organizations have a customer named "Anna Andersson", an item named
-"Horse massage" and a horse named "Kalle" (identical-looking data in different
-tenants), which is what isolation checks should be run against.
+"Horse massage", a horse named "Kalle" and a completed transaction for one
+"Horse massage" (identical-looking data in different tenants), which is what
+isolation checks should be run against.
 """
 
 import uuid
 from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -32,6 +34,8 @@ from app.models import (
     User,
 )
 from app.modules.equine.models import Horse
+from app.modules.sales.models import Transaction, TransactionLine, TransactionStatus
+from app.modules.sales.pricing import calculate_line
 
 # Fixed ids make the seed idempotent and let docs/tests refer to known tenants.
 ORG_HORSE_THERAPY_ID = uuid.UUID("00000000-0000-4000-8000-0000000000a1")
@@ -80,6 +84,16 @@ ITEMS = (
 HORSES = (
     (ORG_HORSE_THERAPY_ID, "Kalle", "Anna Andersson", "Umeå HK", 2015, "gelding", "Swedish Warmblood"),
     (ORG_STABLE_SERVICES_ID, "Kalle", "Anna Andersson", None, 2015, "gelding", "Swedish Warmblood"),
+)
+
+
+# (organization, billing customer name). One completed transaction with one line, copied
+# from the organization's "Horse massage" item. Who owns which horse is NOT recorded here:
+# Sales does not know about it (that context belongs to the future custom-field mechanism).
+SEED_TRANSACTION_DATE = date(2026, 10, 1)
+TRANSACTIONS = (
+    (ORG_HORSE_THERAPY_ID, "Umeå HK"),
+    (ORG_STABLE_SERVICES_ID, "Anna Andersson"),
 )
 
 
@@ -156,6 +170,48 @@ def seed(db: Session) -> None:
                     breed=breed,
                 )
             )
+    db.flush()
+
+    for org_id, billing_name in TRANSACTIONS:
+        billing_id = _customer_id(db, org_id, billing_name)
+        exists = db.scalar(
+            select(Transaction.id).where(
+                Transaction.organization_id == org_id,
+                Transaction.billing_customer_id == billing_id,
+                Transaction.transaction_date == SEED_TRANSACTION_DATE,
+            )
+        )
+        if exists is not None:
+            continue
+        item = db.scalar(
+            select(Item).where(Item.organization_id == org_id, Item.name == "Horse massage")
+        )
+        transaction = Transaction(
+            organization_id=org_id,
+            billing_customer_id=billing_id,
+            transaction_date=SEED_TRANSACTION_DATE,
+            status=TransactionStatus.COMPLETED,
+        )
+        db.add(transaction)
+        db.flush()
+        quantity = Decimal("1")
+        amounts = calculate_line(quantity, item.price_ex_vat, item.vat_rate)
+        db.add(
+            TransactionLine(
+                organization_id=org_id,
+                transaction_id=transaction.id,
+                item_id=item.id,
+                position=1,
+                description=item.name,
+                unit=item.unit,
+                quantity=quantity,
+                unit_price_ex_vat=item.price_ex_vat,
+                vat_rate=item.vat_rate,
+                net_amount=amounts.net,
+                vat_amount=amounts.vat,
+                gross_amount=amounts.gross,
+            )
+        )
     db.flush()
 
 

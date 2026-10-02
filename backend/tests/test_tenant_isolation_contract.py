@@ -105,6 +105,8 @@ def test_multi_organization_user_sees_only_the_selected_organization(
 
 
 def test_search_matches_only_inside_the_active_organization(client: TestClient, world: World):
+    if world.res.twin_search is None:
+        pytest.skip("resource has no search")
     q = {"q": world.res.twin_search}
     a = client.get(world.res.path, params=q, headers=h(world.a_only))
     b = client.get(world.res.path, params=q, headers=h(world.b_only))
@@ -116,6 +118,8 @@ def test_search_matches_only_inside_the_active_organization(client: TestClient, 
 def test_search_cannot_discover_a_record_that_exists_only_in_another_organization(
     client: TestClient, world: World
 ):
+    if world.res.unique_search is None:
+        pytest.skip("resource has no search")
     q = {"q": world.res.unique_search}
     from_a = client.get(world.res.path, params=q, headers=h(world.a_only))
     from_b = client.get(world.res.path, params=q, headers=h(world.b_only))
@@ -320,7 +324,7 @@ def test_selecting_an_organization_you_do_not_belong_to_blocks_every_route(
 
     responses = [
         client.get(path, headers=foreign),
-        client.get(path, params={"q": world.res.twin_search}, headers=foreign),
+        client.get(path, params={"q": world.res.twin_search or "x"}, headers=foreign),
         client.get(target, headers=foreign),
         client.patch(target, json=world.res.patch_body, headers=foreign),
         client.delete(target, headers=foreign),

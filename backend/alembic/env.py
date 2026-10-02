@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.core.db import Base
 from app import models  # noqa: F401  (registers models on Base.metadata)
 from app.modules.equine import models as equine_models  # noqa: F401  (domain module models)
+from app.modules.sales import models as sales_models  # noqa: F401  (Sales models)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

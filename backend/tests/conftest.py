@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -7,8 +8,8 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.db import engine, get_db
 from app.main import app
-from app.models import Role
-from tests.factories import add_member, make_org, make_user
+from app.models import CustomerType, Role
+from tests.factories import add_member, make_customer, make_item, make_org, make_user
 
 
 @pytest.fixture
@@ -52,3 +53,16 @@ def member(db_session: Session):
     org, user = make_org(db_session, "Solo"), make_user(db_session)
     add_member(db_session, org, user, Role.OWNER)
     return org, {"X-Dev-User-Email": user.email}
+
+
+@pytest.fixture
+def sales(db_session: Session, member):
+    """One organization with a billing customer and the catalog item "Horse massage"
+    (service, unit "session", 850.00 excl. VAT, 25.00 % VAT), plus auth headers."""
+    org, headers = member
+    return SimpleNamespace(
+        org=org,
+        headers=headers,
+        billing=make_customer(db_session, org, "Umeå HK", CustomerType.COMPANY, None, None),
+        item=make_item(db_session, org, "Horse massage", unit="session", price_ex_vat="850.00", vat_rate="25.00"),
+    )

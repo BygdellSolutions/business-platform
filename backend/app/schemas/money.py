@@ -9,7 +9,8 @@ Strings are matched against a strict pattern, so exponents ("1e2"), signs,
 spaces, "NaN" and "Infinity" are all rejected, and more decimals than the
 column allows is an error instead of silent rounding.
 
-Output: always a string with exactly two decimals ("850.00", "25.00").
+Output: always a string with a fixed number of decimals: two for money and
+percentages ("850.00", "25.00"), three for quantities ("1.000").
 """
 
 import re
@@ -20,6 +21,7 @@ from pydantic import BeforeValidator, Field, PlainSerializer
 
 _MONEY_RE = re.compile(r"\d{1,10}(\.\d{1,2})?")  # NUMERIC(12,2): up to 10 integer digits
 _PERCENT_RE = re.compile(r"\d{1,3}(\.\d{1,2})?")  # NUMERIC(5,2): up to 3 integer digits
+_QUANTITY_RE = re.compile(r"\d{1,9}(\.\d{1,3})?")  # NUMERIC(12,3): up to 9 integer digits
 
 _HINT = 'send it as a decimal string such as "19.99", not as a JSON number with decimals'
 
@@ -29,7 +31,7 @@ def _strict_decimal_input(pattern: re.Pattern[str]):
         if isinstance(value, bool) or isinstance(value, float):
             raise ValueError(_HINT)
         if isinstance(value, str) and not pattern.fullmatch(value):
-            raise ValueError("must be a non-negative decimal with at most 2 decimals; " + _HINT)
+            raise ValueError("must be a non-negative decimal within the allowed precision; " + _HINT)
         return value  # ints and valid strings go straight to Decimal
 
     return validate
@@ -39,7 +41,12 @@ def _two_decimals(value: Decimal) -> str:
     return f"{value:.2f}"
 
 
+def _three_decimals(value: Decimal) -> str:
+    return f"{value:.3f}"
+
+
 _two_decimals_out = PlainSerializer(_two_decimals, return_type=str, when_used="json")
+_three_decimals_out = PlainSerializer(_three_decimals, return_type=str, when_used="json")
 
 # NUMERIC(12,2), >= 0.
 MoneyIn = Annotated[
@@ -54,5 +61,13 @@ PercentIn = Annotated[
     Field(ge=0, le=100, max_digits=5, decimal_places=2, allow_inf_nan=False),
 ]
 
+# NUMERIC(12,3), strictly positive (quantities of units, hours, kilograms, ...).
+QuantityIn = Annotated[
+    Decimal,
+    BeforeValidator(_strict_decimal_input(_QUANTITY_RE)),
+    Field(gt=0, max_digits=12, decimal_places=3, allow_inf_nan=False),
+]
+
 MoneyOut = Annotated[Decimal, _two_decimals_out]
 PercentOut = Annotated[Decimal, _two_decimals_out]
+QuantityOut = Annotated[Decimal, _three_decimals_out]

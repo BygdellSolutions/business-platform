@@ -6,11 +6,13 @@ places that wire a module in may mention it. This keeps "a specialized module ca
 reference generic entities without contaminating them" a failing test, not a convention.
 """
 
+import re
 from pathlib import Path
 
 BACKEND = Path(__file__).resolve().parents[1]
 APP = BACKEND / "app"
 EQUINE = APP / "modules" / "equine"
+SALES = APP / "modules" / "sales"
 
 # The only files outside the module allowed to know it exists.
 WIRING = {
@@ -18,6 +20,7 @@ WIRING = {
     APP / "scripts" / "seed_dev.py",  # dev data
 }
 FORBIDDEN_WORDS = ("horse", "equine")
+IMPORTS_SALES = re.compile(r"modules\.sales|from app\.modules import .*\bsales\b")
 
 
 def python_files(root: Path):
@@ -38,9 +41,30 @@ def test_nothing_outside_the_module_mentions_it_except_the_wiring_files():
 
 
 def test_wiring_allowlist_is_not_stale():
-    # If a wiring file stops mentioning the module, shrink WIRING.
+    # If a wiring file stops mentioning a module, shrink WIRING.
     for path in WIRING:
-        assert "equine" in path.read_text(encoding="utf-8").lower(), path
+        text = path.read_text(encoding="utf-8").lower()
+        assert "equine" in text and "sales" in text, path
+
+
+def test_sales_is_industry_neutral():
+    # Sales may use core, Customers and Catalog, but must not know any domain module.
+    for path in python_files(SALES):
+        text = path.read_text(encoding="utf-8").lower()
+        assert not any(word in text for word in FORBIDDEN_WORDS), path
+
+
+def test_nothing_imports_sales_except_the_wiring_files():
+    # Core, Customers, Catalog and the domain modules never depend on Sales.
+    offenders = [
+        str(path.relative_to(BACKEND))
+        for path in python_files(APP)
+        if SALES not in path.parents
+        and path not in WIRING
+        and IMPORTS_SALES.search(path.read_text(encoding="utf-8"))
+    ]
+
+    assert offenders == []
 
 
 def test_only_the_horses_migration_mentions_horses():

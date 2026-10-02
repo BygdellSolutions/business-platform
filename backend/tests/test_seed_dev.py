@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models import Customer, Item, OrganizationUser, Role, User
 from app.modules.equine.models import Horse
+from app.modules.sales.models import Transaction, TransactionLine
 from app.scripts import seed_dev
 
 
@@ -75,6 +76,18 @@ def test_seed_creates_expected_layout_and_is_idempotent(db_session: Session):
     assert names[therapy.stable_customer_id] == "Umeå HK"
     assert (therapy.birth_year, therapy.sex, therapy.breed) == (2015, "gelding", "Swedish Warmblood")
     assert horses[seed_dev.ORG_STABLE_SERVICES_ID].stable_customer_id is None
+
+    for org_id, billing in (
+        (seed_dev.ORG_HORSE_THERAPY_ID, "Umeå HK"),
+        (seed_dev.ORG_STABLE_SERVICES_ID, "Anna Andersson"),
+    ):
+        [tx] = db_session.scalars(select(Transaction).where(Transaction.organization_id == org_id)).all()
+        assert names[tx.billing_customer_id] == billing
+        assert (tx.status, tx.transaction_date) == ("completed", seed_dev.SEED_TRANSACTION_DATE)
+        [line] = db_session.scalars(select(TransactionLine).where(TransactionLine.transaction_id == tx.id)).all()
+        assert (line.description, line.unit, line.quantity) == ("Horse massage", "session", Decimal("1"))
+        assert (line.net_amount, line.vat_amount, line.gross_amount) == (
+            Decimal("850.00"), Decimal("212.50"), Decimal("1062.50"))
 
 
 def test_seed_refuses_outside_development(monkeypatch: pytest.MonkeyPatch):

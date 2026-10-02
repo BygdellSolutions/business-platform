@@ -5,6 +5,7 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 from app.modules.equine.models import MIN_BIRTH_YEAR, HorseSex
+from app.schemas.customer import CustomerRef
 
 Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
 Breed = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
@@ -57,16 +58,6 @@ class HorseUpdate(BaseModel):
         if value is None:
             raise ValueError("may not be null")
         return value
-
-
-class CustomerRef(BaseModel):
-    """Compact read-only view of a referenced customer."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    name: str
-    active: bool  # lets a UI flag a horse whose owner/stable was deactivated
 
 
 class HorseRead(BaseModel):

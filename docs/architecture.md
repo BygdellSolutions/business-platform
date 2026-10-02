@@ -490,3 +490,33 @@ How tenant isolation (CLAUDE.md section 6) is enforced in code. Follow this for 
 **Owner, stable and billing are separate.** `Horse.owner_customer_id` and `Horse.stable_customer_id` are independent Customer references; neither implies the other. The billing customer belongs to the future transaction, never to the horse.
 
 **Owner -> Horse filtering later (section 12).** The horse list already filters by `owner_customer_id` and `stable_customer_id`. A future UDF reference field is configuration data (source `horses`, `depends_on` owner, filter parameter `owner_customer_id`); Sales and the UDF engine need no horse-specific code. When UDFs arrive, modules register their reference sources in a small registry. Polymorphic references cannot use composite foreign keys, so they are validated with `resolve_reference` instead.
+
+---
+
+## Implementation notes: sales / transactions
+
+Implemented in `app/modules/sales/`. Sales is industry-neutral: it imports core, Customers and Catalog only, never a domain module, and nothing but the wiring files may import Sales (both directions are enforced by `tests/test_module_boundaries.py`).
+
+**Header and lines.** `transactions` (billing customer, date, status) and `transaction_lines`. The **billing customer is on the header**, one per transaction, required, and never inferred from or assumed equal to any other customer. A transaction has any number of lines; a draft may have none, but completing needs at least one.
+
+**Item reference and snapshot.** A line stores `item_id` (nullable: ad-hoc lines) only as a link. It also copies description, unit, unit price (ex VAT) and VAT rate when created; later Item edits never change them (section 14). The Item's values are defaults the request may override per line; changing a line's `item_id` re-copies the new item's values for fields not overridden in the same request. Inactive items are refused for new assignments only.
+
+**Quantity** is `NUMERIC(12,3)` and strictly positive, sent as a decimal string like money. Credits and refunds will be separate documents, not negative lines.
+
+**Calculation** (`pricing.py`, Decimal only):
+```text
+net   = round_half_up(quantity * unit_price_ex_vat, 2)
+vat   = round_half_up(net * vat_rate / 100, 2)
+gross = net + vat
+```
+Each line is rounded on its own and the three amounts are **stored** on the line; PostgreSQL CHECK constraints (`round(numeric, 2)` rounds half away from zero, equal to half-up for these non-negative values) keep them consistent with the inputs. **Header totals and the VAT breakdown are sums of the stored line amounts, grouped by rate.** They are never recomputed from grouped net totals, so lines always add up. A line net above 9,999,999,999.99 is rejected, never truncated. No cash rounding yet.
+
+**Lifecycle status** (`draft`, `completed`, `cancelled`) describes the transaction itself and nothing else. `completed` means finalized and ready for future invoicing; it is *not* defined as "uninvoiced". When invoicing is built, invoice state is modeled as its own relationship (an invoice referencing transactions or lines), not as another lifecycle status. Transitions use action endpoints (`complete`, `reopen`, `cancel`); `status` is never accepted in a request body.
+
+**Editing and deleting.** Header and lines change only while `draft` (409 otherwise; a completed transaction must be reopened first). Only drafts can be deleted, and their lines go with them; completed or cancelled transactions are kept (cancel instead). Every mutation locks the transaction row (`SELECT ... FOR UPDATE`) before checking the status, so a line edit cannot race a completion. Customers and Items referenced by a transaction cannot be deleted (generic `409`, deactivate instead).
+
+**Tenant-safe references.** Composite foreign keys: header to customer, line to header (ON DELETE CASCADE), line to item; each target has `UNIQUE (organization_id, id)`. The API validates ids with `resolve_reference` (identical 422 for foreign and nonexistent ids), and nested routes match both the organization and the transaction in the path.
+
+**Future custom fields (UDFs) without Sales knowing the referenced module.** Custom-field definitions will name an `entity_type` such as `transaction` or `transaction_line`; values are stored against `(organization_id, definition_id, entity_type, entity_id)`. Modules register their entity types (and reference sources) at startup in a small registry, so the UDF engine validates entity and reference ids through the registry and `resolve_reference` without importing Sales or any domain module. Whether a field lives on the header or on each line is the field definition's choice. Sales will register a small "is this entity editable" check so a completed transaction locks its lines' custom values without the UDF engine learning what `completed` means. Known gap: polymorphic references cannot use composite foreign keys, so deleting a referenced record will need a registered "is referenced" check.
+
+**Invoicing later.** Creating an invoice will lock the completed transactions of one billing customer and copy, not recalculate: customer name and address, each line's description, unit, quantity, price, VAT rate and the three stored amounts, plus a text snapshot of the resolved custom-field context. Invoice lines will reference their source transaction line with a restrictive composite foreign key. Corrections will use credit notes. Partial invoicing of lines within one transaction is out of scope.

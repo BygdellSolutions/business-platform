@@ -16,7 +16,8 @@ from app.core.tenant_scope import (
 )
 from app.models import Customer
 from app.modules.equine.models import Horse
-from app.modules.equine.schemas import CustomerRef, HorseCreate, HorseRead, HorseUpdate
+from app.modules.equine.schemas import HorseCreate, HorseRead, HorseUpdate
+from app.schemas.customer import CustomerRef
 
 router = APIRouter(prefix="/api/horses", tags=["horses"])
 
