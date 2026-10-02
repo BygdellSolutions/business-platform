@@ -17,13 +17,28 @@ A multi-tenant, modular business management platform. See [CLAUDE.md](CLAUDE.md)
 ## Setup
 
 ```bash
-cp .env.example .env        # then change POSTGRES_PASSWORD and DATABASE_URL to match
-docker compose up -d        # start PostgreSQL
+cp .env.example .env        # then change POSTGRES_PASSWORD, DATABASE_URL and TEST_DATABASE_URL to match
+docker compose up -d        # start PostgreSQL (development) AND postgres-test (tests, port 5433)
 cd backend && uv sync       # install backend dependencies
-uv run alembic upgrade head # create the database tables
+uv run alembic upgrade head # create the development database tables
 uv run python -m app.scripts.seed_dev   # development organizations and users
 cd ../frontend && npm install
 ```
+
+Create `frontend/.env.local` (the frontend does not read the root `.env`):
+
+```text
+BACKEND_URL=http://localhost:8000
+DEV_IDENTITY=enabled        # development only: enables /dev-login
+```
+
+## Test database
+
+Automated tests never use the development database. `docker compose up -d postgres-test` starts a **separate** PostgreSQL server (own container, port 5433, disposable tmpfs storage), configured only through `TEST_DATABASE_URL` in `.env` (the database name must end in `_test`).
+
+- **pytest** exports `TEST_DATABASE_URL` as `DATABASE_URL` before the application is imported and rebuilds the schema from migrations at the start of every session. If `TEST_DATABASE_URL` is missing, pytest stops; it never falls back to development.
+- **Playwright** runs its own backend (port 8001) connected only to the test database, and rebuilds and seeds it before every run (`python -m app.scripts.reset_test_db --seed`).
+- A guard (`backend/app/scripts/reset_test_db.py`, mirrored in `frontend/e2e/env.ts`) refuses to run unless the database name ends in `_test` and it is on a different server than the development database. Tests prove this, including that data written by tests never appears in the development database.
 
 ## Development identity
 
@@ -103,22 +118,38 @@ cd frontend
 npm run dev
 ```
 
-The frontend calls the backend at `http://localhost:8000`. To change that, set `NEXT_PUBLIC_API_URL` in `frontend/.env.local`.
+The browser never talks to FastAPI. The frontend's server (`BACKEND_URL`) does, on its behalf; see "Frontend" below.
 
 ## Check that it works
 
 - `http://localhost:8000/health` returns `{"status":"ok"}`
 - `http://localhost:8000/health/db` returns `{"database":"ok"}` when PostgreSQL is reachable (503 otherwise)
-- `http://localhost:3000` shows `Backend: ok`
+- `http://localhost:3000/dev-login` lets you sign in as a seeded user; then pick an organization
+
+## Frontend
+
+Next.js (App Router). See `docs/architecture.md` ("Implementation notes: frontend") for the design.
+
+- **Organization lives in the URL:** every page is `/o/{orgId}/...`. Two tabs can work in two organizations; switching is a plain link (a full page load), so no client state or cached data can carry over.
+- **BFF:** the browser calls only its own origin, `/api/o/{orgId}/...`. A route handler forwards to FastAPI and adds `X-Dev-User-Email` (httpOnly cookie) and `X-Organization-Id` (the URL) itself. Identity or organization headers sent by a client are ignored. FastAPI still verifies the user and their membership on every scoped request and answers 404 for an organization they do not belong to.
+- **Development sign-in:** `/dev-login` (only when `DEV_IDENTITY=enabled`) sets an httpOnly cookie for a user the backend knows (`fredrik@dev.test`, `maria@dev.test`).
+- **Decimals:** money, VAT, quantity and decimal custom fields are strings everywhere in the frontend and are never converted to JavaScript numbers (`lib/decimal.ts`; ESLint forbids number conversion in the money-handling folders).
 
 ## Tests and migrations
 
 ```bash
 cd backend
-uv run pytest                                  # tests (run `alembic upgrade head` first; DB tests roll back their data)
+uv run pytest                                  # uses the TEST database (docker compose up -d postgres-test)
 uv run alembic revision --autogenerate -m "…"  # create a migration
-uv run alembic upgrade head                    # apply migrations
+uv run alembic upgrade head                    # apply migrations to the development database
+uv run python -m app.scripts.reset_test_db --seed   # rebuild and seed the test database by hand
 
 cd frontend
+npm run typecheck   # next typegen + tsc
 npm run lint
+npm test            # Vitest: unit and component tests
+npm run test:e2e    # Playwright against a real stack on the test database (needs postgres-test)
+npm run check       # typecheck, lint, tests, production build
 ```
+
+End-to-end tests drive the installed Microsoft Edge (`E2E_BROWSER=chrome` for Chrome), so no browser download is needed.

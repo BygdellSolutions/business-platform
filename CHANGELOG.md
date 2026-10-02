@@ -5,6 +5,13 @@ All notable changes to `business-platform` will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Dedicated test environment: a separate `postgres-test` PostgreSQL service (own container, port 5433, disposable storage) configured only through `TEST_DATABASE_URL`. `python -m app.scripts.reset_test_db [--seed]` rebuilds it from migrations. A guard refuses any database whose name does not end in `_test` or that lives on the development server.
+- Tests prove that test execution cannot modify the development database (guard refusals before any connection, and a canary row that never appears in the development database).
+- `GET /api/me/organizations`: the current user's own memberships (id, name, role), needing no active organization, so a client can offer to switch.
+- `?active=true|false` filter on `GET /api/customers`.
+- Frontend foundations (Next.js App Router): organization-scoped routes `/o/{orgId}/...`, a BFF route handler (`/api/o/{orgId}/...`) that adds the dev identity and organization headers server-side and ignores any client-supplied ones, `/dev-login` with an httpOnly cookie (development only), the organization shell with a switcher (full navigation), a dashboard, and loading/error/not-found handling.
+- Frontend libraries: structured API error mapping for 401/403/404/409/422, a browser API client scoped to an organization, decimal-string types and validators (`lib/decimal.ts`) with ESLint rules forbidding number conversion in the money-handling folders.
+- Frontend tests: Vitest unit and component tests (BFF security, error mapping, decimals, organization scope reset, stale-answer handling) and Playwright end-to-end tests on the test database for organization isolation (foreign and arbitrary organization ids, switching, tabs, history, client state, forged headers, direct BFF requests, database separation).
 - Initial project structure: Git repository, `.gitignore`, `.env.example`, README.
 - Docker Compose service for PostgreSQL.
 - FastAPI backend with `/health` and `/health/db` endpoints, SQLAlchemy session setup and Alembic.
@@ -54,6 +61,7 @@ All notable changes to `business-platform` will be documented in this file.
 - Tests: registry rules, authorization across organizations with different roles, definition and value validation matrices, reference lifecycle (rename, deactivate, delete, dangling), completion validation, concurrency, tenant isolation (also through the shared contract, which gained a no-delete option), and the generic dependency proof.
 
 ### Changed
+- pytest now runs against the dedicated test database instead of the development database, and rebuilds its schema from migrations at the start of every session. The frontend no longer uses `NEXT_PUBLIC_API_URL`; its server calls the backend (`BACKEND_URL`).
 - Architecture tests now enforce imports and registrations instead of banning domain vocabulary from source files and docs.
 - Shared helpers extracted from the Customers router into `app/core/query.py` (literal LIKE search, commit/refresh, update) and `app/api/deps.py` (pagination) so resources do not duplicate them.
 - `CustomerRef` moved to the shared customer schemas (used by Horses and Transactions); the tenant contract allows resources without search; `get_scoped*` accept `for_update`.
@@ -64,4 +72,5 @@ All notable changes to `business-platform` will be documented in this file.
 - Replaced the deprecated `HTTP_422_UNPROCESSABLE_ENTITY` constant with `HTTP_422_UNPROCESSABLE_CONTENT`.
 
 ### Security
+- The browser never calls FastAPI and never sends identity or organization headers: the BFF builds backend requests from scratch, validates only shapes (UUID, known API areas, safe path segments, same origin, JSON bodies) and leaves membership decisions to FastAPI, which answers 404 for organizations the user does not belong to.
 - Tenant-owned records can no longer have their `organization_id` changed after creation (ORM guard); Customer, Item and Horse requests containing `organization_id` are rejected. Cross-tenant references from horses to customers are rejected by both the API and PostgreSQL composite foreign keys.

@@ -566,3 +566,24 @@ Implemented in `app/modules/custom_fields/`. It depends on core only and never n
 **Administration.** Creating or changing definitions and options is owner/admin only (via `roles_required`). Reading definitions, listing choices and writing values is open to every member.
 
 **Not in V1:** filtering lists by custom fields, text search indexes, money/percent types, multiple dependencies per field, operators other than equality, formulas, deleting definitions, and orphan clean-up.
+
+---
+
+## Implementation notes: frontend
+
+Next.js (App Router) in `frontend/`. Slice 1 (foundations) is implemented; the pages for Customers, Catalog, Horses and Transactions follow in later slices.
+
+```text
+Browser ──(same-origin /api/o/{orgId}/...)──► route handler (BFF) ──► FastAPI
+Server components ──(lib/backend.ts)────────────────────────────────► FastAPI
+                        lib/backend.ts is the ONLY place X-Dev-User-Email and X-Organization-Id are added
+```
+
+- **The organization is in the URL** (`/o/{orgId}/...`), never in a shared cookie, so two tabs can work in two organizations and a switch in one tab cannot re-target another tab's writes. The layout checks the id against the user's memberships (`GET /api/me/organizations`); a malformed, nonexistent and foreign id all end in the same 404. That check is a UI convenience: FastAPI independently verifies the user and the membership on every scoped request.
+- **Switching organization is a full page load** (plain links). `OrgScope` additionally keys its subtree by `orgId`, and client fetches abort and ignore late answers, so state or data from one tenant cannot survive into another even if a switch ever happens client-side. Pages are dynamic and keyed by URL, so the client router cache cannot cross tenants. Cache Components stays off; enabling it would keep hidden routes alive (React `Activity`) and would need a per-organization key.
+- **BFF (`app/api/o/[orgId]/[...path]/route.ts`)** forwards GET, POST, PATCH and DELETE only. It builds backend headers from scratch (client identity, organization, authorization and cookie headers are ignored), validates shapes only (UUID, a known API area, safe path segments, same origin via `Origin` against `Host`, JSON bodies up to 1 MB), turns backend redirects and failures into 502, and returns only the status and body.
+- **Development identity** is an httpOnly cookie set by `/dev-login` for a user the backend knows, enabled only with `DEV_IDENTITY=enabled`. Everything asks `lib/identity.ts`, so real authentication later replaces that module and `lib/backend.ts`.
+- **Server components** do initial reads; **client components** do interaction through `lib/api/client.ts`, which never throws for HTTP errors and maps 401/403/404/409/422 to a typed `ApiError` (`lib/api/errors.ts`): 422 locations become dotted field paths, and the structured 409 `validation_failed` keeps its `problems` for locating records and fields.
+- **Decimals** (money, VAT, quantity, decimal custom fields) are strings in types, form state, payloads and rendering (`lib/decimal.ts`, `components/ui/DecimalText.tsx`). They are branded types validated by shape only and never converted to JavaScript numbers. ESLint forbids number conversion and rounding in the money-handling folders (scoped, not a global ban). Totals are calculated by the backend and displayed as received.
+- **Deliberately simple in V1:** hand-written API types, no form or data libraries, no design system, plain anchors and `confirm()`, no optimistic updates.
+- **Tests:** Vitest for units and components; Playwright (against the installed Edge or Chrome) for a real stack on the dedicated test database (`postgres-test`): organization isolation across URL ids, switching, tabs, history and client state, forged headers, direct BFF requests, and database separation.

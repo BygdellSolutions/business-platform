@@ -29,6 +29,7 @@ def create_customer(
 @router.get("", response_model=list[CustomerRead])
 def list_customers(
     q: str | None = Query(default=None, max_length=255, description="Name or email contains"),
+    active: bool | None = None,
     page: Pagination = Depends(pagination),
     ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
@@ -42,6 +43,8 @@ def list_customers(
                 Customer.email.ilike(pattern, escape="\\"),
             )
         )
+    if active is not None:
+        query = query.where(Customer.active == active)
     query = query.order_by(Customer.name, Customer.id).limit(page.limit).offset(page.offset)
     return list(db.scalars(query))
 

@@ -1,3 +1,25 @@
+"""Test configuration. Tests run ONLY against the dedicated test database.
+
+Before the application is imported, DATABASE_URL is pointed at TEST_DATABASE_URL (a separate
+Postgres server, see docker-compose.yml) and the guard refuses anything that is not clearly a
+test database or that is the development database. There is no fallback to the dev database:
+if TEST_DATABASE_URL is missing, pytest stops. At the start of every session the test
+database is rebuilt from scratch (drop, migrate to head), so every run is deterministic.
+"""
+
+import os
+
+import pytest
+
+from app.scripts import reset_test_db  # light: imports no application code
+
+try:
+    TEST_DATABASE_URL = reset_test_db.test_database_url()
+    reset_test_db.assert_is_test_database(TEST_DATABASE_URL)
+except reset_test_db.UnsafeDatabase as exc:
+    pytest.exit(f"Refusing to run tests: {exc}", returncode=2)
+os.environ["DATABASE_URL"] = TEST_DATABASE_URL  # before app.core.config is first imported
+
 from collections.abc import Iterator
 from types import SimpleNamespace
 
@@ -21,6 +43,12 @@ from tests.factories import (
     make_transaction,
     make_user,
 )
+
+
+@pytest.fixture(scope="session", autouse=True)
+def fresh_test_database() -> None:
+    """Drop and re-migrate the test database once per session (no seed: tests build their own data)."""
+    reset_test_db.reset(TEST_DATABASE_URL)
 
 
 @pytest.fixture

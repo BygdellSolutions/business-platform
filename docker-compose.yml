@@ -16,5 +16,23 @@ services:
       timeout: 5s
       retries: 10
 
+  # A SEPARATE server for automated tests (pytest, Playwright): own container, own port, and
+  # disposable storage (tmpfs), so it cannot share data with the development database.
+  # Start it with `docker compose up -d postgres-test`; tests reset it themselves.
+  postgres-test:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_TEST_DB:-business_platform_test}
+    ports:
+      - "${POSTGRES_TEST_PORT:-5433}:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_TEST_DB:-business_platform_test}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 volumes:
   postgres_data:
