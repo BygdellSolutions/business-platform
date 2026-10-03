@@ -521,7 +521,7 @@ Each line is rounded on its own and the three amounts are **stored** on the line
 
 **Currency.** A transaction carries a `currency` copied from the organization when it is created and immutable afterwards (trigger); old transactions keep NULL until an owner/admin assigns one explicitly. See "Implementation notes: organization profile and currency".
 
-**Invoicing later.** The approved design is recorded in "Invoicing design (approved, NOT implemented)" below: whole transactions only, draft reservation, copied (never recomputed) amounts, snapshots at issuance. `transaction_lines` already has `UNIQUE (organization_id, id, transaction_id)` so invoice lines can reference a line of a given transaction.
+**Invoicing.** The approved design and its backend implementation are recorded in "Invoicing design (approved) and as built" below: whole transactions only, draft reservation, copied (never recomputed) amounts, snapshots at issuance. `transaction_lines` already has `UNIQUE (organization_id, id, transaction_id)` so invoice lines can reference a line of a given transaction.
 
 ---
 
@@ -553,7 +553,7 @@ customers, catalog, sales, domain modules ──► core registry ◄── cust
 
 **Entity registry (`app/core/entity_registry.py`).** Each module calls `register(registry)` explicitly from `main.py` and says what it exposes: `EntityType(key, label, model)` plus optionally `custom_fields` (organizations may add fields to it), `reference` (other records may point at it: label/search/active columns and `FilterSpec`s, meaning "column X of this entity points at entity type Y"), `parent` (belongs to another entity type through a column) and `is_editable` (a callback answering "may this record's custom values change now?"). Registration fails fast on a misspelled column, a duplicate key or an unknown entity key (`registry.validate()` at startup). `registry.isolated()` lets a test register extras without leaving a trace.
 
-**Lifecycle validation (`app/core/lifecycle.py`).** A module that owns a lifecycle step calls `ensure_valid(db, ctx, event, entity_key, entity_id)` before performing it. Sales does this for `complete`, `reopen` and `cancel` (events `COMPLETE`, `REOPEN`, `CANCEL`), after the state and `If-Match` checks and under the transaction row lock. A validator must ignore events it has no opinion on; today only required custom fields vote, on `complete`. No validator vetoes `reopen`/`cancel` yet (the module that will, Invoicing, does not exist); the seam is tested with a synthetic validator on `registry.isolated()`. Anything registered on the registry may veto by returning `Problem`s. A veto is a 409 with `{code: "validation_failed", event, message, total, problems: [{code, message, entity_type, entity_id, field, label}]}`, enough for a frontend to locate the record and field. Validators receive the `TenantContext` and only look at that organization.
+**Lifecycle validation (`app/core/lifecycle.py`).** A module that owns a lifecycle step calls `ensure_valid(db, ctx, event, entity_key, entity_id)` before performing it. Sales does this for `complete`, `reopen` and `cancel` (events `COMPLETE`, `REOPEN`, `CANCEL`), after the state and `If-Match` checks and under the transaction row lock. A validator must ignore events it has no opinion on; today only required custom fields vote, on `complete`. Invoicing registers the validator that vetoes `reopen`/`cancel` of a transaction that is on an invoice; the seam itself is also tested with synthetic validators on `registry.isolated()`. Anything registered on the registry may veto by returning `Problem`s. A veto is a 409 with `{code: "validation_failed", event, message, total, problems: [{code, message, entity_type, entity_id, field, label}]}`, enough for a frontend to locate the record and field. Validators receive the `TenantContext` and only look at that organization.
 
 **Currency guards.** `registry.add_currency_guard(guard)` lets a module say "my records make a currency change unsafe"; `registry.currency_lock_reason(db, organization_id)` asks them all. `isolated()` saves and restores them too.
 
@@ -563,9 +563,9 @@ customers, catalog, sales, domain modules ──► core registry ◄── cust
 
 ---
 
-## Invoicing design (approved, NOT implemented)
+## Invoicing design (approved) and as built
 
-Recorded here so the next milestone starts from the agreed design. No invoice table, model or endpoint exists yet. The prerequisites (profiles, currency, `UNIQUE (organization_id, id, transaction_id)` on `transaction_lines`, the `reopen`/`cancel` lifecycle events and the generic custom-field flag filter) are implemented; see the other notes.
+The approved design, with the owner's modifications. The backend is implemented (see "Invoicing as built" below); the frontend and PDF are not. The prerequisites (profiles, currency, `UNIQUE (organization_id, id, transaction_id)` on `transaction_lines`, the `reopen`/`cancel` lifecycle events and the generic custom-field flag filter) are described in the other notes.
 
 **Scope (V1).**
 - **Whole transactions only.** One or more completed transactions may share an invoice only when they have the same billing customer **and** the same currency. No transaction or line splitting. Invoiced-ness is derived from `invoice_transactions` (a transaction is `none`, `on a draft invoice` or `invoiced`); nothing is added to Sales.
@@ -592,6 +592,38 @@ Recorded here so the next milestone starts from the agreed design. No invoice ta
 **Snapshots.** Buyer and seller blocks (versioned, `schema: 1`), lines, and custom fields as one generic list per line/transaction (`key`, `label`, `field_type`, typed `value`, resolved `display`, `missing`, `position`) for enabled `show_on_invoice` definitions with a value. Read endpoints for an issued invoice touch only invoicing tables (a test records the SQL and fails otherwise).
 
 **Dependencies.** Invoicing may import Sales and Custom Fields directly; the reverse is forbidden (`tests/test_module_boundaries.py` already forbids Sales, Custom Fields and Equine from importing `invoicing`, and anything outside its package and the wiring from importing it).
+
+## Invoicing as built (backend; no frontend or PDF yet)
+
+Implemented in `app/modules/invoicing/` (migration `f74d0b3c9e56`). The design above is what was built; this records the concrete choices.
+
+**API** (`/api/invoices`, `/api/invoiceable-transactions`; reads for every member, mutations for owner/admin/accountant):
+
+| Endpoint | Behavior |
+|---|---|
+| `GET /api/invoiceable-transactions?customer_id&date_from&date_to` | completed, currency set, on no invoice (draft or issued), with customer, totals and version |
+| `GET /api/invoices/by-transaction?ids=` | per id `none`, `draft` or `invoiced` (+ invoice id and number text); an unknown or foreign id answers `none` exactly like a free transaction |
+| `POST /api/invoices` | `{transaction_ids, invoice_date?, due_date?, description?}` creates a draft; the customer, currency and amounts are never accepted |
+| `GET /api/invoices`, `GET /api/invoices/{id}` | list (status, customer, dates, `q` over customer name and number) and the whole stored document |
+| `PATCH /api/invoices/{id}` | draft header only (dates, description), `If-Match` |
+| `POST /api/invoices/{id}/issue` | `If-Match`; numbers and freezes |
+| `DELETE /api/invoices/{id}` | draft only, `If-Match`; releases the transactions |
+
+There is no cancel/void of an issued invoice, no credit note and no payment endpoint. Order of checks on every mutation of an existing invoice: found in the caller's organization (else the one 404) -> state (`409 invoice_issued`) -> `If-Match` (428 missing, 400 malformed, `409 stale_record` with `current_version`) -> change. Refusals of a creation are structured `409`s with a `code` and the (own) `transaction_ids` concerned: `transactions_not_completed`, `mixed_customers`, `currency_missing`, `mixed_currencies`, `already_invoiced`; ids that are not found in the caller's organization, any mixture of those with found ones, and random ids all give one identical `422` on `transaction_ids`.
+
+**Tables and keys.** `invoices` (no `document_type`; numbering uniqueness is `UNIQUE (organization_id, series, number)` only, `number_text` is a stored label and is not unique), `invoice_transactions`, `invoice_lines`, `invoice_vat_rows`, `invoice_counters`. Header totals and VAT rows are `numeric(18,2)` (a sum of many lines can exceed one line's `numeric(14,2)`); lines keep the Sales columns and the same three CHECKs. Sales gained one key for the foreign key to point at, `UNIQUE (organization_id, id, billing_customer_id, currency)` on `transactions`, and nothing else: it stores no invoiced state and has no trigger that mentions invoicing. The currency columns of an invoice and its links are NOT NULL, so the composite foreign key to `transactions` is really enforced and a transaction without a currency can never be linked.
+
+**Locking.** Creation locks the source transactions `ORDER BY id FOR UPDATE`, and checks, reads and copies under those locks. Issuing locks the invoice, then the sources in id order. Deleting and editing a draft lock the invoice. Reads that must reflect the locked rows bypass the session's identity map (`populate_existing`), so the verification does not depend on how the session was used. Creation inserts inside a savepoint, so a failure (including a lost race on `UNIQUE (organization_id, transaction_id)`, which is translated to the ordinary `already_invoiced` answer) leaves nothing behind.
+
+**Issuing, step by step** (one database transaction): lock the invoice, check state and `If-Match`; lock the sources; verify that every source is still completed with the version, customer, currency and date the draft recorded, that the source lines are exactly the copied lines and that every copied value equals its source, and that the stored header and VAT rows are still the sums of the stored lines (any difference is `409 source_changed` and nothing is issued: the financial content is never recalculated or "repaired"); inside a savepoint, re-take the customer, issuer and custom-field snapshots, allocate the number from the counter (the last thing that can fail), set number, text, time, issuing user, status and version.
+
+**Reservation.** `registration.py` registers a validator on the core lifecycle seam: for `reopen` and `cancel` of a transaction it looks for a link in `invoice_transactions` and answers a `invoice.reserved` problem for a draft or an issued invoice. Sales calls the seam under its row lock and imports nothing from Invoicing. Concurrency tests (`tests/test_invoices_concurrency.py`) prove both orderings with a request paused at a gate: a reopen underway makes a creation wait and then refuse, and a creation underway makes a reopen/cancel wait and then be refused.
+
+**Immutability.** Two invoice-local trigger functions (`invoices_immutability`, `invoice_children_immutability`) refuse any change or delete of an issued invoice and its children, any insert of a child into an issued invoice, and, for a draft, any change other than the header data and the snapshot content (`fields`, the snapshots, the customer name). A draft's customer, currency, series and totals are fixed for life. The functions read only invoicing tables; a test asserts that no trigger on a Sales table involves invoicing. Deleting a draft cascades to its children (the trigger sees the parent already gone).
+
+**Reading is independent of live data.** `read_invoice` and the list query only the invoicing tables; a test records every SQL statement of an issued-invoice read and fails if one names a live table, a control proves the recorder sees live reads elsewhere, and further tests change or delete every live source (customer, organization, item, fields, transactions, lines) and show the document is identical. The customer and issuer blocks are versioned (`schema: 1`) and hold only fields that exist today. Custom-field values flagged `show_on_invoice` are copied generically (`key`, `label`, `field_type`, typed `value`, resolved `display`, `missing`, `position`, `definition_id` for audit only); Custom Fields' value reads gained `position` and `definition_id` for this, which keeps the copy a single consistent read.
+
+**Boundaries.** Invoicing imports core, the shared models/schemas, `sales.models`, `sales.pricing`, `sales.versioning`, `custom_fields.service` and `custom_fields.schemas`, and nothing else of Sales or Custom Fields; nothing imports Invoicing except the wiring files (`tests/test_module_boundaries.py`, both directions).
 
 **Deferred or accepted debt.** Customer erasure/anonymisation against retention law (jurisdiction policy); `invoice_date` chosen by the client and defaulting to today (no organization time zone yet); PDF as its own later milestone (the stored snapshot is sufficient for it); payments; credit notes.
 

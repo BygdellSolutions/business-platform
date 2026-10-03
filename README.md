@@ -103,7 +103,7 @@ curl -X POST http://localhost:8000/api/items \
 - **Amounts** are calculated per line (`net = round_half_up(quantity × price, 2)`, `vat = round_half_up(net × rate / 100, 2)`, `gross = net + vat`), stored on the line, and kept consistent by database CHECK constraints. Transaction totals and the VAT breakdown are sums of the stored line amounts. Clients never send amounts.
 - **Lifecycle:** `draft` → `completed` (finalized, ready for future invoicing) → back to `draft` via `reopen`, or `cancelled` (final). Use `POST /api/transactions/{id}/complete|reopen|cancel`. Only drafts can be edited or deleted (otherwise `409`).
 - Customers and Items that a transaction references cannot be deleted (`409`); deactivate them instead.
-- Each transaction has a `currency`, copied from the organization at creation (see the Organization settings API). `complete`, `reopen` and `cancel` ask the core lifecycle seam first, so other modules can veto them (none does yet).
+- Each transaction has a `currency`, copied from the organization at creation (see the Organization settings API). `complete`, `reopen` and `cancel` ask the core lifecycle seam first, so other modules can veto them (Invoicing vetoes reopen and cancel of a transaction that is on a draft or issued invoice).
 - Lines: `POST /api/transactions/{id}/lines`, `PATCH|DELETE /api/transactions/{id}/lines/{line_id}`. List filters: `?status=`, `?billing_customer_id=`, `?date_from=`, `?date_to=`.
 - **Optimistic concurrency.** Every record carries an integer `version`, and a change must say which version it is based on, in an HTTP **`If-Match: "<version>"`** header (a header, not a body field, because `DELETE` and the lifecycle `POST`s have no body). The server compares it under the row lock it already takes; a mismatch is `409 {"code": "stale_record", "current_version": …}` and **nothing is changed**. Missing header: `428`; malformed: `400`. Which token guards what: `header_version` for `PATCH /transactions/{id}` (so a line changed elsewhere does not block a header edit); `version` for `DELETE /transactions/{id}` and `complete`/`reopen`/`cancel` (a decision about everything shown: any header, line or status change moves it); the line's own `version` for `PATCH`/`DELETE` of a line. Adding a line takes no version (it commutes with other edits) but moves the transaction's `version`. A no-op write moves nothing. Order of checks: record found in your organization (else 404, whatever the header says) → state allows the change (a completed transaction answers its own 409) → version → change. Foreign and random ids therefore never reach the version check.
 - After pulling this change run `uv run alembic upgrade head` on your development database (migration `c41a7e5d9b20` adds `version`/`header_version` columns; additive, existing rows start at 1).
@@ -112,6 +112,26 @@ curl -X POST http://localhost:8000/api/items \
 curl -X POST http://localhost:8000/api/transactions \
   -H "X-Dev-User-Email: maria@dev.test" -H "Content-Type: application/json" \
   -d '{"billing_customer_id":"<customer id>","lines":[{"item_id":"<item id>","quantity":"1"}]}'
+```
+
+## Invoices API (Invoicing module, backend only)
+
+`/api/invoices` and `/api/invoiceable-transactions` (`backend/app/modules/invoicing/`) turn **whole completed transactions** into invoices. There is no invoicing frontend and no PDF yet.
+
+- **What can share an invoice:** completed transactions of the **same billing customer** and the **same, non-empty currency**, none of which is already on a draft or issued invoice. No transaction or line is ever split. A transaction without a currency (one that predates currencies and was not assigned one) is not invoiceable. Invoicing state is derived from invoicing records only; Sales stores nothing about it.
+- **Draft, then issue.** `POST /api/invoices` with `{"transaction_ids": [...], "invoice_date"?, "due_date"?, "description"?}` creates a **draft** that reserves its transactions and has **no number**. The customer, currency and every amount come from the locked source transactions (they are never accepted from the caller); line amounts are copied verbatim from the stored Sales lines, and the totals and VAT breakdown are stored sums of them. `PATCH /api/invoices/{id}` edits only the draft's dates and description. `POST /api/invoices/{id}/issue` re-verifies that the sources still match what the draft reserved (otherwise `409 source_changed`, nothing is issued), re-takes the customer, organization and custom-field content as of issuance, allocates the number and freezes the invoice. `DELETE /api/invoices/{id}` deletes a **draft** and releases its transactions. An issued invoice can never be changed or deleted (the API, and invoice-local database triggers, refuse); there is no void, no credit note and no payment yet.
+- **Concurrency:** `PATCH`, `issue` and `DELETE` require `If-Match: "<version>"` like Sales (428 missing, 400 malformed, `409 stale_record` when stale; foreign and random ids are the one 404).
+- **Reservation:** a transaction on a draft **or** issued invoice cannot be reopened or cancelled (`409` with an `invoice.reserved` problem). Delete the draft to release it. Sales does not import Invoicing; the rule is a validator on the core lifecycle seam.
+- **Numbers** come from a counter per organization and series, allocated only at issuance in the same database transaction (a failed issuance gives its number back; an issued number is never reused; a draft has none). They are plain integers (`number_text` stores the label). This is not a legal "gapless numbering" guarantee: whether a jurisdiction requires that is policy that can be layered on later.
+- **An issued invoice is a self-contained document.** `GET /api/invoices/{id}` returns the stored customer and issuer snapshots, lines with their custom-field copies, and the VAT breakdown, reading **only** the invoicing tables. Renaming a customer, changing an item or a field, or deleting source records later does not change it (tests prove this, including by recording the SQL).
+- **Who:** every member may read; owner, admin and accountant may create, edit, issue and delete drafts.
+- `GET /api/invoiceable-transactions` lists what can be invoiced (`?customer_id=&date_from=&date_to=`); `GET /api/invoices/by-transaction?ids=a,b` tells for each transaction `none`, `draft` or `invoiced`.
+- After pulling this change run `uv run alembic upgrade head` on your development database (migration `f74d0b3c9e56`; additive, existing rows are untouched).
+
+```bash
+curl -X POST http://localhost:8000/api/invoices \
+  -H "X-Dev-User-Email: fredrik@dev.test" -H "X-Organization-Id: 00000000-0000-4000-8000-0000000000a1" \
+  -H "Content-Type: application/json" -d '{"transaction_ids":["<id of a completed transaction>"]}'
 ```
 
 ## Custom fields API

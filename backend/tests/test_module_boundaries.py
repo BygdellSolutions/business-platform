@@ -65,15 +65,55 @@ def importers_of(prefix: str, *, allowed_dirs: tuple[Path, ...] = ()) -> list[st
 # --- modules are only imported by their own package and the wiring files -------------------------
 
 
+# The ONE deliberate exception: Invoicing builds on Sales and Custom Fields, so it may import these
+# submodules of theirs (and nothing else of theirs). The reverse is forbidden below.
+INVOICING_MAY_IMPORT = {
+    "app.modules.sales": ("models", "pricing", "versioning"),
+    "app.modules.custom_fields": ("service", "schemas"),
+}
+
+
 @pytest.mark.parametrize("name", MODULE_PREFIX)
 def test_nothing_imports_a_module_except_itself_and_the_wiring_files(name: str):
-    assert importers_of(MODULE_PREFIX[name], allowed_dirs=(MODULES / name,)) == []
+    allowed = (MODULES / name,)
+    offenders = importers_of(MODULE_PREFIX[name], allowed_dirs=allowed)
+    if MODULE_PREFIX[name] in INVOICING_MAY_IMPORT:
+        # Invoicing is let in, but only through the named submodules.
+        offenders = [o for o in offenders if Path(o).parts[:3] != ("app", "modules", "invoicing")]
+    assert offenders == []
+
+
+def test_invoicing_imports_only_what_it_is_allowed_to():
+    """Core, the shared models and schemas, and a narrow list of Sales and Custom Fields
+    submodules. Not Equine, not any other part of Sales or Custom Fields (their APIs, registration)."""
+    allowed_prefixes = ["app.core", "app.models", "app.schemas", "app.api.deps", "app.modules.invoicing"]
+    for module, submodules in INVOICING_MAY_IMPORT.items():
+        allowed_prefixes += [f"{module}.{name}" for name in submodules]
+    offenders = []
+    for path in python_files(MODULES / "invoicing"):
+        for name in imports_of(path):
+            if name.split(".")[0] != "app":
+                continue
+            if name in INVOICING_MAY_IMPORT:  # `from app.modules.sales import models` yields the package too
+                continue
+            if not any(name == p or name.startswith(p + ".") for p in allowed_prefixes):
+                offenders.append(f"{path.relative_to(BACKEND)} -> {name}")
+    assert offenders == []
+
+
+def test_invoicing_really_uses_its_allowance():
+    # Keeps the allowance honest: if Invoicing stops importing a module, remove it from the list.
+    used = {name for path in python_files(MODULES / "invoicing") for name in imports_of(path)}
+    for module in INVOICING_MAY_IMPORT:
+        assert any(name == module or name.startswith(module + ".") for name in used), module
 
 
 def test_wiring_files_really_wire_the_modules():
     # If a wiring file stops importing a module, shrink WIRING (keeps the allowlist honest).
     for path in WIRING:
-        for name in ("equine", "sales"):
+        for name in ("equine", "sales", "invoicing"):
+            if path.name == "seed_dev.py" and name == "invoicing":
+                continue  # the seed creates no invoices
             assert imports_matching(path, MODULE_PREFIX[name]), (path, name)
 
 
@@ -158,5 +198,5 @@ def test_custom_fields_depends_on_core_only():
 
 def test_alembic_collects_the_models_of_every_module():
     env = (BACKEND / "alembic" / "env.py").read_text(encoding="utf-8")
-    for module in ("equine", "sales"):
+    for module in ("equine", "sales", "invoicing"):
         assert f"app.modules.{module}" in env

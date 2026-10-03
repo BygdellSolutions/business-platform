@@ -24,8 +24,11 @@
 - [x] Development database migrated to `c41a7e5d9b20` (done before slice 5)
 - [x] Invoicing design approved (recorded in `docs/architecture.md`, "Invoicing design (approved, NOT implemented)")
 - [x] Invoicing prerequisites: organization and customer profiles, explicit currency (`default_currency`, transaction snapshot, safe migration, locked change), `UNIQUE (organization_id, id, transaction_id)` on `transaction_lines`, `reopen`/`cancel` lifecycle events, generic custom-field flag filter
-- [ ] Run `uv run alembic upgrade head` on the development database (migrations `d52b8f1a7c34`, `e63c9a2b8d45`) and re-run `uv run python -m app.scripts.seed_dev`
-- [ ] Invoicing backend (next milestone, only after review of the prerequisites): tables, draft/issue lifecycle, counter-based numbering, immutability triggers, `reopen`/`cancel` validator on the core seam, concurrency tests
+- [x] Development database migrated to `e63c9a2b8d45` and reseeded (seeded organizations and transactions have SEK)
+- [x] Invoicing backend: draft/issue lifecycle, counter-based numbering, immutability triggers, reservation through the core seam, snapshots, concurrency tests (migration `f74d0b3c9e56`)
+- [ ] Run `uv run alembic upgrade head` on the development database for migration `f74d0b3c9e56`
+- [ ] Invoicing frontend (list, create-from-transactions, draft editor, issue, issued view) - after review of the backend
+- [ ] Invoice PDF (its own milestone; the stored snapshot is sufficient for it)
 
 ## Later
 - [ ] Payments
@@ -61,6 +64,7 @@
 - Customer email is not format-validated; the billing profile is free text by design (no jurisdiction rules).
 - Consider PostgreSQL Row Level Security as defense in depth (see docs/architecture.md).
 - **Currency (temporary rules).** Items have no currency of their own, so the organization's default currency cannot be changed once items or transactions exist, and a currency is a three-letter code with only its shape checked (no list of valid codes, no minor-unit handling). A real currency and repricing model replaces this. Transactions that predate currencies stay without one until an owner/admin assigns it (settings page or `POST /api/transactions/assign-currency`); there is no per-transaction assignment.
+- **Invoicing V1 limits.** The series is always `default` and the number label is the plain integer; no void/cancel of an issued invoice, no credit notes, no payments, no per-customer payment terms or language, no jurisdiction rules (missing profile data does not block issuing), at most 200 transactions per invoice. `invoice_date` is chosen by the client (default: today in UTC; there is no organization time zone). Customer erasure/anonymisation against invoice retention is a jurisdiction policy and is deferred: a referenced customer cannot be deleted. Draft sources cannot be changed (delete the draft and create another). An issued invoice's `fields` snapshot holds the display text as it resolved at issuance.
 - Organization settings are last-writer-wins (no `If-Match` yet) and there is no organization time zone.
 - Item `unit` is free text; no units subsystem.
 - Roles are stored on memberships but not enforced anywhere yet.

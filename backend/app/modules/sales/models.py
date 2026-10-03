@@ -49,6 +49,11 @@ class Transaction(TenantOwned, Base):
     __table_args__ = (
         # Target for the tenant-safe composite foreign key from transaction_lines.
         UniqueConstraint("organization_id", "id", name="uq_transactions_organization_id_id"),
+        # Target for modules whose records must agree with a transaction on its billing customer
+        # AND currency (a referencing row with non-NULL values is then checked by PostgreSQL itself).
+        UniqueConstraint(
+            "organization_id", "id", "billing_customer_id", "currency", name="uq_transactions_org_id_customer_currency"
+        ),
         ForeignKeyConstraint(
             ["organization_id", "billing_customer_id"],
             ["customers.organization_id", "customers.id"],

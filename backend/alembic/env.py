@@ -11,6 +11,7 @@ from app import models  # noqa: F401  (registers models on Base.metadata)
 from app.modules.equine import models as equine_models  # noqa: F401  (domain module models)
 from app.modules.sales import models as sales_models  # noqa: F401  (Sales models)
 from app.modules.custom_fields import models as custom_field_models  # noqa: F401  (custom fields)
+from app.modules.invoicing import models as invoicing_models  # noqa: F401  (Invoicing models)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

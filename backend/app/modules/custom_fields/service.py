@@ -560,7 +560,9 @@ def _value_read(
     targets: dict[str, dict[uuid.UUID, tuple[str, bool]]],
 ) -> ValueRead:
     kind = FieldType(d.field_type)
-    base = dict(key=d.key, label=d.label, field_type=kind, active=None, missing=False)
+    base = dict(
+        key=d.key, label=d.label, field_type=kind, position=d.position, definition_id=d.id, active=None, missing=False
+    )
     if kind == FieldType.TEXT:
         return ValueRead(**base, value=row.value_text, display=row.value_text)
     if kind == FieldType.NUMBER:

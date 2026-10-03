@@ -166,6 +166,10 @@ class ValueRead(BaseModel):
     key: str
     label: str
     field_type: FieldType
+    # Where the field sits in its record's field order, and the definition it came from (so a
+    # consumer that stores a copy can keep both; the id is for audit only, never to look up).
+    position: int
+    definition_id: uuid.UUID
     value: Any
     display: str | None
     active: bool | None  # options and references: still selectable?
