@@ -64,13 +64,18 @@ export function fieldPath(loc: unknown): string | null {
   return parts.length > 0 ? parts.join(".") : null;
 }
 
+/** Pydantic prefixes messages from custom validators with "Value error, "; users do not need it. */
+function cleanMessage(message: string): string {
+  return message.replace(/^Value error, /, "");
+}
+
 function validationErrors(detail: unknown): { fieldErrors: FieldErrors; formErrors: string[] } {
   const fieldErrors: FieldErrors = {};
   const formErrors: string[] = [];
   const items = Array.isArray(detail) ? detail : [];
   for (const item of items) {
     if (!isRecord(item)) continue;
-    const message = typeof item.msg === "string" ? item.msg : "Not valid";
+    const message = typeof item.msg === "string" ? cleanMessage(item.msg) : "Not valid";
     const path = fieldPath(item.loc);
     if (path === null) formErrors.push(message);
     else (fieldErrors[path] ??= []).push(message);

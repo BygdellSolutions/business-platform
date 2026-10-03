@@ -19,8 +19,10 @@ import {
  * organization each, so any leak of data (or of stale state) across a switch is visible.
  */
 
-const ONLY_A = "Only In Org A";
-const ONLY_B = "Only In Org B";
+// The dashboard preview shows the first 10 active customers by name. The leading zeros keep
+// these two first however many customers other specs add to the shared test database.
+const ONLY_A = "000 Only In Org A";
+const ONLY_B = "000 Only In Org B";
 
 test.beforeAll(async ({ browser }) => {
   const context = await browser.newContext({ baseURL: BASE_URL });
@@ -161,7 +163,7 @@ test.describe("tabs", () => {
       const response = await fetch(`/api/o/${orgId}/customers`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ customer_type: "person", name: "Written From Tab A" }),
+        body: JSON.stringify({ customer_type: "person", name: "000 Written From Tab A" }),
       });
       return response.status;
     }, ORG_A.id);
@@ -171,8 +173,8 @@ test.describe("tabs", () => {
     await tabB.reload();
     await expectOrganization(tabA, ORG_A);
     await expectOrganization(tabB, ORG_B);
-    expect(await previewNames(tabA)).toContain("Written From Tab A");
-    expect(await previewNames(tabB)).not.toContain("Written From Tab A");
+    expect(await previewNames(tabA)).toContain("000 Written From Tab A");
+    expect(await previewNames(tabB)).not.toContain("000 Written From Tab A");
     await tabA.close();
     await tabB.close();
   });

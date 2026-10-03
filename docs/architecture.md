@@ -571,7 +571,7 @@ Implemented in `app/modules/custom_fields/`. It depends on core only and never n
 
 ## Implementation notes: frontend
 
-Next.js (App Router) in `frontend/`. Slice 1 (foundations) is implemented; the pages for Customers, Catalog, Horses and Transactions follow in later slices.
+Next.js (App Router) in `frontend/`. Slice 1 (foundations) and slice 2 (Customers and Catalog) are implemented; Horses, Transactions and the custom-field renderer follow in later slices.
 
 ```text
 Browser ──(same-origin /api/o/{orgId}/...)──► route handler (BFF) ──► FastAPI
@@ -585,5 +585,8 @@ Server components ──(lib/backend.ts)─────────────�
 - **Development identity** is an httpOnly cookie set by `/dev-login` for a user the backend knows, enabled only with `DEV_IDENTITY=enabled`. Everything asks `lib/identity.ts`, so real authentication later replaces that module and `lib/backend.ts`.
 - **Server components** do initial reads; **client components** do interaction through `lib/api/client.ts`, which never throws for HTTP errors and maps 401/403/404/409/422 to a typed `ApiError` (`lib/api/errors.ts`): 422 locations become dotted field paths, and the structured 409 `validation_failed` keeps its `problems` for locating records and fields.
 - **Decimals** (money, VAT, quantity, decimal custom fields) are strings in types, form state, payloads and rendering (`lib/decimal.ts`, `components/ui/DecimalText.tsx`). They are branded types validated by shape only and never converted to JavaScript numbers. ESLint forbids number conversion and rounding in the money-handling folders (scoped, not a global ban). Totals are calculated by the backend and displayed as received.
+- **List and detail pages** (`app/o/[orgId]/customers`, `catalog`) read on the server through `lib/server-api.ts`, which answers like the BFF: no identity or a 401 goes to sign-in, a 404 (foreign, random or malformed id) shows the one generic not-found page, anything else reaches `error.tsx` without backend details. Search, status, type and page live in the URL (`lib/list-params.ts`, a plain GET form), are treated as untrusted input (unknown values are dropped, never forwarded) and page with one extra row requested instead of a count endpoint.
+- **Forms** are client components. Each control is named after its API field, so a 422 location reaches its control with a plain lookup (`lib/forms.ts`); messages without a control are shown in a summary and are never dropped. Optional blanks are sent as `null`, edits send only the changed fields, `useMutation` allows one request at a time, and no `organization_id` is ever sent. Only the shape of a decimal is checked locally; digits, range and precision are the backend's rules.
+- **Refresh strategy after a mutation:** `router.refresh()` (after `router.push()` for a create), because the Next.js client cache is reused on browser Back/Forward and would otherwise show a list visited before the change without it. There is no client data library.
 - **Deliberately simple in V1:** hand-written API types, no form or data libraries, no design system, plain anchors and `confirm()`, no optimistic updates.
 - **Tests:** Vitest for units and components; Playwright (against the installed Edge or Chrome) for a real stack on the dedicated test database (`postgres-test`): organization isolation across URL ids, switching, tabs, history and client state, forged headers, direct BFF requests, and database separation.

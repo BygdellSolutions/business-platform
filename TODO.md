@@ -15,7 +15,7 @@
 
 ## Next
 - [x] Frontend slice 1 (foundations): BFF, dev identity, `/o/{orgId}` shell, organization switcher, dashboard, test infrastructure and tenant-isolation e2e tests
-- [ ] Frontend slice 2: Customers and Catalog (list, create, edit) with the shared UI primitives
+- [x] Frontend slice 2: Customers and Catalog (list, search, filters, create, edit, deactivate/reactivate) with the shared UI primitives and tenant-isolation e2e tests
 - [ ] Frontend slice 3: Horses with Owner and Stable pickers
 - [ ] Frontend slice 4: Transactions (list, create-then-edit, line editor, backend-owned totals, lifecycle)
 - [ ] Frontend slice 5: generic custom-field renderer, dependent references, completion problems mapped to lines, read-only completed transactions
@@ -31,6 +31,9 @@
 - Dev identity (`/dev-login`, cookie) is development only; replace `lib/identity.ts` and `lib/backend.ts` with real authentication later. Behind a reverse proxy the same-origin check needs the original `Host` header forwarded.
 - Frontend client: no data library yet; revisit (SWR/TanStack Query) if shared client caches or optimistic updates become real needs.
 - Playwright runs against the installed Edge or Chrome (the browser download is blocked here); other browsers are not covered.
+- Customers and Catalog screens have no delete (records are deactivated, since other records refer to them) and do not hide actions by role: roles are not enforced by the backend for these resources yet, and the UI would only be cosmetic anyway.
+- List pages use Previous/Next (no total count) and sort by name only; there is no column sorting. The e2e specs share one seeded test database, so a spec must never rely on how many records others created (query by a unique name, never by "first N rows").
+- Forms validate only the shape of decimals locally; a message on a field that is wrong for the backend (such as too many digits) is the backend's own wording.
 - Customer, Item, Horse and draft Transaction DELETE are hard deletes. Customers and Items are protected by `409` while referenced; Horse will need the same once sessions reference horses.
 - Module enable/disable per organization is not built; the Equine and custom-field routes are mounted for everyone.
 - Horse has no `notes` yet (deferred) and one owner only (a `horse_owners` table is the planned path to multiple ownership).

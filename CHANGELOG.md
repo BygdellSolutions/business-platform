@@ -5,6 +5,10 @@ All notable changes to `business-platform` will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Customers screens (`/o/{orgId}/customers`, `/new`, `/{id}`): list with search, status filter and paging; create; edit; deactivate and reactivate. Fields: type (person/company), name, email, phone, active.
+- Catalog screens (`/o/{orgId}/catalog`, `/new`, `/{id}`): list with search, type and status filters and paging; create; edit; deactivate and reactivate. Fields: type (service/product), name, description, unit, price excluding VAT, VAT rate, active. Price and VAT are decimal strings from the input to the request and back to the screen, never JavaScript numbers.
+- Basic reusable frontend primitives where Customers and Catalog actually share code: labelled form controls wired to 422 errors (`Field`), `ListFilters`, `Pagination`, `StatusBadge`, `ActiveToggle`, `ErrorSummary`, a `useMutation` hook (one request at a time) and list-address helpers (`lib/list-params.ts`); `lib/server-api.ts` for server-component reads (401 to sign-in, 404 to the one generic not-found page).
+- Tests for these screens: Vitest component tests for both forms (payloads, 422 mapping, changed-only updates, double submit, draft reset on organization change), list parameters, server reads and form helpers, and Playwright workflow tests (create, edit, deactivate/reactivate, search, filters, paging, history) including a full round trip of 0.10, 4.35, 8.20 and 9999999999.99 through browser, BFF, FastAPI and PostgreSQL, and tenant isolation for these screens (identical records in two organizations, search and filters, direct navigation, edits against foreign ids, switching with drafts, tabs, history and forged headers).
 - Dedicated test environment: a separate `postgres-test` PostgreSQL service (own container, port 5433, disposable storage) configured only through `TEST_DATABASE_URL`. `python -m app.scripts.reset_test_db [--seed]` rebuilds it from migrations. A guard refuses any database whose name does not end in `_test` or that lives on the development server.
 - Tests prove that test execution cannot modify the development database (guard refusals before any connection, and a canary row that never appears in the development database).
 - `GET /api/me/organizations`: the current user's own memberships (id, name, role), needing no active organization, so a client can offer to switch.
@@ -61,6 +65,9 @@ All notable changes to `business-platform` will be documented in this file.
 - Tests: registry rules, authorization across organizations with different roles, definition and value validation matrices, reference lifecycle (rename, deactivate, delete, dangling), completion validation, concurrency, tenant isolation (also through the shared contract, which gained a no-delete option), and the generic dependency proof.
 
 ### Changed
+- Frontend decimal validators (`parseMoney`, `parsePercent`, `parseQuantity`) now check the shape only (digits with an optional decimal part). The number of digits, the 0 to 100 range and "greater than zero" are decided by the backend, whose 422 answer is shown on the field, so the frontend cannot drift from the backend rules.
+- 422 messages no longer show Pydantic's "Value error, " prefix.
+- Saving a new record refreshes the router so that browser Back to a list visited earlier shows the new record instead of a cached copy.
 - pytest now runs against the dedicated test database instead of the development database, and rebuilds its schema from migrations at the start of every session. The frontend no longer uses `NEXT_PUBLIC_API_URL`; its server calls the backend (`BACKEND_URL`).
 - Architecture tests now enforce imports and registrations instead of banning domain vocabulary from source files and docs.
 - Shared helpers extracted from the Customers router into `app/core/query.py` (literal LIKE search, commit/refresh, update) and `app/api/deps.py` (pagination) so resources do not duplicate them.

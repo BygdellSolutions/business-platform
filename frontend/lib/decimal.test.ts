@@ -12,34 +12,41 @@ import {
   type QuantityString,
 } from "@/lib/decimal";
 
-describe("money", () => {
+describe("money (shape only: digits with an optional decimal part)", () => {
   it.each(["0", "0.00", "0.1", "0.01", "850.00", "850", "19.99", "9999999999.99", "0000012.5"])("accepts %s and returns the same string", (input) => {
     const money = parseMoney(input);
     expect(money).toBe(input);
     expect(typeof money).toBe("string");
   });
 
-  it.each(["", " ", "-1", "-0.01", "+1", "1.001", "10000000000.00", "1e2", "1E2", "NaN", "Infinity", "1,5", " 1", "1 ", "1.", ".5", "abc", "0x10", "١٢٣"])("rejects %j", (input) => {
+  it.each(["", " ", "-1", "-0.01", "+1", "1e2", "1E2", "NaN", "Infinity", "1,5", " 1", "1 ", "1.", ".5", "abc", "0x10", "١٢٣"])("rejects %j: not a decimal at all", (input) => {
     expect(parseMoney(input)).toBeNull();
   });
+
+  it.each(["1.001", "10000000000.00", "123456789012345678901234567890.123456789"])(
+    "does not judge %j: precision and range belong to the backend, which answers 422 on the field",
+    (input) => {
+      expect(parseMoney(input)).toBe(input);
+    },
+  );
 });
 
-describe("quantity", () => {
-  it.each(["1", "0.001", "2.375", "0.25", "100", "999999999.999"])("accepts %s unchanged", (input) => {
+describe("quantity (shape only)", () => {
+  it.each(["1", "0.001", "2.375", "0.25", "100", "999999999.999", "0", "0.000", "1.0001", "1000000000"])("accepts %s unchanged", (input) => {
     expect(parseQuantity(input)).toBe(input);
   });
 
-  it.each(["0", "0.0", "0.000", "00", "-1", "1.0001", "1000000000", "1e1", "", "abc"])("rejects %j", (input) => {
+  it.each(["-1", "1e1", "", "abc"])("rejects %j", (input) => {
     expect(parseQuantity(input)).toBeNull();
   });
 });
 
-describe("percent", () => {
-  it.each(["0", "0.00", "6", "12.5", "25", "25.00", "99.99", "100", "100.00", "100.0", "010", "007"])("accepts %s", (input) => {
+describe("percent (shape only)", () => {
+  it.each(["0", "0.00", "6", "12.5", "25", "25.00", "99.99", "100", "100.00", "010", "007", "100.01", "101", "999", "25.555"])("accepts %s: the 0 to 100 range is the backend's rule", (input) => {
     expect(parsePercent(input)).toBe(input);
   });
 
-  it.each(["100.01", "100.1", "101", "999", "1000", "000100", "-1", "25.555", "1e1", "", "25%"])("rejects %j without any numeric conversion", (input) => {
+  it.each(["-1", "1e1", "", "25%"])("rejects %j", (input) => {
     expect(parsePercent(input)).toBeNull();
   });
 });
@@ -50,7 +57,7 @@ describe("custom numbers", () => {
     expect(isDecimalString(input)).toBe(true);
   });
 
-  it.each(["1.00001", "100000000000000", "1e2", "NaN", "", " 1", "--1"])("rejects %j", (input) => {
+  it.each(["1e2", "NaN", "", " 1", "--1", "1,5"])("rejects %j", (input) => {
     expect(parseCustomNumber(input)).toBeNull();
     expect(isDecimalString(input)).toBe(false);
   });

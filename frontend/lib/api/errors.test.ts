@@ -71,7 +71,17 @@ describe("normalizeError", () => {
       "values.owner": ["Owner is required"],
       "query.limit": ["Input should be less than or equal to 200"],
     });
-    expect(error.formErrors).toEqual(["Value error, something about the whole body"]);
+    expect(error.formErrors).toEqual(["something about the whole body"]); // the "Value error, " prefix is dropped
+  });
+
+  it("422 keeps the backend's wording for a decimal field but drops the Pydantic prefix", () => {
+    const error = normalizeError(422, {
+      detail: [{ loc: ["body", "price_ex_vat"], msg: "Value error, must be a non-negative decimal within the allowed precision; send it as a decimal string", type: "value_error" }],
+    });
+    expect(error).toMatchObject({
+      kind: "validation",
+      fieldErrors: { price_ex_vat: ["must be a non-negative decimal within the allowed precision; send it as a decimal string"] },
+    });
   });
 
   it("422 with a text detail becomes a form-level error", () => {

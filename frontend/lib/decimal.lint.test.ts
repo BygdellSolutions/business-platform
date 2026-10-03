@@ -30,6 +30,9 @@ const IN_ZONE = [
   "components/custom-fields/Anything.tsx",
   "features/transactions/LineEditor.tsx",
   "features/catalog/ItemForm.tsx",
+  "components/ui/Field.tsx",
+  "app/o/[orgId]/catalog/page.tsx",
+  "app/o/[orgId]/catalog/[id]/page.tsx",
 ];
 
 describe("decimal-critical folders may not convert decimals to numbers", () => {

@@ -4,8 +4,11 @@
  * converted to JavaScript numbers, and the frontend never does business arithmetic on them
  * (totals and VAT breakdowns are calculated by the backend and displayed as received).
  *
- * This module only checks the SHAPE of what the user typed, mirroring the backend contract
- * so obvious mistakes get instant feedback. The backend remains the authority.
+ * This module only checks the SHAPE of what the user typed (digits with an optional decimal
+ * part), so a value that is not a decimal at all ("abc", "1,5", "1e2") never gets typed as
+ * one. It does NOT repeat the backend's rules: the number of digits, the allowed range
+ * (0 to 100 for a percentage, greater than zero for a quantity) and similar limits belong to
+ * the backend, whose 422 answer is shown on the field. Duplicated limits would drift.
  *
  * The distinct brands make it a type error to put a percentage where money is expected, or
  * a plain `number` anywhere a decimal is expected.
@@ -28,37 +31,27 @@ export type QuantityString = DecimalString & { readonly [quantityBrand]: true };
 /** NUMERIC(5,2), 0 to 100. */
 export type PercentString = DecimalString & { readonly [percentBrand]: true };
 
-const MONEY = /^\d{1,10}(\.\d{1,2})?$/;
-const QUANTITY = /^\d{1,9}(\.\d{1,3})?$/;
-const PERCENT = /^\d{1,3}(\.\d{1,2})?$/;
-const CUSTOM_NUMBER = /^-?\d{1,14}(\.\d{1,4})?$/; // NUMERIC(18,4)
-const ALL_ZERO = /^0+(\.0+)?$/;
+const UNSIGNED_DECIMAL = /^\d+(\.\d+)?$/;
+const SIGNED_DECIMAL = /^-?\d+(\.\d+)?$/;
 
+/** Money is written as digits with an optional decimal part; the backend decides the limits. */
 export function parseMoney(input: string): MoneyString | null {
-  return MONEY.test(input) ? (input as MoneyString) : null;
+  return UNSIGNED_DECIMAL.test(input) ? (input as MoneyString) : null;
 }
 
 export function parseQuantity(input: string): QuantityString | null {
-  return QUANTITY.test(input) && !ALL_ZERO.test(input) ? (input as QuantityString) : null;
+  return UNSIGNED_DECIMAL.test(input) ? (input as QuantityString) : null;
 }
 
-/** 0 to 100 inclusive, decided on the digits alone (no numeric conversion). */
 export function parsePercent(input: string): PercentString | null {
-  if (!PERCENT.test(input)) return null;
-  const integer = input.split(".")[0].replace(/^0+(?=\d)/, "");
-  if (integer.length > 3) return null;
-  if (integer.length === 3) {
-    if (integer > "100") return null; // same length, so string order is numeric order
-    if (integer === "100" && /[1-9]/.test(input.split(".")[1] ?? "")) return null;
-  }
-  return input as PercentString;
+  return UNSIGNED_DECIMAL.test(input) ? (input as PercentString) : null;
 }
 
-/** A custom-field number: up to 14 digits and 4 decimals, may be negative. */
+/** A custom-field number: may be negative. */
 export function parseCustomNumber(input: string): DecimalString | null {
-  return CUSTOM_NUMBER.test(input) ? (input as DecimalString) : null;
+  return SIGNED_DECIMAL.test(input) ? (input as DecimalString) : null;
 }
 
 export function isDecimalString(value: unknown): value is string {
-  return typeof value === "string" && CUSTOM_NUMBER.test(value);
+  return typeof value === "string" && SIGNED_DECIMAL.test(value);
 }

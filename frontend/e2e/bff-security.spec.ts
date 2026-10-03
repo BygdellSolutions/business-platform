@@ -43,8 +43,9 @@ test.describe("FastAPI independently refuses organizations the user does not bel
 
     await context.clearCookies();
     await signIn(context, FREDRIK);
-    const names = ((await (await context.request.get(bffUrl(ORG_A.id, "/customers?limit=100"))).json()) as { name: string }[]).map((c) => c.name);
-    expect(names).not.toContain(probe);
+    // Asked by name, so the answer does not depend on how many customers other specs created.
+    const found = (await (await context.request.get(bffUrl(ORG_A.id, `/customers?q=${encodeURIComponent(probe)}`))).json()) as { name: string }[];
+    expect(found).toEqual([]);
   });
 });
 
@@ -55,13 +56,12 @@ test.describe("client-supplied identity and organization headers cannot override
     await context.clearCookies();
     await signIn(context, MARIA);
 
-    const forged = await context.request.get(bffUrl(ORG_B.id, "/customers?limit=100"), {
+    const forged = await context.request.get(bffUrl(ORG_B.id, `/customers?q=${encodeURIComponent("Secret Of Org A")}`), {
       headers: { "x-dev-user-email": FREDRIK, "x-organization-id": ORG_A.id },
     });
 
     expect(forged.status()).toBe(200);
-    const names = ((await forged.json()) as { name: string }[]).map((c) => c.name);
-    expect(names).not.toContain("Secret Of Org A"); // still Maria, still organization B
+    expect(await forged.json()).toEqual([]); // still Maria, still organization B
     const me = await context.request.get(bffUrl(ORG_B.id, "/me"), { headers: { "x-dev-user-email": FREDRIK, "x-organization-id": ORG_A.id } });
     expect(await me.json()).toMatchObject({ user: { email: MARIA }, organization: { id: ORG_B.id }, role: "employee" });
   });

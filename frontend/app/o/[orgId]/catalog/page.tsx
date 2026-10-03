@@ -1,0 +1,89 @@
+import Link from "next/link";
+
+import { DecimalText } from "@/components/ui/DecimalText";
+import { ListFilters } from "@/components/ui/ListFilters";
+import { Pagination } from "@/components/ui/Pagination";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import type { Item } from "@/lib/api/types";
+import { backendQuery, listHref, pageOf, parseListParams } from "@/lib/list-params";
+import { serverRead } from "@/lib/server-api";
+
+const TYPES = ["service", "product"] as const;
+
+export default async function CatalogPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ orgId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const { orgId } = await params;
+  const list = parseListParams(await searchParams, TYPES);
+  const { rows: items, hasNext } = pageOf(await serverRead<Item[]>(orgId, "/api/items", backendQuery(list)));
+  const base = `/o/${orgId}/catalog`;
+  const filtered = list.q !== "" || list.active !== "all" || list.type !== "";
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="text-2xl font-semibold">Catalog</h1>
+        <Link href={`${base}/new`} className="underline" data-testid="new-item">
+          New item
+        </Link>
+      </div>
+
+      <ListFilters action={base} params={list}>
+        <label className="flex flex-col gap-1 text-sm">
+          Type
+          <select name="type" defaultValue={list.type} className="rounded border border-zinc-400 px-2 py-1 text-sm dark:bg-zinc-900">
+            <option value="">All</option>
+            <option value="service">Service</option>
+            <option value="product">Product</option>
+          </select>
+        </label>
+      </ListFilters>
+
+      {items.length === 0 ? (
+        <p data-testid="empty">{filtered ? "No items match." : "No items yet."}</p>
+      ) : (
+        <table data-testid="items-table" className="w-full max-w-4xl text-left text-sm">
+          <thead>
+            <tr className="border-b border-zinc-300 dark:border-zinc-700">
+              <th className="py-1 pr-4">Name</th>
+              <th className="py-1 pr-4">Type</th>
+              <th className="py-1 pr-4">Unit</th>
+              <th className="py-1 pr-4 text-right">Price excl. VAT</th>
+              <th className="py-1 pr-4 text-right">VAT %</th>
+              <th className="py-1">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item) => (
+              <tr key={item.id} data-testid="item-row" className="border-b border-zinc-200 dark:border-zinc-800">
+                <td className="py-1 pr-4">
+                  <Link href={`${base}/${item.id}`} className="underline">
+                    {item.name}
+                  </Link>
+                </td>
+                <td className="py-1 pr-4">{item.type}</td>
+                <td className="py-1 pr-4">{item.unit}</td>
+                <td className="py-1 pr-4 text-right" data-testid="item-price">
+                  {/* Exactly the string the backend sent: no parsing, rounding or formatting. */}
+                  <DecimalText value={item.price_ex_vat} />
+                </td>
+                <td className="py-1 pr-4 text-right" data-testid="item-vat">
+                  <DecimalText value={item.vat_rate} />
+                </td>
+                <td className="py-1">
+                  <StatusBadge active={item.active} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <Pagination page={list.page} hasNext={hasNext} hrefFor={(page) => listHref(base, list, { page })} />
+    </div>
+  );
+}

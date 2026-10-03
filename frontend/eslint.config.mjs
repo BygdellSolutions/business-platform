@@ -11,8 +11,10 @@ import nextTs from "eslint-config-next/typescript";
 export const DECIMAL_ZONES = [
   "lib/decimal.ts",
   "components/ui/DecimalText.tsx",
+  "components/ui/Field.tsx",
   "components/custom-fields/**/*.{ts,tsx}",
   "features/catalog/**/*.{ts,tsx}",
+  "app/o/*/catalog/**/*.{ts,tsx}",
   "features/transactions/**/*.{ts,tsx}",
 ];
 
