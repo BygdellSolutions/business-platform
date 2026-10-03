@@ -31,6 +31,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.db import engine, get_db
 from app.main import app
+from tests.versions import FreshVersionClient
 from app.models import CustomerType, Role
 from app.modules.sales.models import TransactionLine
 from tests.factories import (
@@ -78,7 +79,19 @@ def dev_auth(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def client(db_session: Session, dev_auth: None) -> Iterator[TestClient]:
-    """API client whose requests share the rollback-only test session."""
+    """API client whose requests share the rollback-only test session. It sends the CURRENT
+    If-Match version for Sales mutations (tests/versions.py), so tests about other things keep
+    working; tests about versions use `raw_client` or pass their own If-Match."""
+    app.dependency_overrides[get_db] = lambda: db_session
+    try:
+        yield FreshVersionClient(app)
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def raw_client(db_session: Session, dev_auth: None) -> Iterator[TestClient]:
+    """Like `client`, but sends exactly what the test sends (no automatic If-Match)."""
     app.dependency_overrides[get_db] = lambda: db_session
     try:
         yield TestClient(app)

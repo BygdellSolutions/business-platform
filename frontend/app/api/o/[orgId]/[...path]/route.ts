@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { apiPathFromSegments, backendFetch, isUuid } from "@/lib/backend";
+import { apiPathFromSegments, backendFetch, isUuid, parseIfMatch } from "@/lib/backend";
 import { DEV_USER_COOKIE, identityFromCookie } from "@/lib/identity";
 import { isSameOrigin } from "@/lib/origin";
 
@@ -18,6 +18,7 @@ import { isSameOrigin } from "@/lib/origin";
  *    JSON bodies). It does NOT decide whether the user may use that organization: FastAPI
  *    independently verifies the membership on every scoped request and answers 404 otherwise.
  *  - responses carry only the status and body; no headers or cookies from the backend.
+ *  - requests carry no client headers EXCEPT a validated If-Match (optimistic concurrency).
  */
 
 type Context = { params: Promise<{ orgId: string; path: string[] }> };
@@ -42,6 +43,11 @@ async function handle(request: NextRequest, context: Context): Promise<NextRespo
   const email = identityFromCookie(request.cookies.get(DEV_USER_COOKIE)?.value);
   if (email === null) return failure(401, "Not authenticated");
 
+  // The one client header that is forwarded: the version a change is based on. Anything but a
+  // plain integer is refused here; the backend still decides whether it is current.
+  const ifMatch = parseIfMatch(request.headers.get("if-match"));
+  if (ifMatch === "invalid") return failure(400, "Invalid If-Match header");
+
   let body: string | undefined;
   if (method !== "GET") {
     const declared = Number.parseInt(request.headers.get("content-length") ?? "0", 10);
@@ -57,7 +63,7 @@ async function handle(request: NextRequest, context: Context): Promise<NextRespo
 
   let upstream: Response;
   try {
-    upstream = await backendFetch({ email, orgId }, apiPath, { method, search: request.nextUrl.search, body });
+    upstream = await backendFetch({ email, orgId }, apiPath, { method, search: request.nextUrl.search, body, ifMatch: ifMatch ?? undefined });
   } catch {
     return failure(502, "Backend unavailable");
   }

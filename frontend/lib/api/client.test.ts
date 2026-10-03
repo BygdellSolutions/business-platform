@@ -46,6 +46,22 @@ describe("apiFetch", () => {
     expect(init.cache).toBe("no-store");
   });
 
+  it("sends the version a change is based on as a quoted If-Match, and no other special header", async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await apiFetch(ORG, "/transactions/x/complete", { method: "POST", ifMatch: 3 });
+    await apiFetch(ORG, "/transactions/x", { method: "PATCH", body: { a: 1 }, ifMatch: 12 });
+    await apiFetch(ORG, "/transactions/x");
+
+    const headers = fetchMock.mock.calls.map(([, init]) => init.headers as Record<string, string>);
+    expect(headers[0]["if-match"]).toBe('"3"');
+    expect(headers[1]["if-match"]).toBe('"12"');
+    expect(headers[1]["content-type"]).toBe("application/json");
+    expect("if-match" in headers[2]).toBe(false);
+    expect(Object.keys(headers[0]).sort()).toEqual(["accept", "if-match"]);
+  });
+
   it("returns data on success", async () => {
     fetchMock.mockReturnValue(respond(200, [{ id: "1" }]));
     expect(await apiFetch(ORG, "/customers")).toEqual({ ok: true, status: 200, data: [{ id: "1" }] });

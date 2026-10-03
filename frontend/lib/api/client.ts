@@ -25,6 +25,8 @@ export interface ApiRequest {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   /** JSON body. Money, VAT, quantity and decimal values must already be strings. */
   body?: unknown;
+  /** The version of the record this change is based on (sent as If-Match). */
+  ifMatch?: number;
   signal?: AbortSignal;
 }
 
@@ -38,7 +40,11 @@ export async function apiFetch<T>(orgId: string, path: string, request: ApiReque
   try {
     response = await fetch(bffPath(orgId, path), {
       method: request.method ?? "GET",
-      headers: request.body === undefined ? { accept: "application/json" } : { accept: "application/json", "content-type": "application/json" },
+      headers: {
+        accept: "application/json",
+        ...(request.body === undefined ? {} : { "content-type": "application/json" }),
+        ...(request.ifMatch === undefined ? {} : { "if-match": `"${request.ifMatch}"` }),
+      },
       body: request.body === undefined ? undefined : JSON.stringify(request.body),
       credentials: "same-origin",
       cache: "no-store",

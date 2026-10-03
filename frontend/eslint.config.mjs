@@ -15,6 +15,7 @@ export const DECIMAL_ZONES = [
   "components/custom-fields/**/*.{ts,tsx}",
   "features/catalog/**/*.{ts,tsx}",
   "app/o/*/catalog/**/*.{ts,tsx}",
+  "app/o/*/transactions/**/*.{ts,tsx}",
   "features/transactions/**/*.{ts,tsx}",
 ];
 

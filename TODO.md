@@ -17,7 +17,9 @@
 - [x] Frontend slice 1 (foundations): BFF, dev identity, `/o/{orgId}` shell, organization switcher, dashboard, test infrastructure and tenant-isolation e2e tests
 - [x] Frontend slice 2: Customers and Catalog (list, search, filters, create, edit, deactivate/reactivate) with the shared UI primitives and tenant-isolation e2e tests
 - [x] Frontend slice 3: Horses with Owner and Stable pickers (first reusable EntityPicker)
-- [ ] Frontend slice 4: Transactions (list, create-then-edit, line editor, backend-owned totals, lifecycle)
+- [x] Sales optimistic concurrency (`If-Match` versions on transactions, headers and lines) with committed-data concurrency tests
+- [x] Frontend slice 4: Transactions (list, create-then-edit, line editor, backend-owned totals, lifecycle, stale-tab handling)
+- [ ] Run `uv run alembic upgrade head` on the development database (migration `c41a7e5d9b20`); the dev backend needs it before it can serve transactions
 - [ ] Frontend slice 5: generic custom-field renderer, dependent references, completion problems mapped to lines, read-only completed transactions
 - [ ] Invoicing design: invoice state as its own relationship to transactions (not a lifecycle status); snapshot at issuance
 
@@ -33,6 +35,10 @@
 - Playwright runs against the installed Edge or Chrome (the browser download is blocked here); other browsers are not covered.
 - Customers and Catalog screens have no delete (records are deactivated, since other records refer to them) and do not hide actions by role: roles are not enforced by the backend for these resources yet, and the UI would only be cosmetic anyway.
 - List pages use Previous/Next (no total count) and sort by name only; there is no column sorting. The e2e specs share one seeded test database, so a spec must never rely on how many records others created (query by a unique name, never by "first N rows").
+- Optimistic concurrency covers Sales only. Customers, Items, Horses and custom-field values are still last-writer-wins; extend the same `version` + `If-Match` pattern when a screen needs it. Adding a line takes no version by design.
+- Transaction editor V1: no change-item or detach on an existing line (the API supports both), no "delete draft" in the UI (Cancel exists), no line reordering, no autosave, and a stale line editor can only discard-and-reload (no "apply my edits on top of the latest").
+- A tab that is not looked at stays stale until it is (visibility refresh only, no polling), so a long-unattended tab can show an old transaction until someone returns to it.
+- The transaction date defaults to the browser's local date on create; there is still no organization time zone.
 - EntityPicker V1: shows the first 20 matches (typing narrows; no "more results" hint or paging), searches on every keystroke (aborting the previous request, no debounce), has no inline "create a new customer", and its listbox has no Home/End/PageUp/PageDown keys. Reuse it for the billing customer, items and custom-field references; those need only a `search` function and a mapping to `{id, label}`.
 - The horse list filters (Owner, Stable) travel in a plain GET form, so a cleared field is sent empty (`owner_customer_id=`); the server treats that as no filter.
 - Forms validate only the shape of decimals locally; a message on a field that is wrong for the backend (such as too many digits) is the backend's own wording.

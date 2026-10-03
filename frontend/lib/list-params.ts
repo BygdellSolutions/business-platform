@@ -1,3 +1,4 @@
+import { isDateShape } from "@/lib/dates";
 import { isUuid } from "@/lib/uuid";
 
 /**
@@ -22,11 +23,16 @@ export interface ListParams {
   type: string;
   /** Filters on another record, keyed by the backend parameter (e.g. owner_customer_id): a UUID. */
   refs: Record<string, string>;
+  /** Other filters, keyed by the backend parameter: a choice (status) or a date (date_from). */
+  extra: Record<string, string>;
   /** 1-based. */
   page: number;
 }
 
 type RawParams = Record<string, string | string[] | undefined>;
+
+/** What an extra filter accepts: one of a fixed set of values, or a date (shape only). */
+export type ExtraSpec = readonly string[] | "date";
 
 function first(value: string | string[] | undefined): string {
   return (Array.isArray(value) ? value[0] : value) ?? "";
@@ -36,7 +42,12 @@ function first(value: string | string[] | undefined): string {
  * `allowedTypes` are the values of the `type` filter the list offers; `refKeys` are the names
  * of the record filters it offers. Anything else in the address is ignored.
  */
-export function parseListParams(raw: RawParams, allowedTypes: readonly string[] = [], refKeys: readonly string[] = []): ListParams {
+export function parseListParams(
+  raw: RawParams,
+  allowedTypes: readonly string[] = [],
+  refKeys: readonly string[] = [],
+  extras: Record<string, ExtraSpec> = {},
+): ListParams {
   const active = first(raw.active);
   const type = first(raw.type);
   const page = first(raw.page);
@@ -45,11 +56,17 @@ export function parseListParams(raw: RawParams, allowedTypes: readonly string[] 
     const value = first(raw[key]);
     if (isUuid(value)) refs[key] = value.toLowerCase();
   }
+  const extra: Record<string, string> = {};
+  for (const [key, spec] of Object.entries(extras)) {
+    const value = first(raw[key]);
+    if (value !== "" && (spec === "date" ? isDateShape(value) : spec.includes(value))) extra[key] = value;
+  }
   return {
     q: first(raw.q).trim().slice(0, MAX_QUERY_LENGTH),
     active: active === "active" || active === "inactive" ? active : "all",
     type: allowedTypes.includes(type) ? type : "",
     refs,
+    extra,
     page: /^[1-9]\d{0,4}$/.test(page) ? Math.min(parseInt(page, 10), MAX_PAGE) : 1,
   };
 }
@@ -64,6 +81,7 @@ export function backendQuery(params: ListParams): string {
   if (params.active !== "all") query.set("active", params.active === "active" ? "true" : "false");
   if (params.type) query.set("type", params.type);
   for (const [key, value] of Object.entries(params.refs)) query.set(key, value);
+  for (const [key, value] of Object.entries(params.extra)) query.set(key, value);
   return `?${query.toString()}`;
 }
 
@@ -75,6 +93,7 @@ export function listHref(base: string, params: ListParams, change: Partial<ListP
   if (next.active !== "all") query.set("active", next.active);
   if (next.type) query.set("type", next.type);
   for (const [key, value] of Object.entries(next.refs)) query.set(key, value);
+  for (const [key, value] of Object.entries(next.extra)) query.set(key, value);
   if (next.page > 1) query.set("page", String(next.page));
   const text = query.toString();
   return text ? `${base}?${text}` : base;

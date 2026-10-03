@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ListFilters } from "@/components/ui/ListFilters";
 import { Pagination } from "@/components/ui/Pagination";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { CustomerFilter } from "@/features/horses/CustomerFilter";
+import { CustomerFilter } from "@/features/customers/CustomerFilter";
 import type { Customer, CustomerRef, Horse } from "@/lib/api/types";
 import { backendQuery, listHref, pageOf, parseListParams } from "@/lib/list-params";
 import { serverRead, serverReadOrNull } from "@/lib/server-api";

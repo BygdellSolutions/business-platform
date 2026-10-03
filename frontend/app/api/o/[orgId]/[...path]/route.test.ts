@@ -56,6 +56,46 @@ function sent() {
   return { url, init, headers: init.headers };
 }
 
+describe("If-Match (the version a change is based on) is the one client header that is forwarded", () => {
+  const PATH = ["transactions", "11111111-1111-4111-8111-111111111111", "complete"];
+
+  it.each([
+    ['"3"', '"3"'],
+    ["3", '"3"'],
+    [' "12" ', '"12"'],
+    ['"123456789"', '"123456789"'],
+  ])("forwards %j as %j", async (given, forwarded) => {
+    await call("POST", { path: PATH, headers: { "if-match": given } });
+    expect(sent().headers.get("if-match")).toBe(forwarded);
+  });
+
+  it("sends none when the client sent none (the backend then answers 428)", async () => {
+    await call("POST", { path: PATH });
+    expect(sent().headers.has("if-match")).toBe(false);
+  });
+
+  it.each(["abc", "*", '"1" "2"', "-1", "1.5", "", "W/\"1\"", "1234567890", '"1"; DROP'])("refuses %j without calling the backend", async (given) => {
+    const response = await call("POST", { path: PATH, headers: { "if-match": given } });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ detail: "Invalid If-Match header" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("works for PATCH and DELETE too, and does not let it change identity or organization", async () => {
+    await call("PATCH", { path: ["transactions", "x1"], headers: { "if-match": '"2"', "content-type": "application/json", "x-organization-id": OTHER_ORG, "x-dev-user-email": "evil@dev.test" }, body: "{}" });
+    const { headers } = sent();
+    expect(headers.get("if-match")).toBe('"2"');
+    expect(headers.get("x-organization-id")).toBe(ORG);
+    expect(headers.get("x-dev-user-email")).toBe("maria@dev.test");
+  });
+
+  it("still forwards no other client header", async () => {
+    await call("POST", { path: PATH, headers: { "if-match": '"1"', "if-none-match": "*", "x-forwarded-for": "10.0.0.1", authorization: "Bearer x" } });
+    const names = [...sent().headers.keys()].sort();
+    expect(names).toEqual(["accept", "if-match", "x-dev-user-email", "x-organization-id"]);
+  });
+});
+
 describe("identity and organization are decided by the BFF, never by the client", () => {
   it("forwards the cookie identity and the URL organization", async () => {
     await call("GET", { query: "?limit=5&q=anna" });

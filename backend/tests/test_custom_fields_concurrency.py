@@ -25,6 +25,7 @@ from app.core.db import SessionLocal, engine
 from app.main import app
 from app.models import Role
 from app.modules.sales.models import TransactionLine
+from tests.versions import FreshVersionClient
 from tests.factories import add_member, make_customer, make_definition, make_org, make_transaction, make_user, make_value
 
 BASE = "/api/custom-fields"
@@ -116,7 +117,7 @@ def in_thread(call):
 
     def run():
         try:
-            result["response"] = call(TestClient(app))
+            result["response"] = call(FreshVersionClient(app))
         except Exception as exc:  # surfaced by the assertions below
             result["error"] = exc
 

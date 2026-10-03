@@ -29,9 +29,14 @@ export type ApiError =
       kind: "conflict";
       status: 409;
       message: string;
-      /** Set for the structured "validation_failed" conflict (e.g. completing a transaction). */
+      /**
+       * Set for the structured conflicts: "validation_failed" (a lifecycle step was blocked,
+       * see `problems`) and "stale_record" (the change was based on an old version).
+       */
       code?: string;
       problems: Problem[];
+      /** For "stale_record": the version the record has now. */
+      currentVersion?: number;
     }
   | { kind: "validation"; status: 422; message: string; fieldErrors: FieldErrors; formErrors: string[] }
   | { kind: "client"; status: number; message: string }
@@ -111,6 +116,7 @@ export function normalizeError(status: number, body: unknown): ApiError {
         message: typeof detail.message === "string" ? detail.message : GENERIC[409],
         code: typeof detail.code === "string" ? detail.code : undefined,
         problems: toProblems(detail.problems),
+        currentVersion: typeof detail.current_version === "number" ? detail.current_version : undefined,
       };
     }
     return { kind: "conflict", status: 409, message: text ?? GENERIC[409], problems: [] };

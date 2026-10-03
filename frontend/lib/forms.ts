@@ -23,6 +23,9 @@ export function blankToNull(value: string): string | null {
   return value.trim() === "" ? null : value;
 }
 
+/** The one local message for a decimal field that is not a decimal at all (the backend judges the rest). */
+export const NOT_A_DECIMAL = "Enter a number such as 850.00, using a dot as the decimal separator.";
+
 export const NO_PROBLEMS: Problems = { byField: {}, general: [] };
 
 export function problemsFrom(error: ApiError | null, controls: readonly string[]): Problems {

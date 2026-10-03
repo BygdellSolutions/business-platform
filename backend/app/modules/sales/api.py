@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
@@ -38,6 +38,7 @@ from app.modules.sales.schemas import (
     TransactionUpdate,
     VatBreakdownRead,
 )
+from app.modules.sales.versioning import ensure_current
 from app.schemas.customer import CustomerRef
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
@@ -106,6 +107,8 @@ def _summary_fields(tx: Transaction, customer: Customer, lines: Sequence[Transac
         transaction_date=tx.transaction_date,
         status=tx.status,
         line_count=len(lines),
+        version=tx.version,
+        header_version=tx.header_version,
         totals=_totals_read(calculate_totals(lines)),
         created_at=tx.created_at,
         updated_at=tx.updated_at,
@@ -140,6 +143,11 @@ def _require_draft(tx: Transaction, what: str = "changed") -> None:
         status.HTTP_409_CONFLICT,
         detail=f"A {tx.status} transaction cannot be {what}{hint}",
     )
+
+
+def _changes(record, values: dict) -> bool:
+    """Would applying `values` change anything? A no-op write must not move a version."""
+    return any(getattr(record, field) != value for field, value in values.items())
 
 
 def _today() -> date:
@@ -270,16 +278,20 @@ def read_transaction(
 def update_transaction(
     transaction_id: uuid.UUID,
     payload: TransactionUpdate,
+    if_match: str | None = Header(default=None),
     ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
 ) -> TransactionRead:
     tx = _lock(db, ctx, transaction_id)
     _require_draft(tx)
+    ensure_current(if_match, tx.header_version, "transaction", tx.id)
     values = payload.model_dump(exclude_unset=True)
     if "billing_customer_id" in values and values["billing_customer_id"] != tx.billing_customer_id:
         resolve_reference(
             db, ctx, Customer, values["billing_customer_id"], "billing_customer_id", label="Customer"
         )
+    if _changes(tx, values):
+        values.update(header_version=tx.header_version + 1, version=tx.version + 1)
     apply_update(db, tx, values)
     return _read_one(db, ctx, transaction_id)
 
@@ -287,11 +299,13 @@ def update_transaction(
 @router.delete("/{transaction_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_transaction(
     transaction_id: uuid.UUID,
+    if_match: str | None = Header(default=None),
     ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
 ) -> Response:
     tx = _lock(db, ctx, transaction_id)
     _require_draft(tx, "deleted; cancel it instead" if tx.status == COMPLETED else "deleted")
+    ensure_current(if_match, tx.version, "transaction", tx.id)
     db.delete(tx)  # its lines go with it (ON DELETE CASCADE)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -308,12 +322,16 @@ def _transition(
     verb: str,
     allowed_from: tuple[TransactionStatus, ...],
     to: TransactionStatus,
+    if_match: str | None,
 ) -> TransactionRead:
     tx = _lock(db, ctx, transaction_id)
     if tx.status not in allowed_from:
         raise HTTPException(
             status.HTTP_409_CONFLICT, detail=f"A {tx.status} transaction cannot be {verb}"
         )
+    # A lifecycle step is a decision about everything the caller was looking at: the header,
+    # the lines and the totals. It is refused if any of that changed since.
+    ensure_current(if_match, tx.version, "transaction", tx.id)
     if to == COMPLETED:
         line_count = db.scalar(
             select(func.count())
@@ -333,6 +351,7 @@ def _transition(
         # underneath us before the status is written.
         ensure_valid(db, ctx, EVENT_COMPLETE, "transaction", tx.id)
     tx.status = to
+    tx.version += 1
     commit_and_refresh(db, tx)
     return _read_one(db, ctx, transaction_id)
 
@@ -340,33 +359,36 @@ def _transition(
 @router.post("/{transaction_id}/complete", response_model=TransactionRead)
 def complete_transaction(
     transaction_id: uuid.UUID,
+    if_match: str | None = Header(default=None),
     ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
 ) -> TransactionRead:
     return _transition(
-        db, ctx, transaction_id, verb="completed", allowed_from=(DRAFT,), to=COMPLETED
+        db, ctx, transaction_id, verb="completed", allowed_from=(DRAFT,), to=COMPLETED, if_match=if_match
     )
 
 
 @router.post("/{transaction_id}/reopen", response_model=TransactionRead)
 def reopen_transaction(
     transaction_id: uuid.UUID,
+    if_match: str | None = Header(default=None),
     ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
 ) -> TransactionRead:
     return _transition(
-        db, ctx, transaction_id, verb="reopened", allowed_from=(COMPLETED,), to=DRAFT
+        db, ctx, transaction_id, verb="reopened", allowed_from=(COMPLETED,), to=DRAFT, if_match=if_match
     )
 
 
 @router.post("/{transaction_id}/cancel", response_model=TransactionRead)
 def cancel_transaction(
     transaction_id: uuid.UUID,
+    if_match: str | None = Header(default=None),
     ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
 ) -> TransactionRead:
     return _transition(
-        db, ctx, transaction_id, verb="cancelled", allowed_from=(DRAFT, COMPLETED), to=CANCELLED
+        db, ctx, transaction_id, verb="cancelled", allowed_from=(DRAFT, COMPLETED), to=CANCELLED, if_match=if_match
     )
 
 
@@ -399,6 +421,7 @@ def add_line(
     tx = _lock(db, ctx, transaction_id)
     _require_draft(tx)
     values = _new_line_values(db, ctx, payload)
+    tx.version += 1  # no precondition (adding commutes with other edits), but the transaction changed
     last_position = db.scalar(
         select(func.coalesce(func.max(TransactionLine.position), 0)).where(
             TransactionLine.organization_id == ctx.organization_id,
@@ -417,12 +440,14 @@ def update_line(
     transaction_id: uuid.UUID,
     line_id: uuid.UUID,
     payload: LineUpdate,
+    if_match: str | None = Header(default=None),
     ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
 ) -> TransactionLine:
     tx = _lock(db, ctx, transaction_id)
     _require_draft(tx)
     line = _get_line(db, ctx, tx, line_id)
+    ensure_current(if_match, line.version, "transaction_line", line.id)
     values = payload.model_dump(exclude_unset=True)
 
     if values.get("item_id") is not None and values["item_id"] != line.item_id:
@@ -439,6 +464,9 @@ def update_line(
         values.get("vat_rate", line.vat_rate),
     )
     values.update(net_amount=amounts.net, vat_amount=amounts.vat, gross_amount=amounts.gross)
+    if _changes(line, values):
+        values["version"] = line.version + 1
+        tx.version += 1
     apply_update(db, line, values)
     return line
 
@@ -447,11 +475,15 @@ def update_line(
 def delete_line(
     transaction_id: uuid.UUID,
     line_id: uuid.UUID,
+    if_match: str | None = Header(default=None),
     ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
 ) -> Response:
     tx = _lock(db, ctx, transaction_id)
     _require_draft(tx)
-    db.delete(_get_line(db, ctx, tx, line_id))
+    line = _get_line(db, ctx, tx, line_id)
+    ensure_current(if_match, line.version, "transaction_line", line.id)
+    tx.version += 1
+    db.delete(line)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

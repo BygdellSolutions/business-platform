@@ -4,7 +4,7 @@ import { PAGE_SIZE, backendQuery, listHref, pageOf, parseListParams } from "@/li
 
 describe("parseListParams: the address is untrusted input", () => {
   it("defaults to the first page of everything", () => {
-    expect(parseListParams({})).toEqual({ q: "", active: "all", type: "", refs: {}, page: 1 });
+    expect(parseListParams({})).toEqual({ q: "", active: "all", type: "", refs: {}, extra: {}, page: 1 });
   });
 
   it("reads known values", () => {
@@ -13,6 +13,7 @@ describe("parseListParams: the address is untrusted input", () => {
       active: "inactive",
       type: "service",
       refs: {},
+      extra: {},
       page: 3,
     });
   });
@@ -26,6 +27,27 @@ describe("parseListParams: the address is untrusted input", () => {
     });
     expect(parseListParams({ owner_customer_id: owner }).refs).toEqual({}); // not offered by this list
     expect(parseListParams({ owner_customer_id: `${owner}' or 1=1` }, [], keys).refs).toEqual({});
+  });
+
+  it("reads a choice filter and date filters under their backend names, and drops anything else", () => {
+    const specs = { status: ["draft", "completed", "cancelled"], date_from: "date", date_to: "date" } as const;
+    const params = parseListParams({ status: "completed", date_from: "2026-10-01", date_to: "tomorrow", other: "x" }, [], [], specs);
+    expect(params.extra).toEqual({ status: "completed", date_from: "2026-10-01" });
+
+    expect(parseListParams({ status: "deleted", date_from: "2026-1-1" }, [], [], specs).extra).toEqual({});
+    expect(parseListParams({ status: "completed" }).extra).toEqual({}); // not offered by this list
+    expect(parseListParams({ status: ["draft", "completed"] }, [], [], specs).extra).toEqual({ status: "draft" });
+  });
+
+  it("forwards extra filters to the backend and keeps them in the address", () => {
+    const specs = { status: ["draft", "completed"], date_to: "date" } as const;
+    const params = parseListParams({ status: "draft", date_to: "2026-12-31", page: "2" }, [], [], specs);
+
+    const query = new URLSearchParams(backendQuery(params));
+    expect(query.get("status")).toBe("draft");
+    expect(query.get("date_to")).toBe("2026-12-31");
+    expect(listHref("/o/x/transactions", params)).toBe("/o/x/transactions?status=draft&date_to=2026-12-31&page=2");
+    expect(listHref("/o/x/transactions", params, { page: 1 })).toBe("/o/x/transactions?status=draft&date_to=2026-12-31");
   });
 
   it.each([["0"], ["-1"], ["1.5"], ["abc"], ["1e3"], ["100000"], [""], ["01"]])("drops the malformed page %j", (page) => {

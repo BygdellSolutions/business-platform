@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ALLOWED_API_AREAS, apiPathFromSegments, backendFetch, buildBackendHeaders, isUuid } from "@/lib/backend";
+import { ALLOWED_API_AREAS, apiPathFromSegments, backendFetch, buildBackendHeaders, isUuid, parseIfMatch } from "@/lib/backend";
 
 const ORG = "00000000-0000-4000-8000-0000000000a1";
 
@@ -62,7 +62,29 @@ describe("apiPathFromSegments", () => {
   });
 });
 
+describe("parseIfMatch", () => {
+  it.each([
+    [null, null],
+    [undefined, null],
+    ['"3"', '"3"'],
+    ["3", '"3"'],
+    [" 7 ", '"7"'],
+    ["000012", '"000012"'],
+  ])("%j gives %j", (value, expected) => {
+    expect(parseIfMatch(value)).toBe(expected);
+  });
+
+  it.each(["", "abc", "*", "-1", "1.5", '"1" "2"', "W/\"1\"", "1234567890", '"1"x', "0x10", "1e3"])("%j is invalid", (value) => {
+    expect(parseIfMatch(value)).toBe("invalid");
+  });
+});
+
 describe("buildBackendHeaders: built from scratch, only what the BFF controls", () => {
+  it("adds If-Match only when given", () => {
+    expect(buildBackendHeaders({ email: "a@b.test" }, { ifMatch: '"4"' }).get("if-match")).toBe('"4"');
+    expect(buildBackendHeaders({ email: "a@b.test" }).has("if-match")).toBe(false);
+  });
+
   it("sets identity and organization", () => {
     const headers = buildBackendHeaders({ email: "maria@dev.test", orgId: ORG });
 

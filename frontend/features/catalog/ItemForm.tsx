@@ -14,7 +14,7 @@ import { apiFetch } from "@/lib/api/client";
 import type { FieldErrors } from "@/lib/api/errors";
 import type { Item, ItemCreate, ItemType, ItemUpdate } from "@/lib/api/types";
 import { parseMoney, parsePercent } from "@/lib/decimal";
-import { blankToNull, problemsFrom, useMutation } from "@/lib/forms";
+import { NOT_A_DECIMAL, blankToNull, problemsFrom, useMutation } from "@/lib/forms";
 
 const CONTROLS = ["type", "name", "description", "unit", "price_ex_vat", "vat_rate", "active"] as const;
 
@@ -22,8 +22,6 @@ const TYPES = [
   { value: "service", label: "Service" },
   { value: "product", label: "Product" },
 ];
-
-const NOT_A_DECIMAL = "Enter a number such as 850.00, using a dot as the decimal separator.";
 
 /**
  * Every field is a string while the user edits, price and VAT included: a decimal typed as

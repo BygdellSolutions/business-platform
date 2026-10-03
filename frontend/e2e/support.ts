@@ -110,3 +110,88 @@ export async function pick(page: Page, field: string, name: string): Promise<voi
 export async function choices(page: Page, field: string): Promise<string[]> {
   return picker(page, field).getByRole("option").allTextContents();
 }
+
+// --- Sales: transactions ----------------------------------------------------------------------------------------------
+
+export interface TxJson {
+  id: string;
+  status: "draft" | "completed" | "cancelled";
+  version: number;
+  header_version: number;
+  billing_customer_id: string;
+  transaction_date: string;
+  totals: { net_amount: string; vat_amount: string; gross_amount: string; vat_breakdown: { vat_rate: string; net_amount: string; vat_amount: string }[] };
+  lines: { id: string; version: number; description: string; unit: string; quantity: string; unit_price_ex_vat: string; vat_rate: string; net_amount: string; item_id: string | null }[];
+}
+
+/** The If-Match header for a version, as the browser sends it. */
+export const ifMatch = (version: number) => ({ "if-match": `"${version}"` });
+
+export async function createTransaction(
+  context: BrowserContext,
+  orgId: string,
+  data: { billing_customer_id: string; transaction_date?: string; lines?: Record<string, string>[] },
+): Promise<TxJson> {
+  const response = await context.request.post(bffUrl(orgId, "/transactions"), { data });
+  expect(response.status(), await response.text()).toBe(201);
+  return (await response.json()) as TxJson;
+}
+
+export async function getTransaction(context: BrowserContext, orgId: string, id: string): Promise<TxJson> {
+  const response = await context.request.get(bffUrl(orgId, `/transactions/${id}`));
+  expect(response.status(), await response.text()).toBe(200);
+  return (await response.json()) as TxJson;
+}
+
+/** Add a line the way another tab or user would (no version needed to add). */
+export async function addLine(context: BrowserContext, orgId: string, txId: string, data: Record<string, string>) {
+  const response = await context.request.post(bffUrl(orgId, `/transactions/${txId}/lines`), { data });
+  expect(response.status(), await response.text()).toBe(201);
+  return (await response.json()) as { id: string; version: number };
+}
+
+/** Complete, reopen or cancel as "someone else": reads the current version, then acts on it. */
+export async function lifecycle(context: BrowserContext, orgId: string, id: string, action: "complete" | "reopen" | "cancel"): Promise<TxJson> {
+  const current = await getTransaction(context, orgId, id);
+  const response = await context.request.post(bffUrl(orgId, `/transactions/${id}/${action}`), { headers: ifMatch(current.version) });
+  expect(response.status(), await response.text()).toBe(200);
+  return (await response.json()) as TxJson;
+}
+
+/** Edit a line as "someone else": reads its current version, then patches on it. */
+export async function editLine(context: BrowserContext, orgId: string, txId: string, lineId: string, data: Record<string, string>) {
+  const current = await getTransaction(context, orgId, txId);
+  const version = current.lines.find((line) => line.id === lineId)!.version;
+  const response = await context.request.patch(bffUrl(orgId, `/transactions/${txId}/lines/${lineId}`), { data, headers: ifMatch(version) });
+  expect(response.status(), await response.text()).toBe(200);
+}
+
+/** The browser's own idea of today, as YYYY-MM-DD (what the create form prefills). */
+export const browserToday = (page: Page) => page.evaluate(() => new Date().toLocaleDateString("sv-SE"));
+
+/** Run `body` while a REQUIRED custom field on transactions exists, and always disable it afterwards. */
+export async function withRequiredTransactionField(context: BrowserContext, orgId: string, body: (label: string) => Promise<void>) {
+  const key = `proj_${randomUUID().slice(0, 8).replaceAll("-", "")}`;
+  const label = `Project ${key}`;
+  const made = await context.request.post(bffUrl(orgId, "/custom-fields/definitions"), { data: { entity_type: "transaction", key, label, field_type: "text", required: true } });
+  expect(made.status(), await made.text()).toBe(201);
+  const definition = (await made.json()) as { id: string };
+  try {
+    await body(label);
+  } finally {
+    const off = await context.request.patch(bffUrl(orgId, `/custom-fields/definitions/${definition.id}`), { data: { enabled: false } });
+    expect(off.status(), await off.text()).toBe(200);
+  }
+}
+
+/**
+ * Open the add-line form. The first click after a page load can land before React has attached
+ * its handlers (the server-rendered button exists a moment earlier), so it is retried until the
+ * form is really open.
+ */
+export async function openAddLine(page: Page): Promise<void> {
+  await expect(async () => {
+    if (!(await page.getByTestId("add-line-form").isVisible())) await page.getByTestId("add-line").click();
+    await expect(page.getByTestId("add-line-form")).toBeVisible({ timeout: 1500 });
+  }).toPass({ timeout: 15_000 });
+}

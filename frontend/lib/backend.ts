@@ -54,11 +54,24 @@ export interface BackendIdentity {
   orgId?: string;
 }
 
+/**
+ * The version a change is based on (optimistic concurrency, see the backend's
+ * app/modules/sales/versioning.py), as it may travel in an If-Match header: a quoted or bare
+ * integer. Returns the normalized quoted form, null if there is none, or "invalid". It is the
+ * ONLY client-supplied header the BFF forwards; it carries a number and no authority.
+ */
+export function parseIfMatch(value: string | null | undefined): string | null | "invalid" {
+  if (value === null || value === undefined) return null;
+  const found = /^"?(\d{1,9})"?$/.exec(value.trim());
+  return found ? `"${found[1]}"` : "invalid";
+}
+
 /** Headers for a backend request, built from scratch (never from client headers). */
-export function buildBackendHeaders(identity: BackendIdentity, options: { json?: boolean } = {}): Headers {
+export function buildBackendHeaders(identity: BackendIdentity, options: { json?: boolean; ifMatch?: string } = {}): Headers {
   const headers = new Headers({ accept: "application/json", "x-dev-user-email": identity.email });
   if (identity.orgId) headers.set("x-organization-id", identity.orgId);
   if (options.json) headers.set("content-type", "application/json");
+  if (options.ifMatch) headers.set("if-match", options.ifMatch);
   return headers;
 }
 
@@ -68,6 +81,8 @@ export interface BackendRequest {
   search?: string;
   /** A JSON body as text. */
   body?: string;
+  /** A normalized If-Match value (see parseIfMatch). */
+  ifMatch?: string;
 }
 
 export async function backendFetch(
@@ -83,7 +98,7 @@ export async function backendFetch(
   }
   return fetch(`${backendUrl()}${path}${request.search ?? ""}`, {
     method: request.method ?? "GET",
-    headers: buildBackendHeaders(identity, { json: request.body !== undefined }),
+    headers: buildBackendHeaders(identity, { json: request.body !== undefined, ifMatch: request.ifMatch }),
     body: request.body,
     cache: "no-store",
     redirect: "manual",

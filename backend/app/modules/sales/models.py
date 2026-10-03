@@ -58,6 +58,7 @@ class Transaction(TenantOwned, Base):
         CheckConstraint(
             "status IN ('" + "', '".join(TransactionStatus) + "')", name="ck_transactions_status"
         ),
+        CheckConstraint("version >= 1 AND header_version >= 1", name="ck_transactions_versions_positive"),
         Index("ix_transactions_organization_status_date", "organization_id", "status", "transaction_date"),
         Index("ix_transactions_organization_billing_customer", "organization_id", "billing_customer_id"),
     )
@@ -69,6 +70,12 @@ class Transaction(TenantOwned, Base):
     status: Mapped[str] = mapped_column(
         String(16), default=TransactionStatus.DRAFT, server_default=text("'draft'")
     )
+    # Optimistic concurrency (see app/modules/sales/versioning.py). `version` changes with
+    # ANY change to the transaction: header, lines or status. `header_version` changes only
+    # with the header (billing customer, date), so editing the header is not blocked by a
+    # line that someone else changed.
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
+    header_version: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
 
 
 class TransactionLine(TenantOwned, Base):
@@ -95,6 +102,7 @@ class TransactionLine(TenantOwned, Base):
             ondelete="RESTRICT",
             name="fk_transaction_lines_item_same_organization",
         ),
+        CheckConstraint("version >= 1", name="ck_transaction_lines_version_positive"),
         CheckConstraint("quantity > 0", name="ck_transaction_lines_quantity_positive"),
         CheckConstraint("unit_price_ex_vat >= 0", name="ck_transaction_lines_price_nonnegative"),
         CheckConstraint(
@@ -118,6 +126,7 @@ class TransactionLine(TenantOwned, Base):
     transaction_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
     item_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     position: Mapped[int] = mapped_column(Integer)  # server-assigned print order
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))  # +1 per edit
     description: Mapped[str] = mapped_column(String(255))
     unit: Mapped[str] = mapped_column(String(32))
     quantity: Mapped[Decimal] = mapped_column(Numeric(12, 3))

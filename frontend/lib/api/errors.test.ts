@@ -60,6 +60,25 @@ describe("normalizeError", () => {
     expect(error.problems).toEqual(VALIDATION_FAILED.detail.problems);
   });
 
+  it("409 stale_record keeps its code and the current version", () => {
+    const error = normalizeError(409, {
+      detail: { code: "stale_record", message: "This record was changed by someone else", entity_type: "transaction_line", entity_id: "x", current_version: 4 },
+    });
+    expect(error).toEqual({
+      kind: "conflict",
+      status: 409,
+      message: "This record was changed by someone else",
+      code: "stale_record",
+      problems: [],
+      currentVersion: 4,
+    });
+  });
+
+  it("428 and 400 about a missing or malformed version are client errors with the backend text", () => {
+    expect(normalizeError(428, { detail: "This change must say which version it is based on" })).toMatchObject({ kind: "client", status: 428 });
+    expect(normalizeError(400, { detail: "Invalid If-Match header" })).toMatchObject({ kind: "client", status: 400, message: "Invalid If-Match header" });
+  });
+
   it("422 maps each location to a dotted field path, dropping the leading body", () => {
     const error = normalizeError(422, UNPROCESSABLE);
 

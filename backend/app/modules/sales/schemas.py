@@ -105,6 +105,7 @@ class LineRead(BaseModel):
     transaction_id: uuid.UUID
     item_id: uuid.UUID | None
     position: int
+    version: int  # send as If-Match when editing or deleting this line
     description: str
     unit: str
     quantity: QuantityOut
@@ -139,6 +140,8 @@ class TransactionSummary(BaseModel):
     transaction_date: date
     status: TransactionStatus
     line_count: int
+    version: int  # send as If-Match when completing, reopening or cancelling
+    header_version: int  # send as If-Match when editing the header
     totals: TotalsRead
     created_at: datetime
     updated_at: datetime
