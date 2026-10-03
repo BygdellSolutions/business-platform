@@ -13,6 +13,7 @@ from pydantic import (
 
 from app.modules.sales.models import TransactionStatus
 from app.schemas.customer import CustomerRef
+from app.schemas.profile import CurrencyCode
 from app.schemas.money import MoneyIn, MoneyOut, PercentIn, PercentOut, QuantityIn, QuantityOut
 
 Description = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
@@ -139,6 +140,9 @@ class TransactionSummary(BaseModel):
     billing_customer: CustomerRef
     transaction_date: date
     status: TransactionStatus
+    # Copied from the organization's default when the transaction was created; never changes.
+    # null only for a transaction that predates currencies and was not assigned one yet.
+    currency: str | None
     line_count: int
     version: int  # send as If-Match when completing, reopening or cancelling
     header_version: int  # send as If-Match when editing the header
@@ -149,3 +153,22 @@ class TransactionSummary(BaseModel):
 
 class TransactionRead(TransactionSummary):
     lines: list[LineRead]
+
+
+class CurrencyStatus(BaseModel):
+    default_currency: str | None
+    transactions_without_currency: int
+
+
+class AssignCurrency(BaseModel):
+    """Confirm that the prices of every currency-less transaction are in `currency`, which must
+    be the organization's default. Sent on purpose: nothing assumes it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    currency: CurrencyCode
+
+
+class AssignCurrencyResult(BaseModel):
+    currency: str
+    assigned: int

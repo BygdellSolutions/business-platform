@@ -1,5 +1,6 @@
 import uuid
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.entity_registry import EntityType, ParentSpec, Registry
@@ -18,6 +19,15 @@ def _transaction_is_editable(db: Session, ctx: TenantContext, transaction_id: uu
 def _line_is_editable(db: Session, ctx: TenantContext, line_id: uuid.UUID) -> bool:
     line = get_scoped(db, ctx, TransactionLine, line_id)
     return line is not None and _transaction_is_editable(db, ctx, line.transaction_id)
+
+
+def _transactions_fix_the_currency(db: Session, organization_id: uuid.UUID) -> str | None:
+    """Any transaction, whatever its status, has prices that mean something only in the
+    organization's current currency; changing the currency would silently reinterpret them."""
+    exists = db.scalar(
+        select(Transaction.id).where(Transaction.organization_id == organization_id).limit(1)
+    )
+    return "Transactions already exist, and their prices are in the current currency." if exists else None
 
 
 def register(registry: Registry) -> None:
@@ -42,3 +52,4 @@ def register(registry: Registry) -> None:
             is_editable=_line_is_editable,
         )
     )
+    registry.add_currency_guard(_transactions_fix_the_currency)

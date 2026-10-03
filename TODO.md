@@ -22,7 +22,10 @@
 - [ ] Run `uv run alembic upgrade head` on the development database (migration `c41a7e5d9b20`); the dev backend needs it before it can serve transactions
 - [x] Frontend slice 5: generic custom-field renderer, dependent references, completion problems mapped to lines and controls, read-only completed transactions
 - [x] Development database migrated to `c41a7e5d9b20` (done before slice 5)
-- [ ] Invoicing design: invoice state as its own relationship to transactions (not a lifecycle status); snapshot at issuance
+- [x] Invoicing design approved (recorded in `docs/architecture.md`, "Invoicing design (approved, NOT implemented)")
+- [x] Invoicing prerequisites: organization and customer profiles, explicit currency (`default_currency`, transaction snapshot, safe migration, locked change), `UNIQUE (organization_id, id, transaction_id)` on `transaction_lines`, `reopen`/`cancel` lifecycle events, generic custom-field flag filter
+- [ ] Run `uv run alembic upgrade head` on the development database (migrations `d52b8f1a7c34`, `e63c9a2b8d45`) and re-run `uv run python -m app.scripts.seed_dev`
+- [ ] Invoicing backend (next milestone, only after review of the prerequisites): tables, draft/issue lifecycle, counter-based numbering, immutability triggers, `reopen`/`cancel` validator on the core seam, concurrency tests
 
 ## Later
 - [ ] Payments
@@ -55,10 +58,10 @@
 - Custom fields: no list filtering or search by custom values, no money/percent types, one dependency per reference field, equality filters only, no definition deletion. Orphaned value rows (from deleted records) are harmless but never cleaned up.
 - Custom-field values are written in a second request after a record is created (Sales does not accept them); consider a combined create flow when the frontend needs it.
 - Register Items as a referenceable entity if a custom field ever needs to point at them.
-- Add `UNIQUE (organization_id, id)` to `transaction_lines` when invoice lines reference them.
-- Customer fields are minimal (no billing info yet); email is not format-validated.
+- Customer email is not format-validated; the billing profile is free text by design (no jurisdiction rules).
 - Consider PostgreSQL Row Level Security as defense in depth (see docs/architecture.md).
-- Currency is not modelled yet; it is planned as an Organization financial setting.
+- **Currency (temporary rules).** Items have no currency of their own, so the organization's default currency cannot be changed once items or transactions exist, and a currency is a three-letter code with only its shape checked (no list of valid codes, no minor-unit handling). A real currency and repricing model replaces this. Transactions that predate currencies stay without one until an owner/admin assigns it (settings page or `POST /api/transactions/assign-currency`); there is no per-transaction assignment.
+- Organization settings are last-writer-wins (no `If-Match` yet) and there is no organization time zone.
 - Item `unit` is free text; no units subsystem.
 - Roles are stored on memberships but not enforced anywhere yet.
 - Production authentication must replace the `AUTH_MODE=dev` branch in `app/core/auth.py`.

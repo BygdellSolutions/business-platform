@@ -6,13 +6,14 @@ import { CUSTOMER_CHOICES, customerEntity, customerSearch } from "@/features/cus
 
 vi.mock("@/lib/api/client", () => ({ apiFetch: vi.fn() }));
 import { apiFetch } from "@/lib/api/client";
+import { EMPTY_PROFILE } from "@/lib/profile";
 
 const A = "00000000-0000-4000-8000-0000000000a1";
 const mocked = vi.mocked(apiFetch);
 const signal = new AbortController().signal;
 
 function customer(overrides: Partial<Customer>): Customer {
-  return { id: "1", customer_type: "person", name: "Anna", email: null, phone: null, active: true, created_at: "", updated_at: "", ...overrides };
+  return { id: "1", customer_type: "person", name: "Anna", email: null, phone: null, active: true, created_at: "", updated_at: "", ...EMPTY_PROFILE, ...overrides };
 }
 
 beforeEach(() => {

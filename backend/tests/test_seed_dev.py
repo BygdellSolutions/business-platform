@@ -1,15 +1,16 @@
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.models import Customer, Item, OrganizationUser, Role, User
+from app.models import Customer, Item, Organization, OrganizationUser, Role, User
 from app.modules.custom_fields.models import CustomFieldDefinition, CustomFieldValue
 from app.modules.equine.models import Horse
 from app.modules.sales.models import Transaction, TransactionLine
 from app.scripts import seed_dev
+from tests.factories import make_org, make_transaction
 
 
 def memberships(db: Session, email: str) -> dict:
@@ -115,3 +116,50 @@ def test_seed_refuses_outside_development(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(settings, "app_env", "production")
     with pytest.raises(SystemExit):
         seed_dev.main()
+
+
+def test_seed_explicitly_configures_sek_and_a_profile_for_its_own_organizations(db_session: Session):
+    seed_dev.seed(db_session)
+
+    for org_id in (seed_dev.ORG_HORSE_THERAPY_ID, seed_dev.ORG_STABLE_SERVICES_ID):
+        org = db_session.get(Organization, org_id)
+        assert org.default_currency == "SEK"
+        assert org.legal_name and org.vat_number and org.country_code == "SE"
+        [tx] = db_session.scalars(select(Transaction).where(Transaction.organization_id == org_id)).all()
+        assert tx.currency == "SEK"
+    hk = db_session.scalar(select(Customer).where(Customer.name == "Umeå HK"))
+    assert (hk.city, hk.country_code, hk.registration_number) == ("Umeå", "SE", "802000-0001")
+
+
+def test_reseeding_never_overwrites_what_a_person_edited(db_session: Session):
+    seed_dev.seed(db_session)
+    org = db_session.get(Organization, seed_dev.ORG_HORSE_THERAPY_ID)
+    org.legal_name, org.city = "Edited Name", None  # one value changed, one cleared by hand
+    db_session.flush()
+
+    seed_dev.seed(db_session)
+
+    db_session.refresh(org)
+    assert org.legal_name == "Edited Name"  # kept
+    assert org.city == "Umeå"  # an EMPTY field is filled in again; that is the only thing the seed does
+
+
+def test_seeding_an_older_database_gives_only_the_seeded_rows_a_currency(db_session: Session):
+    """A development database seeded before currencies existed has seeded rows without one. The
+    seed (data that owns those rows) assigns SEK to them, and to nothing else."""
+    seed_dev.seed(db_session)
+    db_session.execute(text("update organizations set default_currency = null where id = :o"), {"o": seed_dev.ORG_HORSE_THERAPY_ID})
+    # The immutability trigger (rightly) forbids NULLing a currency; switch it off just for this
+    # test's rolled-back transaction to recreate a seeded transaction from before currencies.
+    db_session.execute(text("alter table transactions disable trigger trg_transactions_currency_immutable"))
+    db_session.execute(text("update transactions set currency = null where organization_id = :o"), {"o": seed_dev.ORG_HORSE_THERAPY_ID})
+    db_session.execute(text("alter table transactions enable trigger trg_transactions_currency_immutable"))
+    stranger = make_org(db_session, "Not seeded", default_currency=None)
+    foreign_tx = make_transaction(db_session, stranger, currency=None)
+
+    seed_dev.seed(db_session)
+
+    assert db_session.get(Organization, seed_dev.ORG_HORSE_THERAPY_ID).default_currency == "SEK"
+    assert db_session.scalar(select(Transaction.currency).where(Transaction.organization_id == seed_dev.ORG_HORSE_THERAPY_ID)) == "SEK"
+    db_session.refresh(stranger), db_session.refresh(foreign_tx)
+    assert stranger.default_currency is None and foreign_tx.currency is None

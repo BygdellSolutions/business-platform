@@ -9,13 +9,14 @@ import { CustomerPreview } from "@/features/dashboard/CustomerPreview";
 
 vi.mock("@/lib/api/client", () => ({ apiFetch: vi.fn() }));
 import { apiFetch } from "@/lib/api/client";
+import { EMPTY_PROFILE } from "@/lib/profile";
 
 const A = "00000000-0000-4000-8000-0000000000a1";
 const B = "00000000-0000-4000-8000-0000000000b2";
 const mocked = vi.mocked(apiFetch);
 
 function customer(name: string): Customer {
-  return { id: name, customer_type: "person", name, email: null, phone: null, active: true, created_at: "", updated_at: "" };
+  return { id: name, customer_type: "person", name, email: null, phone: null, active: true, created_at: "", updated_at: "", ...EMPTY_PROFILE };
 }
 const ok = (customers: Customer[]): ApiResult<Customer[]> => ({ ok: true, status: 200, data: customers });
 

@@ -5,6 +5,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.api.deps import Pagination, pagination
+from app.core.currency import share_lock_organization
 from app.core.db import get_db
 from app.core.query import apply_update, commit_and_refresh, contains_pattern, delete_or_409
 from app.core.tenant import TenantContext, get_tenant_context
@@ -21,6 +22,11 @@ def create_item(
     ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
 ) -> Item:
+    # A price is only meaningful in the organization's currency, so an item cannot appear while
+    # the currency is being changed (see app/core/currency.py). The foreign key's own key-share
+    # lock on the organization row would also conflict with that change; this lock states the
+    # intent explicitly instead of relying on how foreign-key locking happens to work.
+    share_lock_organization(db, ctx.organization_id)
     item = create_scoped(db, ctx, Item, **payload.model_dump())
     commit_and_refresh(db, item)
     return item

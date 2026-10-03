@@ -19,6 +19,11 @@ export function TotalsPanel() {
         Totals {refreshing && <span className="text-sm font-normal text-zinc-500">(updating…)</span>}
       </h2>
       <dl className="grid max-w-md grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
+        <dt>Currency</dt>
+        <dd className="text-right" data-testid="total-currency">
+          {/* Never guessed: a transaction that predates currencies says so. */}
+          {transaction.currency ?? <span className="text-zinc-500">No currency recorded</span>}
+        </dd>
         <dt>Net (excl. VAT)</dt>
         <dd className="text-right" data-testid="total-net">
           <DecimalText value={totals.net_amount} />

@@ -18,7 +18,24 @@ export interface Membership {
 
 export type CustomerType = "person" | "company";
 
-export interface Customer {
+/**
+ * Optional postal address and business identifiers of a customer or of the organization itself.
+ * All free text; blank means "not set" (null). Only the SHAPE of the country code is checked, by
+ * the backend (two capital letters).
+ */
+export interface Profile {
+  address_line1: string | null;
+  address_line2: string | null;
+  postal_code: string | null;
+  city: string | null;
+  country_code: string | null;
+  registration_number: string | null;
+  vat_number: string | null;
+}
+
+export type ProfileField = keyof Profile;
+
+export interface Customer extends Profile {
   id: string;
   customer_type: CustomerType;
   name: string;
@@ -30,7 +47,7 @@ export interface Customer {
 }
 
 /** What the create form sends. There is no organization_id: the backend takes it from the tenant context. */
-export interface CustomerCreate {
+export interface CustomerCreate extends Profile {
   customer_type: CustomerType;
   name: string;
   email: string | null;
@@ -40,6 +57,40 @@ export interface CustomerCreate {
 
 /** Partial update: only the fields present are changed. */
 export type CustomerUpdate = Partial<CustomerCreate>;
+
+/** The active organization's settings (GET /api/organization). */
+export interface Organization extends Profile {
+  id: string;
+  /** The display name used in the app. */
+  name: string;
+  /** The name to print on documents, if different. */
+  legal_name: string | null;
+  /** Three capital letters, or null until an owner or admin sets it. Nothing assumes a currency. */
+  default_currency: string | null;
+  /** True once items or transactions exist: the currency can no longer be changed. */
+  default_currency_locked: boolean;
+  default_currency_lock_reason: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Partial update of the organization's settings; only the fields present are changed. */
+export type OrganizationUpdate = Partial<Profile> & {
+  name?: string;
+  legal_name?: string | null;
+  default_currency?: string;
+};
+
+/** How many transactions predate currencies (GET /api/transactions/currency-status). */
+export interface CurrencyStatus {
+  default_currency: string | null;
+  transactions_without_currency: number;
+}
+
+export interface AssignCurrencyResult {
+  currency: string;
+  assigned: number;
+}
 
 export type ItemType = "service" | "product";
 
@@ -160,6 +211,8 @@ export interface TransactionSummary {
   /** A calendar date, "YYYY-MM-DD". */
   transaction_date: string;
   status: TransactionStatus;
+  /** Copied from the organization when the transaction was created; never changes. Null only for a transaction that predates currencies and was not assigned one. */
+  currency: string | null;
   line_count: number;
   /** Optimistic concurrency: sent as If-Match for complete, reopen, cancel and deleting a draft. */
   version: number;

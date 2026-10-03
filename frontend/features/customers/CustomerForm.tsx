@@ -10,11 +10,14 @@ import { Button } from "@/components/ui/Button";
 import { ErrorSummary } from "@/components/ui/ErrorSummary";
 import { CheckboxField, SelectField, TextField } from "@/components/ui/Field";
 import { Notice } from "@/components/ui/Notice";
+import { PROFILE_CONTROLS, ProfileFields } from "@/components/profile/ProfileFields";
 import { apiFetch } from "@/lib/api/client";
 import type { Customer, CustomerCreate, CustomerType, CustomerUpdate } from "@/lib/api/types";
 import { blankToNull, problemsFrom, useMutation } from "@/lib/forms";
+import { profileBody, profileChanges, profileState, type ProfileState } from "@/lib/profile";
+import type { ProfileField } from "@/lib/api/types";
 
-const CONTROLS = ["customer_type", "name", "email", "phone", "active"] as const;
+const CONTROLS = ["customer_type", "name", "email", "phone", "active", ...PROFILE_CONTROLS] as const;
 
 const TYPES = [
   { value: "person", label: "Person" },
@@ -27,6 +30,7 @@ interface FormState {
   email: string;
   phone: string;
   active: boolean;
+  profile: ProfileState;
 }
 
 function toState(customer?: Customer): FormState {
@@ -36,6 +40,7 @@ function toState(customer?: Customer): FormState {
     email: customer?.email ?? "",
     phone: customer?.phone ?? "",
     active: customer?.active ?? true,
+    profile: profileState(customer),
   };
 }
 
@@ -55,6 +60,7 @@ export function CustomerForm({ customer }: { customer?: Customer }) {
 
   const problems = problemsFrom(error, CONTROLS);
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => setState((current) => ({ ...current, [key]: value }));
+  const setProfile = (field: ProfileField, value: string) => setState((current) => ({ ...current, profile: { ...current.profile, [field]: value } }));
 
   async function create() {
     const body: CustomerCreate = {
@@ -63,6 +69,7 @@ export function CustomerForm({ customer }: { customer?: Customer }) {
       email: blankToNull(state.email),
       phone: blankToNull(state.phone),
       active: state.active,
+      ...profileBody(state.profile),
     };
     const created = await run(() => apiFetch<Customer>(orgId, "/customers", { method: "POST", body }));
     if (created === null) return;
@@ -77,6 +84,7 @@ export function CustomerForm({ customer }: { customer?: Customer }) {
     if (state.name !== current.name) body.name = state.name;
     if (blankToNull(state.email) !== current.email) body.email = blankToNull(state.email);
     if (blankToNull(state.phone) !== current.phone) body.phone = blankToNull(state.phone);
+    Object.assign(body, profileChanges(state.profile, current));
     if (Object.keys(body).length === 0) {
       setNotice("unchanged");
       return;
@@ -110,6 +118,10 @@ export function CustomerForm({ customer }: { customer?: Customer }) {
         <TextField label="Name" name="name" value={state.name} onChange={(value) => set("name", value)} error={problems.byField.name} autoComplete="off" />
         <TextField label="Email" name="email" value={state.email} onChange={(value) => set("email", value)} error={problems.byField.email} inputMode="email" autoComplete="off" />
         <TextField label="Phone" name="phone" value={state.phone} onChange={(value) => set("phone", value)} error={problems.byField.phone} inputMode="tel" autoComplete="off" />
+        <fieldset className="flex flex-col gap-4">
+          <legend className="pb-1 text-sm font-medium">Billing details</legend>
+          <ProfileFields state={state.profile} onChange={setProfile} errors={problems.byField} />
+        </fieldset>
         {!record && <CheckboxField label="Active" name="active" checked={state.active} onChange={(checked) => set("active", checked)} error={problems.byField.active} />}
         <ErrorSummary messages={problems.general} />
         {notice === "saved" && <Notice testId="saved">Saved.</Notice>}

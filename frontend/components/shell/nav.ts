@@ -12,4 +12,5 @@ export const NAV: NavItem[] = [
   { label: "Catalog", path: "/catalog", enabled: true },
   { label: "Horses", path: "/horses", enabled: true },
   { label: "Transactions", path: "/transactions", enabled: true },
+  { label: "Settings", path: "/settings", enabled: true },
 ];

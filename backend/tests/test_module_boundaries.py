@@ -24,6 +24,10 @@ MODULE_PREFIX = {
     "equine": "app.modules.equine",
     "sales": "app.modules.sales",
     "custom_fields": "app.modules.custom_fields",
+    # Does not exist yet. Registered here so that, from the day it appears, nothing but its own
+    # package and the wiring may import it: the dependency runs invoicing -> sales / custom
+    # fields (never the reverse), and everything else meets it through the core registry.
+    "invoicing": "app.modules.invoicing",
 }
 
 
@@ -79,9 +83,9 @@ def test_wiring_files_really_wire_the_modules():
 @pytest.mark.parametrize(
     "package,forbidden",
     [
-        ("sales", ["equine", "custom_fields"]),
-        ("equine", ["sales", "custom_fields"]),
-        ("custom_fields", ["sales", "equine"]),
+        ("sales", ["equine", "custom_fields", "invoicing"]),
+        ("equine", ["sales", "custom_fields", "invoicing"]),
+        ("custom_fields", ["sales", "equine", "invoicing"]),
     ],
 )
 def test_modules_do_not_import_each_other(package: str, forbidden: list[str]):
@@ -114,6 +118,7 @@ def test_standard_code_does_not_import_modules():
         *python_files(APP / "schemas"),
         APP / "api" / "customers.py",
         APP / "api" / "items.py",
+        APP / "api" / "organization.py",
         APP / "api" / "me.py",
         APP / "api" / "deps.py",
     ]

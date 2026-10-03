@@ -5,6 +5,7 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, StringConstraints, field_validator
 
 from app.models import CustomerType
+from app.schemas.profile import ProfileIn, ProfileRead
 
 Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
 Email = Annotated[str, StringConstraints(strip_whitespace=True, max_length=320)]
@@ -14,9 +15,7 @@ Phone = Annotated[str, StringConstraints(strip_whitespace=True, max_length=64)]
 # client-supplied one into a 422. The organization always comes from the tenant context.
 
 
-class CustomerCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class CustomerCreate(ProfileIn):
     customer_type: CustomerType
     name: Name
     email: Email | None = None
@@ -24,10 +23,9 @@ class CustomerCreate(BaseModel):
     active: bool = True
 
 
-class CustomerUpdate(BaseModel):
-    """Partial update: only fields present in the request are changed."""
-
-    model_config = ConfigDict(extra="forbid")
+class CustomerUpdate(ProfileIn):
+    """Partial update: only fields present in the request are changed. A profile field is
+    cleared by sending null or blank text."""
 
     customer_type: CustomerType | None = None
     name: Name | None = None
@@ -54,9 +52,7 @@ class CustomerRef(BaseModel):
     active: bool  # lets a UI flag a record whose customer was deactivated
 
 
-class CustomerRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class CustomerRead(ProfileRead):
     id: uuid.UUID
     customer_type: CustomerType
     name: str

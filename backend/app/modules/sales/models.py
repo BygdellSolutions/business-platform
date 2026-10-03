@@ -59,6 +59,7 @@ class Transaction(TenantOwned, Base):
             "status IN ('" + "', '".join(TransactionStatus) + "')", name="ck_transactions_status"
         ),
         CheckConstraint("version >= 1 AND header_version >= 1", name="ck_transactions_versions_positive"),
+        CheckConstraint("currency IS NULL OR currency ~ '^[A-Z]{3}$'", name="ck_transactions_currency_shape"),
         Index("ix_transactions_organization_status_date", "organization_id", "status", "transaction_date"),
         Index("ix_transactions_organization_billing_customer", "organization_id", "billing_customer_id"),
     )
@@ -76,6 +77,11 @@ class Transaction(TenantOwned, Base):
     # line that someone else changed.
     version: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
     header_version: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
+    # The currency the prices of this transaction are in, copied from the organization's default
+    # AT CREATION. NULL for transactions that predate currencies (they are assigned one only by an
+    # explicit action, never automatically). Once set it never changes (a database trigger enforces
+    # it), whatever happens to the organization's setting.
+    currency: Mapped[str | None] = mapped_column(String(3))
 
 
 class TransactionLine(TenantOwned, Base):
@@ -89,6 +95,9 @@ class TransactionLine(TenantOwned, Base):
 
     __tablename__ = "transaction_lines"
     __table_args__ = (
+        # Target of the composite foreign keys of whatever later refers to a line of a given
+        # transaction (so the database can check that the line belongs to that transaction).
+        UniqueConstraint("organization_id", "id", "transaction_id", name="uq_transaction_lines_org_id_transaction"),
         ForeignKeyConstraint(
             ["organization_id", "transaction_id"],
             ["transactions.organization_id", "transactions.id"],

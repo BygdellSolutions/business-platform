@@ -8,6 +8,7 @@ import { apiFetch } from "@/lib/api/client";
 import { normalizeError, type ApiResult } from "@/lib/api/errors";
 import type { Customer, Item, Transaction, TransactionLine } from "@/lib/api/types";
 import type { MoneyString, PercentString, QuantityString } from "@/lib/decimal";
+import { EMPTY_PROFILE } from "@/lib/profile";
 
 /** Fixtures and a harness for the transaction editor's component tests (not shipped). */
 
@@ -67,6 +68,7 @@ export function tx(overrides: Partial<Transaction> = {}): Transaction {
     billing_customer: { id: ANNA_ID, name: "Anna Andersson", active: true },
     transaction_date: "2026-10-01",
     status: "draft",
+    currency: "SEK",
     line_count: 2,
     version: 4,
     header_version: 2,
@@ -87,7 +89,7 @@ export function tx(overrides: Partial<Transaction> = {}): Transaction {
 }
 
 export function customer(id: string, name: string, active = true): Customer {
-  return { id, customer_type: "person", name, email: null, phone: null, active, created_at: "", updated_at: "" };
+  return { id, customer_type: "person", name, email: null, phone: null, active, created_at: "", updated_at: "", ...EMPTY_PROFILE };
 }
 
 export function item(id: string, name: string, overrides: Partial<Item> = {}): Item {

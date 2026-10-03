@@ -83,20 +83,32 @@ def custom_field_entity(entity_type: str) -> EntityType:
 # --- definitions --------------------------------------------------------------------------------
 
 
+# The yes/no properties of a definition that a caller may filter by ("every field flagged X").
+# The filter is generic: it names a property, not who wants it or why.
+FLAGS = ("required", "show_in_form", "show_in_table", "show_on_invoice")
+
+
 def load_definitions(
     db: Session,
     ctx: TenantContext,
     entity_type: str | None = None,
     *,
     include_disabled: bool = True,
+    flag: str | None = None,
     limit: int | None = None,
     offset: int = 0,
 ) -> list[CustomFieldDefinition]:
+    """Definitions of the active organization. `flag` keeps only those whose yes/no property of
+    that name (one of FLAGS) is true."""
     query = scoped_select(CustomFieldDefinition, ctx)
     if entity_type is not None:
         query = query.where(CustomFieldDefinition.entity_type == entity_type)
     if not include_disabled:
         query = query.where(CustomFieldDefinition.enabled.is_(True))
+    if flag is not None:
+        if flag not in FLAGS:
+            raise ValueError(f"unknown definition flag {flag!r}")
+        query = query.where(getattr(CustomFieldDefinition, flag).is_(True))
     query = query.order_by(
         CustomFieldDefinition.entity_type, CustomFieldDefinition.position, CustomFieldDefinition.key
     ).offset(offset)
@@ -472,16 +484,19 @@ def read_values(
     entity_ids: Sequence[uuid.UUID],
     *,
     include_disabled: bool = False,
+    flag: str | None = None,
 ) -> dict[uuid.UUID, list[ValueRead]]:
     """Set values of the given entities, in field order, with live display text.
 
-    Callers must pass ids already confirmed to belong to the active organization.
+    Callers must pass ids already confirmed to belong to the active organization. `flag` keeps
+    only the values of definitions with that property (see load_definitions).
     """
     result: dict[uuid.UUID, list[ValueRead]] = {i: [] for i in entity_ids}
     if not entity_ids:
         return result
     definitions = {
-        d.id: d for d in load_definitions(db, ctx, entity_type, include_disabled=include_disabled)
+        d.id: d
+        for d in load_definitions(db, ctx, entity_type, include_disabled=include_disabled, flag=flag)
     }
     if not definitions:
         return result

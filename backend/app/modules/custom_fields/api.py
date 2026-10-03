@@ -1,4 +1,5 @@
 import uuid
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -29,6 +30,9 @@ from app.modules.custom_fields.schemas import (
 )
 
 router = APIRouter(prefix="/api/custom-fields", tags=["custom-fields"])
+
+# Keep in step with service.FLAGS (a test compares them).
+Flag = Literal["required", "show_in_form", "show_in_table", "show_on_invoice"]
 
 # Defining fields reshapes forms for the whole organization: owners and admins only.
 # Reading definitions and writing values stays open to every member.
@@ -62,13 +66,14 @@ def list_entity_types(ctx: TenantContext = Depends(get_tenant_context)) -> list[
 def list_definitions(
     entity_type: str | None = None,
     include_disabled: bool = False,
+    flag: Flag | None = None,
     limit: int = Query(default=200, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
 ) -> list[DefinitionRead]:
     definitions = service.load_definitions(
-        db, ctx, entity_type, include_disabled=include_disabled, limit=limit, offset=offset
+        db, ctx, entity_type, include_disabled=include_disabled, flag=flag, limit=limit, offset=offset
     )
     return service.definitions_read(db, ctx, definitions)
 
@@ -183,9 +188,16 @@ def _confirmed_entity(db: Session, ctx: TenantContext, entity_type: str, entity_
 
 
 def _entity_values(
-    db: Session, ctx: TenantContext, entity_type: str, entity_id: uuid.UUID, include_disabled: bool
+    db: Session,
+    ctx: TenantContext,
+    entity_type: str,
+    entity_id: uuid.UUID,
+    include_disabled: bool,
+    flag: str | None = None,
 ) -> EntityValuesRead:
-    values = service.read_values(db, ctx, entity_type, [entity_id], include_disabled=include_disabled)
+    values = service.read_values(
+        db, ctx, entity_type, [entity_id], include_disabled=include_disabled, flag=flag
+    )
     return EntityValuesRead(
         entity_type=entity_type,
         entity_id=entity_id,
@@ -199,11 +211,12 @@ def read_entity_values(
     entity_type: str,
     entity_id: uuid.UUID,
     include_disabled: bool = False,
+    flag: Flag | None = None,
     ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
 ) -> EntityValuesRead:
     _confirmed_entity(db, ctx, entity_type, entity_id)
-    return _entity_values(db, ctx, entity_type, entity_id, include_disabled)
+    return _entity_values(db, ctx, entity_type, entity_id, include_disabled, flag)
 
 
 @router.patch("/entities/{entity_type}/{entity_id}/values", response_model=EntityValuesRead)
@@ -223,6 +236,7 @@ def read_bulk_values(
     entity_type: str,
     entity_ids: str = Query(description="Comma-separated ids"),
     include_disabled: bool = False,
+    flag: Flag | None = None,
     ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
 ) -> BulkValuesRead:
@@ -245,5 +259,7 @@ def read_bulk_values(
         db.scalars(scoped_select(entity.model, ctx).where(entity.model.id.in_(ids)).with_only_columns(entity.model.id))
     )
     confirmed = [i for i in ids if i in owned]
-    values = service.read_values(db, ctx, entity_type, confirmed, include_disabled=include_disabled)
+    values = service.read_values(
+        db, ctx, entity_type, confirmed, include_disabled=include_disabled, flag=flag
+    )
     return BulkValuesRead(entity_type=entity_type, entities=values)

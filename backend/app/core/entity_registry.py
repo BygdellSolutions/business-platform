@@ -71,6 +71,8 @@ IsEditable = Callable[[Session, TenantContext, uuid.UUID], bool]
 ReferenceGuard = Callable[[Session, str, uuid.UUID, uuid.UUID], bool]
 # (db, ctx, event, entity_key, entity_id) -> list of lifecycle Problems
 LifecycleValidator = Callable[[Session, TenantContext, str, str, uuid.UUID], list[Any]]
+# (db, organization_id) -> a human reason if stored prices make a currency change unsafe, else None
+CurrencyGuard = Callable[[Session, uuid.UUID], str | None]
 
 
 @dataclass(frozen=True)
@@ -89,6 +91,7 @@ class Registry:
         self._entities: dict[str, EntityType] = {}
         self._reference_guards: list[ReferenceGuard] = []
         self._validators: list[LifecycleValidator] = []
+        self._currency_guards: list[CurrencyGuard] = []
 
     # --- entity types ---------------------------------------------------------------------
 
@@ -170,20 +173,41 @@ class Registry:
     def validators(self) -> list[LifecycleValidator]:
         return list(self._validators)
 
+    # --- currency guards -----------------------------------------------------------------------
+
+    def add_currency_guard(self, guard: CurrencyGuard) -> None:
+        self._currency_guards.append(guard)
+
+    def currency_lock_reason(self, db: Session, organization_id: uuid.UUID) -> str | None:
+        """Why the organization's default currency may not change now, or None if it may.
+
+        A guard answers for the records it owns whose prices are only meaningful in the current
+        currency (items, transactions, ...). Modules register guards; core never imports them.
+        """
+        for guard in self._currency_guards:
+            reason = guard(db, organization_id)
+            if reason:
+                return reason
+        return None
+
     # --- tests ---------------------------------------------------------------------------------
 
     @contextmanager
     def isolated(self) -> Iterator["Registry"]:
         """Let a test register extra entities/guards/validators and leave no trace."""
-        saved = (dict(self._entities), list(self._reference_guards), list(self._validators))
+        saved = (
+            dict(self._entities),
+            list(self._reference_guards),
+            list(self._validators),
+            list(self._currency_guards),
+        )
         try:
             yield self
         finally:
-            self._entities, self._reference_guards, self._validators = (
-                dict(saved[0]),
-                list(saved[1]),
-                list(saved[2]),
-            )
+            self._entities = dict(saved[0])
+            self._reference_guards = list(saved[1])
+            self._validators = list(saved[2])
+            self._currency_guards = list(saved[3])
 
 
 registry = Registry()

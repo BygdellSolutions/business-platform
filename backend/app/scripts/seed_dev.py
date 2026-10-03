@@ -15,6 +15,11 @@ isolation checks should be run against.
 Each organization also configures two custom fields on transaction lines, Owner (a
 customer) and Horse (a horse, narrowed to the selected owner), and the seeded line
 carries Anna Andersson / Kalle in them.
+
+The seeded organizations EXPLICITLY use SEK (their default currency and the currency of their
+seeded transactions) and have a small business profile. That is seed data choosing a currency
+for its own organizations; the platform itself assumes none. A value that is already set is
+never overwritten, so re-running the seed keeps what a person edited.
 """
 
 import uuid
@@ -102,6 +107,47 @@ TRANSACTIONS = (
 )
 
 
+SEED_CURRENCY = "SEK"
+
+# Business profile of the seeded organizations and of two customers (fake identifiers).
+ORGANIZATION_PROFILES = {
+    ORG_HORSE_THERAPY_ID: dict(
+        legal_name="Fredrik Horse Therapy AB",
+        address_line1="Storgatan 1",
+        postal_code="903 26",
+        city="Umeå",
+        country_code="SE",
+        registration_number="556000-0001",
+        vat_number="SE556000000101",
+    ),
+    ORG_STABLE_SERVICES_ID: dict(
+        legal_name="Umeå Stable Services AB",
+        address_line1="Stallvägen 4",
+        postal_code="905 80",
+        city="Umeå",
+        country_code="SE",
+        registration_number="556000-0002",
+        vat_number="SE556000000201",
+    ),
+}
+CUSTOMER_PROFILES = {
+    (ORG_HORSE_THERAPY_ID, "Umeå HK"): dict(
+        address_line1="Ridvägen 2",
+        postal_code="903 30",
+        city="Umeå",
+        country_code="SE",
+        registration_number="802000-0001",
+    ),
+}
+
+
+def _fill_missing(record, values: dict) -> None:
+    """Set each attribute that is still empty; never overwrite what is there."""
+    for name, value in values.items():
+        if getattr(record, name) is None:
+            setattr(record, name, value)
+
+
 def _definition(db: Session, org_id: uuid.UUID, key: str, **fields) -> CustomFieldDefinition:
     definition = db.scalar(
         select(CustomFieldDefinition).where(
@@ -150,6 +196,10 @@ def seed(db: Session) -> None:
         if db.get(Organization, org_id) is None:
             db.add(Organization(id=org_id, name=name))
     db.flush()
+    for org_id, profile in ORGANIZATION_PROFILES.items():
+        organization = db.get(Organization, org_id)
+        _fill_missing(organization, {"default_currency": SEED_CURRENCY, **profile})
+    db.flush()
 
     for seed_user in USERS:
         user = db.scalar(select(User).where(User.email == seed_user.email))
@@ -176,6 +226,12 @@ def seed(db: Session) -> None:
             db.add(
                 Customer(organization_id=org_id, name=name, customer_type=customer_type, email=email)
             )
+    db.flush()
+    for (org_id, name), profile in CUSTOMER_PROFILES.items():
+        customer = db.scalar(
+            select(Customer).where(Customer.organization_id == org_id, Customer.name == name)
+        )
+        _fill_missing(customer, profile)
     db.flush()
 
     for org_id, name, item_type, unit, price, vat in ITEMS:
@@ -215,14 +271,16 @@ def seed(db: Session) -> None:
 
     for org_id, billing_name in TRANSACTIONS:
         billing_id = _customer_id(db, org_id, billing_name)
-        exists = db.scalar(
-            select(Transaction.id).where(
+        existing = db.scalar(
+            select(Transaction).where(
                 Transaction.organization_id == org_id,
                 Transaction.billing_customer_id == billing_id,
                 Transaction.transaction_date == SEED_TRANSACTION_DATE,
             )
         )
-        if exists is not None:
+        if existing is not None:
+            # A seeded transaction from before currencies existed gets the seed's explicit currency.
+            _fill_missing(existing, {"currency": SEED_CURRENCY})
             continue
         item = db.scalar(
             select(Item).where(Item.organization_id == org_id, Item.name == "Horse massage")
@@ -232,6 +290,7 @@ def seed(db: Session) -> None:
             billing_customer_id=billing_id,
             transaction_date=SEED_TRANSACTION_DATE,
             status=TransactionStatus.COMPLETED,
+            currency=SEED_CURRENCY,
         )
         db.add(transaction)
         db.flush()

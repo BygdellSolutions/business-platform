@@ -26,6 +26,9 @@ from app.core.entity_registry import registry
 from app.core.tenant import TenantContext
 
 COMPLETE = "complete"  # an entity is about to be finalized (and locked)
+REOPEN = "reopen"  # a finalized entity is about to become editable again
+CANCEL = "cancel"  # an entity is about to be cancelled
+# A validator must ignore events it has no opinion on: the set of events grows with the modules.
 
 MAX_PROBLEMS = 100
 

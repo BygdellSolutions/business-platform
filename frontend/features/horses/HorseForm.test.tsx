@@ -11,13 +11,14 @@ const router = { push: vi.fn(), refresh: vi.fn() };
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
 vi.mock("@/lib/api/client", () => ({ apiFetch: vi.fn() }));
 import { apiFetch } from "@/lib/api/client";
+import { EMPTY_PROFILE } from "@/lib/profile";
 
 const A = "00000000-0000-4000-8000-0000000000a1";
 const B = "00000000-0000-4000-8000-0000000000b2";
 const mocked = vi.mocked(apiFetch);
 
 function customer(id: string, name: string, active = true): Customer {
-  return { id, customer_type: "person", name, email: null, phone: null, active, created_at: "", updated_at: "" };
+  return { id, customer_type: "person", name, email: null, phone: null, active, created_at: "", updated_at: "", ...EMPTY_PROFILE };
 }
 const ANNA = customer("11111111-1111-4111-8111-111111111111", "Anna Andersson");
 const UMEA = customer("22222222-2222-4222-8222-222222222222", "Umeå HK");

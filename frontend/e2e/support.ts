@@ -270,3 +270,82 @@ export function storedValues(entityId: string): string {
     `select coalesce(string_agg(d.key || '=' || coalesce(v.value_reference_id::text, v.value_text, v.value_number::text, v.value_date::text, v.value_boolean::text, v.value_option_id::text), ',' order by d.key), '') from custom_field_values v join custom_field_definitions d on d.id = v.definition_id where v.entity_id = ${sql(entityId)}`,
   );
 }
+
+// --- Throwaway organizations (settings and currency specs) ------------------------------------------------------------------
+
+export type RoleName = "owner" | "admin" | "accountant" | "employee" | "viewer";
+
+export interface World {
+  orgId: string;
+  name: string;
+  /** The owner's login. */
+  email: string;
+  userIds: string[];
+  /** A member with the given role (created on demand); returns the login email. */
+  addMember: (role: RoleName) => string;
+  /** Remove everything this world created from the TEST database. */
+  cleanup: () => void;
+}
+
+/**
+ * An organization of its own with an owner of its own, created directly in the TEST database, so a
+ * spec can change settings and currencies without touching the seeded organizations (whose
+ * state other specs rely on). `currency: null` is an organization that never configured one.
+ */
+export function createWorld(options: { currency?: string | null; label?: string } = {}): World {
+  const orgId = randomUUID();
+  const tag = randomUUID().slice(0, 8);
+  const name = `${options.label ?? "World"} ${tag}`;
+  const currency = options.currency === undefined ? "SEK" : options.currency;
+  const userIds: string[] = [];
+
+  const addUser = (role: RoleName, label: string): string => {
+    const id = randomUUID();
+    const email = `${label}-${tag}@dev.test`;
+    testRow(`insert into users (id, email, name) values (${sql(id)}, ${sql(email)}, ${sql(`${label} ${tag}`)})`);
+    testRow(`insert into organization_users (organization_id, user_id, role) values (${sql(orgId)}, ${sql(id)}, ${sql(role)})`);
+    userIds.push(id);
+    return email;
+  };
+
+  testRow(`insert into organizations (id, name, default_currency) values (${sql(orgId)}, ${sql(name)}, ${currency === null ? "null" : sql(currency)})`);
+  const email = addUser("owner", "owner");
+
+  return {
+    orgId,
+    name,
+    email,
+    userIds,
+    addMember: (role) => addUser(role, role),
+    cleanup: () => {
+      const org = sql(orgId);
+      for (const table of ["transaction_lines", "transactions", "items", "customers", "organization_users"]) {
+        testRow(`delete from ${table} where organization_id = ${org}`);
+      }
+      testRow(`delete from organizations where id = ${org}`);
+      for (const id of userIds) testRow(`delete from users where id = ${sql(id)}`);
+    },
+  };
+}
+
+/** Insert a customer into a world's organization (test database) and return its id. */
+export function insertCustomer(orgId: string, name: string): string {
+  const id = randomUUID();
+  testRow(`insert into customers (id, organization_id, customer_type, name) values (${sql(id)}, ${sql(orgId)}, 'company', ${sql(name)})`);
+  return id;
+}
+
+/**
+ * Insert a transaction that PREDATES currencies (currency NULL) with one line of 850.00 + 25 % VAT,
+ * exactly as an old row would look. Directly in the test database: the API has no way to make one.
+ */
+export function insertCurrencylessTransaction(orgId: string, customerId: string, date = "2026-01-15"): string {
+  const id = randomUUID();
+  testRow(
+    `insert into transactions (id, organization_id, billing_customer_id, transaction_date, status) values (${sql(id)}, ${sql(orgId)}, ${sql(customerId)}, ${sql(date)}, 'completed')`,
+  );
+  testRow(
+    `insert into transaction_lines (organization_id, transaction_id, position, description, unit, quantity, unit_price_ex_vat, vat_rate, net_amount, vat_amount, gross_amount) values (${sql(orgId)}, ${sql(id)}, 1, 'Old massage', 'session', 1, 850.00, 25.00, 850.00, 212.50, 1062.50)`,
+  );
+  return id;
+}

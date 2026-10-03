@@ -85,6 +85,7 @@ export default async function TransactionsPage({
                 <th className="py-1 pr-4">Date</th>
                 <th className="py-1 pr-4">Customer</th>
                 <th className="py-1 pr-4">Status</th>
+                <th className="py-1 pr-4">Currency</th>
                 <th className="py-1 pr-4 text-right">Lines</th>
                 <th className="py-1 pr-4 text-right">Net</th>
                 <th className="py-1 pr-4 text-right">VAT</th>
@@ -107,6 +108,9 @@ export default async function TransactionsPage({
                   </td>
                   <td className="py-1 pr-4">
                     <TransactionStatusBadge status={transaction.status} />
+                  </td>
+                  <td className="py-1 pr-4" data-testid="transaction-currency">
+                    {transaction.currency ?? <span className="text-zinc-500">none</span>}
                   </td>
                   <td className="py-1 pr-4 text-right">{transaction.line_count}</td>
                   <td className="py-1 pr-4 text-right" data-testid="transaction-net">

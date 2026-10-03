@@ -10,7 +10,7 @@ from app.models import Organization
 
 def test_organizations_table_is_migrated():
     columns = {c["name"]: c for c in inspect(engine).get_columns("organizations")}
-    assert set(columns) == {"id", "name", "created_at", "updated_at"}
+    assert {"id", "name", "created_at", "updated_at"} <= set(columns)
     assert not columns["name"]["nullable"]
 
 

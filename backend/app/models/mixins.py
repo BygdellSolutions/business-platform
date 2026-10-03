@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, event, func, inspect, text
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, event, func, inspect, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -40,3 +40,27 @@ def _forbid_organization_change(mapper, connection, target) -> None:
     """
     if inspect(target).attrs.organization_id.history.has_changes():
         raise ValueError("organization_id of a tenant-owned record cannot be changed")
+
+
+class BusinessProfile:
+    """Optional postal address and business identifiers, shared by Organization (the seller
+    on a future invoice) and Customer (the buyer).
+
+    Everything is nullable FREE TEXT. The only structure enforced is the SHAPE of the country
+    code (two capital letters, ISO 3166-1 alpha-2 style). Whether an address is complete, or what
+    a registration or VAT number looks like, is a jurisdiction policy and is deliberately not
+    decided here.
+    """
+
+    address_line1: Mapped[str | None] = mapped_column(String(255))
+    address_line2: Mapped[str | None] = mapped_column(String(255))
+    postal_code: Mapped[str | None] = mapped_column(String(32))
+    city: Mapped[str | None] = mapped_column(String(128))
+    country_code: Mapped[str | None] = mapped_column(String(2))
+    registration_number: Mapped[str | None] = mapped_column(String(64))
+    vat_number: Mapped[str | None] = mapped_column(String(64))
+
+
+def profile_constraints(table: str) -> tuple[CheckConstraint, ...]:
+    """The structural checks for the BusinessProfile columns of `table`."""
+    return (CheckConstraint("country_code IS NULL OR country_code ~ '^[A-Z]{2}$'", name=f"ck_{table}_country_code_shape"),)

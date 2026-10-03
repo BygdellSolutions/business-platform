@@ -11,6 +11,7 @@ const router = { push: vi.fn(), refresh: vi.fn() };
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
 vi.mock("@/lib/api/client", () => ({ apiFetch: vi.fn() }));
 import { apiFetch } from "@/lib/api/client";
+import { EMPTY_PROFILE } from "@/lib/profile";
 
 const A = "00000000-0000-4000-8000-0000000000a1";
 const B = "00000000-0000-4000-8000-0000000000b2";
@@ -26,6 +27,7 @@ function customer(overrides: Partial<Customer> = {}): Customer {
     active: true,
     created_at: "2026-10-01T10:00:00Z",
     updated_at: "2026-10-01T10:00:00Z",
+    ...EMPTY_PROFILE,
     ...overrides,
   };
 }
@@ -62,7 +64,7 @@ describe("creating a customer", () => {
     expect(path).toBe("/customers");
     expect(request).toEqual({
       method: "POST",
-      body: { customer_type: "company", name: "Umeå HK", email: "info@umea.test", phone: null, active: true },
+      body: { customer_type: "company", name: "Umeå HK", email: "info@umea.test", phone: null, active: true, ...EMPTY_PROFILE },
     });
     expect(JSON.stringify(request?.body)).not.toContain("organization");
     expect(router.push).toHaveBeenCalledWith(`/o/${A}/customers/new-id?created=1`);
@@ -78,7 +80,7 @@ describe("creating a customer", () => {
     await userEvent.click(screen.getByLabelText("Active"));
     await userEvent.click(screen.getByRole("button", { name: "Create customer" }));
 
-    expect(mocked.mock.calls[0][2]?.body).toEqual({ customer_type: "person", name: "Anna", email: null, phone: null, active: false });
+    expect(mocked.mock.calls[0][2]?.body).toEqual({ customer_type: "person", name: "Anna", email: null, phone: null, active: false, ...EMPTY_PROFILE });
   });
 
   it("shows each 422 on the matching control and keeps what was typed", async () => {
@@ -148,6 +150,83 @@ describe("creating a customer", () => {
     expect(mocked).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "Saving…" })).toBeDisabled();
     await act(async () => finish(ok(customer(), 201)));
+  });
+});
+
+describe("the billing profile", () => {
+  it("has a box for each of the seven optional fields, empty for a new customer", () => {
+    mount(A);
+    for (const label of ["Address line 1", "Address line 2", "Postal code", "City", "Country code", "Registration number", "VAT number"]) {
+      expect(screen.getByLabelText(label)).toHaveValue("");
+    }
+  });
+
+  it("sends what was typed, as typed, and blank boxes as null", async () => {
+    mocked.mockResolvedValue(ok(customer(), 201));
+    mount(A);
+
+    await userEvent.type(screen.getByLabelText("Name"), "Umeå HK");
+    await userEvent.type(screen.getByLabelText("Address line 1"), "Ridvägen 2");
+    await userEvent.type(screen.getByLabelText("Address line 2"), "   ");
+    await userEvent.type(screen.getByLabelText("Country code"), "se"); // case and shape are the backend's business
+    await userEvent.type(screen.getByLabelText("VAT number"), "SE802000000101");
+    await userEvent.click(screen.getByRole("button", { name: "Create customer" }));
+
+    expect(mocked.mock.calls[0][2]?.body).toMatchObject({
+      address_line1: "Ridvägen 2",
+      address_line2: null,
+      country_code: "se",
+      vat_number: "SE802000000101",
+      city: null,
+    });
+  });
+
+  it("shows a backend refusal next to the box it is about and keeps what was typed", async () => {
+    mocked.mockResolvedValue(fail(422, { detail: [{ loc: ["body", "country_code"], msg: "String should match pattern", type: "string_pattern_mismatch" }] }));
+    mount(A);
+    await userEvent.type(screen.getByLabelText("Country code"), "SWE");
+
+    await userEvent.click(screen.getByRole("button", { name: "Create customer" }));
+
+    expect(await screen.findByTestId("error-country_code")).toHaveTextContent("String should match pattern");
+    expect(screen.getByLabelText("Country code")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByLabelText("Country code")).toHaveValue("SWE");
+    expect(screen.queryByTestId("form-error")).toBeNull();
+  });
+
+  it("shows the saved profile and sends only the profile fields that changed", async () => {
+    const saved = customer({ city: "Umeå", country_code: "SE", vat_number: "SE1" });
+    mocked.mockResolvedValue(ok({ ...saved, city: "Luleå" }));
+    mount(A, saved);
+    expect(screen.getByLabelText("City")).toHaveValue("Umeå");
+
+    await userEvent.clear(screen.getByLabelText("City"));
+    await userEvent.type(screen.getByLabelText("City"), "Luleå");
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(mocked.mock.calls[0][2]).toEqual({ method: "PATCH", body: { city: "Luleå" } });
+    expect(await screen.findByTestId("saved")).toBeInTheDocument();
+  });
+
+  it("clearing a saved field sends null", async () => {
+    const saved = customer({ vat_number: "SE1" });
+    mocked.mockResolvedValue(ok({ ...saved, vat_number: null }));
+    mount(A, saved);
+
+    await userEvent.clear(screen.getByLabelText("VAT number"));
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(mocked.mock.calls[0][2]?.body).toEqual({ vat_number: null });
+  });
+
+  it("shows what the backend stored after saving (normalized)", async () => {
+    mocked.mockResolvedValue(ok(customer({ country_code: "SE" })));
+    mount(A, customer());
+    await userEvent.type(screen.getByLabelText("Country code"), "se");
+
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(screen.getByLabelText("Country code")).toHaveValue("SE"));
   });
 });
 

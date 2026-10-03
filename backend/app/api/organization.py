@@ -1,0 +1,75 @@
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.core.authz import roles_required
+from app.core.currency import CURRENCY_LOCKED, default_currency_lock_reason
+from app.core.db import get_db
+from app.core.query import apply_update
+from app.core.tenant import TenantContext, get_tenant_context
+from app.models import Organization, Role
+from app.schemas.organization import OrganizationRead, OrganizationUpdate
+
+router = APIRouter(prefix="/api/organization", tags=["organization"])
+
+SETTINGS_ROLES = (Role.OWNER, Role.ADMIN)
+
+
+def _read(db: Session, organization: Organization) -> OrganizationRead:
+    reason = None
+    if organization.default_currency is not None:
+        reason = default_currency_lock_reason(db, organization.id)
+    return OrganizationRead(
+        **{
+            name: getattr(organization, name)
+            for name in OrganizationRead.model_fields
+            if hasattr(organization, name)
+        },
+        default_currency_locked=reason is not None,
+        default_currency_lock_reason=reason,
+    )
+
+
+def _active_organization(db: Session, ctx: TenantContext, *, for_update: bool = False) -> Organization:
+    query = select(Organization).where(Organization.id == ctx.organization_id)
+    if for_update:
+        query = query.with_for_update().execution_options(populate_existing=True)
+    return db.execute(query).scalar_one()
+
+
+@router.get("", response_model=OrganizationRead)
+def read_organization(
+    ctx: TenantContext = Depends(get_tenant_context), db: Session = Depends(get_db)
+) -> OrganizationRead:
+    """The active organization's settings. Any member may read them: the currency and the
+    business profile are shown to everyone who works in the organization."""
+    return _read(db, _active_organization(db, ctx))
+
+
+@router.patch("", response_model=OrganizationRead)
+def update_organization(
+    payload: OrganizationUpdate,
+    ctx: TenantContext = Depends(roles_required(*SETTINGS_ROLES)),
+    db: Session = Depends(get_db),
+) -> OrganizationRead:
+    # Row lock: creators of prices (items, transactions) hold it FOR SHARE, so the check
+    # below sees every record created before this change and none can be created during it.
+    organization = _active_organization(db, ctx, for_update=True)
+    values = payload.model_dump(exclude_unset=True)
+    new_currency = values.get("default_currency")
+    if (
+        new_currency is not None
+        and organization.default_currency is not None
+        and new_currency != organization.default_currency
+    ):
+        reason = default_currency_lock_reason(db, organization.id)
+        if reason is not None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail={
+                    "code": CURRENCY_LOCKED,
+                    "message": f"The default currency can no longer be changed. {reason}",
+                },
+            )
+    apply_update(db, organization, values)
+    return _read(db, organization)

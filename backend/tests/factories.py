@@ -24,8 +24,15 @@ from app.modules.sales.models import Transaction, TransactionLine
 from app.modules.sales.pricing import calculate_line
 
 
-def make_org(db: Session, name: str = "Test Org") -> Organization:
-    org = Organization(name=name)
+_FROM_ORG = object()  # "use the organization's default currency"
+
+
+def make_org(
+    db: Session, name: str = "Test Org", default_currency: str | None = "SEK", **fields
+) -> Organization:
+    """An organization. Test organizations EXPLICITLY use SEK by default (the platform assumes
+    no currency); pass default_currency=None for one that has not configured it."""
+    org = Organization(name=name, default_currency=default_currency, **fields)
     db.add(org)
     db.flush()
     return org
@@ -127,10 +134,12 @@ def make_transaction(
     transaction_date: date = date(2026, 10, 1),
     status: str = "draft",
     lines: list[dict] | None = None,
+    currency: str | None | object = _FROM_ORG,
 ) -> Transaction:
     """A transaction whose defaults look identical in every organization.
 
-    `lines` is a list of make_line() keyword dicts; by default one ad-hoc line.
+    `lines` is a list of make_line() keyword dicts; by default one ad-hoc line. The currency is
+    the organization's default unless given (None builds a transaction that predates currencies).
     """
     billing_customer = billing_customer or make_customer(
         db, org, "Umeå HK", CustomerType.COMPANY, "hk@example.test", None
@@ -140,6 +149,7 @@ def make_transaction(
         billing_customer_id=billing_customer.id,
         transaction_date=transaction_date,
         status=status,
+        currency=org.default_currency if currency is _FROM_ORG else currency,
     )
     db.add(tx)
     db.flush()

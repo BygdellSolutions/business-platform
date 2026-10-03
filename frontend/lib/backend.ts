@@ -29,6 +29,7 @@ export const ALLOWED_API_AREAS = [
   "horses",
   "transactions",
   "custom-fields",
+  "organization",
   "me",
 ] as const;
 

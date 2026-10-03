@@ -4,12 +4,19 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, select, update
 from sqlalchemy.orm import Session
 
 from app.api.deps import Pagination, pagination
+from app.core.authz import roles_required
+from app.core.currency import default_currency_for_new_record
 from app.core.db import get_db
-from app.core.lifecycle import COMPLETE as EVENT_COMPLETE, ensure_valid
+from app.core.lifecycle import (
+    CANCEL as EVENT_CANCEL,
+    COMPLETE as EVENT_COMPLETE,
+    REOPEN as EVENT_REOPEN,
+    ensure_valid,
+)
 from app.core.query import apply_update, commit_and_refresh
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import (
@@ -18,7 +25,7 @@ from app.core.tenant_scope import (
     resolve_reference,
     scoped_select,
 )
-from app.models import Customer, Item
+from app.models import Customer, Item, Organization, Role
 from app.modules.sales.models import Transaction, TransactionLine, TransactionStatus
 from app.modules.sales.pricing import (
     AmountTooLarge,
@@ -28,6 +35,9 @@ from app.modules.sales.pricing import (
     calculate_totals,
 )
 from app.modules.sales.schemas import (
+    AssignCurrency,
+    AssignCurrencyResult,
+    CurrencyStatus,
     LineCreate,
     LineRead,
     LineUpdate,
@@ -106,6 +116,7 @@ def _summary_fields(tx: Transaction, customer: Customer, lines: Sequence[Transac
         billing_customer=CustomerRef.model_validate(customer),
         transaction_date=tx.transaction_date,
         status=tx.status,
+        currency=tx.currency,
         line_count=len(lines),
         version=tx.version,
         header_version=tx.header_version,
@@ -218,11 +229,15 @@ def create_transaction(
         _new_line_values(db, ctx, line, ("lines", index))
         for index, line in enumerate(payload.lines)
     ]
+    # Snapshot the organization's currency now; the row stays share-locked until the commit, so a
+    # concurrent currency change either sees this transaction (and refuses) or happens first.
+    currency = default_currency_for_new_record(db, ctx.organization_id)
     tx = create_scoped(
         db,
         ctx,
         Transaction,
         billing_customer_id=payload.billing_customer_id,
+        currency=currency,
         transaction_date=payload.transaction_date or _today(),
     )
     for position, values in enumerate(line_values, start=1):
@@ -263,6 +278,60 @@ def list_transactions(
     return [
         TransactionSummary(**_summary_fields(tx, customer, lines[tx.id])) for tx, customer in rows
     ]
+
+
+# --- currency of transactions that predate currencies -----------------------------------------
+# Declared before the "/{transaction_id}" routes so these literal paths win.
+
+
+@router.get("/currency-status", response_model=CurrencyStatus)
+def currency_status(
+    ctx: TenantContext = Depends(get_tenant_context), db: Session = Depends(get_db)
+) -> CurrencyStatus:
+    return CurrencyStatus(
+        default_currency=db.scalar(
+            select(Organization.default_currency).where(Organization.id == ctx.organization_id)
+        ),
+        transactions_without_currency=db.scalar(
+            select(func.count())
+            .select_from(Transaction)
+            .where(Transaction.organization_id == ctx.organization_id, Transaction.currency.is_(None))
+        ),
+    )
+
+
+@router.post("/assign-currency", response_model=AssignCurrencyResult)
+def assign_currency(
+    payload: AssignCurrency,
+    ctx: TenantContext = Depends(roles_required(Role.OWNER, Role.ADMIN)),
+    db: Session = Depends(get_db),
+) -> AssignCurrencyResult:
+    """The one way a transaction that predates currencies gets a currency: an owner or admin
+    states that those transactions were priced in the organization's default currency.
+
+    Only transactions WITHOUT a currency are touched, so a transaction's currency never
+    changes once it has one (a database trigger enforces the same). Their `version` moves so
+    an open editor is told its view is stale.
+    """
+    currency = default_currency_for_new_record(db, ctx.organization_id)
+    if payload.currency != currency:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=[
+                {
+                    "loc": ["body", "currency"],
+                    "msg": f"Must be the organization's default currency ({currency})",
+                    "type": "currency.mismatch",
+                }
+            ],
+        )
+    assigned = db.execute(
+        update(Transaction)
+        .where(Transaction.organization_id == ctx.organization_id, Transaction.currency.is_(None))
+        .values(currency=currency, version=Transaction.version + 1)
+    ).rowcount
+    db.commit()
+    return AssignCurrencyResult(currency=currency, assigned=assigned)
 
 
 @router.get("/{transaction_id}", response_model=TransactionRead)
@@ -320,6 +389,7 @@ def _transition(
     transaction_id: uuid.UUID,
     *,
     verb: str,
+    event: str,
     allowed_from: tuple[TransactionStatus, ...],
     to: TransactionStatus,
     if_match: str | None,
@@ -346,10 +416,11 @@ def _transition(
                 status.HTTP_409_CONFLICT,
                 detail="A transaction needs at least one line to be completed",
             )
-        # Anything registered on the core lifecycle seam may object (for example required
-        # custom fields). The row is locked, so what the validators see cannot change
-        # underneath us before the status is written.
-        ensure_valid(db, ctx, EVENT_COMPLETE, "transaction", tx.id)
+    # Anything registered on the core lifecycle seam may object: required custom fields to a
+    # completion, and (later) whatever holds a claim on a completed transaction to a reopen or a
+    # cancel. The row is locked, so what the validators see cannot change underneath us before
+    # the status is written.
+    ensure_valid(db, ctx, event, "transaction", tx.id)
     tx.status = to
     tx.version += 1
     commit_and_refresh(db, tx)
@@ -364,7 +435,7 @@ def complete_transaction(
     db: Session = Depends(get_db),
 ) -> TransactionRead:
     return _transition(
-        db, ctx, transaction_id, verb="completed", allowed_from=(DRAFT,), to=COMPLETED, if_match=if_match
+        db, ctx, transaction_id, verb="completed", event=EVENT_COMPLETE, allowed_from=(DRAFT,), to=COMPLETED, if_match=if_match
     )
 
 
@@ -376,7 +447,7 @@ def reopen_transaction(
     db: Session = Depends(get_db),
 ) -> TransactionRead:
     return _transition(
-        db, ctx, transaction_id, verb="reopened", allowed_from=(COMPLETED,), to=DRAFT, if_match=if_match
+        db, ctx, transaction_id, verb="reopened", event=EVENT_REOPEN, allowed_from=(COMPLETED,), to=DRAFT, if_match=if_match
     )
 
 
@@ -388,7 +459,7 @@ def cancel_transaction(
     db: Session = Depends(get_db),
 ) -> TransactionRead:
     return _transition(
-        db, ctx, transaction_id, verb="cancelled", allowed_from=(DRAFT, COMPLETED), to=CANCELLED, if_match=if_match
+        db, ctx, transaction_id, verb="cancelled", event=EVENT_CANCEL, allowed_from=(DRAFT, COMPLETED), to=CANCELLED, if_match=if_match
     )
 
 
