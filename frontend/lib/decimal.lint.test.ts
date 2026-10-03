@@ -38,11 +38,18 @@ const IN_ZONE = [
   "features/transactions/TransactionEditor.tsx",
   "features/transactions/AddLineForm.tsx",
   "features/transactions/TotalsPanel.tsx",
+  "features/invoices/InvoiceDocument.tsx",
+  "features/invoices/InvoiceCreateForm.tsx",
+  "features/invoices/eligibility.ts",
+  "app/o/[orgId]/invoices/page.tsx",
+  "app/o/[orgId]/invoices/[invoiceId]/page.tsx",
+  "app/o/[orgId]/invoices/new/page.tsx",
+  "components/snapshots/FieldSnapshots.tsx",
 ];
 
 describe("decimal-critical folders may not convert decimals to numbers", () => {
   it("covers the money-handling folders", () => {
-    expect(DECIMAL_ZONES).toEqual(expect.arrayContaining(["lib/decimal.ts", "components/custom-fields/**/*.{ts,tsx}", "features/transactions/**/*.{ts,tsx}"]));
+    expect(DECIMAL_ZONES).toEqual(expect.arrayContaining(["lib/decimal.ts", "components/custom-fields/**/*.{ts,tsx}", "features/transactions/**/*.{ts,tsx}", "features/invoices/**/*.{ts,tsx}", "app/o/*/invoices/**/*.{ts,tsx}", "components/snapshots/**/*.{ts,tsx}"]));
   });
 
   for (const file of IN_ZONE) {

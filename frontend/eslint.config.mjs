@@ -18,6 +18,9 @@ export const DECIMAL_ZONES = [
   "app/o/*/catalog/**/*.{ts,tsx}",
   "app/o/*/transactions/**/*.{ts,tsx}",
   "features/transactions/**/*.{ts,tsx}",
+  "app/o/*/invoices/**/*.{ts,tsx}",
+  "features/invoices/**/*.{ts,tsx}",
+  "components/snapshots/**/*.{ts,tsx}",
 ];
 
 const WHY = "Decimal values are strings end to end; never convert them to JavaScript numbers.";

@@ -26,8 +26,8 @@
 - [x] Invoicing prerequisites: organization and customer profiles, explicit currency (`default_currency`, transaction snapshot, safe migration, locked change), `UNIQUE (organization_id, id, transaction_id)` on `transaction_lines`, `reopen`/`cancel` lifecycle events, generic custom-field flag filter
 - [x] Development database migrated to `e63c9a2b8d45` and reseeded (seeded organizations and transactions have SEK)
 - [x] Invoicing backend: draft/issue lifecycle, counter-based numbering, immutability triggers, reservation through the core seam, snapshots, concurrency tests (migration `f74d0b3c9e56`)
-- [ ] Run `uv run alembic upgrade head` on the development database for migration `f74d0b3c9e56`
-- [ ] Invoicing frontend (list, create-from-transactions, draft editor, issue, issued view) - after review of the backend
+- [x] Development database migrated to `f74d0b3c9e56`
+- [x] Invoicing frontend V1 (list, create from transactions, draft editor, issue, issued view)
 - [ ] Invoice PDF (its own milestone; the stored snapshot is sufficient for it)
 
 ## Later
@@ -64,6 +64,7 @@
 - Customer email is not format-validated; the billing profile is free text by design (no jurisdiction rules).
 - Consider PostgreSQL Row Level Security as defense in depth (see docs/architecture.md).
 - **Currency (temporary rules).** Items have no currency of their own, so the organization's default currency cannot be changed once items or transactions exist, and a currency is a three-letter code with only its shape checked (no list of valid codes, no minor-unit handling). A real currency and repricing model replaces this. Transactions that predate currencies stay without one until an owner/admin assigns it (settings page or `POST /api/transactions/assign-currency`); there is no per-transaction assignment.
+- **Invoicing frontend V1 limits.** No PDF, email, payments, credit notes, exports, void/cancel or polish. The create screen shows no combined amount (the backend has no aggregate for a selection; add one there rather than summing in the browser). Filters on the create screen are the backend's customer filter only (reached by a link, so the selection survives paging); there is no date filter there. A deleted draft returns to the list. Nothing refreshes a long-unattended tab until it becomes visible.
 - **Invoicing V1 limits.** The series is always `default` and the number label is the plain integer; no void/cancel of an issued invoice, no credit notes, no payments, no per-customer payment terms or language, no jurisdiction rules (missing profile data does not block issuing), at most 200 transactions per invoice. `invoice_date` is chosen by the client (default: today in UTC; there is no organization time zone). Customer erasure/anonymisation against invoice retention is a jurisdiction policy and is deferred: a referenced customer cannot be deleted. Draft sources cannot be changed (delete the draft and create another). An issued invoice's `fields` snapshot holds the display text as it resolved at issuance.
 - Organization settings are last-writer-wins (no `If-Match` yet) and there is no organization time zone.
 - Item `unit` is free text; no units subsystem.

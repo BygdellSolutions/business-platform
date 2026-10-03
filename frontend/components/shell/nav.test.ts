@@ -7,6 +7,10 @@ describe("navigation", () => {
     expect(NAV.find((item) => item.label === "Settings")).toEqual({ label: "Settings", path: "/settings", enabled: true });
   });
 
+  it("links the invoices", () => {
+    expect(NAV.find((item) => item.label === "Invoices")).toEqual({ label: "Invoices", path: "/invoices", enabled: true });
+  });
+
   it("has unique labels and paths, all relative to the organization", () => {
     expect(new Set(NAV.map((item) => item.label)).size).toBe(NAV.length);
     expect(new Set(NAV.map((item) => item.path)).size).toBe(NAV.length);

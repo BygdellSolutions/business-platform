@@ -37,6 +37,8 @@ export type ApiError =
       problems: Problem[];
       /** For "stale_record": the version the record has now. */
       currentVersion?: number;
+      /** For conflicts about transactions (not invoiceable any more): the ids concerned. */
+      transactionIds: string[];
     }
   | { kind: "validation"; status: 422; message: string; fieldErrors: FieldErrors; formErrors: string[] }
   | { kind: "client"; status: number; message: string }
@@ -117,9 +119,10 @@ export function normalizeError(status: number, body: unknown): ApiError {
         code: typeof detail.code === "string" ? detail.code : undefined,
         problems: toProblems(detail.problems),
         currentVersion: typeof detail.current_version === "number" ? detail.current_version : undefined,
+        transactionIds: Array.isArray(detail.transaction_ids) ? detail.transaction_ids.filter((id): id is string => typeof id === "string") : [],
       };
     }
-    return { kind: "conflict", status: 409, message: text ?? GENERIC[409], problems: [] };
+    return { kind: "conflict", status: 409, message: text ?? GENERIC[409], problems: [], transactionIds: [] };
   }
   if (status === 422) {
     const { fieldErrors, formErrors } = validationErrors(detail);

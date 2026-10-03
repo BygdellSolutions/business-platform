@@ -629,6 +629,18 @@ There is no cancel/void of an issued invoice, no credit note and no payment endp
 
 ---
 
+## Implementation notes: invoicing frontend
+
+Minimal screens over the Invoicing API (`app/o/[orgId]/invoices/`, `features/invoices/`, `components/snapshots/`). Same architecture as Transactions: pages are server components that read through `serverRead` (identity from the cookie, organization from the URL, both added by `backendFetch`); the client part receives the server's record and replaces it by `router.refresh()` after every change; the browser reaches FastAPI only through the BFF.
+
+- **A stored document, rendered from itself.** `InvoiceDocument` holds no state and fetches nothing. The invoice page and the list read only `/api/invoices...` (the list page reads one customer solely to label its customer *filter*). `features/invoices/boundary.test.ts` fails if invoice code imports customer, catalog, horse, transaction-editor or custom-field code, requests `/customers`, `/items`, `/horses` or `/custom-fields`, converts a decimal to a number or does arithmetic on an amount field. Custom-field snapshots go through `components/snapshots/FieldSnapshots`, a generic read-only renderer (stored label, stored display text, stored missing state; no definitions, choices or references), whose own boundary test enforces genericity (no metadata comparisons, no domain words) and inertness (no fetching, no effects).
+- **Zero arithmetic.** Amounts, totals and VAT rows are the server's strings (`DecimalText`); `features/invoices/**`, `app/o/*/invoices/**` and `components/snapshots/**` are ESLint decimal zones. The create screen deliberately shows no combined total, because the backend offers no authoritative aggregate for a selection.
+- **Selection rules in one pure module** (`eligibility.ts`): compatibility is a comparison of customer id and currency code with the first selected row; the create request is built there and carries ids and approved header fields only. FastAPI remains the authority and answers a structured conflict (`already_invoiced`, `transactions_not_completed`, `currency_missing`, `mixed_*`) when the list was stale.
+- **Concurrency and unknown outcomes.** The invoice view runs one change at a time. A draft edit carries the version the editor was OPENED on; a stale refusal keeps the user's draft and offers an explicit discard. Failures are classified (`failures.ts`); `network` and `server` are `unconfirmed`: the outcome is unknown, so the invoice is re-read (`verify`) and no new Issue or Delete is offered until that check has answered. `invoice_issued`, `stale_record`, `source_changed` and 404 refresh to the authoritative state. Answers that arrive after the screen was left (navigation or organization switch) change nothing: every continuation is guarded by a mounted flag.
+- **Permissions** are presentation only (`lib/roles.ts`); the backend's role checks are authoritative and tests forge BFF requests as employees and viewers.
+
+---
+
 ## Implementation notes: custom fields (UDFs)
 
 Implemented in `app/modules/custom_fields/`. It depends on core only and never names a concrete entity: everything it knows about entities comes from the registry. Attributes that are normal and stable for an entity stay real columns in that entity's module; custom fields extend an entity with organization-specific fields and never replace normal domain modeling.

@@ -46,7 +46,7 @@ describe("normalizeError", () => {
   });
 
   it("409 with a text detail is a plain conflict", () => {
-    expect(normalizeError(409, LOCKED)).toEqual({ kind: "conflict", status: 409, message: LOCKED.detail, problems: [] });
+    expect(normalizeError(409, LOCKED)).toEqual({ kind: "conflict", status: 409, message: LOCKED.detail, problems: [], transactionIds: [] });
     expect(normalizeError(409, REFERENCED)).toMatchObject({ kind: "conflict", message: REFERENCED.detail, problems: [] });
   });
 
@@ -71,7 +71,15 @@ describe("normalizeError", () => {
       code: "stale_record",
       problems: [],
       currentVersion: 4,
+      transactionIds: [],
     });
+  });
+
+  it("409 about transactions keeps the ids of the (own) transactions concerned, and only well-formed ones", () => {
+    const error = normalizeError(409, { detail: { code: "already_invoiced", message: "taken", transaction_ids: ["t1", "t2", 7, null] } });
+    expect(error).toMatchObject({ kind: "conflict", code: "already_invoiced", transactionIds: ["t1", "t2"] });
+    expect(normalizeError(409, { detail: { code: "x", message: "m", transaction_ids: "not-a-list" } })).toMatchObject({ transactionIds: [] });
+    expect(normalizeError(409, { detail: "plain" })).toMatchObject({ transactionIds: [] });
   });
 
   it("428 and 400 about a missing or malformed version are client errors with the backend text", () => {

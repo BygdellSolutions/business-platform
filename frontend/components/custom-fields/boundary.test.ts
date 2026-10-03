@@ -1,7 +1,9 @@
 // @vitest-environment node
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+
+import { sourceFiles, violationsOf } from "../../test-support/genericity";
 
 /**
  * The Custom Fields frontend is GENERIC: it understands field metadata and six value types, and
@@ -22,57 +24,11 @@ import { describe, expect, it } from "vitest";
 const ROOT = path.resolve(__dirname, "..", "..");
 const LAYERS = ["components/custom-fields", "lib/custom-fields"];
 
-const ALLOWED_IMPORT = [
-  /^react$/,
-  /^react\/.+/,
-  /^next\/navigation$/,
-  /^server-only$/,
-  /^@\/components\/ui\//,
-  /^@\/components\/custom-fields\//,
-  /^@\/components\/shell\/org-context$/, // which organization the page is for: infrastructure, not a module
-  /^@\/lib\//, // shared helpers (and this layer's own lib)
-  /^\.\.?\//,
-];
-
-// A hyphen joins words ("items-center" is a CSS class, not the domain word "items").
-const DOMAIN_WORDS = /(?<![\w-])(horse|horses|equine|owner|customer|customers|catalog|item|items|stable|billing|sales|transaction|transactions|invoice|invoices|animal|animals)(?![\w-])/i;
-const COMPARES_METADATA_TO_LITERAL = [
-  /\.(key|source|entity_type|depends_on|filter|reference_source)\s*[!=]==?\s*["'`]/,
-  /["'`]\s*[!=]==?\s*[\w.]*\.(key|source|entity_type|depends_on|filter|reference_source)\b/,
-  /\bswitch\s*\(\s*[\w.?]*\.(key|source|entity_type|depends_on|filter|reference_source)\s*\)/,
-];
-
-function imports(source: string): string[] {
-  const found = new Set<string>();
-  for (const match of source.matchAll(/\bfrom\s+["']([^"']+)["']/g)) found.add(match[1]);
-  for (const match of source.matchAll(/\bimport\s*\(\s*["']([^"']+)["']\s*\)/g)) found.add(match[1]);
-  for (const match of source.matchAll(/^\s*import\s+["']([^"']+)["']/gm)) found.add(match[1]);
-  return [...found];
-}
+const OWN_LAYER = [/^@\/components\/custom-fields\//];
 
 /** What is wrong with this source, as readable messages. Empty if it is generic. */
 export function violations(source: string): string[] {
-  const problems: string[] = [];
-  for (const specifier of imports(source)) {
-    if (!ALLOWED_IMPORT.some((pattern) => pattern.test(specifier))) problems.push(`imports "${specifier}", which is not a generic layer`);
-  }
-  for (const pattern of COMPARES_METADATA_TO_LITERAL) {
-    const hit = pattern.exec(source);
-    if (hit) problems.push(`decides by comparing metadata to a literal: ${hit[0].trim()}`);
-  }
-  const word = DOMAIN_WORDS.exec(source);
-  if (word) problems.push(`mentions the domain word "${word[0]}"`);
-  return problems;
-}
-
-function sourceFiles(directory: string): string[] {
-  const out: string[] = [];
-  for (const entry of readdirSync(directory)) {
-    const full = path.join(directory, entry);
-    if (statSync(full).isDirectory()) out.push(...sourceFiles(full));
-    else if (/\.(ts|tsx)$/.test(entry) && !/\.test\.(ts|tsx)$/.test(entry)) out.push(full);
-  }
-  return out;
+  return violationsOf(source, OWN_LAYER);
 }
 
 describe("the generic Custom Fields layer", () => {

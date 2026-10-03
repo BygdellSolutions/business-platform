@@ -319,11 +319,32 @@ export function createWorld(options: { currency?: string | null; label?: string 
     addMember: (role) => addUser(role, role),
     cleanup: () => {
       const org = sql(orgId);
-      for (const table of ["transaction_lines", "transactions", "items", "customers", "organization_users"]) {
-        testRow(`delete from ${table} where organization_id = ${org}`);
-      }
-      testRow(`delete from organizations where id = ${org}`);
-      for (const id of userIds) testRow(`delete from users where id = ${sql(id)}`);
+      // One transaction with triggers and foreign keys switched off: issued invoices are protected on
+      // purpose (immutability triggers, RESTRICT keys), and this is a throwaway organization in the
+      // disposable TEST database. Everything the organization can own is removed.
+      const tables = [
+        "invoice_vat_rows",
+        "invoice_lines",
+        "invoice_transactions",
+        "invoices",
+        "invoice_counters",
+        "custom_field_values",
+        "custom_field_options",
+        "custom_field_definitions",
+        "transaction_lines",
+        "transactions",
+        "horses",
+        "items",
+        "customers",
+        "organization_users",
+      ];
+      const statements = [
+        "set local session_replication_role = replica",
+        ...tables.map((table) => `delete from ${table} where organization_id = ${org}`),
+        `delete from organizations where id = ${org}`,
+        ...userIds.map((id) => `delete from users where id = ${sql(id)}`),
+      ];
+      testRow(statements.join("; "));
     },
   };
 }
@@ -346,6 +367,77 @@ export function insertCurrencylessTransaction(orgId: string, customerId: string,
   );
   testRow(
     `insert into transaction_lines (organization_id, transaction_id, position, description, unit, quantity, unit_price_ex_vat, vat_rate, net_amount, vat_amount, gross_amount) values (${sql(orgId)}, ${sql(id)}, 1, 'Old massage', 'session', 1, 850.00, 25.00, 850.00, 212.50, 1062.50)`,
+  );
+  return id;
+}
+
+// --- Invoicing ---------------------------------------------------------------------------------------------------------------
+
+export interface InvoiceJson {
+  id: string;
+  status: "draft" | "issued";
+  version: number;
+  number: number | null;
+  number_text: string | null;
+  currency: string;
+  customer_id: string;
+  customer_name: string;
+  invoice_date: string;
+  due_date: string | null;
+  description: string | null;
+  net_amount: string;
+  vat_amount: string;
+  gross_amount: string;
+  customer_snapshot: Record<string, unknown>;
+  issuer_snapshot: Record<string, unknown>;
+  transactions: { transaction_id: string; transaction_date: string; fields: unknown[] }[];
+  lines: { id: string; description: string; net_amount: string; vat_amount: string; gross_amount: string; fields: { key: string; label: string; display: string | null; value: unknown }[] }[];
+  vat_breakdown: { vat_rate: string; net_amount: string; vat_amount: string }[];
+}
+
+const DEFAULT_LINE = { description: "Horse massage", unit: "session", quantity: "1", unit_price_ex_vat: "850.00", vat_rate: "25" };
+
+/** A COMPLETED transaction (created and completed through the BFF as the context's signed-in user). */
+export async function createCompletedTransaction(
+  context: BrowserContext,
+  orgId: string,
+  customerId: string,
+  options: { date?: string; lines?: Record<string, string>[] } = {},
+): Promise<TxJson> {
+  const draft = await createTransaction(context, orgId, {
+    billing_customer_id: customerId,
+    transaction_date: options.date ?? "2026-10-01",
+    lines: options.lines ?? [DEFAULT_LINE],
+  });
+  return lifecycle(context, orgId, draft.id, "complete");
+}
+
+export async function createInvoiceApi(context: BrowserContext, orgId: string, transactionIds: string[], extra: Record<string, unknown> = {}): Promise<InvoiceJson> {
+  const response = await context.request.post(bffUrl(orgId, "/invoices"), { data: { transaction_ids: transactionIds, ...extra } });
+  expect(response.status(), await response.text()).toBe(201);
+  return (await response.json()) as InvoiceJson;
+}
+
+export async function getInvoiceApi(context: BrowserContext, orgId: string, id: string): Promise<InvoiceJson> {
+  const response = await context.request.get(bffUrl(orgId, `/invoices/${id}`));
+  expect(response.status(), await response.text()).toBe(200);
+  return (await response.json()) as InvoiceJson;
+}
+
+export async function issueInvoiceApi(context: BrowserContext, orgId: string, invoice: Pick<InvoiceJson, "id" | "version">): Promise<InvoiceJson> {
+  const response = await context.request.post(bffUrl(orgId, `/invoices/${invoice.id}/issue`), { headers: ifMatch(invoice.version) });
+  expect(response.status(), await response.text()).toBe(200);
+  return (await response.json()) as InvoiceJson;
+}
+
+/** A completed transaction straight in the TEST database with the given currency (the API can only make ones in the organization's currency). */
+export function insertCompletedTransaction(orgId: string, customerId: string, currency: string | null, date = "2026-10-03"): string {
+  const id = randomUUID();
+  testRow(
+    `insert into transactions (id, organization_id, billing_customer_id, transaction_date, status, currency) values (${sql(id)}, ${sql(orgId)}, ${sql(customerId)}, ${sql(date)}, 'completed', ${currency === null ? "null" : sql(currency)})`,
+  );
+  testRow(
+    `insert into transaction_lines (organization_id, transaction_id, position, description, unit, quantity, unit_price_ex_vat, vat_rate, net_amount, vat_amount, gross_amount) values (${sql(orgId)}, ${sql(id)}, 1, 'Direct line', 'session', 1, 100.00, 25.00, 100.00, 25.00, 125.00)`,
   );
   return id;
 }

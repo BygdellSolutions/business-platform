@@ -1,0 +1,24 @@
+import { describe, expect, it } from "vitest";
+
+import { canMutateInvoices, INVOICING_ROLES } from "@/lib/roles";
+import type { Role } from "@/lib/api/types";
+
+describe("who is offered invoice controls", () => {
+  it("is exactly owner, admin and accountant", () => {
+    expect([...INVOICING_ROLES].sort()).toEqual(["accountant", "admin", "owner"]);
+  });
+
+  it.each<[Role, boolean]>([
+    ["owner", true],
+    ["admin", true],
+    ["accountant", true],
+    ["employee", false],
+    ["viewer", false],
+  ])("%s: %s", (role, allowed) => {
+    expect(canMutateInvoices(role)).toBe(allowed);
+  });
+
+  it("an unknown role (the membership could not be read) gets nothing", () => {
+    expect(canMutateInvoices(undefined)).toBe(false);
+  });
+});

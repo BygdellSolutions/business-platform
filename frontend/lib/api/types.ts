@@ -250,3 +250,135 @@ export interface LineCreate {
 
 /** A line edit. There is deliberately no `item_id`: this UI never re-snapshots or detaches a line. */
 export type LineUpdate = Partial<Pick<LineCreate, "description" | "unit" | "quantity" | "unit_price_ex_vat" | "vat_rate">>;
+
+// --- Invoicing ------------------------------------------------------------------------------------------------------------
+//
+// An invoice is a stored DOCUMENT: everything on it (parties, lines, amounts, custom-field text) is
+// the invoice's own snapshot. Money, quantity and VAT rates are decimal STRINGS, shown exactly as
+// received; the frontend adds nothing up and recomputes nothing. Source ids are navigation metadata.
+
+export type InvoiceStatus = "draft" | "issued";
+
+export interface InvoiceSummary {
+  id: string;
+  status: InvoiceStatus;
+  /** Optimistic concurrency: sent as If-Match when editing, issuing or deleting a draft. */
+  version: number;
+  series: string;
+  /** null for a draft: a number exists only once issued. */
+  number: number | null;
+  number_text: string | null;
+  /** Navigation metadata; the name to show is `customer_name`. */
+  customer_id: string;
+  customer_name: string;
+  currency: string;
+  /** A calendar date, "YYYY-MM-DD". */
+  invoice_date: string;
+  due_date: string | null;
+  description: string | null;
+  net_amount: MoneyString;
+  vat_amount: MoneyString;
+  gross_amount: MoneyString;
+  transaction_count: number;
+  issued_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** One stored custom-field value of an invoice (generic: nothing says what the field is for). */
+export interface FieldSnapshot {
+  key: string;
+  label: string;
+  field_type: "text" | "number" | "date" | "boolean" | "select" | "reference";
+  /** What was stored: text, a decimal string, an ISO date, a boolean, or an id (select/reference). */
+  value: string | boolean | null;
+  /** The text as it resolved when the snapshot was taken; null for a reference that was already gone. */
+  display: string | null;
+  missing: boolean;
+  position: number;
+  /** For audit only; never looked up. */
+  definition_id: string;
+}
+
+export interface InvoiceLine {
+  id: string;
+  position: number;
+  source_transaction_id: string;
+  source_line_id: string;
+  description: string;
+  unit: string;
+  quantity: QuantityString;
+  unit_price_ex_vat: MoneyString;
+  vat_rate: PercentString;
+  net_amount: MoneyString;
+  vat_amount: MoneyString;
+  gross_amount: MoneyString;
+  fields: FieldSnapshot[];
+}
+
+export interface InvoiceSource {
+  transaction_id: string;
+  position: number;
+  transaction_date: string;
+  source_version: number;
+  fields: FieldSnapshot[];
+}
+
+export interface InvoiceVatRow {
+  vat_rate: PercentString;
+  net_amount: MoneyString;
+  vat_amount: MoneyString;
+}
+
+/** The party blocks are versioned snapshots; only fields that existed when they were taken are present. */
+export interface PartySnapshot {
+  schema: number;
+  name: string;
+  legal_name?: string | null;
+  customer_type?: string;
+  email?: string | null;
+  phone?: string | null;
+  address_line1: string | null;
+  address_line2: string | null;
+  postal_code: string | null;
+  city: string | null;
+  country_code: string | null;
+  registration_number: string | null;
+  vat_number: string | null;
+}
+
+export interface Invoice extends InvoiceSummary {
+  issued_by: string | null;
+  customer_snapshot: PartySnapshot;
+  issuer_snapshot: PartySnapshot;
+  transactions: InvoiceSource[];
+  lines: InvoiceLine[];
+  vat_breakdown: InvoiceVatRow[];
+}
+
+/** A completed, currency-bearing transaction that is on no invoice (GET /api/invoiceable-transactions). */
+export interface Invoiceable {
+  id: string;
+  transaction_date: string;
+  billing_customer_id: string;
+  billing_customer: CustomerRef;
+  currency: string;
+  line_count: number;
+  version: number;
+  totals: { net_amount: MoneyString; vat_amount: MoneyString; gross_amount: MoneyString };
+}
+
+/** What the create screen sends: ids and the approved header fields only. Never a customer or a currency. */
+export interface InvoiceCreate {
+  transaction_ids: string[];
+  invoice_date?: string;
+  due_date?: string;
+  description?: string;
+}
+
+/** Partial update of a draft's header; a cleared date or description is null. */
+export interface InvoiceUpdate {
+  invoice_date?: string;
+  due_date?: string | null;
+  description?: string | null;
+}
