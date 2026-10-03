@@ -76,3 +76,37 @@ export const sql = (value: string) => `'${value.replaceAll("'", "''")}'`;
 export function testRow(query: string): string {
   return psql("postgres-test", query);
 }
+
+/** Create a horse through the BFF. */
+export async function createHorse(
+  context: BrowserContext,
+  orgId: string,
+  data: { name: string; owner_customer_id: string; stable_customer_id?: string | null; birth_year?: number; sex?: "mare" | "stallion" | "gelding"; breed?: string; active?: boolean },
+) {
+  const response = await context.request.post(bffUrl(orgId, "/horses"), { data });
+  expect(response.status(), await response.text()).toBe(201);
+  return (await response.json()) as { id: string; name: string };
+}
+
+/** Deactivate or reactivate any record through the BFF. */
+export async function setActive(context: BrowserContext, orgId: string, area: "customers" | "items" | "horses", id: string, active: boolean) {
+  const response = await context.request.patch(bffUrl(orgId, `/${area}/${id}`), { data: { active } });
+  expect(response.status(), await response.text()).toBe(200);
+}
+
+/** The entity picker for an API field (the owner is `owner_customer_id`). */
+export const picker = (page: Page, field: string) => page.getByTestId(`picker-${field}`);
+
+/** Open a picker, type to narrow it, and choose the option showing `name`. */
+export async function pick(page: Page, field: string, name: string): Promise<void> {
+  const input = picker(page, field).getByRole("combobox");
+  await input.click();
+  await input.fill(name);
+  await picker(page, field).getByRole("option").filter({ hasText: name }).first().click();
+  await expect(input).toHaveValue(name);
+}
+
+/** The labels of the options a picker currently lists. */
+export async function choices(page: Page, field: string): Promise<string[]> {
+  return picker(page, field).getByRole("option").allTextContents();
+}

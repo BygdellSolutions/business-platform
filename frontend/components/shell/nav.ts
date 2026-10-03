@@ -10,6 +10,6 @@ export const NAV: NavItem[] = [
   { label: "Dashboard", path: "", enabled: true },
   { label: "Customers", path: "/customers", enabled: true },
   { label: "Catalog", path: "/catalog", enabled: true },
-  { label: "Horses", path: "/horses", enabled: false },
+  { label: "Horses", path: "/horses", enabled: true },
   { label: "Transactions", path: "/transactions", enabled: false },
 ];

@@ -69,3 +69,45 @@ export interface ItemCreate {
 }
 
 export type ItemUpdate = Partial<ItemCreate>;
+
+/** The compact customer the backend embeds in records that refer to one (a horse owner). */
+export interface CustomerRef {
+  id: string;
+  name: string;
+  /** False when the customer was deactivated after the reference was made. */
+  active: boolean;
+}
+
+export type HorseSex = "mare" | "stallion" | "gelding";
+
+export interface Horse {
+  id: string;
+  name: string;
+  owner_customer_id: string;
+  stable_customer_id: string | null;
+  owner: CustomerRef;
+  stable: CustomerRef | null;
+  birth_year: number | null;
+  sex: HorseSex | null;
+  breed: string | null;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * What the create form sends. The owner is OPTIONAL in this type on purpose: when none is
+ * chosen the field is left out and the backend answers "Field required" on it. The frontend
+ * does not decide that rule. A birth year is a JSON integer (the backend refuses a string).
+ */
+export interface HorseCreate {
+  name: string;
+  owner_customer_id?: string;
+  stable_customer_id: string | null;
+  birth_year: number | null;
+  sex: HorseSex | null;
+  breed: string | null;
+  active: boolean;
+}
+
+export type HorseUpdate = Partial<Omit<HorseCreate, "owner_customer_id">> & { owner_customer_id?: string };

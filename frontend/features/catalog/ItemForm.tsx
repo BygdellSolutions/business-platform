@@ -14,7 +14,7 @@ import { apiFetch } from "@/lib/api/client";
 import type { FieldErrors } from "@/lib/api/errors";
 import type { Item, ItemCreate, ItemType, ItemUpdate } from "@/lib/api/types";
 import { parseMoney, parsePercent } from "@/lib/decimal";
-import { problemsFrom, useMutation } from "@/lib/forms";
+import { blankToNull, problemsFrom, useMutation } from "@/lib/forms";
 
 const CONTROLS = ["type", "name", "description", "unit", "price_ex_vat", "vat_rate", "active"] as const;
 
@@ -51,11 +51,6 @@ function toState(item?: Item): FormState {
     vat_rate: item?.vat_rate ?? "",
     active: item?.active ?? true,
   };
-}
-
-/** A blank optional field means "no value" (null), not an empty string. */
-function blankToNull(value: string): string | null {
-  return value.trim() === "" ? null : value;
 }
 
 export function ItemForm({ item }: { item?: Item }) {

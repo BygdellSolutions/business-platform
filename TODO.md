@@ -16,7 +16,7 @@
 ## Next
 - [x] Frontend slice 1 (foundations): BFF, dev identity, `/o/{orgId}` shell, organization switcher, dashboard, test infrastructure and tenant-isolation e2e tests
 - [x] Frontend slice 2: Customers and Catalog (list, search, filters, create, edit, deactivate/reactivate) with the shared UI primitives and tenant-isolation e2e tests
-- [ ] Frontend slice 3: Horses with Owner and Stable pickers
+- [x] Frontend slice 3: Horses with Owner and Stable pickers (first reusable EntityPicker)
 - [ ] Frontend slice 4: Transactions (list, create-then-edit, line editor, backend-owned totals, lifecycle)
 - [ ] Frontend slice 5: generic custom-field renderer, dependent references, completion problems mapped to lines, read-only completed transactions
 - [ ] Invoicing design: invoice state as its own relationship to transactions (not a lifecycle status); snapshot at issuance
@@ -33,6 +33,8 @@
 - Playwright runs against the installed Edge or Chrome (the browser download is blocked here); other browsers are not covered.
 - Customers and Catalog screens have no delete (records are deactivated, since other records refer to them) and do not hide actions by role: roles are not enforced by the backend for these resources yet, and the UI would only be cosmetic anyway.
 - List pages use Previous/Next (no total count) and sort by name only; there is no column sorting. The e2e specs share one seeded test database, so a spec must never rely on how many records others created (query by a unique name, never by "first N rows").
+- EntityPicker V1: shows the first 20 matches (typing narrows; no "more results" hint or paging), searches on every keystroke (aborting the previous request, no debounce), has no inline "create a new customer", and its listbox has no Home/End/PageUp/PageDown keys. Reuse it for the billing customer, items and custom-field references; those need only a `search` function and a mapping to `{id, label}`.
+- The horse list filters (Owner, Stable) travel in a plain GET form, so a cleared field is sent empty (`owner_customer_id=`); the server treats that as no filter.
 - Forms validate only the shape of decimals locally; a message on a field that is wrong for the backend (such as too many digits) is the backend's own wording.
 - Customer, Item, Horse and draft Transaction DELETE are hard deletes. Customers and Items are protected by `409` while referenced; Horse will need the same once sessions reference horses.
 - Module enable/disable per organization is not built; the Equine and custom-field routes are mounted for everyone.

@@ -6,7 +6,7 @@ import { useId, type ReactNode } from "react";
  * (`fieldErrors[name]`). Errors are tied to the control with aria-describedby / aria-invalid.
  */
 
-interface FieldProps {
+export interface FieldProps {
   label: string;
   /** The API field name; also the control's name and the key of its errors. */
   name: string;
@@ -15,7 +15,7 @@ interface FieldProps {
   disabled?: boolean;
 }
 
-interface ControlA11y {
+export interface ControlA11y {
   id: string;
   name: string;
   disabled?: boolean;
@@ -25,7 +25,8 @@ interface ControlA11y {
 
 const CONTROL = "rounded border border-zinc-400 px-2 py-1 dark:bg-zinc-900 aria-[invalid=true]:border-red-600";
 
-function Shell({ label, name, error, hint, disabled, children, inline = false }: FieldProps & { children: (a11y: ControlA11y) => ReactNode; inline?: boolean }) {
+/** Label, hint and error around one control (also used by the entity picker). */
+export function FieldShell({ label, name, error, hint, disabled, children, inline = false }: FieldProps & { children: (a11y: ControlA11y) => ReactNode; inline?: boolean }) {
   const id = useId();
   const hasError = !!error && error.length > 0;
   const describedBy = [hasError ? `${id}-error` : null, hint ? `${id}-hint` : null].filter(Boolean).join(" ") || undefined;
@@ -73,11 +74,11 @@ export function TextField({
   autoComplete?: string;
 }) {
   return (
-    <Shell {...field}>
+    <FieldShell {...field}>
       {(a11y) => (
         <input {...a11y} type="text" value={value} inputMode={inputMode} autoComplete={autoComplete} onChange={(event) => onChange(event.target.value)} className={CONTROL} />
       )}
-    </Shell>
+    </FieldShell>
   );
 }
 
@@ -92,9 +93,9 @@ export function DecimalField(props: Omit<Parameters<typeof TextField>[0], "input
 
 export function TextAreaField({ value, onChange, rows = 3, ...field }: FieldProps & { value: string; onChange: (value: string) => void; rows?: number }) {
   return (
-    <Shell {...field}>
+    <FieldShell {...field}>
       {(a11y) => <textarea {...a11y} rows={rows} value={value} onChange={(event) => onChange(event.target.value)} className={CONTROL} />}
-    </Shell>
+    </FieldShell>
   );
 }
 
@@ -105,7 +106,7 @@ export function SelectField({
   ...field
 }: FieldProps & { value: string; onChange: (value: string) => void; options: { value: string; label: string }[] }) {
   return (
-    <Shell {...field}>
+    <FieldShell {...field}>
       {(a11y) => (
         <select {...a11y} value={value} onChange={(event) => onChange(event.target.value)} className={CONTROL}>
           {options.map((option) => (
@@ -115,14 +116,14 @@ export function SelectField({
           ))}
         </select>
       )}
-    </Shell>
+    </FieldShell>
   );
 }
 
 export function CheckboxField({ checked, onChange, ...field }: FieldProps & { checked: boolean; onChange: (checked: boolean) => void }) {
   return (
-    <Shell {...field} inline>
+    <FieldShell {...field} inline>
       {(a11y) => <input {...a11y} type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />}
-    </Shell>
+    </FieldShell>
   );
 }

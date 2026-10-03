@@ -4,7 +4,7 @@ import { PAGE_SIZE, backendQuery, listHref, pageOf, parseListParams } from "@/li
 
 describe("parseListParams: the address is untrusted input", () => {
   it("defaults to the first page of everything", () => {
-    expect(parseListParams({})).toEqual({ q: "", active: "all", type: "", page: 1 });
+    expect(parseListParams({})).toEqual({ q: "", active: "all", type: "", refs: {}, page: 1 });
   });
 
   it("reads known values", () => {
@@ -12,8 +12,20 @@ describe("parseListParams: the address is untrusted input", () => {
       q: "anna",
       active: "inactive",
       type: "service",
+      refs: {},
       page: 3,
     });
+  });
+
+  it("reads a record filter only if the list offers it and the value is a UUID", () => {
+    const owner = "00000000-0000-4000-8000-0000000000A1";
+    const keys = ["owner_customer_id", "stable_customer_id"];
+
+    expect(parseListParams({ owner_customer_id: owner, stable_customer_id: "not-a-uuid", organization_id: owner }, [], keys).refs).toEqual({
+      owner_customer_id: owner.toLowerCase(),
+    });
+    expect(parseListParams({ owner_customer_id: owner }).refs).toEqual({}); // not offered by this list
+    expect(parseListParams({ owner_customer_id: `${owner}' or 1=1` }, [], keys).refs).toEqual({});
   });
 
   it.each([["0"], ["-1"], ["1.5"], ["abc"], ["1e3"], ["100000"], [""], ["01"]])("drops the malformed page %j", (page) => {
@@ -50,6 +62,12 @@ describe("backendQuery", () => {
     expect([...query.keys()].sort()).toEqual(["active", "limit", "offset", "q", "type"]);
   });
 
+  it("forwards a record filter under its backend name", () => {
+    const owner = "00000000-0000-4000-8000-0000000000a1";
+    const params = parseListParams({ owner_customer_id: owner }, [], ["owner_customer_id"]);
+    expect(new URLSearchParams(backendQuery(params)).get("owner_customer_id")).toBe(owner);
+  });
+
   it("maps inactive to active=false", () => {
     expect(new URLSearchParams(backendQuery(parseListParams({ active: "inactive" }))).get("active")).toBe("false");
   });
@@ -61,6 +79,13 @@ describe("listHref", () => {
   it("keeps the organization-scoped base and leaves defaults out", () => {
     expect(listHref("/o/x/customers", parseListParams({}))).toBe("/o/x/customers");
     expect(listHref("/o/x/customers", params)).toBe("/o/x/customers?q=anna&active=active&page=2");
+  });
+
+  it("keeps record filters in the address", () => {
+    const owner = "00000000-0000-4000-8000-0000000000a1";
+    const withOwner = parseListParams({ owner_customer_id: owner, page: "2" }, [], ["owner_customer_id"]);
+    expect(listHref("/o/x/horses", withOwner)).toBe(`/o/x/horses?owner_customer_id=${owner}&page=2`);
+    expect(listHref("/o/x/horses", withOwner, { page: 1 })).toBe(`/o/x/horses?owner_customer_id=${owner}`);
   });
 
   it("changes only what is asked", () => {

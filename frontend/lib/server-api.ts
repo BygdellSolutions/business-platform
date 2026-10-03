@@ -18,6 +18,24 @@ import { getIdentity } from "@/lib/identity";
  *   - anything else         -> an error the segment's error.tsx shows (no internals)
  */
 export async function serverRead<T>(orgId: string, path: string, search = ""): Promise<T> {
+  const record = await read<T>(orgId, path, search);
+  if (record === MISSING) notFound();
+  return record;
+}
+
+/**
+ * Like `serverRead`, for a record that only DECORATES a page (the label of a filter chosen in
+ * the address): a 404 gives null instead of replacing the whole page with not-found. A foreign
+ * id and a random id are both 404, so both give null and nothing tells them apart.
+ */
+export async function serverReadOrNull<T>(orgId: string, path: string): Promise<T | null> {
+  const record = await read<T>(orgId, path, "");
+  return record === MISSING ? null : record;
+}
+
+const MISSING = Symbol("missing");
+
+async function read<T>(orgId: string, path: string, search: string): Promise<T | typeof MISSING> {
   if (!isUuid(orgId)) notFound();
   const email = await getIdentity();
   if (email === null) redirect("/dev-login");
@@ -34,7 +52,7 @@ export async function serverRead<T>(orgId: string, path: string, search = ""): P
   const body: unknown = await response.json().catch(() => undefined);
   const error = normalizeError(response.status, body);
   if (error.kind === "unauthorized") redirect("/dev-login");
-  if (error.kind === "not_found") notFound();
+  if (error.kind === "not_found") return MISSING;
   throw new Error(`The backend answered ${error.status}`);
 }
 

@@ -18,6 +18,11 @@ export interface Problems {
   general: string[];
 }
 
+/** A blank optional field means "no value" (null), not an empty string. */
+export function blankToNull(value: string): string | null {
+  return value.trim() === "" ? null : value;
+}
+
 export const NO_PROBLEMS: Problems = { byField: {}, general: [] };
 
 export function problemsFrom(error: ApiError | null, controls: readonly string[]): Problems {

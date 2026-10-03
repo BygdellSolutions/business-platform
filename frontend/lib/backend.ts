@@ -11,14 +11,12 @@ import "server-only";
  * only a selector.
  */
 
+import { UUID, isUuid } from "@/lib/uuid";
+
 const DEFAULT_BACKEND_URL = "http://localhost:8000";
 const TIMEOUT_MS = 15_000;
 
-export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-export function isUuid(value: string | undefined | null): value is string {
-  return typeof value === "string" && UUID.test(value);
-}
+export { UUID, isUuid };
 
 export function backendUrl(): string {
   return (process.env.BACKEND_URL ?? DEFAULT_BACKEND_URL).replace(/\/+$/, "");

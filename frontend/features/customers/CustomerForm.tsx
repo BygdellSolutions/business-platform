@@ -12,7 +12,7 @@ import { CheckboxField, SelectField, TextField } from "@/components/ui/Field";
 import { Notice } from "@/components/ui/Notice";
 import { apiFetch } from "@/lib/api/client";
 import type { Customer, CustomerCreate, CustomerType, CustomerUpdate } from "@/lib/api/types";
-import { problemsFrom, useMutation } from "@/lib/forms";
+import { blankToNull, problemsFrom, useMutation } from "@/lib/forms";
 
 const CONTROLS = ["customer_type", "name", "email", "phone", "active"] as const;
 
@@ -37,11 +37,6 @@ function toState(customer?: Customer): FormState {
     phone: customer?.phone ?? "",
     active: customer?.active ?? true,
   };
-}
-
-/** A blank optional field means "no value" (null), not an empty string. */
-function blankToNull(value: string): string | null {
-  return value.trim() === "" ? null : value;
 }
 
 /**

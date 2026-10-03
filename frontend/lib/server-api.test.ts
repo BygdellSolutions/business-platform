@@ -14,7 +14,7 @@ vi.mock("@/lib/backend", async (importOriginal) => ({ ...(await importOriginal<t
 
 import { backendFetch } from "@/lib/backend";
 import { getIdentity } from "@/lib/identity";
-import { requireUuid, serverRead } from "@/lib/server-api";
+import { requireUuid, serverRead, serverReadOrNull } from "@/lib/server-api";
 
 const ORG = "00000000-0000-4000-8000-0000000000a1";
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -69,6 +69,32 @@ describe("serverRead", () => {
     const failure = serverRead(ORG, "/api/customers");
     await expect(failure).rejects.toThrow("The backend could not be reached");
     await expect(failure).rejects.not.toThrow(/10\.1\.2\.3/);
+  });
+});
+
+describe("serverReadOrNull (a record that only decorates a page)", () => {
+  it("returns the record, asked for the organization in the URL", async () => {
+    vi.mocked(backendFetch).mockResolvedValue(json(200, { id: "1", name: "Anna" }));
+    await expect(serverReadOrNull(ORG, "/api/customers/1")).resolves.toEqual({ id: "1", name: "Anna" });
+    expect(backendFetch).toHaveBeenCalledWith({ email: "fredrik@dev.test", orgId: ORG }, "/api/customers/1", { search: "" });
+  });
+
+  it("gives null for a 404, whatever FastAPI said: a foreign id and a random id cannot be told apart", async () => {
+    vi.mocked(backendFetch).mockResolvedValueOnce(json(404, { detail: "Not found" }));
+    const random = await serverReadOrNull(ORG, "/api/customers/x");
+    vi.mocked(backendFetch).mockResolvedValueOnce(json(404, { detail: "Customer belongs to another organization" }));
+    const foreign = await serverReadOrNull(ORG, "/api/customers/y");
+
+    expect(random).toBeNull();
+    expect(foreign).toBe(random);
+  });
+
+  it("still sends a 401 to sign in, still turns other failures into errors, and still refuses a malformed organization", async () => {
+    vi.mocked(backendFetch).mockResolvedValueOnce(json(401, { detail: "Not authenticated" }));
+    await expect(serverReadOrNull(ORG, "/api/customers/x")).rejects.toThrow("NEXT_REDIRECT /dev-login");
+    vi.mocked(backendFetch).mockResolvedValueOnce(json(500, { detail: "Traceback" }));
+    await expect(serverReadOrNull(ORG, "/api/customers/x")).rejects.toThrow("The backend answered 500");
+    await expect(serverReadOrNull("not-a-uuid", "/api/customers/x")).rejects.toThrow("NEXT_NOT_FOUND");
   });
 });
 
