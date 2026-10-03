@@ -37,6 +37,22 @@ export type PickerSearch = (query: string, signal: AbortSignal) => Promise<ApiRe
 
 type Answer = { key: string } & ({ status: "ready"; entities: PickerEntity[] } | { status: "error"; message: string });
 
+/**
+ * Which `search` function an answer belongs to. A form that narrows the choices by another
+ * field (a dependent reference) hands the picker a NEW search function when that other field
+ * changes; answers fetched with the old one must never be shown for the new one.
+ */
+const searchIds = new WeakMap<object, number>();
+let lastSearchId = 0;
+function searchIdOf(search: object): number {
+  let id = searchIds.get(search);
+  if (id === undefined) {
+    id = ++lastSearchId;
+    searchIds.set(search, id);
+  }
+  return id;
+}
+
 const CONTROL = "w-full rounded border border-zinc-400 px-2 py-1 dark:bg-zinc-900 aria-[invalid=true]:border-red-600";
 
 function display(entity: PickerEntity | null): string {
@@ -50,6 +66,7 @@ export function EntityPicker({
   error,
   hint,
   disabled,
+  required,
   readOnly = false,
   value,
   onChange,
@@ -68,6 +85,7 @@ export function EntityPicker({
 }) {
   const listId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
+  const focusWithoutOpening = useRef(false);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState<string | null>(null); // null: showing the selection, not typing
   const [reload, setReload] = useState(0);
@@ -76,7 +94,7 @@ export function EntityPicker({
   const [cursor, setCursor] = useState<{ key: string; index: number }>({ key: "", index: -1 });
 
   const term = (query ?? "").trim();
-  const key = `${session}:${term}#${reload}`;
+  const key = `${searchIdOf(search)}:${session}:${term}#${reload}`;
   // An answer counts only for the request it was made for; anything else means "loading".
   const current = answer !== null && answer.key === key ? answer : null;
   const entities = current?.status === "ready" ? current.entities : [];
@@ -136,7 +154,7 @@ export function EntityPicker({
   }
 
   return (
-    <FieldShell label={label} name={name} error={error} hint={hint} disabled={disabled}>
+    <FieldShell label={label} name={name} error={error} hint={hint} disabled={disabled} required={required}>
       {(a11y) => (
         <div
           data-testid={`picker-${name}`}
@@ -157,6 +175,7 @@ export function EntityPicker({
               aria-autocomplete="list"
               aria-activedescendant={open && index >= 0 ? `${listId}-${index}` : undefined}
               aria-readonly={readOnly || undefined}
+              aria-required={a11y["aria-required"]}
               autoComplete="off"
               disabled={disabled}
               readOnly={readOnly}
@@ -166,7 +185,13 @@ export function EntityPicker({
                 setQuery(event.target.value);
                 openList();
               }}
-              onFocus={() => interactive && openList()}
+              onFocus={() => {
+                if (focusWithoutOpening.current) {
+                  focusWithoutOpening.current = false; // focus returned after Clear: do not pop the list over what is below
+                  return;
+                }
+                if (interactive) openList();
+              }}
               onClick={() => interactive && openList()}
               onKeyDown={onKeyDown}
               className={CONTROL}
@@ -178,7 +203,9 @@ export function EntityPicker({
                 onClick={() => {
                   onChange(null);
                   setQuery(null);
+                  focusWithoutOpening.current = true;
                   inputRef.current?.focus();
+                  if (document.activeElement === inputRef.current) focusWithoutOpening.current = false; // focus did not change: nothing to skip
                 }}
                 className="rounded border border-zinc-400 px-2 py-1 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"
               >

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 import { FREDRIK, MARIA, ORG_A, ORG_B, RANDOM_ORG, bffUrl, createCustomer, signIn } from "./support";
 

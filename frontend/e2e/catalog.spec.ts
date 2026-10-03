@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./fixtures";
 
 import { BACKEND_URL } from "./env";
 import { FREDRIK, ORG_A, bffUrl, createItem, signIn, sql, testRow, unique } from "./support";

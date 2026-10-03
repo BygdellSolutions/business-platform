@@ -195,3 +195,78 @@ export async function openAddLine(page: Page): Promise<void> {
     await expect(page.getByTestId("add-line-form")).toBeVisible({ timeout: 1500 });
   }).toPass({ timeout: 15_000 });
 }
+
+// --- Custom fields ------------------------------------------------------------------------------------------------------
+
+export interface DefinitionJson {
+  id: string;
+  key: string;
+  entity_type: string;
+  required: boolean;
+  enabled: boolean;
+  field_type: string;
+}
+
+/** The enabled definitions of an entity type, as the backend lists them. */
+export async function definitionsOf(context: BrowserContext, orgId: string, entityType: string): Promise<DefinitionJson[]> {
+  const response = await context.request.get(bffUrl(orgId, `/custom-fields/definitions?entity_type=${entityType}&limit=200`));
+  expect(response.status(), await response.text()).toBe(200);
+  return (await response.json()) as DefinitionJson[];
+}
+
+async function patchDefinition(context: BrowserContext, orgId: string, id: string, data: Record<string, unknown>) {
+  const response = await context.request.patch(bffUrl(orgId, `/custom-fields/definitions/${id}`), { data });
+  expect(response.status(), await response.text()).toBe(200);
+}
+
+/** Make the named fields of an entity type required for the duration of `body`, and ALWAYS put them back. */
+export async function withRequired(context: BrowserContext, orgId: string, entityType: string, keys: string[], body: () => Promise<void>) {
+  const all = await definitionsOf(context, orgId, entityType);
+  const targets = all.filter((definition) => keys.includes(definition.key));
+  expect(targets.map((definition) => definition.key).sort()).toEqual([...keys].sort());
+  const before = targets.map((definition) => ({ id: definition.id, required: definition.required }));
+  for (const target of targets) await patchDefinition(context, orgId, target.id, { required: true });
+  try {
+    await body();
+  } finally {
+    for (const original of before) await patchDefinition(context, orgId, original.id, { required: original.required });
+  }
+}
+
+/**
+ * A synthetic field definition, created through the real API (as an administrator would) and ALWAYS
+ * disabled afterwards, so it cannot affect any other test (definitions are disabled, never deleted).
+ */
+export async function withDefinitions(
+  context: BrowserContext,
+  orgId: string,
+  definitions: Record<string, unknown>[],
+  body: (created: DefinitionJson[]) => Promise<void>,
+) {
+  const created: DefinitionJson[] = [];
+  try {
+    for (const data of definitions) {
+      const response = await context.request.post(bffUrl(orgId, "/custom-fields/definitions"), { data });
+      expect(response.status(), await response.text()).toBe(201);
+      created.push((await response.json()) as DefinitionJson);
+    }
+    await body(created);
+  } finally {
+    for (const definition of created) await patchDefinition(context, orgId, definition.id, { enabled: false, required: false }).catch(() => undefined);
+  }
+}
+
+/** A key nobody else uses (the backend wants lowercase letters, digits and underscores). */
+export const uniqueKey = (prefix: string) => `${prefix}_${randomUUID().slice(0, 8).replaceAll("-", "")}`;
+
+/** The id of a customer, horse or item by name in an organization (read from the TEST database). */
+export function idOf(table: "customers" | "horses" | "items", orgId: string, name: string): string {
+  return testRow(`select id from ${table} where organization_id = ${sql(orgId)} and name = ${sql(name)} order by created_at limit 1`);
+}
+
+/** The custom values stored for a record, as `key=value` pairs, read from the TEST database. */
+export function storedValues(entityId: string): string {
+  return testRow(
+    `select coalesce(string_agg(d.key || '=' || coalesce(v.value_reference_id::text, v.value_text, v.value_number::text, v.value_date::text, v.value_boolean::text, v.value_option_id::text), ',' order by d.key), '') from custom_field_values v join custom_field_definitions d on d.id = v.definition_id where v.entity_id = ${sql(entityId)}`,
+  );
+}

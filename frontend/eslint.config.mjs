@@ -13,6 +13,7 @@ export const DECIMAL_ZONES = [
   "components/ui/DecimalText.tsx",
   "components/ui/Field.tsx",
   "components/custom-fields/**/*.{ts,tsx}",
+  "lib/custom-fields/**/*.{ts,tsx}",
   "features/catalog/**/*.{ts,tsx}",
   "app/o/*/catalog/**/*.{ts,tsx}",
   "app/o/*/transactions/**/*.{ts,tsx}",

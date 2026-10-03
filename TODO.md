@@ -20,7 +20,8 @@
 - [x] Sales optimistic concurrency (`If-Match` versions on transactions, headers and lines) with committed-data concurrency tests
 - [x] Frontend slice 4: Transactions (list, create-then-edit, line editor, backend-owned totals, lifecycle, stale-tab handling)
 - [ ] Run `uv run alembic upgrade head` on the development database (migration `c41a7e5d9b20`); the dev backend needs it before it can serve transactions
-- [ ] Frontend slice 5: generic custom-field renderer, dependent references, completion problems mapped to lines, read-only completed transactions
+- [x] Frontend slice 5: generic custom-field renderer, dependent references, completion problems mapped to lines and controls, read-only completed transactions
+- [x] Development database migrated to `c41a7e5d9b20` (done before slice 5)
 - [ ] Invoicing design: invoice state as its own relationship to transactions (not a lifecycle status); snapshot at issuance
 
 ## Later
@@ -35,6 +36,10 @@
 - Playwright runs against the installed Edge or Chrome (the browser download is blocked here); other browsers are not covered.
 - Customers and Catalog screens have no delete (records are deactivated, since other records refer to them) and do not hide actions by role: roles are not enforced by the backend for these resources yet, and the UI would only be cosmetic anyway.
 - List pages use Previous/Next (no total count) and sort by name only; there is no column sorting. The e2e specs share one seeded test database, so a spec must never rely on how many records others created (query by a unique name, never by "first N rows").
+- Custom fields are only rendered for transactions and their lines. Customers, Items and Horses have no custom-field UI yet (the renderer is generic, so each is an integration like `features/transactions/TransactionFields.tsx`, and the backend must register the entity type with `custom_fields=True`). There is no definition administration UI (definitions are created through the API); list tables do not show or filter by custom values (`show_in_table` is ignored for now).
+- Custom-field values are last-writer-wins: saving a record's fields sends only what changed, but two tabs editing the same field overwrite each other. The same `version` + `If-Match` pattern as Sales can be added when needed.
+- A record's custom fields save together (the backend enforces required fields on every write), so a required field can never be set on its own while another required field is empty: the form saves, the backend answers 422 on the empty one.
+- Custom numbers come back from the backend normalized (`0.10` is stored and shown as `0.1`); the frontend shows exactly what it receives.
 - Optimistic concurrency covers Sales only. Customers, Items, Horses and custom-field values are still last-writer-wins; extend the same `version` + `If-Match` pattern when a screen needs it. Adding a line takes no version by design.
 - Transaction editor V1: no change-item or detach on an existing line (the API supports both), no "delete draft" in the UI (Cancel exists), no line reordering, no autosave, and a stale line editor can only discard-and-reload (no "apply my edits on top of the latest").
 - A tab that is not looked at stays stale until it is (visibility refresh only, no polling), so a long-unattended tab can show an old transaction until someone returns to it.

@@ -1,4 +1,4 @@
-import { expect, test, type BrowserContext, type Page } from "@playwright/test";
+import { expect, test, type BrowserContext, type Page } from "./fixtures";
 
 import {
   addLine,
@@ -256,9 +256,10 @@ test.describe("a tab that comes back", () => {
     await addLine(context, ORG_A.id, transaction.id, { ...LINE, description: "Appears on its own" });
     await expect(rows(b)).toHaveCount(2); // the tab is stale until it is looked at again
 
-    await becomeVisible(b);
-
-    await expect(rows(b)).toHaveCount(3);
+    await expect(async () => {
+      await becomeVisible(b); // retried until the page has finished loading and is listening
+      await expect(rows(b)).toHaveCount(3, { timeout: 1500 });
+    }).toPass({ timeout: 15_000 });
     await expect(lineRow(b, "Appears on its own")).toHaveCount(1);
   });
 

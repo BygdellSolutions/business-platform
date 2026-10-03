@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./fixtures";
 
 import { FREDRIK, ORG_A, ORG_B, RANDOM_ORG, bffUrl, choices, createCustomer, createHorse, picker, pick, setActive, signIn, sql, testRow, unique } from "./support";
 

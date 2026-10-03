@@ -228,6 +228,57 @@ describe("stale answers", () => {
   });
 });
 
+describe("a different search function (a field that narrows the choices by another field)", () => {
+  function Narrowed({ search }: { search: PickerSearch }) {
+    return <Harness search={search} />;
+  }
+
+  it("never shows the old search's answers for the new one, not even for a moment", async () => {
+    const forA = vi.fn<PickerSearch>(async () => ok([ANNA]));
+    const slowForB = deferred<ApiResult<PickerEntity[]>>();
+    const forB = vi.fn<PickerSearch>(() => slowForB.promise);
+    const { rerender } = render(<Narrowed search={forA} />);
+    await userEvent.click(combobox());
+    expect(await screen.findAllByRole("option")).toHaveLength(1); // answered for A
+
+    rerender(<Narrowed search={forB} />);
+
+    expect(screen.queryAllByRole("option")).toHaveLength(0); // A's choices are gone at once
+    expect(screen.getByTestId("picker-status")).toHaveTextContent("Searching…");
+    await act(async () => slowForB.resolve(ok([UMEA])));
+    expect(optionNames()).toEqual(["Umeå HK"]);
+  });
+
+  it("a late answer for the OLD search function is ignored", async () => {
+    const lateForA = deferred<ApiResult<PickerEntity[]>>();
+    const forA = vi.fn<PickerSearch>(() => lateForA.promise);
+    const forB = vi.fn<PickerSearch>(async () => ok([UMEA]));
+    const { rerender } = render(<Narrowed search={forA} />);
+    await userEvent.click(combobox()); // asks the old search; no answer yet
+
+    rerender(<Narrowed search={forB} />);
+    expect(await screen.findAllByRole("option")).toHaveLength(1);
+    await act(async () => lateForA.resolve(ok([ANNA])));
+
+    expect(optionNames()).toEqual(["Umeå HK"]);
+    expect(document.body.textContent).not.toContain("Anna Andersson");
+  });
+
+  it("aborts the request of the old search function", async () => {
+    const signals: AbortSignal[] = [];
+    const forA = vi.fn<PickerSearch>((_query, signal) => {
+      signals.push(signal);
+      return new Promise(() => {});
+    });
+    const { rerender } = render(<Narrowed search={forA} />);
+    await userEvent.click(combobox());
+
+    rerender(<Narrowed search={vi.fn<PickerSearch>(async () => ok([]))} />);
+
+    expect(signals[0].aborted).toBe(true);
+  });
+});
+
 describe("choosing", () => {
   it("choosing an option selects its entity: the id is what the picker holds", async () => {
     const onValue = vi.fn();
@@ -361,6 +412,20 @@ describe("clearing", () => {
     expect(screen.queryByRole("button", { name: "Clear Owner" })).toBeNull();
   });
 
+  it("clearing does not pop the list open (it would cover whatever is below, such as a Save button)", async () => {
+    const search = directory([ANNA, UMEA]);
+    render(<Harness search={search} initial={ANNA} clearable />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Clear Owner" }));
+
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(combobox()).toHaveAttribute("aria-expanded", "false");
+    expect(combobox()).toHaveFocus(); // focus is back in the control...
+    expect(search).not.toHaveBeenCalled(); // ...and no request was made
+    await userEvent.keyboard("{ArrowDown}"); // opening on purpose still works
+    expect(await screen.findAllByRole("option")).toHaveLength(2);
+  });
+
   it("a required picker offers no Clear", () => {
     render(<Harness search={directory([])} initial={ANNA} />);
     expect(screen.queryByRole("button", { name: /Clear/ })).toBeNull();
@@ -398,6 +463,20 @@ describe("disabled and read-only", () => {
     expect(screen.queryByRole("listbox")).toBeNull();
     expect(screen.queryByRole("button", { name: /Clear/ })).toBeNull();
     expect(onValue).not.toHaveBeenCalled();
+  });
+});
+
+describe("required marker", () => {
+  it("marks a required picker visually and for assistive technology, without changing its name", () => {
+    render(<EntityPicker label="Owner" name="owner" required value={null} onChange={() => {}} search={directory([])} />);
+    expect(screen.getByRole("combobox", { name: "Owner" })).toHaveAttribute("aria-required", "true");
+    expect(screen.getByText("Owner").closest("label")).toHaveAttribute("data-required", "true"); // the star itself is drawn by CSS
+  });
+
+  it("an optional picker has no marker", () => {
+    render(<EntityPicker label="Owner" name="owner" value={null} onChange={() => {}} search={directory([])} />);
+    expect(screen.getByRole("combobox", { name: "Owner" })).not.toHaveAttribute("aria-required");
+    expect(screen.getByText("Owner").closest("label")).not.toHaveAttribute("data-required");
   });
 });
 

@@ -13,12 +13,15 @@ export interface FieldProps {
   error?: string[];
   hint?: string;
   disabled?: boolean;
+  /** Mark the field as required (visual and aria only: the backend decides). */
+  required?: boolean;
 }
 
 export interface ControlA11y {
   id: string;
   name: string;
   disabled?: boolean;
+  "aria-required"?: boolean;
   "aria-invalid": boolean;
   "aria-describedby": string | undefined;
 }
@@ -26,11 +29,11 @@ export interface ControlA11y {
 const CONTROL = "rounded border border-zinc-400 px-2 py-1 dark:bg-zinc-900 aria-[invalid=true]:border-red-600";
 
 /** Label, hint and error around one control (also used by the entity picker). */
-export function FieldShell({ label, name, error, hint, disabled, children, inline = false }: FieldProps & { children: (a11y: ControlA11y) => ReactNode; inline?: boolean }) {
+export function FieldShell({ label, name, error, hint, disabled, required, children, inline = false }: FieldProps & { children: (a11y: ControlA11y) => ReactNode; inline?: boolean }) {
   const id = useId();
   const hasError = !!error && error.length > 0;
   const describedBy = [hasError ? `${id}-error` : null, hint ? `${id}-hint` : null].filter(Boolean).join(" ") || undefined;
-  const control = children({ id, name, disabled, "aria-invalid": hasError, "aria-describedby": describedBy });
+  const control = children({ id, name, disabled, "aria-required": required || undefined, "aria-invalid": hasError, "aria-describedby": describedBy });
 
   return (
     <div className="flex flex-col gap-1">
@@ -40,7 +43,7 @@ export function FieldShell({ label, name, error, hint, disabled, children, inlin
         </label>
       ) : (
         <>
-          <label htmlFor={id} className="text-sm font-medium">
+          <label htmlFor={id} data-required={required || undefined} className={`text-sm font-medium ${required ? "after:ml-1 after:text-red-700 after:content-['*'] dark:after:text-red-300" : ""}`}>
             {label}
           </label>
           {control}

@@ -2,6 +2,7 @@ import { use, useEffect, useState } from "react";
 import { vi } from "vitest";
 
 import { OrgScope } from "@/components/shell/org-context";
+import type { TransactionFields } from "@/features/transactions/editor-context";
 import { TransactionEditor } from "@/features/transactions/TransactionEditor";
 import { apiFetch } from "@/lib/api/client";
 import { normalizeError, type ApiResult } from "@/lib/api/errors";
@@ -140,7 +141,9 @@ function Gate() {
   return null;
 }
 
-export function Harness({ initial, orgId = ORG_A }: { initial: Transaction; orgId?: string }) {
+export const NO_FIELDS: TransactionFields = { transaction: { definitions: [], values: [] }, line: { definitions: [], values: {} } };
+
+export function Harness({ initial, orgId = ORG_A, fields = NO_FIELDS }: { initial: Transaction; orgId?: string; fields?: TransactionFields }) {
   const [current, setCurrent] = useState(initial);
   useEffect(() => {
     server.apply = setCurrent;
@@ -152,7 +155,7 @@ export function Harness({ initial, orgId = ORG_A }: { initial: Transaction; orgI
     <>
       <Gate />
       <OrgScope orgId={orgId}>
-        <TransactionEditor transaction={current} />
+        <TransactionEditor transaction={current} fields={fields} />
       </OrgScope>
     </>
   );

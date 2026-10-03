@@ -2,15 +2,25 @@
 
 import { createContext, useContext, useEffect } from "react";
 
-import type { ApiResult } from "@/lib/api/errors";
+import type { ApiResult, Problem } from "@/lib/api/errors";
 import type { Transaction } from "@/lib/api/types";
+import type { Definition, ValueRead } from "@/lib/custom-fields/types";
+
+export type { Problem };
 import type { Failure } from "@/features/transactions/failures";
 
 /** A message above the editor: what happened, and (for a blocked lifecycle step) the problems. */
 export interface EditorNotice {
   tone: "error" | "info";
   text: string;
-  problems?: string[];
+  /** Each problem as a line of text, with a link to the part of the page it is about, if there is one. */
+  problems?: { text: string; href?: string }[];
+}
+
+/** The custom-field definitions and values of the transaction and of its lines, as the page read them. */
+export interface TransactionFields {
+  transaction: { definitions: Definition[]; values: ValueRead[] };
+  line: { definitions: Definition[]; values: Record<string, ValueRead[]> };
 }
 
 /**
@@ -31,6 +41,12 @@ export interface EditorApi {
   /** How many row, header or add-line editors are open. Lifecycle buttons wait for zero. */
   editorsOpen: number;
   notice: EditorNotice | null;
+  fields: TransactionFields;
+  /**
+   * What a blocked completion said about custom fields of ONE record, by field key, to be shown at
+   * those controls. Cleared by the next change; the backend's answer, not a rule of this screen.
+   */
+  fieldErrors(entityType: string, entityId: string): Record<string, string[]>;
   /**
    * Run ONE change at a time. Resolves to null (and does nothing) if another is running. A
    * successful change is followed by a refresh of the transaction. A response that arrives

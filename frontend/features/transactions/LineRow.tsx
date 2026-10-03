@@ -10,6 +10,7 @@ import { DecimalText } from "@/components/ui/DecimalText";
 import { useEditor } from "@/features/transactions/editor-context";
 import { classify } from "@/features/transactions/failures";
 import { LineEditor } from "@/features/transactions/LineEditor";
+import { LineFields } from "@/features/transactions/LineFields";
 import { apiFetch } from "@/lib/api/client";
 import type { TransactionLine } from "@/lib/api/types";
 
@@ -53,6 +54,7 @@ export function LineRow({ line, ordinal }: { line: TransactionLine; ordinal: num
   }
 
   return (
+    <>
     <tr data-testid="line-row" data-line-id={line.id} data-version={line.version} aria-busy={deleting || undefined} className="border-b border-zinc-200 align-top dark:border-zinc-800">
       <td className="py-1 pr-3">{ordinal}</td>
       <td className="py-1 pr-3" data-testid="line-description">{line.description}</td>
@@ -90,5 +92,7 @@ export function LineRow({ line, ordinal }: { line: TransactionLine; ordinal: num
         )}
       </td>
     </tr>
+    <LineFields line={line} ordinal={ordinal} />
+    </>
   );
 }

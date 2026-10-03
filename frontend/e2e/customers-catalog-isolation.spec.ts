@@ -1,4 +1,4 @@
-import { expect, test, type APIResponse, type Page } from "@playwright/test";
+import { expect, test, type APIResponse, type Page } from "./fixtures";
 
 import { BASE_URL } from "./env";
 import { FREDRIK, MARIA, ORG_A, ORG_B, RANDOM_ORG, bffUrl, createCustomer, createItem, signIn, sql, testRow, unique } from "./support";

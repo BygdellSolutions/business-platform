@@ -5,14 +5,15 @@ import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, useT
 
 import { Notice } from "@/components/ui/Notice";
 import { AddLineForm } from "@/features/transactions/AddLineForm";
-import { EditorContext, type EditorApi, type EditorNotice } from "@/features/transactions/editor-context";
+import { EditorContext, type EditorApi, type EditorNotice, type TransactionFields as Fields } from "@/features/transactions/editor-context";
 import { describeProblem, TEXT, type Failure } from "@/features/transactions/failures";
 import { HeaderEditor } from "@/features/transactions/HeaderEditor";
+import { TransactionFields } from "@/features/transactions/TransactionFields";
 import { LifecycleBar } from "@/features/transactions/LifecycleBar";
 import { LinesTable } from "@/features/transactions/LinesTable";
 import { TotalsPanel } from "@/features/transactions/TotalsPanel";
 import { TransactionStatusBadge } from "@/features/transactions/TransactionStatusBadge";
-import type { ApiResult } from "@/lib/api/errors";
+import type { ApiResult, Problem } from "@/lib/api/errors";
 import type { Transaction } from "@/lib/api/types";
 
 /**
@@ -32,12 +33,13 @@ import type { Transaction } from "@/lib/api/types";
  * decide. When the tab becomes visible again and nothing is being edited it refreshes by itself;
  * it never refreshes over an open editor.
  */
-export function TransactionEditor({ transaction }: { transaction: Transaction }) {
+export function TransactionEditor({ transaction, fields }: { transaction: Transaction; fields: Fields }) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
   const [mutating, setMutating] = useState(false);
   const [editorsOpen, setEditorsOpen] = useState(0);
   const [notice, setNotice] = useState<EditorNotice | null>(null);
+  const [problems, setProblems] = useState<Problem[]>([]);
   const inFlight = useRef(false);
   const mounted = useRef(false);
 
@@ -68,6 +70,7 @@ export function TransactionEditor({ transaction }: { transaction: Transaction })
       inFlight.current = true;
       setMutating(true);
       setNotice(null);
+      setProblems([]);
       try {
         const result = await call();
         // The user may have left (or switched organization) while this ran. The change itself
@@ -84,7 +87,7 @@ export function TransactionEditor({ transaction }: { transaction: Transaction })
 
   const report = useCallback(
     (failure: Failure, context: "save" | "lifecycle") => {
-      const error = (text: string, problems?: string[]): EditorNotice => ({ tone: "error", text, problems });
+      const error = (text: string, problems?: EditorNotice["problems"]): EditorNotice => ({ tone: "error", text, problems });
       switch (failure.kind) {
         case "conflict":
           announce(error(context === "save" ? TEXT.notDraft : failure.message));
@@ -99,7 +102,14 @@ export function TransactionEditor({ transaction }: { transaction: Transaction })
           refresh();
           break;
         case "problems":
-          announce(error(failure.message, failure.problems.map((problem) => describeProblem(problem, transaction.lines))));
+          // Kept twice: as a list above the editor (with links), and at the controls they are about.
+          announce(
+            error(
+              failure.message,
+              failure.problems.map((problem) => ({ text: describeProblem(problem, transaction.lines), href: anchorOf(problem, transaction.lines) })),
+            ),
+          );
+          if (mounted.current) setProblems(failure.problems);
           break;
         case "validation":
           announce(error([...failure.formErrors, ...Object.values(failure.fieldErrors).flat()].join(" ") || "Some values are not valid."));
@@ -123,6 +133,17 @@ export function TransactionEditor({ transaction }: { transaction: Transaction })
     return () => document.removeEventListener("visibilitychange", listener);
   }, []);
 
+  const fieldErrors = useCallback(
+    (entityType: string, entityId: string): Record<string, string[]> => {
+      const byField: Record<string, string[]> = {};
+      for (const problem of problems) {
+        if (problem.entity_type === entityType && problem.entity_id === entityId && problem.field) (byField[problem.field] ??= []).push(problem.message);
+      }
+      return byField;
+    },
+    [problems],
+  );
+
   const busy = mutating || refreshing;
   const api = useMemo<EditorApi>(
     () => ({
@@ -132,13 +153,15 @@ export function TransactionEditor({ transaction }: { transaction: Transaction })
       refreshing,
       editorsOpen,
       notice,
+      fields,
+      fieldErrors,
       mutate,
       report,
       announce,
       refresh,
       registerEditor,
     }),
-    [transaction, busy, refreshing, editorsOpen, notice, mutate, report, announce, refresh, registerEditor],
+    [transaction, busy, refreshing, editorsOpen, notice, fields, fieldErrors, mutate, report, announce, refresh, registerEditor],
   );
 
   return (
@@ -156,7 +179,15 @@ export function TransactionEditor({ transaction }: { transaction: Transaction })
             {notice.problems && notice.problems.length > 0 && (
               <ul data-testid="editor-problems" className="mt-1 list-disc pl-5">
                 {notice.problems.map((problem) => (
-                  <li key={problem}>{problem}</li>
+                  <li key={problem.text}>
+                    {problem.href ? (
+                      <a href={problem.href} className="underline">
+                        {problem.text}
+                      </a>
+                    ) : (
+                      problem.text
+                    )}
+                  </li>
                 ))}
               </ul>
             )}
@@ -165,10 +196,18 @@ export function TransactionEditor({ transaction }: { transaction: Transaction })
 
         <LifecycleBar />
         <HeaderEditor />
+        <TransactionFields />
         <LinesTable />
         {transaction.status === "draft" && <AddLineForm />}
         <TotalsPanel />
       </div>
     </EditorContext.Provider>
   );
+}
+
+/** The part of the page a blocked-completion problem is about (a link target), if it can be told. */
+function anchorOf(problem: Problem, lines: { id: string }[]): string | undefined {
+  if (problem.entity_type === "transaction") return "#transaction-fields";
+  if (problem.entity_type === "transaction_line" && lines.some((line) => line.id === problem.entity_id)) return `#line-${problem.entity_id}-fields`;
+  return undefined;
 }
