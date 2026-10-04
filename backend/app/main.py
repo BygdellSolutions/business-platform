@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import registrations
-from app.api import customers, health, items, me, organization
+from app.api import auth, customers, health, items, me, organization
 from app.core.config import settings
 from app.core.entity_registry import registry
 from app.modules import custom_fields, equine, invoicing, sales
@@ -18,6 +18,7 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
+app.include_router(auth.router)
 app.include_router(me.router)
 app.include_router(customers.router)
 app.include_router(items.router)

@@ -40,9 +40,30 @@ Automated tests never use the development database. `docker compose up -d postgr
 - **Playwright** runs its own backend (port 8001) connected only to the test database, and rebuilds and seeds it before every run (`python -m app.scripts.reset_test_db --seed`).
 - A guard (`backend/app/scripts/reset_test_db.py`, mirrored in `frontend/e2e/env.ts`) refuses to run unless the database name ends in `_test` and it is on a different server than the development database. Tests prove this, including that data written by tests never appears in the development database.
 
+## Authentication (session mode, backend only for now)
+
+Besides the development identity below, the backend has real authentication: `AUTH_MODE=session` (the only mode `APP_ENV=production` accepts, together with `SECURITY_KEY`; see `.env.example`). Authentication answers "who is this user?"; what the user may do in an organization is still decided only by their membership.
+
+- **Passwords** are Argon2id (12 to 128 characters, no composition rules). **Sessions** are opaque server-side tokens (12 hours idle, 7 days absolute, at most 20 per user), kept only as a hash; the caller sends `Authorization: Bearer <token>` and, on every mutating request, `X-CSRF-Token`. Production authentication is meant to be reached through the BFF (a later step); today a client can call `POST /api/auth/login` directly in session mode.
+- **Endpoints** (session mode only, 404 otherwise): `POST /api/auth/login`, `POST /api/auth/logout`, `POST /api/auth/change-password`, `POST /api/auth/setup`. Wrong credentials of every kind answer the same 401; repeated failures are throttled per source, per source and account, and across sources without ever locking an account (`docs/architecture.md`, "Login abuse protection").
+- **The first user and recovery** come from the operator CLI, which never accepts a password: it prints a single-use link that lets the person choose their own.
+
+```bash
+cd backend
+uv run python -m app.scripts.admin bootstrap-user --email owner@example.com --name "Ada Owner"
+uv run python -m app.scripts.admin reissue-setup-link --email owner@example.com   # recovery
+uv run python -m app.scripts.admin disable-user --email someone@example.com       # also ends their sessions
+uv run python -m app.scripts.admin enable-user  --email someone@example.com
+uv run python -m app.scripts.admin purge        # expired sessions, used or expired links, old security events
+```
+
+- **Existing users** (the seeded development users included) have no credential, so they cannot log in with a password until a link is redeemed; the seed never creates one.
+- After pulling this change run `uv sync` (adds `argon2-cffi`) and, on a database you want to use in session mode, `uv run alembic upgrade head` (migration `b96f2d4e8a13`; additive, existing rows are untouched).
+- There is no browser login yet: the frontend still uses `/dev-login` (`AUTH_MODE=dev`).
+
 ## Development identity
 
-There is no login yet. With `APP_ENV=development` and `AUTH_MODE=dev` (set in `.env.example`) the backend identifies the caller from the `X-Dev-User-Email` header, falling back to `DEV_USER_EMAIL`. If `AUTH_MODE=dev` is set in any other `APP_ENV`, the backend refuses to start. Without those settings there is no identity at all.
+This is the development-only identity (there is no browser login yet). With `APP_ENV=development` and `AUTH_MODE=dev` (set in `.env.example`) the backend identifies the caller from the `X-Dev-User-Email` header, falling back to `DEV_USER_EMAIL`. If `AUTH_MODE=dev` is set in any other `APP_ENV`, the backend refuses to start. Without those settings there is no identity at all.
 
 A user in several organizations picks one with `X-Organization-Id`. This only *selects* among the user's own memberships; the backend verifies the membership, and an organization the user does not belong to returns 404.
 

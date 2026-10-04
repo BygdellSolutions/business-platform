@@ -747,3 +747,104 @@ The PDF of an issued invoice, made by the backend, stored once, and served from 
 **Deferred.** Regeneration or a superseding artifact; localization and locale-aware formats; payment details and QR codes; email; credit notes; complex-script support (a shaping engine); an organization logo; a draft preview. Each is its own milestone.
 
 **Verification of the PDF milestone.** Beyond the tests, 100 deliberate faults were injected one at a time (tenant filtering, draft generation, artifact mutation, live lookups, financial recomputation, markup escaping, filename handling, BFF binary handling, first-download races, fonts, layout) and each had to make a test fail. Every fault was detected except those that are redundant by design, which are named here so nobody mistakes them for gaps: (a) the organization filter on the stored-artifact read is redundant because the invoice is looked up in the caller's organization first (the observable difference, a foreign DRAFT answering 409 instead of 404, is tested through the invoice lookup); (b) the composite foreign key `(organization_id, invoice_id)` is redundant with the insert trigger, which reads the invoice by both columns; (c) taking a row lock on the invoice before the commit that precedes rendering changes nothing, because the commit releases it (removing the commit is detected, by the open-transaction and `FOR UPDATE NOWAIT` checks).
+---
+
+## Production authentication and membership administration (approved design; S1 built)
+
+**Status.** The design below is approved. Only **S1 (backend identity core)** is implemented: no browser login, cookies, BFF change, organization creation, membership administration or invitations yet (S2 to S6). The development workflow (`AUTH_MODE=dev`, `/dev-login`) is unchanged.
+
+**Two questions, kept apart.** *Authentication* answers "who is this user?": a `User` (stable internal id) proven by a password and a server-side session. *Membership* answers "what may this user do in this organization?": `organization_users` (role per organization), resolved by `get_tenant_context` exactly as before. Nothing in the authentication code reads a membership, a role or an organization (a static test enforces it), and the tenant code reads no credential, session or token table.
+
+### Approved decisions
+
+| | Decision |
+|---|---|
+| D1 | Application-owned email and password, **Argon2id** (`argon2-cffi`, no custom cryptography). Credentials live in `user_credentials`; `users` stay the stable identity; a future `user_identities(provider, subject, user_id)` is the seam for OIDC or SSO. |
+| D2 | **FastAPI-owned** opaque server-side sessions. The BFF turns the protected browser session cookie into an `Authorization: Bearer` header. |
+| D3 | 12 hours idle, 7 days absolute, 20 sessions per user (all settings). |
+| D4 | `users.can_create_organizations` gates organization creation. |
+| D5, D6 | An admin manages accountant, employee and viewer only; owners manage admins and owners. Member and invitation administration is visible to owner and admin only. |
+| D7 | No ownership-transfer workflow in V1: promote another owner, then demote or leave. |
+| D9 | No general email verification in V1; an invitation stays bound to the normalized invited email. |
+| D10 | Invitation and setup links carry their secret in the URL **fragment**, which the page removes from the history at once; a token is never shown again. |
+| D11 | The operator bootstrap CLI is the only first-user and recovery path. |
+| D12 | The onboarding UI requires a currency; the organization API and model stay nullable. |
+| D13 | Production requires `AUTH_MODE=session` and fails closed at startup; the dev identity additionally requires `APP_ENV=development`; there is no fallback. |
+| D14 | Passwords are 12 to 128 characters with no composition rules. |
+
+### Review change 1: the CSRF and BFF trust boundary (the responsibility split)
+
+```
+Browser ──────────────► BFF ──────────────────► FastAPI
+cookies, Origin,        validates Origin vs     authenticates the opaque session;
+CSRF header             PUBLIC_ORIGIN; validates validates sha256(X-CSRF-Token) against
+                        the double-submit        THAT session's csrf_hash (constant time);
+                        cookie/header pair;      never treats a browser Origin or cookie as an
+                        STRIPS every client      authentication or authorization assertion
+                        Authorization, identity,
+                        tenant and proxy header
+```
+
+- **Browser to BFF.** The browser sends its cookies, an `Origin` header and a CSRF header. The BFF validates the browser `Origin` against the configured `PUBLIC_ORIGIN` (not the `Host` header) and validates the double-submit relationship (the CSRF cookie equals the CSRF header). It discards every client-supplied `Authorization`, `Cookie`, identity (`X-Dev-User-Email` and the like), tenant (`X-Organization-Id`) and proxy or trust header (`X-Forwarded-*`, `X-Client-Ip`).
+- **BFF to FastAPI.** `Authorization` is built **only** from the protected session cookie. `X-Organization-Id` is built only from the URL route where applicable. `X-CSRF-Token` is forwarded only after the BFF validated it. `If-Match` stays validated as today. For the throttling source the BFF alone sets `X-Client-Ip`, and FastAPI honours it only with `TRUST_CLIENT_IP_HEADER=true` (valid because FastAPI is reachable from the BFF alone).
+- **FastAPI.** It authenticates the opaque session from the Bearer header and, for every mutating request (anything but GET, HEAD, OPTIONS), validates `sha256(X-CSRF-Token)` against that session's `csrf_hash` with `hmac.compare_digest`. Binding the token to the session makes a cookie planted from a sibling domain useless. FastAPI never sees, and never expects, the browser's cookies or Origin: that check is the BFF's, and nothing is left ambiguous between the two.
+- **Before there is a session (login, setup-link redemption, invitation acceptance).** The same split with a pre-auth token: the login and invitation pages set a random `__Host-` pre-auth cookie and the form or `fetch` must echo it. The BFF validates `PUBLIC_ORIGIN` and that double-submit pair **before forwarding**; FastAPI receives no cookie and no Origin. The throttling in the next section is FastAPI's own defense in depth and does not depend on the browser.
+- **Implemented in S1** (FastAPI half only): the Bearer session, the per-session `csrf_hash` and its constant-time check on every mutating request, and `X-Client-Ip` handling. The BFF half (Origin, double-submit, header stripping, cookies) is S2.
+
+### Review change 2: login abuse protection (revised algorithm, implemented in S1)
+
+No account-level state exists: `user_credentials` has no failure counter and no `throttled_until`, so an attacker who only knows an email can neither lock the account nor extend a lock on it. The inputs are the **source** (a client address, an IPv6 /64), the **login identifier** (an HMAC of the normalized email, so unknown and known accounts are treated alike and the table never holds an email), recent `login_failure` **events**, and the global **Argon2 capacity**. Parameters are settings; the defaults are in brackets.
+
+For every `POST /api/auth/login`, in this order:
+
+1. **Per source.** Failures from this source in the window (15 minutes, a sliding window) at or above `throttle_source_max_failures` (30): refuse with 429.
+2. **Per source and identifier.** At or above `throttle_pair_max_failures` (5): 429.
+3. **Per identifier across all sources** (distributed guessing). At or above `throttle_identifier_max_failures` (50): only a source that has **already logged in successfully as this identifier** (within the retention) may still try; any other source gets 429. A user on their usual source is therefore never affected by an attacker's failures.
+4. **Global valve.** Failure rows written in the window at or above `throttle_global_max_failure_events` (5000): failures stop being recorded and, as in 3, only known sources may still try.
+5. **Bounded admission to hashing.** At most `argon2_max_concurrent` (4) hashes run; at most `argon2_max_waiting` (8) more requests wait, for at most `argon2_wait_seconds` (2); any further request is refused **at once** with 503 and `Retry-After`, with no hashing, no queue growth and no event.
+6. **Exactly one Argon2 verification** inside the slot, against a dummy hash made with the current parameters when there is no user or no credential. Unknown account, wrong password, no credential and disabled account return the identical 401 and cost the same.
+7. **On failure** a `login_failure` event is recorded (unless the valve is open). On success: lock the user row, re-check it is active, store a rehash if the parameters are outdated, end the presented session, create a fresh session, enforce the cap, record `login_success`, purge a small batch of old records, commit.
+
+A refused attempt (429 or 503) **writes nothing**. A block therefore cannot be kept alive by hammering it: it lasts only until the failures that caused it leave the window.
+
+- **Growth is bounded.** A failure row is written only after steps 1 to 4 passed, so per window one source can cause at most its limit (plus the requests already in flight, at most the admission limit) and the whole table at most the valve (plus the same slack). A row is fixed and small (type from a fixed list, source up to 64 characters, a 64-character HMAC, a 64-character code). Every count is an index range scan that stops at its limit (`LIMIT cap`).
+- **Known trade-offs.** A user logging in from a source they have never used, while at least 50 failures per window hit their identifier from many sources, waits until those failures age out; known sources are never blocked. If the valve opens (5000 failure rows in a window, which takes more than 160 sources at 30 each) unknown-source logins are refused everywhere until the window passes. A botnet is limited to at most 5 guesses per source per window and 50 in total against unknown sources per window. Successful logins write a row each but cost a full Argon2 hash under admission.
+- Setup-link redemption has a per-source failure budget (`setup_source_max_failures`, 10); a wrong current password on `change-password` has a per-user budget (`password_change_max_failures`, 5).
+- No Redis or distributed rate limiting: one PostgreSQL instance is the counter store.
+
+### Review change 3: the owner invariant (not yet implemented; the contract for S3 and S4)
+
+- **New organization.** `POST /organizations` inserts the organization **and** the caller's owner membership in **one** database transaction; an injected failure between the two inserts rolls everything back. The owner-loss trigger does not duplicate or guarantee this.
+- **Existing organization with at least one owner.** The application locks the actor, the target and all owner rows (`ORDER BY id FOR UPDATE`, fresh reads) and re-checks authority and the remaining-owner count inside the transaction; a deferred database trigger backs it up. A transition from at least one owner to zero is impossible.
+- **Legacy organization already at zero owners** (the seed's second organization is one). The migration is compatible and does not invalidate it; the trigger fires only when an owner row is lost, so unrelated changes to such an organization still work. Operator tooling (S4) can repair it.
+- The trigger stays focused on **owner loss**.
+
+### Review change 4: `security_events` retention
+
+A minimal append-only table, **not the business Audit module**. It exists because throttling needs durable counters and an investigation needs facts. IP addresses are security metadata only. Retention is a setting, not an invariant: `SECURITY_EVENT_RETENTION_DAYS` (default **30**), and `AUTH_RECORD_RETENTION_DAYS` (30) for ended sessions and used or expired setup tokens. The database only insists on a floor: a row younger than one day cannot be deleted (so the setting must be at least 1), and a row can never be updated. **Never stored** in `security_events` (tests prove it): passwords, session tokens, CSRF tokens, setup tokens, invitation tokens, emails (the identifier is an HMAC), or any free text beyond a 64-character code.
+
+### S1 as built
+
+**Schema** (migration `b96f2d4e8a13`, additive; downgrade drops exactly it):
+
+| Table | Columns and rules |
+|---|---|
+| `users` | `+ can_create_organizations boolean NOT NULL DEFAULT false` |
+| `user_credentials` | `user_id` PK/FK, `password_hash` (CHECK: Argon2id encoding), `password_changed_at`, timestamps. No counters. |
+| `auth_sessions` | `id`, `user_id`, `token_hash` UNIQUE, `csrf_hash` (both CHECK 64 hex), `created_at`, `last_used_at`, `absolute_expires_at`, `revoked_at` + `revoked_reason` (CHECK: set together, from a fixed list), `user_agent` (200), `source` (64). Partial index of active sessions per user; index on expiry. |
+| `user_setup_tokens` | `id`, `user_id`, `token_hash` UNIQUE (CHECK 64 hex), `purpose` (`set_password`), `created_at`, `expires_at`, `used_at`, `revoked_at`. A partial unique index allows one outstanding link per user and purpose. |
+| `security_events` | `id` identity, `occurred_at`, `event_type` (CHECK: fixed list), `actor_user_id` (nullable FK), `source`, `identifier_hash` (CHECK 64 hex), `detail`. Indexes for the three throttle counts and for purging. Trigger: no UPDATE, no DELETE of a row younger than a day. |
+
+**Session resolution** (`get_current_user`, one mechanism per `AUTH_MODE`, no fallback): read exactly `Authorization: Bearer <43-character token>` (anything else is unauthenticated); look up `sha256(token)` (unique index); require the session unrevoked, `absolute_expires_at > now`, `last_used_at > now - idle`, and the user active, **on every request** (disabling a user and ending a session take effect on the next request; roles and memberships are never cached in a session); for a mutating request require `X-CSRF-Token` matching `csrf_hash` (403 `csrf_failed`); refresh `last_used_at` at most every `session_touch_seconds` (300; the idle limit can therefore be up to 5 minutes stricter than the setting). The development header and `DEV_USER_EMAIL` are not read in session mode.
+
+**Sessions.** A token is 256 random bits (`secrets.token_urlsafe(32)`), returned once and stored only as its SHA-256. A login always creates a fresh session and ends the one presented with the request (fixation); a password change and a link redemption end the user's other sessions; the cap revokes the oldest sessions under a per-user row lock, so simultaneous logins cannot exceed it. Ended and expired records are purged by `purge` and, in small batches, at every login.
+
+**Endpoints** (`/api/auth`, only in session mode; 404 otherwise; called by the BFF, never by a browser): `POST /login`, `POST /logout`, `POST /change-password`, `POST /setup`. `/api/me` and `/api/me/organizations` work unchanged over sessions.
+
+**Bootstrap and recovery** (`python -m app.scripts.admin`): `bootstrap-user` creates a user **without any credential** and prints a single-use link (`<PUBLIC_ORIGIN>/setup#<token>`, 24 hours); `reissue-setup-link` revokes earlier links and prints a new one (recovery); `disable-user` (also ends every session), `enable-user`, `purge`. There is no way to supply a password (no option, no prompt, no environment variable). The token is 256 random bits, shown once, stored only as its hash, redeemed by one conditional UPDATE (single use, race-safe), refused after expiry or revocation, and recorded nowhere. Redeeming sets the password, ends the user's other sessions and signs in. A weak password or a request that cannot use the link does not consume it, and a malformed or unknown link costs no Argon2 work. Running the CLI needs shell and database access, the same trust as the database; no endpoint creates a user without an invitation or a link.
+
+**Migration behavior for existing users.** The migration adds tables and one column and changes no row: **no credential, session or setup-token row is created**, and `can_create_organizations` is false for everyone. A seeded development user therefore cannot authenticate in session mode until an operator issues a link, and `seed_dev` creates no credential (tested).
+
+**Configuration** (`AUTH_MODE` is `dev`, `session` or `disabled`; unknown values refuse to start): production (`APP_ENV=production`, the default) requires `session` and a `SECURITY_KEY` of at least 32 characters (the HMAC key for identifiers) or the process does not start; `dev` requires `APP_ENV=development`; development may choose any mode (session mode without a key gets a per-process key). Deployment constraints: FastAPI reachable from the BFF alone, `CORS_ORIGINS=[]`, `TRUST_CLIENT_IP_HEADER=true` behind the BFF, Argon2 parameters tuned on the deployment hardware, `PUBLIC_ORIGIN` set.
+
+**Deviations from the proposal.** (1) The throttling replaces the proposed per-account delay (review change 2). (2) `user_credentials` has no `failed_count` or `throttled_until`. (3) Setup-link redemption (`POST /api/auth/setup`) is implemented in S1, because the single-use and expiry rules cannot be proved without it; the setup page is S2. (4) CSRF enforcement is applied once, in the authentication seam, to every mutating request in session mode (so later endpoints are covered by construction) instead of per endpoint. (5) The `X-Client-Ip` header is trusted only when `TRUST_CLIENT_IP_HEADER` is on (default off), so S1 is safe before the BFF exists.

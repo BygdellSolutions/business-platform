@@ -19,6 +19,7 @@ try:
 except reset_test_db.UnsafeDatabase as exc:
     pytest.exit(f"Refusing to run tests: {exc}", returncode=2)
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL  # before app.core.config is first imported
+os.environ.setdefault("APP_ENV", "development")  # tests are development by definition (production refuses AUTH_MODE=dev)
 
 from collections.abc import Iterator
 from types import SimpleNamespace
@@ -149,3 +150,45 @@ def cf(db_session: Session, sales):
         anna=anna, erik=erik, kalle=kalle, storm=storm, tx=tx, lines=lines,
         owner=owner, horse=horse,
     )
+
+
+# --- session authentication (AUTH_MODE=session) -------------------------------------------------------------------------------------------
+
+
+@pytest.fixture
+def session_mode(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Real authentication on, with cheap Argon2 parameters (the algorithm is the real one; only the cost is tiny).
+
+    Everything else keeps the production defaults. The development identity is explicitly present in the
+    configuration (DEV_USER_EMAIL) so tests can prove it is ignored.
+    """
+    from pydantic import SecretStr
+
+    from app.core import passwords
+
+    monkeypatch.setattr(settings, "app_env", "development")
+    monkeypatch.setattr(settings, "auth_mode", "session")
+    monkeypatch.setattr(settings, "dev_user_email", None)
+    monkeypatch.setattr(settings, "security_key", SecretStr("test-security-key-" + "x" * 32))
+    monkeypatch.setattr(settings, "argon2_memory_kib", 1024)
+    monkeypatch.setattr(settings, "argon2_time_cost", 1)
+    monkeypatch.setattr(settings, "argon2_parallelism", 1)
+    monkeypatch.setattr(settings, "trust_client_ip_header", False)
+    passwords._dummy.clear()
+    passwords.configure_admission_from_settings()
+    try:
+        yield
+    finally:
+        monkeypatch.undo()
+        passwords._dummy.clear()
+        passwords.configure_admission_from_settings()
+
+
+@pytest.fixture
+def session_client(db_session: Session, session_mode: None) -> Iterator[TestClient]:
+    """An API client in session mode whose requests share the rollback-only test session."""
+    app.dependency_overrides[get_db] = lambda: db_session
+    try:
+        yield TestClient(app)
+    finally:
+        app.dependency_overrides.clear()

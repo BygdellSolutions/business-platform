@@ -31,6 +31,15 @@
 - [x] Invoice PDF: lazy-freeze artifact in `invoice_pdfs` (migration `a85e1c4d7f90`), ReportLab renderer with bundled Noto fonts, `GET /api/invoices/{id}/pdf`, BFF binary pass-through and "Download PDF" (committed as a557cce)
 - [x] Development database migrated to `a85e1c4d7f90`. It now holds ONE permanent issued invoice (number 1, Fredrik Horse Therapy, from its seeded transaction) and its frozen PDF in `invoice_pdfs`, created by the PDF smoke test; issued invoices are immutable, so that transaction can no longer be reopened or cancelled in dev
 
+## Production authentication and membership administration (approved; one slice per review)
+- [x] **S1 Backend identity core:** credentials, sessions, setup links, minimal `security_events`, Argon2id, login/logout/change-password/setup endpoints, bounded login-abuse protection, fail-closed `AUTH_MODE`, operator CLI, migration `b96f2d4e8a13` (implemented and verified; NOT yet committed)
+- [ ] **S2 Browser authentication:** BFF credential refactor (cookie to Bearer), login/logout/setup pages, `PUBLIC_ORIGIN` and double-submit CSRF, header stripping, session-mode Playwright project
+- [ ] **S3 Organization onboarding:** atomic `POST /organizations` (Organization and owner membership in one transaction), the `can_create_organizations` gate, onboarding page that requires a currency
+- [ ] **S4 Membership administration:** member list, role change, removal (owner/admin rules), application locks plus the deferred owner-loss trigger, operator repair of ownerless organizations
+- [ ] **S5 Invitations:** copy-link invitations (fragment tokens), accept flows, race-safe acceptance
+- [ ] **S6 Hardening and documentation**
+- [ ] Migrate the development database to `b96f2d4e8a13` after S1 is committed (the development database is still at `a85e1c4d7f90`)
+
 ## Later
 - [ ] Payments
 - [ ] Pricing rules, customer-specific pricing, discounts and campaigns
@@ -70,5 +79,5 @@
 - **Invoice PDF V1 limits.** English labels and locale-neutral numbers only; no payment details, QR code, logo or email; no regeneration (an artifact is final: add a superseding artifact, keeping `template_version`, `renderer` and `source_sha256`, when a template change must reach old invoices); no draft preview. **Renderer capability debt (not a business rule):** scripts that need shaping or right-to-left layout (Arabic, Hebrew, Indic scripts, Thai and others), combining marks without a precomposed form, and emoji are refused with `422 unsupported_characters` and nothing is stored; supporting them means adding a shaping engine (HarfBuzz) and bundling more fonts. Input bounds: 2,000 lines, 20,000 custom-field entries, 1,000,000 characters; there is no page limit. A very long unbroken amount is wrapped by character (amount columns grow to the widest figure first). The PDF bytes live in PostgreSQL (`bytea`); move them to object storage if the volume ever requires it.
 - Organization settings are last-writer-wins (no `If-Match` yet) and there is no organization time zone.
 - Item `unit` is free text; no units subsystem.
-- Roles are stored on memberships but not enforced anywhere yet.
-- Production authentication must replace the `AUTH_MODE=dev` branch in `app/core/auth.py`.
+- Roles are enforced per endpoint (`roles_required`) from the active membership; membership administration is S4.
+- Authentication: MFA, SSO, social login, password-reset email, invitation email, email verification, breached-password checks and an ownership-transfer workflow are deferred (see `docs/architecture.md`). The dev identity (`/dev-login`) stays development-only. Login throttling trade-offs are listed in `docs/architecture.md`.

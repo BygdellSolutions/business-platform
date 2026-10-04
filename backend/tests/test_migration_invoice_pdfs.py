@@ -132,4 +132,3 @@ def test_models_and_migrations_agree_at_the_pdf_revision_and_at_head(scratch_url
     _upgrade(scratch_url, "head")
     result = _alembic(scratch_url, "check")
     assert result.returncode == 0, result.stdout[-2000:] + result.stderr[-2000:]
-    assert _scalar(scratch_url, "select version_num from alembic_version") == PDF_REVISION
