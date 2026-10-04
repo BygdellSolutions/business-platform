@@ -304,10 +304,13 @@ export function createWorld(options: { currency?: string | null; label?: string 
   const name = `${options.label ?? "World"} ${tag}`;
   const currency = options.currency === undefined ? "SEK" : options.currency;
   const userIds: string[] = [];
+  const userEmails: string[] = [];
 
   const addUser = (role: RoleName, label: string): string => {
     const id = randomUUID();
-    const email = `${label}-${tag}@dev.test`;
+    const taken = userEmails.filter((used) => used.startsWith(`${label}-${tag}`)).length;
+    const email = taken === 0 ? `${label}-${tag}@dev.test` : `${label}-${tag}-${taken + 1}@dev.test`; // a second member of a role gets its own login
+    userEmails.push(email);
     testRow(`insert into users (id, email, name) values (${sql(id)}, ${sql(email)}, ${sql(`${label} ${tag}`)})`);
     testRow(`insert into organization_users (organization_id, user_id, role) values (${sql(orgId)}, ${sql(id)}, ${sql(role)})`);
     userIds.push(id);
@@ -349,6 +352,7 @@ export function createWorld(options: { currency?: string | null; label?: string 
       const statements = [
         "set local session_replication_role = replica",
         ...tables.map((table) => `delete from ${table} where organization_id = ${org}`),
+        `delete from security_events where organization_id = ${org}${userIds.length ? ` or actor_user_id in (${userIds.map(sql).join(",")})` : ""}`,
         `delete from organizations where id = ${org}`,
         ...userIds.map((id) => `delete from users where id = ${sql(id)}`),
       ];

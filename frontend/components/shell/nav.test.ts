@@ -11,6 +11,10 @@ describe("navigation", () => {
     expect(NAV.find((item) => item.label === "Invoices")).toEqual({ label: "Invoices", path: "/invoices", enabled: true });
   });
 
+  it("shows Members to owners and admins only (presentation; the backend decides)", () => {
+    expect(NAV.find((item) => item.label === "Members")).toEqual({ label: "Members", path: "/members", enabled: true, roles: ["owner", "admin"] });
+  });
+
   it("has unique labels and paths, all relative to the organization", () => {
     expect(new Set(NAV.map((item) => item.label)).size).toBe(NAV.length);
     expect(new Set(NAV.map((item) => item.path)).size).toBe(NAV.length);

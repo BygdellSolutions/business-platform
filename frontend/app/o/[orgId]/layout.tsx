@@ -8,6 +8,7 @@ import { getCurrentUser, getMemberships } from "@/lib/orgs";
 import { OrgScope } from "@/components/shell/org-context";
 import { OrgSwitcher } from "@/components/shell/OrgSwitcher";
 import { NAV } from "@/components/shell/nav";
+import { LeaveOrganization } from "@/components/shell/LeaveOrganization";
 import { SignOut } from "@/components/shell/SignOut";
 
 /**
@@ -45,12 +46,13 @@ export default async function OrgLayout({
           </div>
           <div className="flex items-center gap-3 text-sm">
             <span data-testid="user-email">{current.user.email}</span>
+            <LeaveOrganization orgId={orgId} />
             {(mode === "dev" || mode === "session") && <SignOut mode={mode} />}
           </div>
         </div>
         <OrgSwitcher organizations={result.memberships} currentId={orgId} canCreate={current.user.can_create_organizations} />
         <nav aria-label="Main" className="flex flex-wrap gap-4 text-sm">
-          {NAV.map((item) =>
+          {NAV.filter((item) => item.roles === undefined || item.roles.includes(organization.role)).map((item) =>
             item.enabled ? (
               <a key={item.label} href={`/o/${orgId}${item.path}`} className="underline">
                 {item.label}

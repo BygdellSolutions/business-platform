@@ -33,6 +33,7 @@ export const ALLOWED_API_AREAS = [
   "invoices",
   "invoiceable-transactions",
   "organization",
+  "members",
   "me",
 ] as const;
 

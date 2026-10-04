@@ -16,6 +16,16 @@ export interface Membership {
   role: Role;
 }
 
+/** One member of the active organization, as membership administration shows them (no user id, credentials or sessions). */
+export interface Member {
+  /** The MEMBERSHIP id: the handle for a change or removal, meaningful only inside this organization. */
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  is_you: boolean;
+}
+
 export type CustomerType = "person" | "company";
 
 /**

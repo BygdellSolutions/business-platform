@@ -34,9 +34,10 @@
 ## Production authentication and membership administration (approved; one slice per review)
 - [x] **S1 Backend identity core:** credentials, sessions, setup links, minimal `security_events`, Argon2id, login/logout/change-password/setup endpoints, bounded login-abuse protection, fail-closed `AUTH_MODE`, operator CLI, migration `b96f2d4e8a13` (committed as 17d77bb; development database migrated and unchanged otherwise)
 - [x] **S2 Browser authentication:** BFF credential refactor (cookie to Bearer), login/logout/setup pages, `PUBLIC_ORIGIN` and double-submit CSRF, header stripping, session-mode Playwright run, `GET /api/me/user` (committed as cf2f0a9)
-- [x] **S3 Organization onboarding:** atomic `POST /api/organizations` (organization, owner membership, retry record and event in one transaction), the `can_create_organizations` gate with a fresh user-row lock, `Idempotency-Key` retries, onboarding page that requires a currency, operator `grant-org-creation` / `revoke-org-creation`, migration `c07a3e5f9b24` (implemented and verified on the TEST database; NOT yet committed; the development database is still at `b96f2d4e8a13`)
-- [ ] Migrate the development database to `c07a3e5f9b24` after S3 is reviewed and committed (`uv run alembic upgrade head` against the DEV url; then optionally `grant-org-creation --email fredrik@dev.test` there, since the dev seed only gives the right to new seed data)
-- [ ] **S4 Membership administration:** member list, role change, removal (owner/admin rules), application locks plus the deferred owner-loss trigger, operator repair of ownerless organizations
+- [x] **S3 Organization onboarding (committed as d9953c8):** atomic `POST /api/organizations` (organization, owner membership, retry record and event in one transaction), the `can_create_organizations` gate with a fresh user-row lock, `Idempotency-Key` retries, onboarding page that requires a currency, operator `grant-org-creation` / `revoke-org-creation`, migration `c07a3e5f9b24` (committed; development database migrated to `c07a3e5f9b24`, post-S3 baseline recorded: no credentials, sessions, organizations, memberships, requests or events were created by the migration)
+- [x] Migrated the development database to `c07a3e5f9b24` after S3 was committed (`uv run alembic upgrade head` against the DEV url; then optionally `grant-org-creation --email fredrik@dev.test` there, since the dev seed only gives the right to new seed data)
+- [x] **S4 Membership administration:** member list, role change, removal and leave (owner/admin rules), one ordered lock over the organization's memberships with fresh re-reads, the deferred owner-loss trigger, operator `repair owner` command, migration `d18b4c6e2f31` (implemented and verified on the TEST database; NOT yet committed; the development database stays at `c07a3e5f9b24` until S4 is approved)
+- [ ] After S4 is reviewed and committed: migrate the development database to `d18b4c6e2f31`; then decide with the owner whether and how to repair the legacy ownerless dev organization (`python -m app.scripts.repair owner --organization-id <uuid> --email <an existing member>`); nothing is repaired automatically and the member must be chosen deliberately
 - [ ] **S5 Invitations:** copy-link invitations (fragment tokens), accept flows, race-safe acceptance
 - [ ] **S6 Hardening and documentation**
 - [x] Development database migrated to `b96f2d4e8a13`; it has no credentials, so a manual session-mode login in development needs an operator link first (`python -m app.scripts.admin reissue-setup-link --email ...`), which would change permanent dev data and is done only on request
@@ -45,6 +46,11 @@
 - A currency catalogue (a supported-currency list for a dropdown) does not exist; onboarding and Settings both take a typed three-letter code. Decide with the owner whether a list is wanted before inventing one.
 - The creation form asks for a name and a currency only; a "complete your profile" nudge in Settings (invoicing prerequisites) could follow the first login into a new organization.
 - `organization_creation_requests` rows are kept (one small row per keyed creation). A retention rule (purge after the retry window) is not needed yet.
+
+## Membership follow-ups (S4)
+- Ownership transfer is just promote-then-step-down (no dedicated workflow, by decision). Invitations (S5) will be the only way to add a member.
+- A members list with many hundreds of rows is not paginated (organizations are small); the lock statement also covers the whole set.
+- The role control has no "undo" and a changed role takes effect immediately; a confirmation for demotions could be added if users ask.
 
 ## Later
 - [ ] Payments

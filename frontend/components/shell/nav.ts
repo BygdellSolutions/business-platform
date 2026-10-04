@@ -1,5 +1,9 @@
+import type { Role } from "@/lib/api/types";
+
 export interface NavItem {
   label: string;
+  /** Roles that are shown the entry (presentation only; FastAPI authorizes every request). Everyone when absent. */
+  roles?: readonly Role[];
   /** Path below /o/{orgId}; "" is the dashboard. */
   path: string;
   /** Pages arrive in later slices; until then the entry is shown but not linked. */
@@ -14,4 +18,5 @@ export const NAV: NavItem[] = [
   { label: "Transactions", path: "/transactions", enabled: true },
   { label: "Invoices", path: "/invoices", enabled: true },
   { label: "Settings", path: "/settings", enabled: true },
+  { label: "Members", path: "/members", enabled: true, roles: ["owner", "admin"] },
 ];

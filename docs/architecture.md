@@ -751,7 +751,7 @@ The PDF of an issued invoice, made by the backend, stored once, and served from 
 
 ## Production authentication and membership administration (approved design; S1 built)
 
-**Status.** The design below is approved. **S1 (backend identity core)**, **S2 (browser authentication)** and **S3 (organization onboarding)** are implemented; membership administration and invitations are not yet (S4 to S6). The development workflow (`AUTH_MODE=dev`, `/dev-login`) is unchanged.
+**Status.** The design below is approved. **S1 (backend identity core)**, **S2 (browser authentication)**, **S3 (organization onboarding)** and **S4 (membership administration)** are implemented; invitations are not yet (S5, S6). The development workflow (`AUTH_MODE=dev`, `/dev-login`) is unchanged.
 
 **Two questions, kept apart.** *Authentication* answers "who is this user?": a `User` (stable internal id) proven by a password and a server-side session. *Membership* answers "what may this user do in this organization?": `organization_users` (role per organization), resolved by `get_tenant_context` exactly as before. Nothing in the authentication code reads a membership, a role or an organization (a static test enforces it), and the tenant code reads no credential, session or token table.
 
@@ -812,7 +812,7 @@ A refused attempt (429 or 503) **writes nothing**. A block therefore cannot be k
 - Setup-link redemption has a per-source failure budget (`setup_source_max_failures`, 10); a wrong current password on `change-password` has a per-user budget (`password_change_max_failures`, 5).
 - No Redis or distributed rate limiting: one PostgreSQL instance is the counter store.
 
-### Review change 3: the owner invariant (new organizations: built in S3; the rest is the contract for S4)
+### Review change 3: the owner invariant (new organizations: built in S3; existing organizations: built in S4)
 
 - **New organization.** `POST /organizations` inserts the organization **and** the caller's owner membership in **one** database transaction; an injected failure between the two inserts rolls everything back. The owner-loss trigger does not duplicate or guarantee this.
 - **Existing organization with at least one owner.** The application locks the actor, the target and all owner rows (`ORDER BY id FOR UPDATE`, fresh reads) and re-checks authority and the remaining-owner count inside the transaction; a deferred database trigger backs it up. A transition from at least one owner to zero is impossible.
@@ -1006,3 +1006,72 @@ Existing organizations with no owner (the seed's second organization) are not re
 - The idempotency key is optional at the API (a script can call it without one); the browser always sends one.
 - A replay by a user who left the organization is a 409, not a 404: the key is theirs, but the organization is no longer visible to them.
 - Currency selection is a typed code (see above), not a list: stopping there would have left no way to onboard, and there is no second currency system.
+---
+
+## Membership administration (S4 as built)
+
+S4 administers EXISTING memberships: list, change role, remove, leave. It adds no invitations, user creation, email, custom RBAC, ownership-transfer workflow or organization deletion (invitations are S5). Everything is decided by the backend; the frontend only presents.
+
+### The authority matrix
+
+| Actor | May do | May NOT do |
+|---|---|---|
+| **owner** | change another member to ANY role; remove another member; promote to owner; demote another owner; demote **themselves**, or **leave**, only while another owner remains | remove themselves through the administrative removal (leave is explicit) |
+| **admin** | change/remove members whose CURRENT role is accountant, employee or viewer, to accountant, employee or viewer only | touch an owner or another admin; grant admin or owner; remove an owner or admin; change their own role |
+| **accountant / employee / viewer** | leave | list members; change or remove anyone |
+
+Self rules: nobody changes their own role except an owner stepping DOWN while another owner remains (a "change" to the role one already has is a no-op, no event); every member may leave; the last owner may not. The matrix is restated independently in the test (`expected_change`) for every actor/target/new-role combination.
+
+### Contracts (all tenant-scoped: `X-Organization-Id`, resolved against the caller's memberships; a non-member gets the usual 404)
+
+| | |
+|---|---|
+| `GET /api/members` | owner/admin only (403 otherwise). `[{id, name, email, role, is_you}]` ordered by name. `id` is the **membership** id. No user id, credential or session state, no `can_create_organizations`, nothing about other organizations. |
+| `PATCH /api/members/{membership_id}` | body `{"role": "<role>"}` and nothing else (unknown fields are a 422: no organization id, actor, actor role or target user/email). 200 with the member. |
+| `DELETE /api/members/{membership_id}` | 204. |
+| `POST /api/members/leave` | 204. Any member. |
+| Errors | 403 `membership_admin_forbidden` (not an owner/admin), `insufficient_authority` (the target or the resulting role is beyond an admin), `self_role_change_not_allowed`, `self_removal_use_leave`; 404 `Member not found` (a random id and another organization's id are identical) and `Organization not found` (the actor lost their membership meanwhile); **409 `last_owner`** (the one stable conflict, whether the attempt was a demotion, a removal or a leave). |
+
+### Fresh authority under lock (and the lock order)
+
+The mutation endpoints use the tenant context only to learn the organization and who is acting; they never use its role. Every mutation decides from the database inside its own transaction:
+
+**LOCK ORDER.** One statement: `SELECT ... FROM organization_users WHERE organization_id = :org ORDER BY id FOR UPDATE`, with `populate_existing`. It locks the actor row, the target row and every owner row (they are all rows of that organization) in **ascending membership id**, so all membership mutations of one organization take the same locks in the same order: they serialize and cannot deadlock with each other. Rows of other organizations are never read, counted or locked, so administration in one organization never waits for another (tested). Locking the whole set is deliberate: an organization has a handful of members, and it makes "who else is an owner" exact.
+
+After the lock: re-check that the actor still has a membership (else 404), the actor's CURRENT role, the target's membership (else 404) and CURRENT role, the requested resulting role, and only then the owner count. Nothing is taken from the tenant context captured earlier, from the frontend, or from an ORM object loaded earlier (`populate_existing`; tested with deliberately stale loaded rows, and with gated requests that are paused between authentication and the lock while the other side commits).
+
+### The last-owner invariant
+
+Application: any operation that can reduce the owner count (owner to non-owner, removing an owner, an owner leaving) counts owners from the locked rows and refuses with `last_owner` if the result would be zero. Removal of an owner by someone else cannot reach zero through the API (the actor, an owner, remains), so that check is a defence in depth; demotion and leave are the reachable cases.
+
+Database backstop (migration `d18b4c6e2f31`): two **deferred constraint triggers** on `organization_users` (`AFTER DELETE`, and `AFTER UPDATE OF role, organization_id`, each `WHEN` the OLD row was an owner and, for an update, it stopped being one in this organization), running at COMMIT. The function takes a per-organization advisory lock (`pg_advisory_xact_lock`) and counts that organization's owners; none left (and the organization still exists) raises `check_violation` (`organization_owner_required`). Properties:
+
+- deferred, so one transaction may demote an owner and promote another;
+- per-organization count (tested against an organization that has many owners);
+- the advisory lock makes two raw transactions that each remove a DIFFERENT owner of a two-owner organization unable to both commit (write skew; tested with real concurrent transactions: one commits, one is refused);
+- it fires only for a row that WAS an owner: a legacy organization that already has no owner stays valid and its unrelated changes (and any change of non-owner rows) are unaffected; it does not guarantee the initial owner of a new organization (S3's creation transaction does) and it repairs nothing; inserts are not checked;
+- a refusal at commit is mapped to the same `last_owner` conflict by the service.
+
+### Legacy ownerless organizations
+
+The migration changes no row. Ordinary administration of such an organization works (the backstop only looks at lost owner rows). Repair is an operator action, never HTTP: there was NO existing operator command for roles, so S4 adds the smallest one, `python -m app.scripts.repair owner --organization-id <uuid> --email <member>`: it requires both identifiers, requires the user to ALREADY be a member (it never creates a membership), refuses an organization that already has an owner, changes that one role to owner and records an `owner_repaired` security event. It lives in its own tenant-aware module because `app.scripts.admin` is authentication-only (an existing static test forbids tenant concepts there). There is no application ownership-repair UI.
+
+### Removal and leaving
+
+Removal deletes the membership row only: the User, their sessions (authentication is global), their other memberships and historical references such as `invoices.issued_by` are untouched. Their next request to that organization fails through ordinary tenant resolution (404). Leaving is a separate endpoint with its own rules (no administrator authority needed; the last owner is refused); the generic removal refuses to be used on oneself (`self_removal_use_leave`).
+
+### Security events
+
+`member_role_changed` (`detail`: `<target user id> <old>><new>`), `member_removed` (`<target user id> <old role>`), `member_left` (`<old role>`), `owner_repaired` (`cli <old>>owner`), each with the actor user id and `organization_id`. Ids and roles only: no email, name or request body; a refused or no-op attempt records nothing. No schema column was added beyond the widened event-type CHECK; rich before/after auditing is left to the future Audit module.
+
+### Frontend
+
+`/o/{orgId}/members` (owner/admin; the navigation entry is shown only to them and the page shows a notice to other roles; presentation only): a table with name, email and role, a role control and a Remove (with confirmation) where `lib/members.ts#offered` says the apparent role allows it. **Leave organization** is a separate control in the shell header for every role. Every change is a request the backend decides; after ANY answer the list is re-read from the server, a refusal is shown as such (never as success) with a safe message (`last_owner`, not allowed, no longer exists), and a stale row settles into the truth. The last-owner rule is not calculated in the browser beyond hiding a self-demotion that cannot be legal. After leaving, the browser does a full navigation to `/`: the person stays signed in, keeps their other organizations, and sees the existing no-organization state (with the creation link only if the account may create organizations).
+
+### Verification, trade-offs and deviations
+
+- Tests: `test_membership_admin.py` (the matrix, self rules, last owner, freshness with stale loaded rows, tenancy with look-alike organizations, removal side effects, events, the trigger with raw SQL, the operator repair; run under the dev identity and real sessions with CSRF), `test_membership_admin_concurrency.py` (committed data, real connections: mutual demotion/removal/leave of two owners, remove versus demote, promotion versus leave, leave versus removal, role change versus removal, gated stale-authority races, per-organization lock isolation, a mixed burst without deadlock, the raw-SQL write skew, the legacy organization at a real commit), `test_migration_member_admin.py`, Vitest (matrix presentation, stale-UI messages, leave) and Playwright (`e2e/members.spec.ts` in the dev and session runs, `e2e/session/members.spec.ts`: CSRF layers and global sessions after removal).
+- A role change to the role a member already has is a no-op (200, nothing written or recorded).
+- A refused `remove` of the last owner is unreachable through the API by construction (see above), so the application check there is redundant defence, reported as such by fault injection.
+- Deadlock handling is by construction (one ordered lock statement), not by retry; a deadlock would surface as an error, not be hidden. The raw-SQL backstop under concurrency takes an advisory lock instead of row locks for the same reason.
+- `GET /api/members` returns `is_you` instead of a user id so the UI can mark the current person without exposing identifiers.
