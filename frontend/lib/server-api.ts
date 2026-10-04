@@ -3,19 +3,20 @@ import "server-only";
 import { notFound, redirect } from "next/navigation";
 
 import { normalizeError } from "@/lib/api/errors";
+import { loginPath, requireCredential } from "@/lib/auth/credential";
 import { backendFetch, isUuid } from "@/lib/backend";
-import { getIdentity } from "@/lib/identity";
 
 /**
  * Initial reads for server components: the page asks FastAPI for one organization's data
- * (identity from the httpOnly cookie, organization from the URL; both added by
+ * (credential from the protected cookie, organization from the URL; both added by
  * `backendFetch`, never by the browser) and renders it.
  *
  * Outcomes are the same ones the BFF produces for the browser:
- *   - no identity or a 401  -> /dev-login
- *   - 404                   -> the one generic not-found page (a foreign id looks exactly
+ *   - no credential or a 401 -> the login (a dead session, a revoked one and a disabled user all end here);
+ *                              a 403 is NOT an authentication failure and never goes to the login
+ *   - 404                    -> the one generic not-found page (a foreign id looks exactly
  *                              like a random one, because FastAPI answers both with 404)
- *   - anything else         -> an error the segment's error.tsx shows (no internals)
+ *   - anything else          -> an error the segment's error.tsx shows (no internals)
  */
 export async function serverRead<T>(orgId: string, path: string, search = ""): Promise<T> {
   const record = await read<T>(orgId, path, search);
@@ -37,12 +38,12 @@ const MISSING = Symbol("missing");
 
 async function read<T>(orgId: string, path: string, search: string): Promise<T | typeof MISSING> {
   if (!isUuid(orgId)) notFound();
-  const email = await getIdentity();
-  if (email === null) redirect("/dev-login");
+  const returnTo = `/o/${orgId}`;
+  const credential = await requireCredential(returnTo);
 
   let response: Response;
   try {
-    response = await backendFetch({ email, orgId }, path, { search });
+    response = await backendFetch({ credential, orgId }, path, { search });
   } catch {
     throw new Error("The backend could not be reached");
   }
@@ -51,7 +52,7 @@ async function read<T>(orgId: string, path: string, search: string): Promise<T |
 
   const body: unknown = await response.json().catch(() => undefined);
   const error = normalizeError(response.status, body);
-  if (error.kind === "unauthorized") redirect("/dev-login");
+  if (error.kind === "unauthorized") redirect(loginPath(returnTo));
   if (error.kind === "not_found") return MISSING;
   throw new Error(`The backend answered ${error.status}`);
 }

@@ -92,3 +92,14 @@ def test_requires_an_authenticated_active_user(client: TestClient, db_session: S
 def test_is_read_only(client: TestClient, db_session: Session, method):
     user = make_user(db_session)
     assert getattr(client, method)(URL, headers=headers(user)).status_code == 405
+
+
+# --- GET /api/me/user in development mode (S2) ---------------------------------------------------------------------------------------------------
+
+
+def test_me_user_works_with_the_development_identity_and_needs_no_membership(client, db_session):
+    user = make_user(db_session, name="Dev Person")  # no membership at all
+    response = client.get("/api/me/user", headers={"X-Dev-User-Email": user.email})
+    assert response.status_code == 200
+    assert response.json() == {"id": str(user.id), "email": user.email, "name": "Dev Person", "can_create_organizations": False}
+    assert client.get("/api/me/user").status_code == 401

@@ -1,4 +1,5 @@
 import { networkError, normalizeError, type ApiResult } from "@/lib/api/errors";
+import { CSRF_HEADER, readCsrfToken } from "@/lib/auth/cookies";
 
 /**
  * The browser's only way to reach the backend: same-origin calls to the BFF at
@@ -9,16 +10,31 @@ import { networkError, normalizeError, type ApiResult } from "@/lib/api/errors";
  * Never throws for HTTP or network failures: it returns an ApiResult.
  */
 
-let onUnauthorized: () => void = () => {
+/**
+ * Where an unauthenticated browser goes. `loginPath` is what the BFF named in its 401 (the login page of the
+ * active mode); the page the user was on is kept as a RELATIVE return path (validated again by the login page
+ * and by the BFF) and never for the login pages themselves, so this cannot loop.
+ */
+export function loginTarget(loginPath: string, here: { pathname: string; search: string }): string {
+  if (!loginPath.startsWith("/") || loginPath.startsWith("//") || loginPath.includes("\\")) return "/login";
+  if (loginPath !== "/login" || !here.pathname.startsWith("/o/")) return loginPath;
+  return `/login?next=${encodeURIComponent(here.pathname + here.search)}`;
+}
+
+let onUnauthorized: (loginPath: string) => void = (loginPath) => {
   // A full page load (not a client transition) on purpose: no state from the signed-out
   // session may survive. The Next.js rule below recommends client navigation; we do not want it.
-  // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-  if (typeof window !== "undefined") window.location.href = "/dev-login";
+  if (typeof window !== "undefined") window.location.href = loginTarget(loginPath, window.location);
 };
 
 /** Replace what happens on a 401 (tests, or real authentication later). */
-export function setUnauthorizedHandler(handler: () => void): void {
+export function setUnauthorizedHandler(handler: (loginPath: string) => void): void {
   onUnauthorized = handler;
+}
+
+function loginPathOf(body: unknown): string {
+  const login = typeof body === "object" && body !== null ? (body as { login?: unknown }).login : undefined;
+  return typeof login === "string" ? login : "/dev-login";
 }
 
 export interface ApiRequest {
@@ -35,6 +51,17 @@ export function bffPath(orgId: string, path: string): string {
   return `/api/o/${encodeURIComponent(orgId)}${path}`;
 }
 
+/**
+ * The CSRF double-submit header for a state-changing request: the page echoes the readable CSRF cookie. It
+ * proves nothing by itself (the BFF compares it with the cookie and FastAPI with the session's stored hash).
+ * There is no such cookie in development mode, so nothing is sent then.
+ */
+function csrfHeader(method: string | undefined): Record<string, string> {
+  if (method === undefined || method === "GET" || typeof document === "undefined") return {};
+  const token = readCsrfToken(document.cookie);
+  return token === null ? {} : { [CSRF_HEADER]: token };
+}
+
 export async function apiFetch<T>(orgId: string, path: string, request: ApiRequest = {}): Promise<ApiResult<T>> {
   let response: Response;
   try {
@@ -44,6 +71,7 @@ export async function apiFetch<T>(orgId: string, path: string, request: ApiReque
         accept: "application/json",
         ...(request.body === undefined ? {} : { "content-type": "application/json" }),
         ...(request.ifMatch === undefined ? {} : { "if-match": `"${request.ifMatch}"` }),
+        ...csrfHeader(request.method),
       },
       body: request.body === undefined ? undefined : JSON.stringify(request.body),
       credentials: "same-origin",
@@ -67,7 +95,7 @@ export async function apiFetch<T>(orgId: string, path: string, request: ApiReque
 
   if (response.ok) return { ok: true, status: response.status, data: body as T };
   const error = normalizeError(response.status, body);
-  if (error.kind === "unauthorized") onUnauthorized();
+  if (error.kind === "unauthorized") onUnauthorized(loginPathOf(body));
   return { ok: false, error };
 }
 
@@ -111,6 +139,6 @@ export async function apiDownloadPdf(orgId: string, path: string, signal?: Abort
     body = undefined;
   }
   const error = normalizeError(response.status, body);
-  if (error.kind === "unauthorized") onUnauthorized();
+  if (error.kind === "unauthorized") onUnauthorized(loginPathOf(body));
   return { ok: false, error };
 }

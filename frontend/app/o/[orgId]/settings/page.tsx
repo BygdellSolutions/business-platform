@@ -1,9 +1,8 @@
-import { redirect } from "next/navigation";
 
 import { EarlierTransactions } from "@/features/settings/EarlierTransactions";
 import { OrganizationSettings } from "@/features/settings/OrganizationSettings";
 import type { CurrencyStatus, Organization, Role } from "@/lib/api/types";
-import { getIdentity } from "@/lib/identity";
+import { requireCredential } from "@/lib/auth/credential";
 import { getMemberships } from "@/lib/orgs";
 import { serverRead } from "@/lib/server-api";
 
@@ -13,13 +12,12 @@ const SETTINGS_ROLES: Role[] = ["owner", "admin"];
 /** The active organization's settings and currency status, read from FastAPI for this organization only. */
 export default async function SettingsPage({ params }: { params: Promise<{ orgId: string }> }) {
   const { orgId } = await params;
-  const email = await getIdentity();
-  if (email === null) redirect("/dev-login");
+  const credential = await requireCredential(`/o/${orgId}`);
 
   const [organization, status, memberships] = await Promise.all([
     serverRead<Organization>(orgId, "/api/organization"),
     serverRead<CurrencyStatus>(orgId, "/api/transactions/currency-status"),
-    getMemberships(email),
+    getMemberships(credential),
   ]);
   const role = memberships.status === "ok" ? memberships.memberships.find((membership) => membership.id === orgId)?.role : undefined;
   const canEdit = role !== undefined && SETTINGS_ROLES.includes(role);

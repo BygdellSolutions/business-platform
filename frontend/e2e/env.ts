@@ -12,8 +12,14 @@ export const FRONTEND_DIR = path.resolve(__dirname, "..");
 export const ROOT_DIR = path.resolve(FRONTEND_DIR, "..");
 export const BACKEND_DIR = path.join(ROOT_DIR, "backend");
 
-export const BACKEND_PORT = 8001;
-export const FRONTEND_PORT = 3100;
+/**
+ * Two end-to-end runs exist, with separate servers (never at the same time, never against the development
+ * database): the DEV run (AUTH_MODE=dev, ports 8001/3100) and the SESSION run (AUTH_MODE=session, real login,
+ * ports 8002/3101, selected by playwright.session.config.ts through E2E_AUTH).
+ */
+export const AUTH_E2E: "dev" | "session" = process.env.E2E_AUTH === "session" ? "session" : "dev";
+export const BACKEND_PORT = AUTH_E2E === "session" ? 8002 : 8001;
+export const FRONTEND_PORT = AUTH_E2E === "session" ? 3101 : 3100;
 export const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
 export const BASE_URL = `http://127.0.0.1:${FRONTEND_PORT}`;
 

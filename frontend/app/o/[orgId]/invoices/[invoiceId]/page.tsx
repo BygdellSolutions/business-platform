@@ -1,10 +1,9 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 
 import { Notice } from "@/components/ui/Notice";
 import { InvoiceView } from "@/features/invoices/InvoiceView";
 import type { Invoice } from "@/lib/api/types";
-import { getIdentity } from "@/lib/identity";
+import { requireCredential } from "@/lib/auth/credential";
 import { getMemberships } from "@/lib/orgs";
 import { canMutateInvoices } from "@/lib/roles";
 import { requireUuid, serverRead } from "@/lib/server-api";
@@ -25,9 +24,8 @@ export default async function InvoicePage({
 }) {
   const { orgId, invoiceId } = await params;
   const { created } = await searchParams;
-  const email = await getIdentity();
-  if (email === null) redirect("/dev-login");
-  const [invoice, memberships] = await Promise.all([serverRead<Invoice>(orgId, `/api/invoices/${requireUuid(invoiceId)}`), getMemberships(email)]);
+  const credential = await requireCredential(`/o/${orgId}`);
+  const [invoice, memberships] = await Promise.all([serverRead<Invoice>(orgId, `/api/invoices/${requireUuid(invoiceId)}`), getMemberships(credential)]);
   const role = memberships.status === "ok" ? memberships.memberships.find((membership) => membership.id === orgId)?.role : undefined;
 
   return (

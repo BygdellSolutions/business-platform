@@ -1,8 +1,7 @@
-import { redirect } from "next/navigation";
 
 import { InvoiceCreateForm } from "@/features/invoices/InvoiceCreateForm";
 import type { Invoiceable } from "@/lib/api/types";
-import { getIdentity } from "@/lib/identity";
+import { requireCredential } from "@/lib/auth/credential";
 import { backendQuery, pageOf, parseListParams } from "@/lib/list-params";
 import { getMemberships } from "@/lib/orgs";
 import { canMutateInvoices } from "@/lib/roles";
@@ -23,11 +22,10 @@ export default async function NewInvoicePage({
 }) {
   const { orgId } = await params;
   const list = parseListParams(await searchParams, [], ["customer_id"], {});
-  const email = await getIdentity();
-  if (email === null) redirect("/dev-login");
+  const credential = await requireCredential(`/o/${orgId}`);
   const [rows, memberships] = await Promise.all([
     serverRead<Invoiceable[]>(orgId, "/api/invoiceable-transactions", backendQuery({ ...list, q: "" })),
-    getMemberships(email),
+    getMemberships(credential),
   ]);
   const role = memberships.status === "ok" ? memberships.memberships.find((membership) => membership.id === orgId)?.role : undefined;
   const { rows: eligible, hasNext } = pageOf(rows);

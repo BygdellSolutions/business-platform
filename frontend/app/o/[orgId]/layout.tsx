@@ -2,12 +2,13 @@ import { notFound, redirect } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { isUuid } from "@/lib/backend";
-import { devIdentityEnabled, getIdentity } from "@/lib/identity";
-import { getMemberships } from "@/lib/orgs";
+import { authMode } from "@/lib/auth/config";
+import { loginPath, requireCredential } from "@/lib/auth/credential";
+import { getCurrentUser, getMemberships } from "@/lib/orgs";
 import { OrgScope } from "@/components/shell/org-context";
 import { OrgSwitcher } from "@/components/shell/OrgSwitcher";
 import { NAV } from "@/components/shell/nav";
-import { Button } from "@/components/ui/Button";
+import { SignOut } from "@/components/shell/SignOut";
 
 /**
  * The organization shell. The organization comes from the URL and is checked against the
@@ -25,12 +26,11 @@ export default async function OrgLayout({
   const { orgId } = await params;
   if (!isUuid(orgId)) notFound();
 
-  const email = await getIdentity();
-  if (email === null) redirect("/dev-login");
-
-  const result = await getMemberships(email);
-  if (result.status === "unauthorized") redirect("/dev-login");
-  if (result.status === "unavailable") throw new Error("The backend is unavailable");
+  const credential = await requireCredential(`/o/${orgId}`);
+  const [result, current] = await Promise.all([getMemberships(credential), getCurrentUser(credential)]);
+  if (result.status === "unauthorized" || current.status === "unauthorized") redirect(loginPath(`/o/${orgId}`));
+  if (result.status === "unavailable" || current.status === "unavailable") throw new Error("The backend is unavailable");
+  const mode = authMode();
 
   const organization = result.memberships.find((membership) => membership.id === orgId);
   if (!organization) notFound();
@@ -44,13 +44,8 @@ export default async function OrgLayout({
             <span data-testid="org-role" className="text-sm text-zinc-500">{organization.role}</span>
           </div>
           <div className="flex items-center gap-3 text-sm">
-            <span data-testid="user-email">{email}</span>
-            {devIdentityEnabled() && (
-              <form action="/api/dev-session" method="post">
-                <input type="hidden" name="logout" value="1" />
-                <Button type="submit">Sign out</Button>
-              </form>
-            )}
+            <span data-testid="user-email">{current.user.email}</span>
+            {(mode === "dev" || mode === "session") && <SignOut mode={mode} />}
           </div>
         </div>
         <OrgSwitcher organizations={result.memberships} currentId={orgId} />

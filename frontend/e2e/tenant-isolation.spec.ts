@@ -160,9 +160,11 @@ test.describe("tabs", () => {
 
     // The cookie is shared by both tabs; the organization is not.
     const created = await tabA.evaluate(async (orgId) => {
+      // What the application's own client does: echo the readable CSRF cookie (there is none in the dev run).
+      const csrf = document.cookie.split("; ").map((part) => part.split("=")).find(([name]) => name === "bp_csrf" || name === "__Host-bp_csrf")?.[1];
       const response = await fetch(`/api/o/${orgId}/customers`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...(csrf ? { "x-csrf-token": csrf } : {}) },
         body: JSON.stringify({ customer_type: "person", name: "000 Written From Tab A" }),
       });
       return response.status;

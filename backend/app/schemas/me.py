@@ -19,6 +19,15 @@ class MeUser(BaseModel):
     name: str
 
 
+class MyUser(BaseModel):
+    """The authenticated user themselves (no organization involved): what a client may show as "signed in as"."""
+
+    id: uuid.UUID
+    email: str
+    name: str
+    can_create_organizations: bool
+
+
 class MeOrganization(BaseModel):
     id: uuid.UUID
     name: str

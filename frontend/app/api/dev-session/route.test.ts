@@ -8,7 +8,8 @@ const ORIGIN = "http://localhost:3100";
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
-  vi.stubEnv("DEV_IDENTITY", "enabled");
+  vi.stubEnv("AUTH_MODE", "dev");
+  vi.stubEnv("APP_ENV", "development");
   vi.stubEnv("BACKEND_URL", "http://backend.test:8000");
   fetchMock = vi.fn().mockResolvedValue(new Response("[]", { status: 200 }));
   vi.stubGlobal("fetch", fetchMock);
@@ -88,8 +89,8 @@ describe("signing out", () => {
 });
 
 describe("guards", () => {
-  it("does not exist unless DEV_IDENTITY=enabled", async () => {
-    vi.stubEnv("DEV_IDENTITY", "");
+  it("does not exist unless AUTH_MODE=dev with APP_ENV=development", async () => {
+    vi.stubEnv("AUTH_MODE", "");
 
     const response = await post({ email: "maria@dev.test" });
 

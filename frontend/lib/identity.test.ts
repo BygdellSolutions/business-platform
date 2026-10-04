@@ -1,31 +1,7 @@
 // @vitest-environment node
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import { devIdentityEnabled, identityFromCookie, parseEmail } from "@/lib/identity";
-
-afterEach(() => vi.unstubAllEnvs());
-
-describe("dev identity fails closed", () => {
-  it.each([undefined, "", "disabled", "true", "1", "ENABLED"])("is disabled when DEV_IDENTITY=%j", (value) => {
-    if (value === undefined) vi.stubEnv("DEV_IDENTITY", undefined as unknown as string);
-    else vi.stubEnv("DEV_IDENTITY", value);
-    expect(devIdentityEnabled()).toBe(false);
-    expect(identityFromCookie("fredrik@dev.test")).toBeNull();
-  });
-
-  it("is enabled only by DEV_IDENTITY=enabled", () => {
-    vi.stubEnv("DEV_IDENTITY", "enabled");
-    expect(devIdentityEnabled()).toBe(true);
-    expect(identityFromCookie("fredrik@dev.test")).toBe("fredrik@dev.test");
-  });
-
-  it("has no ambient identity: nothing in the environment stands in for a missing cookie", () => {
-    vi.stubEnv("DEV_IDENTITY", "enabled");
-    vi.stubEnv("DEV_USER_EMAIL", "fredrik@dev.test");
-    expect(identityFromCookie(undefined)).toBeNull();
-    expect(identityFromCookie("")).toBeNull();
-  });
-});
+import { parseEmail } from "@/lib/identity";
 
 describe("parseEmail", () => {
   it("normalizes case and surrounding whitespace, including a trailing line break", () => {

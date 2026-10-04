@@ -80,7 +80,7 @@ test.describe("client-supplied identity and organization headers cannot override
     });
 
     expect(response.status()).toBe(401);
-    expect(await response.json()).toEqual({ detail: "Not authenticated" });
+    expect(await response.json()).toEqual({ detail: "Not authenticated", login: "/dev-login" }); // a fixed answer that names the login page
   });
 
   test("a query parameter cannot choose the organization", async ({ context }) => {

@@ -694,7 +694,7 @@ Server components ──(lib/backend.ts)─────────────�
 - **The organization is in the URL** (`/o/{orgId}/...`), never in a shared cookie, so two tabs can work in two organizations and a switch in one tab cannot re-target another tab's writes. The layout checks the id against the user's memberships (`GET /api/me/organizations`); a malformed, nonexistent and foreign id all end in the same 404. That check is a UI convenience: FastAPI independently verifies the user and the membership on every scoped request.
 - **Switching organization is a full page load** (plain links). `OrgScope` additionally keys its subtree by `orgId`, and client fetches abort and ignore late answers, so state or data from one tenant cannot survive into another even if a switch ever happens client-side. Pages are dynamic and keyed by URL, so the client router cache cannot cross tenants. Cache Components stays off; enabling it would keep hidden routes alive (React `Activity`) and would need a per-organization key.
 - **BFF (`app/api/o/[orgId]/[...path]/route.ts`)** forwards GET, POST, PATCH and DELETE only. It builds backend headers from scratch (client identity, organization, authorization and cookie headers are ignored), validates shapes only (UUID, a known API area, safe path segments, same origin via `Origin` against `Host`, JSON bodies up to 1 MB), turns backend redirects and failures into 502, and returns only the status and body.
-- **Development identity** is an httpOnly cookie set by `/dev-login` for a user the backend knows, enabled only with `DEV_IDENTITY=enabled`. Everything asks `lib/identity.ts`, so real authentication later replaces that module and `lib/backend.ts`.
+- **Development identity** is an httpOnly cookie set by `/dev-login` for a user the backend knows, enabled only with `AUTH_MODE=dev` and `APP_ENV=development` (S2 retired `DEV_IDENTITY`). It is now one adapter (`lib/identity.ts`) behind the credential abstraction in `lib/auth/credential.ts`; the real login is described under "Browser authentication (S2 as built)".
 - **Server components** do initial reads; **client components** do interaction through `lib/api/client.ts`, which never throws for HTTP errors and maps 401/403/404/409/422 to a typed `ApiError` (`lib/api/errors.ts`): 422 locations become dotted field paths, and the structured 409 `validation_failed` keeps its `problems` for locating records and fields.
 - **Decimals** (money, VAT, quantity, decimal custom fields) are strings in types, form state, payloads and rendering (`lib/decimal.ts`, `components/ui/DecimalText.tsx`). They are branded types validated by shape only and never converted to JavaScript numbers. ESLint forbids number conversion and rounding in the money-handling folders (scoped, not a global ban). Totals are calculated by the backend and displayed as received.
 - **List and detail pages** (`app/o/[orgId]/customers`, `catalog`) read on the server through `lib/server-api.ts`, which answers like the BFF: no identity or a 401 goes to sign-in, a 404 (foreign, random or malformed id) shows the one generic not-found page, anything else reaches `error.tsx` without backend details. Search, status, type and page live in the URL (`lib/list-params.ts`, a plain GET form), are treated as untrusted input (unknown values are dropped, never forwarded) and page with one extra row requested instead of a count endpoint.
@@ -751,7 +751,7 @@ The PDF of an issued invoice, made by the backend, stored once, and served from 
 
 ## Production authentication and membership administration (approved design; S1 built)
 
-**Status.** The design below is approved. Only **S1 (backend identity core)** is implemented: no browser login, cookies, BFF change, organization creation, membership administration or invitations yet (S2 to S6). The development workflow (`AUTH_MODE=dev`, `/dev-login`) is unchanged.
+**Status.** The design below is approved. **S1 (backend identity core)** and **S2 (browser authentication)** are implemented; organization creation, membership administration and invitations are not yet (S3 to S6). The development workflow (`AUTH_MODE=dev`, `/dev-login`) is unchanged.
 
 **Two questions, kept apart.** *Authentication* answers "who is this user?": a `User` (stable internal id) proven by a password and a server-side session. *Membership* answers "what may this user do in this organization?": `organization_users` (role per organization), resolved by `get_tenant_context` exactly as before. Nothing in the authentication code reads a membership, a role or an organization (a static test enforces it), and the tenant code reads no credential, session or token table.
 
@@ -848,3 +848,72 @@ A minimal append-only table, **not the business Audit module**. It exists becaus
 **Configuration** (`AUTH_MODE` is `dev`, `session` or `disabled`; unknown values refuse to start): production (`APP_ENV=production`, the default) requires `session` and a `SECURITY_KEY` of at least 32 characters (the HMAC key for identifiers) or the process does not start; `dev` requires `APP_ENV=development`; development may choose any mode (session mode without a key gets a per-process key). Deployment constraints: FastAPI reachable from the BFF alone, `CORS_ORIGINS=[]`, `TRUST_CLIENT_IP_HEADER=true` behind the BFF, Argon2 parameters tuned on the deployment hardware, `PUBLIC_ORIGIN` set.
 
 **Deviations from the proposal.** (1) The throttling replaces the proposed per-account delay (review change 2). (2) `user_credentials` has no `failed_count` or `throttled_until`. (3) Setup-link redemption (`POST /api/auth/setup`) is implemented in S1, because the single-use and expiry rules cannot be proved without it; the setup page is S2. (4) CSRF enforcement is applied once, in the authentication seam, to every mutating request in session mode (so later endpoints are covered by construction) instead of per endpoint. (5) The `X-Client-Ip` header is trusted only when `TRUST_CLIENT_IP_HEADER` is on (default off), so S1 is safe before the BFF exists.
+---
+
+## Browser authentication (S2 as built)
+
+S2 connects the real browser to the S1 backend identity core. Still NOT built (later slices): organization onboarding (S3), membership administration (S4), invitations (S5). The development workflow (`AUTH_MODE=dev`, `/dev-login`) is unchanged and independent.
+
+```
+browser ──cookies, Origin, X-CSRF-Token──► Next.js BFF ──Authorization: Bearer <token>──► FastAPI
+                                           reads the protected cookie server-side;       resolves the session to a User,
+                                           validates Origin and the CSRF pair;            validates sha256(X-CSRF-Token)
+                                           builds every upstream header FROM SCRATCH      against that session, resolves
+                                                                                          X-Organization-Id to a membership
+```
+
+### The mode boundary (one place)
+
+`lib/auth/config.ts` is the only code that reads `AUTH_MODE`, `APP_ENV`, `PUBLIC_ORIGIN` and `TRUSTED_PROXY_HOPS` (a static test enforces it), and only the shell, the authentication pages and the BFF routes branch on the mode (also tested). Business pages and components call `requireCredential()` and `serverRead()`; they never learn what kind of identity it is.
+
+| `AUTH_MODE` | Meaning | Requirements |
+|---|---|---|
+| `dev` | the development identity (`/dev-login`, dev-user cookie) | `APP_ENV=development`, otherwise the mode is "none" |
+| `session` | the real login | `PUBLIC_ORIGIN` (https outside development) |
+| anything else | no identity at all ("none") | the BFF answers 503 to everything |
+
+`APP_ENV` defaults to production, like the backend. The retired `DEV_IDENTITY` switch does nothing. `instrumentation.ts` stops a production server that starts with an unusable configuration. In `session` mode `/dev-login` and `/api/dev-session` do not exist (404), the dev header and cookie are never read, and a failed session never falls back to anything.
+
+### Cookies
+
+| Cookie | Production name (https) | Development name (http) | Attributes | Holds |
+|---|---|---|---|---|
+| session | `__Host-bp_session` | `bp_session` | **HttpOnly**, SameSite=Lax, Path=/, no Domain, Secure over https, expires with the session's absolute end | the opaque FastAPI session token |
+| CSRF | `__Host-bp_csrf` | `bp_csrf` | readable by script (the double-submit needs it), otherwise as above | the CSRF token returned for the session |
+| pre-auth | `__Host-bp_pre` | `bp_pre` | HttpOnly, Lax, Path=/, 30 minutes | a random value, used only before a session exists |
+
+The names and `Secure` follow `PUBLIC_ORIGIN`, never the request. The session token is never in a response body, a readable header, a URL, the page, any storage or the React state (tests, including a Playwright spec that scans the page and every response header). Clearing a cookie repeats the attributes it was set with: a `__Host-` cookie can only be overwritten or deleted by a response that is itself Secure, Path=/ and without Domain.
+
+### The BFF trust boundary
+
+For an authenticated request the BFF reads the session cookie server-side and builds `Authorization: Bearer <token>`; `X-Organization-Id` comes only from the `/api/o/{orgId}/…` route; `If-Match` is validated as before; for a mutation it forwards `X-CSRF-Token` after validating it. **Every other header is built from scratch**: a client-supplied `Authorization`, `Cookie`, `X-Dev-User-Email`, `X-Organization-Id`, role or permission header, and any `X-Forwarded-*`, `Forwarded`, `X-Real-IP` or `X-Client-Ip` header are ignored and never reach FastAPI. The BFF asserts no user id, email or role. FastAPI stays authoritative: Bearer token to session to User; CSRF token to the session's `csrf_hash`; organization selector to membership to role. A backend 401 (expired, revoked, disabled) becomes a fixed answer naming the login page; a 403 (role, CSRF) and a 404 (tenant isolation) are relayed unchanged and are never treated as a lost session.
+
+### CSRF: the responsibility split, as built
+
+| Layer | Checks | Where it is proved on its own |
+|---|---|---|
+| BFF, state-changing requests (session mode) | the browser `Origin` equals `PUBLIC_ORIGIN` (a missing one is refused; `Host` is not consulted), and `X-CSRF-Token` equals the readable CSRF cookie | Vitest (`session.test.ts`, `request.test.ts`) and Playwright (`forgery.spec.ts`: "BFF layer") |
+| FastAPI | `sha256(X-CSRF-Token)` equals the authenticated session's `csrf_hash`, constant-time; the browser's Origin and cookies are never examined | backend suite (S1) and Playwright ("FastAPI layer": cookie and header set to the same wrong value, which the BFF accepts and FastAPI refuses) |
+| Before there is a session (login, setup) | the same Origin rule, and the **pre-auth double-submit**: `GET /api/auth/pre` sets an HttpOnly cookie and returns the same random value, the page echoes it in `X-Pre-Auth`, the BFF compares them before contacting FastAPI. The value is not a credential and is never forwarded. | Vitest (`auth.test.ts`) and Playwright (`login.spec.ts`) |
+
+Deleting either layer is detected (fault injection). Invitation acceptance (S5) will use the pre-auth mechanism; it is not implemented.
+
+### Login, setup and logout
+
+- **Login** (`/login`): email and password only. Every wrong credential (unknown email, wrong password, no credential, disabled user) shows one message, `Invalid email or password.`, and sets nothing. The BFF validates Origin and the pre-auth pair, asks FastAPI, sets the two protected cookies and returns only a validated relative destination. A presented session cookie is passed upstream (built from the cookie) so FastAPI ends it: a planted cookie is never adopted.
+- **Where login leads**: `/` and `/o/<uuid>` with plain path segments and a short query string; everything else (absolute URLs, `//host`, backslashes, schemes, control characters, encoded slashes or dots, dot segments, the authentication pages, the API) becomes `/`. The text is judged as written and after URL normalization, and the result is rebuilt from the parsed path, never copied from the input. The BFF validates again; the page validates the BFF's answer.
+- **Setup** (`/setup#<token>`, session mode): the link secret is read from the URL fragment once (again on a `hashchange`, because opening another link in the same tab is only a fragment change), removed at once with `history.replaceState`, kept only in a ref, sent only in the body of the POST, never in a URL, a header, storage or the DOM, and never shown. Password plus a confirmation (a UX check); the backend's policy wording is shown for a weak password and the link stays usable; an invalid, used, expired or revoked link gets one generic message. Success follows the S1 contract: the link is consumed, the password set, and a session starts (the BFF sets the cookies like a login).
+- **Headers**: `/login`, `/setup` and `/api/auth/*` are served `Cache-Control: no-store` and `Referrer-Policy: no-referrer` (`next.config.ts`); the setup page loads nothing from another site.
+- **Logout**: a CSRF-protected POST. FastAPI revokes the session; **this browser's cookies are always cleared**, whatever FastAPI answers. The answer is honest: `confirmed`, `already_invalid`, or `unconfirmed` (FastAPI unreachable or odd), and the login page then says the browser is signed out but the server session could not be confirmed ended. A revoked token cannot be used directly against FastAPI (tested).
+- **Session loss**: a server-rendered page whose backend call answers 401 redirects to `/login?next=<the organization page>`; a client request that answers 401 does a full page load of the login with the current page as the way back (only under `/o/`, never for the login pages themselves, so there is no loop). Expired, idle, revoked and disabled-user sessions are all tested end to end.
+- **Navigation**: the organization stays in the URL; authentication is global to the browser session; there is no active-organization cookie. The shell shows the user from `GET /api/me/user` (new, returns the authenticated user without any organization context), not from anything the browser holds.
+
+### Client address and throttling (the topology decision)
+
+The BFF is the only caller of the authentication endpoints, and FastAPI is meant to be reachable from it alone. `TRUST_CLIENT_IP_HEADER` stays **off by default** and S2 does not turn it on. What exists now: with `TRUSTED_PROXY_HOPS=N` (default 0) the BFF takes the address the N-th trusted reverse proxy appended to `X-Forwarded-For` (entry N from the right: whatever the browser wrote further left is never used) and sends it as `X-Client-Ip` to the login and setup endpoints only; a browser-supplied `X-Client-Ip` or `X-Forwarded-For` cannot become that value. With 0 hops nothing is forwarded. FastAPI honours the header only with `TRUST_CLIENT_IP_HEADER=true`, valid only while FastAPI is reachable from the BFF alone. **Consequence until the deployment milestone configures both**: FastAPI sees the BFF as the only source, so the per-source login budgets act as one budget shared by all users (the known-source exemption and the per-account protections still apply, and nothing about identity or sessions is weakened). Source-based throttling becomes fully effective when deployment sets `TRUSTED_PROXY_HOPS` and `TRUST_CLIENT_IP_HEADER` together.
+
+### Verification, trade-offs and deviations
+
+- A second Playwright configuration (`playwright.session.config.ts`, `npm run test:e2e:session`) runs real authentication end to end on its own ports (BFF 3101, FastAPI 8002) against the disposable test database: the session-only specs (`e2e/session/`) and the representative dev specs (tenant isolation, customers, catalog, horses, transactions, invoices) unchanged, signing in through `signIn`. Credentials are provisioned through the real mechanism (the operator CLI's setup link); `seed_dev` creates none. The backend of that run is started with `DEV_USER_EMAIL` set on purpose, to prove it is ignored. Specs about forged dev headers and direct dev-header reads of FastAPI stay in the dev run.
+- The CSRF cookie is readable by script by design (double-submit). The session cookie persists until the session's absolute end (idle and absolute limits are enforced server-side regardless). `GET /api/auth/pre` is a GET that sets a cookie: another site can only make a victim's in-flight login fail (a nuisance), never read or use the value. No Content-Security-Policy is set yet (a candidate for hardening).
+- NextResponse shows an internal `x-middleware-set-cookie` header in unit tests; the real server sends only `Set-Cookie` (a Playwright spec asserts no `x-middleware-*` header).

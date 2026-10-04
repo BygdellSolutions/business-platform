@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 
 import { DecimalText } from "@/components/ui/DecimalText";
 import { ListFilters } from "@/components/ui/ListFilters";
@@ -8,7 +7,7 @@ import { Pagination } from "@/components/ui/Pagination";
 import { CustomerFilter } from "@/features/customers/CustomerFilter";
 import { InvoiceStatusBadge } from "@/features/invoices/InvoiceStatusBadge";
 import type { Customer, InvoiceSummary } from "@/lib/api/types";
-import { getIdentity } from "@/lib/identity";
+import { requireCredential } from "@/lib/auth/credential";
 import { backendQuery, listHref, pageOf, parseListParams, type ExtraSpec } from "@/lib/list-params";
 import { getMemberships } from "@/lib/orgs";
 import { canMutateInvoices } from "@/lib/roles";
@@ -36,13 +35,12 @@ export default async function InvoicesPage({
   const raw = await searchParams;
   const list = parseListParams(raw, [], ["customer_id"], EXTRAS);
   const customerId = list.refs.customer_id;
-  const email = await getIdentity();
-  if (email === null) redirect("/dev-login");
+  const credential = await requireCredential(`/o/${orgId}`);
 
   const [rows, filterCustomer, memberships] = await Promise.all([
     serverRead<InvoiceSummary[]>(orgId, "/api/invoices", backendQuery(list)),
     customerId === undefined ? null : serverReadOrNull<Customer>(orgId, `/api/customers/${customerId}`),
-    getMemberships(email),
+    getMemberships(credential),
   ]);
   const role = memberships.status === "ok" ? memberships.memberships.find((membership) => membership.id === orgId)?.role : undefined;
   const { rows: invoices, hasNext } = pageOf(rows);

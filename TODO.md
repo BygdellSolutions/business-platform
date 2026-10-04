@@ -32,13 +32,13 @@
 - [x] Development database migrated to `a85e1c4d7f90`. It now holds ONE permanent issued invoice (number 1, Fredrik Horse Therapy, from its seeded transaction) and its frozen PDF in `invoice_pdfs`, created by the PDF smoke test; issued invoices are immutable, so that transaction can no longer be reopened or cancelled in dev
 
 ## Production authentication and membership administration (approved; one slice per review)
-- [x] **S1 Backend identity core:** credentials, sessions, setup links, minimal `security_events`, Argon2id, login/logout/change-password/setup endpoints, bounded login-abuse protection, fail-closed `AUTH_MODE`, operator CLI, migration `b96f2d4e8a13` (implemented and verified; NOT yet committed)
-- [ ] **S2 Browser authentication:** BFF credential refactor (cookie to Bearer), login/logout/setup pages, `PUBLIC_ORIGIN` and double-submit CSRF, header stripping, session-mode Playwright project
+- [x] **S1 Backend identity core:** credentials, sessions, setup links, minimal `security_events`, Argon2id, login/logout/change-password/setup endpoints, bounded login-abuse protection, fail-closed `AUTH_MODE`, operator CLI, migration `b96f2d4e8a13` (committed as 17d77bb; development database migrated and unchanged otherwise)
+- [x] **S2 Browser authentication:** BFF credential refactor (cookie to Bearer), login/logout/setup pages, `PUBLIC_ORIGIN` and double-submit CSRF, header stripping, session-mode Playwright run, `GET /api/me/user` (implemented and verified; NOT yet committed)
 - [ ] **S3 Organization onboarding:** atomic `POST /organizations` (Organization and owner membership in one transaction), the `can_create_organizations` gate, onboarding page that requires a currency
 - [ ] **S4 Membership administration:** member list, role change, removal (owner/admin rules), application locks plus the deferred owner-loss trigger, operator repair of ownerless organizations
 - [ ] **S5 Invitations:** copy-link invitations (fragment tokens), accept flows, race-safe acceptance
 - [ ] **S6 Hardening and documentation**
-- [ ] Migrate the development database to `b96f2d4e8a13` after S1 is committed (the development database is still at `a85e1c4d7f90`)
+- [x] Development database migrated to `b96f2d4e8a13`; it has no credentials, so a manual session-mode login in development needs an operator link first (`python -m app.scripts.admin reissue-setup-link --email ...`), which would change permanent dev data and is done only on request
 
 ## Later
 - [ ] Payments
@@ -80,4 +80,6 @@
 - Organization settings are last-writer-wins (no `If-Match` yet) and there is no organization time zone.
 - Item `unit` is free text; no units subsystem.
 - Roles are enforced per endpoint (`roles_required`) from the active membership; membership administration is S4.
+- **Source-based login throttling needs the deployment milestone.** `TRUST_CLIENT_IP_HEADER` stays off and the BFF forwards no client address unless `TRUSTED_PROXY_HOPS` is set; until deployment configures both together (FastAPI reachable from the BFF alone), FastAPI sees one source for every browser, so the per-source budgets are shared by all users. Identity, sessions and CSRF are not affected.
+- Session-mode hardening candidates: a Content-Security-Policy, "sign out everywhere" and a sessions list (backend has the data), password-change screen (the endpoint exists), a remember-me choice.
 - Authentication: MFA, SSO, social login, password-reset email, invitation email, email verification, breached-password checks and an ownership-transfer workflow are deferred (see `docs/architecture.md`). The dev identity (`/dev-login`) stays development-only. Login throttling trade-offs are listed in `docs/architecture.md`.

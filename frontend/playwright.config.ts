@@ -17,6 +17,7 @@ const testDatabaseUrl = assertTestDatabase();
 export default defineConfig({
   testDir: "./e2e",
   testMatch: "**/*.spec.ts",
+  testIgnore: "**/session/**", // the session run has its own configuration (playwright.session.config.ts)
   globalSetup: "./e2e/global-setup.ts",
   fullyParallel: false,
   workers: 1, // the specs share one seeded database
@@ -54,7 +55,8 @@ export default defineConfig({
       env: {
         ...(process.env as Record<string, string>),
         BACKEND_URL,
-        DEV_IDENTITY: "enabled",
+        AUTH_MODE: "dev",
+        APP_ENV: "development",
       },
     },
   ],

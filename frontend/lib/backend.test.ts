@@ -81,12 +81,12 @@ describe("parseIfMatch", () => {
 
 describe("buildBackendHeaders: built from scratch, only what the BFF controls", () => {
   it("adds If-Match only when given", () => {
-    expect(buildBackendHeaders({ email: "a@b.test" }, { ifMatch: '"4"' }).get("if-match")).toBe('"4"');
-    expect(buildBackendHeaders({ email: "a@b.test" }).has("if-match")).toBe(false);
+    expect(buildBackendHeaders({ credential: { kind: "dev", email: "a@b.test" } }, { ifMatch: '"4"' }).get("if-match")).toBe('"4"');
+    expect(buildBackendHeaders({ credential: { kind: "dev", email: "a@b.test" } }).has("if-match")).toBe(false);
   });
 
   it("sets identity and organization", () => {
-    const headers = buildBackendHeaders({ email: "maria@dev.test", orgId: ORG });
+    const headers = buildBackendHeaders({ credential: { kind: "dev", email: "maria@dev.test" }, orgId: ORG });
 
     expect(Object.fromEntries(headers)).toEqual({
       accept: "application/json",
@@ -96,8 +96,8 @@ describe("buildBackendHeaders: built from scratch, only what the BFF controls", 
   });
 
   it("omits the organization when there is none, and adds a JSON content type only for bodies", () => {
-    expect(Object.fromEntries(buildBackendHeaders({ email: "a@b.test" }))).toEqual({ accept: "application/json", "x-dev-user-email": "a@b.test" });
-    expect(buildBackendHeaders({ email: "a@b.test" }, { json: true }).get("content-type")).toBe("application/json");
+    expect(Object.fromEntries(buildBackendHeaders({ credential: { kind: "dev", email: "a@b.test" } }))).toEqual({ accept: "application/json", "x-dev-user-email": "a@b.test" });
+    expect(buildBackendHeaders({ credential: { kind: "dev", email: "a@b.test" } }, { json: true }).get("content-type")).toBe("application/json");
   });
 });
 
@@ -114,7 +114,7 @@ describe("backendFetch", () => {
   });
 
   it("calls the configured backend, uncached, without following redirects", async () => {
-    await backendFetch({ email: "a@b.test", orgId: ORG }, "/api/customers", { search: "?limit=5" });
+    await backendFetch({ credential: { kind: "dev", email: "a@b.test" }, orgId: ORG }, "/api/customers", { search: "?limit=5" });
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("http://backend.test:9000/api/customers?limit=5");
@@ -123,12 +123,12 @@ describe("backendFetch", () => {
   });
 
   it.each(["/health", "/docs", "api/customers", "/api/../health", "/api//customers", "http://evil.test/api/x"])("refuses %s", async (path) => {
-    await expect(backendFetch({ email: "a@b.test" }, path)).rejects.toThrow();
+    await expect(backendFetch({ credential: { kind: "dev", email: "a@b.test" } }, path)).rejects.toThrow();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("refuses a malformed organization id", async () => {
-    await expect(backendFetch({ email: "a@b.test", orgId: "../x" }, "/api/customers")).rejects.toThrow();
+    await expect(backendFetch({ credential: { kind: "dev", email: "a@b.test" }, orgId: "../x" }, "/api/customers")).rejects.toThrow();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

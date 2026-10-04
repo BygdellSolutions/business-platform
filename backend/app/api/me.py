@@ -6,9 +6,15 @@ from app.core.auth import get_current_user
 from app.core.db import get_db
 from app.core.tenant import TenantContext, get_tenant_context
 from app.models import Organization, OrganizationUser, User
-from app.schemas.me import MeOrganization, MeResponse, MeUser, MyOrganization
+from app.schemas.me import MeOrganization, MeResponse, MeUser, MyOrganization, MyUser
 
 router = APIRouter(prefix="/api", tags=["me"])
+
+
+@router.get("/me/user", response_model=MyUser)
+def read_my_user(user: User = Depends(get_current_user)) -> MyUser:
+    """Who the session is: the user's own identity, with no organization context. Needs authentication only."""
+    return MyUser(id=user.id, email=user.email, name=user.name, can_create_organizations=user.can_create_organizations)
 
 
 @router.get("/me/organizations", response_model=list[MyOrganization])

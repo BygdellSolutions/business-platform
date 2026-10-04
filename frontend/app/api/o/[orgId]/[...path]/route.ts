@@ -1,7 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { apiPathFromSegments, backendFetch, isInvoicePdfPath, isUuid, parseIfMatch } from "@/lib/backend";
-import { DEV_USER_COOKIE, identityFromCookie } from "@/lib/identity";
+import { authMode } from "@/lib/auth/config";
+import { credentialFromRequest, loginPath } from "@/lib/auth/credential";
+import { originProblem, validCsrf } from "@/lib/auth/request";
 import { isSameOrigin } from "@/lib/origin";
 import { pdfPassThrough, unexpected } from "@/lib/pdf-response";
 
@@ -11,10 +13,16 @@ import { pdfPassThrough, unexpected } from "@/lib/pdf-response";
  *   /api/o/{orgId}/customers?limit=5   ->   FastAPI GET /api/customers?limit=5
  *
  * What it does, and what it deliberately does not:
- *  - the dev identity comes from the httpOnly cookie and the organization from the URL; both
- *    are turned into X-Dev-User-Email / X-Organization-Id by `backendFetch`, which builds the
- *    request headers from scratch. Any identity or organization header, cookie or credential
- *    the client sends is ignored.
+ *  - the credential comes from the protected httpOnly cookie (dev: the dev-user cookie, session: the opaque
+ *    session token) and the organization from the URL; both are turned into upstream headers by `backendFetch`,
+ *    which builds them from scratch (`Authorization: Bearer <token>` or, in development, `X-Dev-User-Email`, and
+ *    `X-Organization-Id`). Any Authorization, Cookie, identity, organization, role or proxy header the client
+ *    sends is ignored, never forwarded.
+ *  - session mode, state-changing requests: the browser's Origin must equal PUBLIC_ORIGIN (a missing one is
+ *    refused; Host is not consulted) and the X-CSRF-Token header must equal the readable CSRF cookie; only then is
+ *    the token forwarded, and FastAPI independently checks it against the session's stored hash.
+ *  - a 401 from FastAPI (expired, revoked, disabled) is answered with a fixed body naming the login page; a 403
+ *    (role, CSRF) is NOT an authentication failure and is relayed as is.
  *  - it validates SHAPES only (a UUID, a known API area, safe path segments, same origin,
  *    JSON bodies). It does NOT decide whether the user may use that organization: FastAPI
  *    independently verifies the membership on every scoped request and answers 404 otherwise.
@@ -33,6 +41,11 @@ function failure(status: number, detail: string): NextResponse {
   return NextResponse.json({ detail }, { status, headers: NO_STORE });
 }
 
+/** The one answer for "sign in again": a fixed body (nothing from the backend) naming where to go. */
+function unauthenticated(): NextResponse {
+  return NextResponse.json({ detail: "Not authenticated", login: loginPath() }, { status: 401, headers: NO_STORE });
+}
+
 async function handle(request: NextRequest, context: Context): Promise<NextResponse> {
   const { orgId, path } = await context.params;
 
@@ -41,10 +54,23 @@ async function handle(request: NextRequest, context: Context): Promise<NextRespo
   if (apiPath === null) return failure(404, "Not found");
 
   const method = request.method as "GET" | "POST" | "PATCH" | "DELETE";
-  if (method !== "GET" && !isSameOrigin(request)) return failure(403, "Cross-origin requests are not allowed");
+  const mode = authMode();
+  if (mode === "none") return failure(503, "Authentication is not configured");
+  if (method !== "GET") {
+    const refused = mode === "session" ? originProblem(request) !== null : !isSameOrigin(request);
+    if (refused) return failure(403, "Cross-origin requests are not allowed");
+  }
 
-  const email = identityFromCookie(request.cookies.get(DEV_USER_COOKIE)?.value);
-  if (email === null) return failure(401, "Not authenticated");
+  const credential = credentialFromRequest(request);
+  if (credential === null) return unauthenticated();
+
+  // Session mode: the double-submit half of CSRF, checked HERE (FastAPI checks the session-bound half).
+  let csrf: string | undefined;
+  if (method !== "GET" && mode === "session") {
+    const valid = validCsrf(request);
+    if (valid === null) return failure(403, "CSRF validation failed");
+    csrf = valid;
+  }
 
   // The one client header that is forwarded: the version a change is based on. Anything but a
   // plain integer is refused here; the backend still decides whether it is current.
@@ -70,17 +96,19 @@ async function handle(request: NextRequest, context: Context): Promise<NextRespo
 
   let upstream: Response;
   try {
-    upstream = await backendFetch({ email, orgId }, apiPath, {
+    upstream = await backendFetch({ credential, orgId }, apiPath, {
       method,
       search: request.nextUrl.search,
       body,
       ifMatch: ifMatch ?? undefined,
+      csrf,
       accept: wantsPdf ? "application/pdf, application/json;q=0.9" : undefined,
     });
   } catch {
     return failure(502, "Backend unavailable");
   }
   if (upstream.status >= 300 && upstream.status < 400) return failure(502, "Unexpected response from the backend");
+  if (upstream.status === 401) return unauthenticated();
 
   const upstreamType = (upstream.headers.get("content-type") ?? "").toLowerCase();
   if (wantsPdf && upstream.status === 200) return pdfPassThrough(upstream);

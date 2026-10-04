@@ -17,7 +17,8 @@ const ORIGIN = "http://localhost:3100";
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
-  vi.stubEnv("DEV_IDENTITY", "enabled");
+  vi.stubEnv("AUTH_MODE", "dev");
+  vi.stubEnv("APP_ENV", "development");
   vi.stubEnv("BACKEND_URL", "http://backend.test:8000");
   fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response("[]", { status: 200, headers: { "content-type": "application/json" } })));
   vi.stubGlobal("fetch", fetchMock);
@@ -149,7 +150,7 @@ describe("identity and organization are decided by the BFF, never by the client"
     const response = await call("GET", { cookie: null, headers: { "x-dev-user-email": "fredrik@dev.test", "x-organization-id": ORG } });
 
     expect(response.status).toBe(401);
-    expect(await response.json()).toEqual({ detail: "Not authenticated" });
+    expect(await response.json()).toEqual({ detail: "Not authenticated", login: "/dev-login" });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -158,10 +159,11 @@ describe("identity and organization are decided by the BFF, never by the client"
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("has no identity at all unless DEV_IDENTITY=enabled", async () => {
-    vi.stubEnv("DEV_IDENTITY", "");
+  it("has no identity at all unless AUTH_MODE selects one: the BFF refuses everything (503), whatever cookie or header comes", async () => {
+    vi.stubEnv("AUTH_MODE", "");
 
-    expect((await call("GET")).status).toBe(401);
+    expect((await call("GET")).status).toBe(503);
+    expect((await call("GET", { headers: { "x-dev-user-email": "maria@dev.test" } })).status).toBe(503);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
@@ -269,7 +271,6 @@ describe("cross-site requests", () => {
 
 describe("responses", () => {
   it.each([
-    [401, { detail: "Not authenticated" }],
     [403, { detail: "Your role in this organization does not allow this action" }],
     [404, { detail: "Organization not found" }],
     [409, { detail: { code: "validation_failed", problems: [] } }],
@@ -282,6 +283,15 @@ describe("responses", () => {
     expect(response.status).toBe(status);
     expect(await response.json()).toEqual(body);
     expect(response.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("answers a backend 401 with a fixed body naming the login page, never the backend's own body", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ detail: "Not authenticated", secret: "token=abc" }), { status: 401, headers: { "content-type": "application/json" } }));
+
+    const response = await call("GET");
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ detail: "Not authenticated", login: "/dev-login" });
   });
 
   it("returns only the content type: no cookies or other backend headers leak to the browser", async () => {

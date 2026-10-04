@@ -24,7 +24,8 @@ const BYTES = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34, 0x
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
-  vi.stubEnv("DEV_IDENTITY", "enabled");
+  vi.stubEnv("AUTH_MODE", "dev");
+  vi.stubEnv("APP_ENV", "development");
   vi.stubEnv("BACKEND_URL", "http://backend.test:8000");
   fetchMock = vi.fn();
   vi.stubGlobal("fetch", fetchMock);

@@ -2,7 +2,8 @@ import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 
-import { POSTGRES_DB, POSTGRES_TEST_DB, POSTGRES_USER, ROOT_DIR } from "./env";
+import { signInThroughPage, signInWithPassword } from "./auth-support";
+import { AUTH_E2E, POSTGRES_DB, POSTGRES_TEST_DB, POSTGRES_USER, ROOT_DIR } from "./env";
 
 // Seeded by backend/app/scripts/seed_dev.py (fixed ids).
 export const ORG_A = { id: "00000000-0000-4000-8000-0000000000a1", name: "Fredrik Horse Therapy" };
@@ -13,13 +14,18 @@ export const RANDOM_ORG = "00000000-0000-4000-8000-00000000dead";
 
 export const bffUrl = (orgId: string, path: string) => `/api/o/${orgId}${path}`;
 
-/** Sign in through the real route handler; the cookie lands in the browser context. */
+/**
+ * Sign in through the real route handler; the cookie lands in the browser context. In the SESSION run
+ * (E2E_AUTH=session) this is the real login with a real password; the specs themselves do not change.
+ */
 export async function signIn(context: BrowserContext, email: string): Promise<void> {
+  if (AUTH_E2E === "session") return signInWithPassword(context, email);
   const response = await context.request.post("/api/dev-session", { form: { email }, maxRedirects: 0 });
   expect(response.status()).toBe(303);
 }
 
 export async function signInViaUi(page: Page, email: string): Promise<void> {
+  if (AUTH_E2E === "session") return signInThroughPage(page, email);
   await page.goto("/dev-login");
   await page.getByTestId(`login-as-${email}`).click();
 }

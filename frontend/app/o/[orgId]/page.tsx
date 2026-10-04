@@ -1,12 +1,12 @@
 import { CustomerPreview } from "@/features/dashboard/CustomerPreview";
-import { getIdentity } from "@/lib/identity";
+import { getCredential } from "@/lib/auth/credential";
 import { getMemberships } from "@/lib/orgs";
 
 export default async function Dashboard({ params }: { params: Promise<{ orgId: string }> }) {
   const { orgId } = await params;
   // The layout has already validated the user and the organization; this read is memoized.
-  const email = await getIdentity();
-  const result = email ? await getMemberships(email) : null;
+  const credential = await getCredential();
+  const result = credential ? await getMemberships(credential) : null;
   const organization = result?.status === "ok" ? result.memberships.find((m) => m.id === orgId) : undefined;
 
   return (

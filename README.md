@@ -29,7 +29,9 @@ Create `frontend/.env.local` (the frontend does not read the root `.env`):
 
 ```text
 BACKEND_URL=http://localhost:8000
-DEV_IDENTITY=enabled        # development only: enables /dev-login
+AUTH_MODE=dev               # development sign-in at /dev-login (needs APP_ENV=development)
+APP_ENV=development
+# For the real login instead: AUTH_MODE=session and PUBLIC_ORIGIN=http://localhost:3000
 ```
 
 ## Test database
@@ -59,7 +61,7 @@ uv run python -m app.scripts.admin purge        # expired sessions, used or expi
 
 - **Existing users** (the seeded development users included) have no credential, so they cannot log in with a password until a link is redeemed; the seed never creates one.
 - After pulling this change run `uv sync` (adds `argon2-cffi`) and, on a database you want to use in session mode, `uv run alembic upgrade head` (migration `b96f2d4e8a13`; additive, existing rows are untouched).
-- There is no browser login yet: the frontend still uses `/dev-login` (`AUTH_MODE=dev`).
+- The browser login is described under "Frontend" below (S2). `AUTH_MODE=dev` with `/dev-login` still works for development.
 
 ## Development identity
 
@@ -196,7 +198,9 @@ Next.js (App Router). See `docs/architecture.md` ("Implementation notes: fronten
 
 - **Organization lives in the URL:** every page is `/o/{orgId}/...`. Two tabs can work in two organizations; switching is a plain link (a full page load), so no client state or cached data can carry over.
 - **BFF:** the browser calls only its own origin, `/api/o/{orgId}/...`. A route handler forwards to FastAPI and adds `X-Dev-User-Email` (httpOnly cookie) and `X-Organization-Id` (the URL) itself. Identity or organization headers sent by a client are ignored. FastAPI still verifies the user and their membership on every scoped request and answers 404 for an organization they do not belong to.
-- **Development sign-in:** `/dev-login` (only when `DEV_IDENTITY=enabled`) sets an httpOnly cookie for a user the backend knows (`fredrik@dev.test`, `maria@dev.test`).
+- **Authentication modes** (frontend `.env.local`, read only by `lib/auth/config.ts`): `AUTH_MODE=dev` with `APP_ENV=development` for the development sign-in, or `AUTH_MODE=session` with `PUBLIC_ORIGIN` (the canonical browser origin; https outside development) for the real login; anything else means no identity at all. `APP_ENV` defaults to production. The old `DEV_IDENTITY` switch no longer does anything. Optional: `TRUSTED_PROXY_HOPS` (default 0).
+- **Real login (session mode):** `/login` (email and password; one generic failure message), `/setup#<token>` (set a password with the operator's single-use link, the secret read from the URL fragment and removed at once), sign out in the shell. The browser holds only protected cookies (`bp_session` HttpOnly; `bp_csrf` readable for the CSRF header; `__Host-` prefixed and Secure over https); the BFF turns the session cookie into `Authorization: Bearer` for FastAPI and checks Origin (against `PUBLIC_ORIGIN`) and the CSRF pair on every change. Nothing the browser sends can name a user, an organization authority or a role. Details: `docs/architecture.md`, "Browser authentication (S2 as built)".
+- **Development sign-in:** `/dev-login` (only with `AUTH_MODE=dev` and `APP_ENV=development`) sets an httpOnly cookie for a user the backend knows (`fredrik@dev.test`, `maria@dev.test`).
 - **Decimals:** money, VAT, quantity and decimal custom fields are strings everywhere in the frontend and are never converted to JavaScript numbers (`lib/decimal.ts`; ESLint forbids number conversion in the money-handling folders). The frontend only checks that a typed value looks like a decimal; digits, range and precision are the backend's rules, and its 422 answer is shown on the field.
 - **Customers** (`/o/{orgId}/customers`, `/new`, `/{id}`) and **Catalog** (`/o/{orgId}/catalog`, `/new`, `/{id}`): list with search and filters, create, edit, and deactivate/reactivate (records are deactivated, not deleted). Lists and details are read on the server; forms are client components that save through the BFF. Search, status, type and page live in the address (`?q=anna&active=inactive&type=product&page=2`), set by a plain GET form, so a list always shows what its URL says for the organization in that URL. A record id from another organization, a random id and a malformed id all show the same not-found page.
 
@@ -218,6 +222,8 @@ Next.js (App Router). See `docs/architecture.md` ("Implementation notes: fronten
 - **Custom fields in transactions:** the transaction page loads the organization's enabled field definitions for `transaction` and `transaction_line` (and the values of this transaction and its lines) on the server and shows them with the transaction and with each line. The renderer is **generic** (`components/custom-fields/`, `lib/custom-fields/`): it understands field metadata and six types (text, number, date, boolean, select, reference) and nothing about what a field is for, which a boundary test enforces (no imports of feature modules, no comparison of metadata to literals such as a field key or source, no domain words). Types are kept exactly: a number is a decimal string, a date is `YYYY-MM-DD`, a boolean has three states (not set / yes / no; `false` is a value), a select stores its option's UUID, a reference stores the record's UUID (the picker shows labels, only ids are sent). Reference choices come from the definition's generic choices endpoint (`/custom-fields/definitions/{id}/choices`), narrowed by the parent field's value when the definition says it depends on another field. Changing or clearing a field clears everything that depends on it, through any number of levels, and **the parent change and the cleared children travel in one request**. A record's fields are saved together (only the changed ones), because the backend validates a record's values as a whole (including required fields). Inactive reference targets stay displayed but are not newly assignable; a missing target is shown as "(no longer exists)". Fields are editable only while the transaction is a draft; completed and cancelled transactions show their values read-only. A blocked completion's problems appear in the banner (with links) **and at the controls they are about**. Custom-field writes carry no Sales version (they are outside the Sales concurrency contract; the backend locks the transaction, so a write and a completion cannot interleave).
 
 ## Tests and migrations
+
+End-to-end tests have two runs, never at the same time and never against the development database: `npm run test:e2e` (the dev identity, ports 8001/3100) and `npm run test:e2e:session` (real authentication, ports 8002/3101; users get their passwords through the operator CLI's setup link in the disposable test database). Both need `docker compose up -d postgres-test`.
 
 ```bash
 cd backend

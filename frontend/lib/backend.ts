@@ -11,6 +11,7 @@ import "server-only";
  * only a selector.
  */
 
+import type { Credential } from "@/lib/auth/credential";
 import { UUID, isUuid } from "@/lib/uuid";
 
 const DEFAULT_BACKEND_URL = "http://localhost:8000";
@@ -51,8 +52,11 @@ export function apiPathFromSegments(segments: string[] | undefined): string | nu
 }
 
 export interface BackendIdentity {
-  /** The dev user's email (X-Dev-User-Email). */
-  email: string;
+  /**
+   * Who is calling, as the server holds it (see `lib/auth/credential`). Null only for the few operations that
+   * happen BEFORE a session exists (login, setup-link redemption).
+   */
+  credential: Credential | null;
   /** The organization the request is scoped to (X-Organization-Id), if any. */
   orgId?: string;
 }
@@ -69,12 +73,31 @@ export function parseIfMatch(value: string | null | undefined): string | null | 
   return found ? `"${found[1]}"` : "invalid";
 }
 
-/** Headers for a backend request, built from scratch (never from client headers). */
-export function buildBackendHeaders(identity: BackendIdentity, options: { json?: boolean; ifMatch?: string; accept?: string } = {}): Headers {
-  const headers = new Headers({ accept: options.accept ?? "application/json", "x-dev-user-email": identity.email });
+export interface HeaderOptions {
+  json?: boolean;
+  ifMatch?: string;
+  accept?: string;
+  /** A CSRF token the BFF has ALREADY validated against the browser's cookie (session mode, mutations only). */
+  csrf?: string;
+  /** The client address the BFF itself established (login and setup only); see `clientAddress`. */
+  clientAddress?: string;
+}
+
+/**
+ * Headers for a backend request, built from scratch: nothing the client sent is copied. The only values are
+ * the credential (as `Authorization: Bearer` or, in development, `X-Dev-User-Email`), the organization taken
+ * from the URL, and the few validated extras above.
+ */
+export function buildBackendHeaders(identity: BackendIdentity, options: HeaderOptions = {}): Headers {
+  const headers = new Headers({ accept: options.accept ?? "application/json" });
+  const { credential } = identity;
+  if (credential?.kind === "dev") headers.set("x-dev-user-email", credential.email);
+  if (credential?.kind === "session") headers.set("authorization", `Bearer ${credential.token}`);
   if (identity.orgId) headers.set("x-organization-id", identity.orgId);
   if (options.json) headers.set("content-type", "application/json");
   if (options.ifMatch) headers.set("if-match", options.ifMatch);
+  if (options.csrf) headers.set("x-csrf-token", options.csrf);
+  if (options.clientAddress) headers.set("x-client-ip", options.clientAddress);
   return headers;
 }
 
@@ -88,6 +111,8 @@ export interface BackendRequest {
   ifMatch?: string;
   /** The media type to ask for; JSON unless the BFF is fetching the one binary resource it passes through. */
   accept?: string;
+  csrf?: string;
+  clientAddress?: string;
 }
 
 /**
@@ -113,7 +138,7 @@ export async function backendFetch(
   }
   return fetch(`${backendUrl()}${path}${request.search ?? ""}`, {
     method: request.method ?? "GET",
-    headers: buildBackendHeaders(identity, { json: request.body !== undefined, ifMatch: request.ifMatch, accept: request.accept }),
+    headers: buildBackendHeaders(identity, { json: request.body !== undefined, ifMatch: request.ifMatch, accept: request.accept, csrf: request.csrf, clientAddress: request.clientAddress }),
     body: request.body,
     cache: "no-store",
     redirect: "manual",

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-import { devIdentityEnabled } from "@/lib/identity";
+import { devIdentityEnabled } from "@/lib/auth/config";
 import { Button } from "@/components/ui/Button";
 import { Notice } from "@/components/ui/Notice";
 
@@ -13,7 +13,7 @@ const MESSAGES: Record<string, string> = {
 /** The seeded development users (see backend/app/scripts/seed_dev.py). */
 const PRESETS = ["fredrik@dev.test", "maria@dev.test"];
 
-/** Development-only sign-in. Not found unless DEV_IDENTITY=enabled on the server. */
+/** Development-only sign-in. Not found unless AUTH_MODE=dev with APP_ENV=development on the server. */
 export default async function DevLogin({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   if (!devIdentityEnabled()) notFound();
   const { error } = await searchParams;

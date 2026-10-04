@@ -2,16 +2,12 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { backendFetch } from "@/lib/backend";
 import { isSameOrigin } from "@/lib/origin";
-import {
-  DEV_USER_COOKIE,
-  DEV_USER_MAX_AGE_SECONDS,
-  devIdentityEnabled,
-  parseEmail,
-} from "@/lib/identity";
+import { devIdentityEnabled } from "@/lib/auth/config";
+import { DEV_USER_COOKIE, DEV_USER_MAX_AGE_SECONDS, parseEmail } from "@/lib/identity";
 
 /**
  * Development sign-in: sets or clears the httpOnly dev identity cookie.
- * 404 unless DEV_IDENTITY=enabled. The email is checked against FastAPI (an unknown or
+ * 404 unless AUTH_MODE=dev with APP_ENV=development. The email is checked against FastAPI (an unknown or
  * inactive user is refused), so the cookie only ever holds a user the backend knows.
  */
 
@@ -44,7 +40,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   let known: boolean;
   try {
-    const check = await backendFetch({ email }, "/api/me/organizations");
+    const check = await backendFetch({ credential: { kind: "dev", email } }, "/api/me/organizations");
     if (check.status === 401) known = false;
     else if (check.ok) known = true;
     else return redirect(request, "/dev-login?error=unavailable");

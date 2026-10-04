@@ -320,3 +320,26 @@ def test_the_change_hashes_with_the_current_parameters(session_client, db_sessio
     change(session_client, handle)
     stored = db_session.scalar(text("select password_hash from user_credentials where user_id = :u"), {"u": user.id})
     assert stored.startswith("$argon2id$") and passwords.verify(stored, "a brand new long passphrase")
+
+
+# --- GET /api/me/user (S2: a client learns who it is from the backend, never from a browser-held email) ----------------------------------------------
+
+
+def test_me_user_returns_the_session_user_and_nothing_about_organizations(session_client, db_session):
+    user = login_user(db_session, name="Ada Owner")
+    org = make_org(db_session)
+    add_member(db_session, org, user, Role.OWNER)
+    handle = make_session(db_session, user)
+
+    response = session_client.get("/api/me/user", headers=handle.read_headers)
+
+    assert response.status_code == 200
+    assert response.json() == {"id": str(user.id), "email": user.email, "name": "Ada Owner", "can_create_organizations": False}
+
+
+def test_me_user_needs_authentication_and_ignores_an_organization_selector(session_client, db_session):
+    user = login_user(db_session)  # no membership at all
+    handle = make_session(db_session, user)
+    assert session_client.get("/api/me/user").status_code == 401
+    assert session_client.get("/api/me/user", headers={"X-Dev-User-Email": user.email}).status_code == 401
+    assert session_client.get("/api/me/user", headers={**handle.read_headers, "X-Organization-Id": "00000000-0000-4000-8000-0000000000ff"}).status_code == 200
