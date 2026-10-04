@@ -109,6 +109,7 @@ describe("the authentication mode is decided in one place", () => {
       "app/api/o/[orgId]/[...path]/route.ts",
       "app/api/organizations/route.ts",
       "app/dev-login/page.tsx",
+      "app/invite/page.tsx",
       "app/login/page.tsx",
       "app/o/[orgId]/layout.tsx",
       "app/page.tsx",

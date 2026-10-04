@@ -26,6 +26,21 @@ export interface Member {
   is_you: boolean;
 }
 
+/** A pending (or expired, not yet superseded) invitation as administration lists it. Never carries the token. */
+export interface Invitation {
+  id: string;
+  email: string;
+  role: Role;
+  created_at: string;
+  expires_at: string;
+  state: "pending" | "expired";
+}
+
+/** The response to creating or regenerating an invitation: the ONLY place the secret appears, once. */
+export interface InvitationCreated extends Invitation {
+  token: string;
+}
+
 export type CustomerType = "person" | "company";
 
 /**

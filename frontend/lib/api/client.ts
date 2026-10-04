@@ -58,7 +58,7 @@ export function bffPath(orgId: string, path: string): string {
  * proves nothing by itself (the BFF compares it with the cookie and FastAPI with the session's stored hash).
  * There is no such cookie in development mode, so nothing is sent then.
  */
-function csrfHeader(method: string | undefined): Record<string, string> {
+export function csrfHeader(method: string | undefined): Record<string, string> {
   if (method === undefined || method === "GET" || typeof document === "undefined") return {};
   const token = readCsrfToken(document.cookie);
   return token === null ? {} : { [CSRF_HEADER]: token };

@@ -1,6 +1,7 @@
 import { Notice } from "@/components/ui/Notice";
+import { InvitationsAdmin } from "@/features/members/InvitationsAdmin";
 import { MembersAdmin } from "@/features/members/MembersAdmin";
-import type { Member } from "@/lib/api/types";
+import type { Invitation, Member } from "@/lib/api/types";
 import { requireCredential } from "@/lib/auth/credential";
 import { canAdminister } from "@/lib/members";
 import { getMemberships } from "@/lib/orgs";
@@ -21,7 +22,10 @@ export default async function MembersPage({ params }: { params: Promise<{ orgId:
     <div className="flex flex-col gap-4">
       <h1 className="text-2xl font-semibold">Members</h1>
       {role !== undefined && canAdminister(role) ? (
-        <MembersAdmin key={orgId} members={await serverRead<Member[]>(orgId, "/api/members")} actorRole={role} />
+        <>
+          <MembersAdmin key={orgId} members={await serverRead<Member[]>(orgId, "/api/members")} actorRole={role} />
+          <InvitationsAdmin key={`invitations-${orgId}`} invitations={await serverRead<Invitation[]>(orgId, "/api/invitations")} actorRole={role} />
+        </>
       ) : (
         <Notice testId="members-not-allowed">Only an owner or admin can manage members.</Notice>
       )}

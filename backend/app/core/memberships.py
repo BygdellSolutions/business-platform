@@ -88,6 +88,18 @@ def _lock_members(db: Session, organization_id: uuid.UUID) -> list[OrganizationU
     )
 
 
+def lock_members(db: Session, organization_id: uuid.UUID) -> list[OrganizationUser]:
+    """The S4 lock, for other tenant-aware services (invitations): ALL membership rows of one organization, ascending id."""
+    return _lock_members(db, organization_id)
+
+
+def administrator(rows: list[OrganizationUser], user_id: uuid.UUID) -> OrganizationUser:
+    """The acting user's CURRENT membership among freshly locked rows, which must be an owner or admin."""
+    actor = _actor(rows, user_id)
+    _require_administrator(actor)
+    return actor
+
+
 def _owners(rows: list[OrganizationUser]) -> int:
     return sum(1 for row in rows if row.role == Role.OWNER)
 

@@ -13,6 +13,8 @@ const nextConfig: NextConfig = {
     return [
       { source: "/login", headers: [NO_STORE, NO_REFERRER] },
       { source: "/setup", headers: [NO_STORE, NO_REFERRER] },
+      { source: "/invite", headers: [NO_STORE, NO_REFERRER] },
+      { source: "/api/invite/:path*", headers: [NO_STORE, NO_REFERRER] },
       { source: "/api/auth/:path*", headers: [NO_STORE, NO_REFERRER] },
     ];
   },

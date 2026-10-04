@@ -347,6 +347,7 @@ export function createWorld(options: { currency?: string | null; label?: string 
         "items",
         "customers",
         "organization_creation_requests",
+        "organization_invitations",
         "organization_users",
       ];
       const statements = [
@@ -480,6 +481,7 @@ const ORGANIZATION_TABLES = [
   "horses",
   "items",
   "customers",
+  "organization_invitations",
 ];
 
 /**
@@ -530,4 +532,22 @@ export function membersOf(orgId: string): string[] {
 /** How many organizations, memberships and creation requests exist right now (test database): "unchanged" proofs. */
 export function onboardingCounts(): string {
   return testRow("select (select count(*) from organizations) || '/' || (select count(*) from organization_users) || '/' || (select count(*) from organization_creation_requests)");
+}
+
+/** Remove users (by email) that a spec created through the application, with their sessions, credentials and events. */
+export function purgeUsersByEmail(emails: string[]): void {
+  if (emails.length === 0) return;
+  const list = emails.map(sql).join(",");
+  const ids = `(select id from users where email in (${list}))`;
+  testRow(
+    [
+      "set local session_replication_role = replica",
+      `delete from security_events where actor_user_id in ${ids}`,
+      `delete from auth_sessions where user_id in ${ids}`,
+      `delete from user_credentials where user_id in ${ids}`,
+      `delete from user_setup_tokens where user_id in ${ids}`,
+      `delete from organization_users where user_id in ${ids}`,
+      `delete from users where email in (${list})`,
+    ].join("; "),
+  );
 }

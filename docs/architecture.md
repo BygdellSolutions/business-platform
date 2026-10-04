@@ -751,7 +751,7 @@ The PDF of an issued invoice, made by the backend, stored once, and served from 
 
 ## Production authentication and membership administration (approved design; S1 built)
 
-**Status.** The design below is approved. **S1 (backend identity core)**, **S2 (browser authentication)**, **S3 (organization onboarding)** and **S4 (membership administration)** are implemented; invitations are not yet (S5, S6). The development workflow (`AUTH_MODE=dev`, `/dev-login`) is unchanged.
+**Status.** The design below is approved. **S1 (backend identity core)**, **S2 (browser authentication)**, **S3 (organization onboarding)**, **S4 (membership administration)** and **S5 (invitations)** are implemented; hardening and documentation (S6) remain. The development workflow (`AUTH_MODE=dev`, `/dev-login`) is unchanged.
 
 **Two questions, kept apart.** *Authentication* answers "who is this user?": a `User` (stable internal id) proven by a password and a server-side session. *Membership* answers "what may this user do in this organization?": `organization_users` (role per organization), resolved by `get_tenant_context` exactly as before. Nothing in the authentication code reads a membership, a role or an organization (a static test enforces it), and the tenant code reads no credential, session or token table.
 
@@ -1075,3 +1075,71 @@ Removal deletes the membership row only: the User, their sessions (authenticatio
 - A refused `remove` of the last owner is unreachable through the API by construction (see above), so the application check there is redundant defence, reported as such by fault injection.
 - Deadlock handling is by construction (one ordered lock statement), not by retry; a deadlock would surface as an error, not be hidden. The raw-SQL backstop under concurrency takes an advisory lock instead of row locks for the same reason.
 - `GET /api/members` returns `is_you` instead of a user id so the UI can mark the current person without exposing identifiers.
+---
+
+## Invitations (S5 as built)
+
+S5 completes: authenticated organization administrator, create invitation, copy the bearer link, the invitee opens it, an existing or new account authenticates, and the invitation creates an ordinary membership. There is no email delivery, deployment, payments or audit UI. Authentication still identifies the User and `organization_users` still decides tenant membership and role: **the invitation token is not authentication, not tenant selection, and not authority to choose a role or to modify an existing membership.** The organization and the role come only from the locked invitation row.
+
+### Schema and lifecycle (`organization_invitations`, migration `e29c5d7a3b48`)
+
+`id`, `organization_id` (tenant-owned, FK), `email` (normalized with the authentication module's `normalize_email`; NOT a foreign key; CHECK that it is stored trimmed and lowercase), `role` (CHECK on the five roles), `token_hash` (SHA-256 hex, **unique index**, shape CHECK), `expires_at`, `created_by`, `created_at`/`updated_at`, `revoked_at`, `accepted_at`, `accepted_by` (CHECKs: never both revoked and accepted; accepted time and user come together). The row is immutable except those lifecycle pairs, so there is no "invitation role changes while someone accepts" race. Nothing is ever deleted.
+
+States: **pending** (neither revoked nor accepted, not expired) -> **accepted** | **revoked**; **expired** is pending whose `expires_at` has passed (not usable; `INVITATION_TTL_DAYS`, default 7). Superseded and regenerated invitations are simply revoked.
+
+**Pending uniqueness.** A partial unique index on `(organization_id, email) WHERE revoked_at IS NULL AND accepted_at IS NULL` allows at most one invitation per organization and email that is neither revoked nor accepted. It deliberately does NOT mention expiry (`now()` cannot be in an index predicate): an expired row keeps its slot until it is **explicitly superseded**: creating (or regenerating) an invitation for that email revokes the expired one first, in the same transaction, with an `invitation_revoked` event whose detail ends in `superseded`. A still-unexpired pending invitation makes a second create a 409 `invitation_pending` (use regenerate). Inviting someone who is already a member is a 409 `already_member`.
+
+### The token and the copy-link threat model
+
+256 random bits (`secrets.token_urlsafe(32)`, 43 URL-safe characters), returned **once**, in the response that creates (or regenerates) the invitation. Only SHA-256(token) is stored; the raw token is in no log, no security event, no list, no database column. There is no "show it again": regenerate = revoke the old row and create a new random token in one transaction.
+
+The link is `/invite#<token>`. A URL **fragment** is never sent to any server: not in the request line, not in `Referer`, not in a redirect built by a server, not visible to server components. The invite page therefore (1) is a server component that renders without the secret (it only asks who is signed in), (2) reads the fragment in the browser, (3) removes it at once with `history.replaceState`, (4) keeps it only in a `ref`, never in rendered state, storage, cookies or query strings, (5) sends it only in the BODY of POSTs, (6) is served `Cache-Control: no-store` and `Referrer-Policy: no-referrer` and loads nothing from another site. A reload cannot recover it (the person opens the link again); the administrator's panel that shows a freshly created link likewise lives in component memory only. Honest limits: the link is a bearer secret (anyone who has it can try it; for an existing account they must also hold the invited account), it is visible in the browser the administrator copies it from, and clipboard and chat history are outside the platform's control. A leaked unused link is cured by revoking or regenerating the invitation.
+
+### Contracts
+
+Administration is tenant-scoped (`X-Organization-Id`, a non-member gets the usual 404): `GET /api/invitations` (owner/admin; `{id, email, role, created_at, expires_at, state}`, never a token or hash), `POST /api/invitations` (`{email, role}` only; 201 with the same fields plus `token`), `POST /api/invitations/{id}/regenerate` (201 with a new token), `DELETE /api/invitations/{id}` (204; idempotent; 409 `invitation_accepted` for an accepted one). Errors: 403 `insufficient_authority` / `membership_admin_forbidden`, 404 `Invitation not found` (a foreign id and a random id are identical), 409 `already_member`, `invitation_pending`, `invitation_accepted`, `invitation_not_pending`.
+
+The invitee's endpoints are NOT organization-scoped: `POST /api/invite/preview` (pre-auth; `{token}` in the body; returns `{organization_name, email, role, account_exists}` only), `POST /api/invite/accept` (an authenticated account; ordinary session CSRF), `POST /api/invite/accept-new` (pre-auth, session mode only; `{token, name, password}`; returns a session plus the organization id). Every unusable token (random, malformed, revoked, expired, already used by someone else) is the same `404 {"detail": "Invitation not found"}`. A wrong signed-in account is a specific `403 invitation_wrong_account` and consumes nothing; an existing account's creation attempt is `409 account_exists`; a weak password is `422 password_policy`. The preview tells the holder whether the invited email already has an account; that is the approved trade-off (the invitation is bound to that email), and nothing is revealed about any other address.
+
+### Authority (decided from fresh locked rows)
+
+Owner: may invite any role and revoke any invitation. Admin: may invite, regenerate and revoke only accountant/employee/viewer invitations. Accountant/employee/viewer: nothing. Create, regenerate and revoke never use the tenant context's role: they take the S4 lock, re-read the actor's membership and current role, and decide (tested with a stale loaded role and with requests paused between authentication and the lock).
+
+### Existing account
+
+The invitee signs in on the invite page through the protected login (the invitation's email is fixed; the token stays in the page's memory and goes through no redirect, `next`, cookie or storage), then accepts. A signed-in account is accepted only if its normalized email equals the invitation's: the bearer token alone is not enough. The wrong account is refused without consuming the invitation, and the page offers "sign out and continue" without losing the in-memory token. **Already a member:** acceptance never alters an existing membership: the invitation is settled, the existing role is kept (an existing viewer with a stale admin invitation stays a viewer) and the answer says `joined: false`.
+
+### New account
+
+`accept-new` creates User (email from the invitation, the name given), credential (the existing Argon2 service and password policy; the password is checked against the policy and hashed BEFORE any write, using the existing bounded hashing admission, and only for a token that is currently usable, so garbage costs nothing), membership (role from the row), session and the settled invitation, in ONE transaction. A failure at any point (tested with a failure injected after the user, credential and membership were flushed) leaves no user, credential, membership or accepted invitation. A weak password consumes nothing. If the email gained an account meanwhile (another invitation, same email, different organization, accepted a moment earlier) the loser gets `account_exists` with its invitation untouched, signs in, and accepts as an existing account.
+
+### Single use and retries
+
+Exactly one acceptance creates the membership. The same account retrying a successful acceptance gets an idempotent success (`joined: false`) while it is still a member; anyone else, or the same person after leaving, gets the generic 404; a retried account creation gets the generic 404 (no second user, no password reset, no second session; the person signs in with the password they chose).
+
+### Combined lock order (with membership administration)
+
+1. the organization's membership rows (`ORDER BY id FOR UPDATE`, S4's single statement);
+2. the invitation row (`FOR UPDATE`);
+3. the accepting user's row (acceptance only).
+
+Create, regenerate and revoke take 1 then 2. Acceptance starts from the token: it reads the invitation without a lock only to learn the organization, then takes 1, 2, 3 in the same order and re-checks everything. Membership administration (S4) takes only 1. Every operation that takes several takes them in this order, so none can deadlock with another; inverting it is a detected fault, and a mixed burst of invitation and membership operations on committed data completes without a 500. Acceptance only INSERTS a membership; "am I already a member?" is answered by a fresh statement after the locks (a membership committed by another path meanwhile is detected by the unique constraint inside a savepoint and tolerated: the invitation is settled and the role kept). Acceptance cannot reduce the owner count, so it needs no last-owner check, and S4's database backstop is untouched. An owner invitation accepted into a legacy ownerless organization is not a special case: nobody can issue it through ordinary authority there, so the operator repair (`app.scripts.repair`) remains the recovery.
+
+### Pre-authentication CSRF
+
+The invite page's unauthenticated requests (preview, account creation, and the existing account's login) reuse S2's pre-auth double submit (`GET /api/auth/pre`, an HttpOnly cookie echoed in a header, checked by the BFF before FastAPI is contacted, plus the Origin check). The signed-in acceptance uses the ordinary session CSRF at both layers (BFF double submit, FastAPI's session-bound hash).
+
+### Security events
+
+`invitation_created` (`<invitation id> <role>`), `invitation_revoked` (`<id> <role>` | `<id> superseded` | `<id> regenerated`), `invitation_accepted` (`<id> <role>` or `<id> existing`), each with actor and organization; never a token, hash, password, email or body.
+
+### Frontend
+
+The Members page (owner/admin) gains Invitations: a form (owners may pick any role, admins accountant/employee/viewer; presentation only), the freshly created link shown once with a copy button and the "cannot be retrieved again" notice, a list of pending/expired invitations (never a token) with regenerate and confirmed revoke where the apparent role allows. `/invite` (session mode only) handles the four cases (signed in as the invited account, signed in as another account, signed out with an account, signed out without one) and ends with a full navigation to `/o/{organization_id}`; no active organization is stored anywhere.
+
+### Trade-offs and deviations
+
+- The tenant list reads without taking locks; only mutations lock.
+- Regeneration is one atomic endpoint instead of revoke-then-create from the browser.
+- Preview and account creation are limited to session mode (the dev identity has no sign-in page); the signed-in acceptance endpoint works in both modes at the backend.
+- An invitation's expiry is checked at use; there is no background job that revokes expired rows (they are superseded on the next create).

@@ -36,6 +36,9 @@ SECURITY_EVENT_TYPES = (
     "member_removed",
     "member_left",
     "owner_repaired",
+    "invitation_created",
+    "invitation_revoked",
+    "invitation_accepted",
 )
 
 HEX64 = "^[0-9a-f]{64}$"

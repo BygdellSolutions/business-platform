@@ -66,6 +66,7 @@ class Settings(BaseSettings):
 
     # --- operator links and retention -----------------------------------------------------------------------------------------------
     setup_token_ttl_hours: int = 24
+    invitation_ttl_days: int = 7  # how long an organization invitation can be accepted
     public_origin: str = "http://localhost:3000"  # used to print setup links
     security_event_retention_days: int = 30
     auth_record_retention_days: int = 30  # expired or revoked sessions and used or expired setup tokens
@@ -100,6 +101,7 @@ class Settings(BaseSettings):
             ("setup_source_max_failures", 1),
             ("password_change_max_failures", 1),
             ("setup_token_ttl_hours", 1),
+            ("invitation_ttl_days", 1),
             ("security_event_retention_days", 1),  # the database trigger also refuses deleting events younger than a day
             ("auth_record_retention_days", 1),
         ):

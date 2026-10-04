@@ -31,15 +31,16 @@
 - [x] Invoice PDF: lazy-freeze artifact in `invoice_pdfs` (migration `a85e1c4d7f90`), ReportLab renderer with bundled Noto fonts, `GET /api/invoices/{id}/pdf`, BFF binary pass-through and "Download PDF" (committed as a557cce)
 - [x] Development database migrated to `a85e1c4d7f90`. It now holds ONE permanent issued invoice (number 1, Fredrik Horse Therapy, from its seeded transaction) and its frozen PDF in `invoice_pdfs`, created by the PDF smoke test; issued invoices are immutable, so that transaction can no longer be reopened or cancelled in dev
 
-## Production authentication and membership administration (approved; one slice per review)
+## Production authentication and membership administration (COMPLETE: S1 to S5 committed; S6 was folded into the deployment-readiness milestone)
 - [x] **S1 Backend identity core:** credentials, sessions, setup links, minimal `security_events`, Argon2id, login/logout/change-password/setup endpoints, bounded login-abuse protection, fail-closed `AUTH_MODE`, operator CLI, migration `b96f2d4e8a13` (committed as 17d77bb; development database migrated and unchanged otherwise)
 - [x] **S2 Browser authentication:** BFF credential refactor (cookie to Bearer), login/logout/setup pages, `PUBLIC_ORIGIN` and double-submit CSRF, header stripping, session-mode Playwright run, `GET /api/me/user` (committed as cf2f0a9)
 - [x] **S3 Organization onboarding (committed as d9953c8):** atomic `POST /api/organizations` (organization, owner membership, retry record and event in one transaction), the `can_create_organizations` gate with a fresh user-row lock, `Idempotency-Key` retries, onboarding page that requires a currency, operator `grant-org-creation` / `revoke-org-creation`, migration `c07a3e5f9b24` (committed; development database migrated to `c07a3e5f9b24`, post-S3 baseline recorded: no credentials, sessions, organizations, memberships, requests or events were created by the migration)
 - [x] Migrated the development database to `c07a3e5f9b24` after S3 was committed (`uv run alembic upgrade head` against the DEV url; then optionally `grant-org-creation --email fredrik@dev.test` there, since the dev seed only gives the right to new seed data)
-- [x] **S4 Membership administration:** member list, role change, removal and leave (owner/admin rules), one ordered lock over the organization's memberships with fresh re-reads, the deferred owner-loss trigger, operator `repair owner` command, migration `d18b4c6e2f31` (implemented and verified on the TEST database; NOT yet committed; the development database stays at `c07a3e5f9b24` until S4 is approved)
+- [x] **S4 Membership administration (committed as 10cb40c):** member list, role change, removal and leave (owner/admin rules), one ordered lock over the organization's memberships with fresh re-reads, the deferred owner-loss trigger, operator `repair owner` command, migration `d18b4c6e2f31` (implemented and verified on the TEST database; NOT yet committed; the development database stays at `c07a3e5f9b24` until S4 is approved)
 - [ ] After S4 is reviewed and committed: migrate the development database to `d18b4c6e2f31`; then decide with the owner whether and how to repair the legacy ownerless dev organization (`python -m app.scripts.repair owner --organization-id <uuid> --email <an existing member>`); nothing is repaired automatically and the member must be chosen deliberately
-- [ ] **S5 Invitations:** copy-link invitations (fragment tokens), accept flows, race-safe acceptance
-- [ ] **S6 Hardening and documentation**
+- [x] **S5 Invitations:** copy-link invitations (fragment tokens, hashed, shown once), administration with fresh-lock authority, accept flows for existing and new accounts, race-safe single-use acceptance, migration `e29c5d7a3b48` (approved and committed as `feat: add organization invitations`)
+- [x] Development database migrated to `e29c5d7a3b48` right after the S5 commit (no invitations, users, credentials, memberships, sessions or events were created; no roles, owners or capabilities changed)
+- [x] **S6 Hardening and documentation:** superseded by the production-deployment-readiness milestone (proxy/client-address trust, CSP and headers, throttling of the invite preview, scheduled purge); see `Deployment readiness` below
 - [x] Development database migrated to `b96f2d4e8a13`; it has no credentials, so a manual session-mode login in development needs an operator link first (`python -m app.scripts.admin reissue-setup-link --email ...`), which would change permanent dev data and is done only on request
 
 ## Onboarding follow-ups (S3)
@@ -51,6 +52,15 @@
 - Ownership transfer is just promote-then-step-down (no dedicated workflow, by decision). Invitations (S5) will be the only way to add a member.
 - A members list with many hundreds of rows is not paginated (organizations are small); the lock statement also covers the whole set.
 - The role control has no "undo" and a changed role takes effect immediately; a confirmation for demotions could be added if users ask.
+
+## Invitation follow-ups (S5)
+- No email delivery (by decision): the administrator copies the link. A mail provider would be a deployment-time choice.
+- Expired invitations are not swept by a job; they are superseded on the next create for that email. A purge of old settled invitations (like sessions and events) is not needed yet.
+- The invite page and account creation exist only in session mode; there is no dev-mode sign-up page.
+- Preview and account creation have no per-source throttle of their own (256-bit tokens cannot be guessed; password hashing is bounded by the existing admission); revisit with the deployment milestone's client-address work.
+
+## Deployment readiness (next milestone: proposal under review, nothing implemented)
+- [ ] Architecture review of production deployment readiness (first Coolify deployment), then slices D1 to D5
 
 ## Later
 - [ ] Payments

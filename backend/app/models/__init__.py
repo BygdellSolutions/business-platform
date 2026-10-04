@@ -2,6 +2,7 @@
 from app.models.auth import AuthSession, SecurityEvent, UserCredential, UserSetupToken
 from app.models.customer import Customer, CustomerType
 from app.models.item import Item, ItemType
+from app.models.invitation import OrganizationInvitation
 from app.models.organization import Organization
 from app.models.organization_request import OrganizationCreationRequest
 from app.models.organization_user import OrganizationUser, Role
@@ -17,6 +18,7 @@ __all__ = [
     "Item",
     "ItemType",
     "Organization",
+    "OrganizationInvitation",
     "OrganizationCreationRequest",
     "OrganizationUser",
     "Role",
