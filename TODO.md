@@ -28,8 +28,8 @@
 - [x] Invoicing backend: draft/issue lifecycle, counter-based numbering, immutability triggers, reservation through the core seam, snapshots, concurrency tests (migration `f74d0b3c9e56`)
 - [x] Development database migrated to `f74d0b3c9e56`
 - [x] Invoicing frontend V1 (list, create from transactions, draft editor, issue, issued view)
-- [x] Invoice PDF: lazy-freeze artifact in `invoice_pdfs` (migration `a85e1c4d7f90`), ReportLab renderer with bundled Noto fonts, `GET /api/invoices/{id}/pdf`, BFF binary pass-through and "Download PDF" (implemented and verified; NOT yet committed)
-- [ ] Migrate the development database to `a85e1c4d7f90` and run `uv sync` after the PDF milestone is committed
+- [x] Invoice PDF: lazy-freeze artifact in `invoice_pdfs` (migration `a85e1c4d7f90`), ReportLab renderer with bundled Noto fonts, `GET /api/invoices/{id}/pdf`, BFF binary pass-through and "Download PDF" (committed as a557cce)
+- [x] Development database migrated to `a85e1c4d7f90`. It now holds ONE permanent issued invoice (number 1, Fredrik Horse Therapy, from its seeded transaction) and its frozen PDF in `invoice_pdfs`, created by the PDF smoke test; issued invoices are immutable, so that transaction can no longer be reopened or cancelled in dev
 
 ## Later
 - [ ] Payments
