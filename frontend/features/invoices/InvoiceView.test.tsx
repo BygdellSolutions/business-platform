@@ -38,6 +38,10 @@ beforeEach(() => {
 
 const INVOICE_PATH = `/invoices/${INVOICE_ID}`;
 const text = (testId: string) => screen.getByTestId(testId).textContent;
+// An issued invoice has exactly one button: the PDF download. No control changes anything.
+function expectOnlyTheDownload() {
+  expect(screen.getAllByRole("button").map((button) => button.getAttribute("data-testid"))).toEqual(["download-pdf"]);
+}
 
 async function openEditor() {
   await userEvent.click(screen.getByTestId("edit-details"));
@@ -288,7 +292,7 @@ describe("issuing", () => {
     await waitFor(() => expect(text("invoice-status")).toBe("Issued"));
 
     for (const control of ["issue", "delete-draft", "edit-details", "save-details"]) expect(screen.queryByTestId(control)).toBeNull();
-    expect(screen.queryByRole("button")).toBeNull();
+    expectOnlyTheDownload();
     expect(screen.queryByRole("textbox")).toBeNull();
     expect(screen.getByTestId("issued-note")).toHaveTextContent("cannot be edited or deleted");
   });
@@ -480,7 +484,7 @@ describe("deleting a draft", () => {
     render(<Harness initial={issued()} />);
     expect(screen.queryByTestId("delete-draft")).toBeNull();
     expect(screen.queryByText(/delete draft/i)).toBeNull();
-    expect(screen.queryByRole("button")).toBeNull();
+    expectOnlyTheDownload();
   });
 });
 
@@ -497,9 +501,9 @@ describe("who gets controls", () => {
     for (const control of ["issue", "delete-draft", "edit-details"]) expect(screen.getByTestId(control)).toBeInTheDocument();
   });
 
-  it("an issued invoice has no controls for anyone", () => {
+  it("an issued invoice has no controls that change anything, for anyone (only the PDF download)", () => {
     render(<Harness initial={issued()} canMutate />);
-    expect(screen.queryByRole("button")).toBeNull();
+    expectOnlyTheDownload();
   });
 
   it("a reader of an issued invoice is not told about drafts: there is nothing to explain, only the document", () => {
@@ -633,7 +637,7 @@ describe("refreshing when the tab comes back", () => {
     server.invoice = issued();
     visible();
     await waitFor(() => expect(text("invoice-status")).toBe("Issued"));
-    expect(screen.queryByRole("button")).toBeNull();
+    expectOnlyTheDownload();
   });
 });
 

@@ -70,8 +70,8 @@ export function parseIfMatch(value: string | null | undefined): string | null | 
 }
 
 /** Headers for a backend request, built from scratch (never from client headers). */
-export function buildBackendHeaders(identity: BackendIdentity, options: { json?: boolean; ifMatch?: string } = {}): Headers {
-  const headers = new Headers({ accept: "application/json", "x-dev-user-email": identity.email });
+export function buildBackendHeaders(identity: BackendIdentity, options: { json?: boolean; ifMatch?: string; accept?: string } = {}): Headers {
+  const headers = new Headers({ accept: options.accept ?? "application/json", "x-dev-user-email": identity.email });
   if (identity.orgId) headers.set("x-organization-id", identity.orgId);
   if (options.json) headers.set("content-type", "application/json");
   if (options.ifMatch) headers.set("if-match", options.ifMatch);
@@ -86,6 +86,18 @@ export interface BackendRequest {
   body?: string;
   /** A normalized If-Match value (see parseIfMatch). */
   ifMatch?: string;
+  /** The media type to ask for; JSON unless the BFF is fetching the one binary resource it passes through. */
+  accept?: string;
+}
+
+/**
+ * The ONE binary resource the BFF passes through: the frozen PDF of an invoice. Everything else it
+ * relays is JSON text.
+ */
+const INVOICE_PDF_PATH = /^\/api\/invoices\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/pdf$/i;
+
+export function isInvoicePdfPath(apiPath: string): boolean {
+  return INVOICE_PDF_PATH.test(apiPath);
 }
 
 export async function backendFetch(
@@ -101,7 +113,7 @@ export async function backendFetch(
   }
   return fetch(`${backendUrl()}${path}${request.search ?? ""}`, {
     method: request.method ?? "GET",
-    headers: buildBackendHeaders(identity, { json: request.body !== undefined, ifMatch: request.ifMatch }),
+    headers: buildBackendHeaders(identity, { json: request.body !== undefined, ifMatch: request.ifMatch, accept: request.accept }),
     body: request.body,
     cache: "no-store",
     redirect: "manual",

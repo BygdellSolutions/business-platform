@@ -7,6 +7,7 @@
  *   404 {"detail": "Not found"}
  *   409 {"detail": "text"}  or  {"detail": {"code": "validation_failed", "problems": [...]}}
  *   422 {"detail": [{"loc": ["body", "values", "owner"], "msg": "...", "type": "..."}]}
+ *       or a structured refusal {"detail": {"code": "unsupported_characters", "message": "...", "characters": [...]}}
  */
 
 export interface Problem {
@@ -40,7 +41,20 @@ export type ApiError =
       /** For conflicts about transactions (not invoiceable any more): the ids concerned. */
       transactionIds: string[];
     }
-  | { kind: "validation"; status: 422; message: string; fieldErrors: FieldErrors; formErrors: string[] }
+  | {
+      kind: "validation";
+      status: 422;
+      message: string;
+      fieldErrors: FieldErrors;
+      formErrors: string[];
+      /**
+       * Set when the backend refused with a structured reason rather than field errors, e.g. a PDF that
+       * cannot be made: "unsupported_characters" (with `characters`) or "document_too_large".
+       */
+      code?: string;
+      characters?: { character: string; reason: string }[];
+      totalCharacters?: number;
+    }
   | { kind: "client"; status: number; message: string }
   | { kind: "server"; status: number; message: string }
   | { kind: "network"; status: 0; message: string };
@@ -125,6 +139,21 @@ export function normalizeError(status: number, body: unknown): ApiError {
     return { kind: "conflict", status: 409, message: text ?? GENERIC[409], problems: [], transactionIds: [] };
   }
   if (status === 422) {
+    if (isRecord(detail) && typeof detail.code === "string") {
+      const characters = Array.isArray(detail.characters)
+        ? detail.characters.filter(isRecord).map((c) => ({ character: String(c.character ?? ""), reason: String(c.reason ?? "") }))
+        : undefined;
+      return {
+        kind: "validation",
+        status: 422,
+        message: typeof detail.message === "string" ? detail.message : GENERIC[422],
+        fieldErrors: {},
+        formErrors: [],
+        code: detail.code,
+        characters,
+        totalCharacters: typeof detail.total === "number" ? detail.total : undefined,
+      };
+    }
     const { fieldErrors, formErrors } = validationErrors(detail);
     return { kind: "validation", status: 422, message: GENERIC[422], fieldErrors, formErrors };
   }

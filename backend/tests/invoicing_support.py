@@ -72,6 +72,7 @@ def purge_organization(org_id: uuid.UUID, user_ids: list[uuid.UUID]) -> None:
     with engine.begin() as connection:
         connection.execute(text("set local session_replication_role = replica"))
         for table in (
+            "invoice_pdfs",
             "invoice_vat_rows",
             "invoice_lines",
             "invoice_transactions",

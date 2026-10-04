@@ -14,6 +14,8 @@ from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import scoped_select
 from app.models import Customer, Role
 from app.modules.invoicing import service
+from app.modules.invoicing.pdf import service as pdf_service
+from app.modules.invoicing.pdf.filename import content_disposition
 from app.modules.invoicing.models import Invoice, InvoiceStatus, InvoiceTransaction
 from app.modules.invoicing.schemas import (
     MAX_TRANSACTIONS_PER_INVOICE,
@@ -187,6 +189,35 @@ def read_invoice(
     db: Session = Depends(get_db),
 ) -> InvoiceRead:
     return service.read_invoice(db, ctx, invoice_id)
+
+
+@router.get(
+    "/{invoice_id}/pdf",
+    response_class=Response,
+    responses={200: {"content": {"application/pdf": {}}, "description": "The frozen PDF of an issued invoice"}},
+)
+def download_invoice_pdf(
+    invoice_id: uuid.UUID,
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: Session = Depends(get_db),
+) -> Response:
+    """The PDF of an issued invoice. Any member who can read the invoice may download it.
+
+    The first request renders it from the stored invoice and stores the bytes; every later request
+    returns exactly those bytes (see pdf/service.py). A draft has no PDF.
+    """
+    stored = pdf_service.get_or_create_pdf(db, ctx, invoice_id)
+    return Response(
+        content=stored.content,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": content_disposition(stored.filename),
+            "Content-Length": str(len(stored.content)),
+            "ETag": f'"{stored.sha256}"',
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "private, no-store",
+        },
+    )
 
 
 @router.patch("/{invoice_id}", response_model=InvoiceRead)

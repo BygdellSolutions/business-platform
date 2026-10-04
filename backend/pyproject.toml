@@ -10,12 +10,14 @@ dependencies = [
     "alembic",
     "pydantic-settings",
     "psycopg[binary]",
+    "reportlab>=5.0.1",
 ]
 
 [dependency-groups]
 dev = [
     "pytest",
     "httpx",
+    "pypdf>=6.19.0",
 ]
 
 [tool.pytest.ini_options]

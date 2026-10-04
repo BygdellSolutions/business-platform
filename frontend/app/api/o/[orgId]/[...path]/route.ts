@@ -1,8 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { apiPathFromSegments, backendFetch, isUuid, parseIfMatch } from "@/lib/backend";
+import { apiPathFromSegments, backendFetch, isInvoicePdfPath, isUuid, parseIfMatch } from "@/lib/backend";
 import { DEV_USER_COOKIE, identityFromCookie } from "@/lib/identity";
 import { isSameOrigin } from "@/lib/origin";
+import { pdfPassThrough, unexpected } from "@/lib/pdf-response";
 
 /**
  * The BFF: the browser's only door to FastAPI.
@@ -17,7 +18,9 @@ import { isSameOrigin } from "@/lib/origin";
  *  - it validates SHAPES only (a UUID, a known API area, safe path segments, same origin,
  *    JSON bodies). It does NOT decide whether the user may use that organization: FastAPI
  *    independently verifies the membership on every scoped request and answers 404 otherwise.
- *  - responses carry only the status and body; no headers or cookies from the backend.
+ *  - responses carry only the status and body; no headers or cookies from the backend. The one
+ *    exception in KIND is the binary PDF of an invoice (see lib/pdf-response.ts): it is validated, and
+ *    its headers are rebuilt, never copied.
  *  - requests carry no client headers EXCEPT a validated If-Match (optimistic concurrency).
  */
 
@@ -61,13 +64,31 @@ async function handle(request: NextRequest, context: Context): Promise<NextRespo
     }
   }
 
+  // The one binary resource: an invoice's frozen PDF, GET only (a body or query on it is not part of the contract).
+  const wantsPdf = isInvoicePdfPath(apiPath);
+  if (wantsPdf && (method !== "GET" || request.nextUrl.search !== "")) return failure(404, "Not found");
+
   let upstream: Response;
   try {
-    upstream = await backendFetch({ email, orgId }, apiPath, { method, search: request.nextUrl.search, body, ifMatch: ifMatch ?? undefined });
+    upstream = await backendFetch({ email, orgId }, apiPath, {
+      method,
+      search: request.nextUrl.search,
+      body,
+      ifMatch: ifMatch ?? undefined,
+      accept: wantsPdf ? "application/pdf, application/json;q=0.9" : undefined,
+    });
   } catch {
     return failure(502, "Backend unavailable");
   }
   if (upstream.status >= 300 && upstream.status < 400) return failure(502, "Unexpected response from the backend");
+
+  const upstreamType = (upstream.headers.get("content-type") ?? "").toLowerCase();
+  if (wantsPdf && upstream.status === 200) return pdfPassThrough(upstream);
+  // Everything else is relayed as JSON text. A PDF (or any non-JSON body) that arrives anywhere but the one
+  // validated path above is never passed along: it would be corrupted as text, and it is not what we asked for.
+  if (upstream.status !== 204 && upstream.status !== 205 && !upstreamType.startsWith("application/json")) {
+    if (wantsPdf || upstreamType.startsWith("application/pdf")) return unexpected();
+  }
 
   const bodyless = upstream.status === 204 || upstream.status === 205;
   return new NextResponse(bodyless ? null : await upstream.text(), {

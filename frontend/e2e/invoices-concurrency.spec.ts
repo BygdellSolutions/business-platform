@@ -118,7 +118,9 @@ test.describe("issuing from another tab", () => {
 
     await becomeVisible(b);
     await expect(status(b)).toHaveText("Issued");
-    await expect(b.getByTestId("invoice-view").getByRole("button")).toHaveCount(0);
+    // The only control left is the PDF download: nothing that changes the invoice.
+    await expect(b.getByTestId("invoice-view").getByRole("button")).toHaveCount(1);
+    await expect(b.getByTestId("download-pdf")).toBeVisible();
   });
 
   test("both tabs press Issue: one number is allocated, and the other tab shows the issued invoice", async ({ context }) => {

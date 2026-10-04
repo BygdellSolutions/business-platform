@@ -70,3 +70,47 @@ export async function apiFetch<T>(orgId: string, path: string, request: ApiReque
   if (error.kind === "unauthorized") onUnauthorized();
   return { ok: false, error };
 }
+
+export interface DownloadedFile {
+  blob: Blob;
+  filename: string;
+}
+
+const PDF_FILENAME = /^invoice(?:-[A-Za-z0-9._-]{1,60})?\.pdf$/;
+
+/** The filename from the BFF's Content-Disposition, only if it has the one expected shape. */
+export function downloadFilename(disposition: string | null): string {
+  const found = /^attachment;\s*filename="([^"\\\r\n]*)"$/.exec(disposition ?? "");
+  return found && PDF_FILENAME.test(found[1]) ? found[1] : "invoice.pdf";
+}
+
+/**
+ * Fetch an invoice PDF through the BFF as a Blob. Never throws for HTTP or network failures.
+ * A 200 is accepted only if it really is a PDF response; anything else is treated as a failed
+ * request (the BFF has already refused to pass along a response that is not the PDF).
+ */
+export async function apiDownloadPdf(orgId: string, path: string, signal?: AbortSignal): Promise<ApiResult<DownloadedFile>> {
+  let response: Response;
+  try {
+    response = await fetch(bffPath(orgId, path), { method: "GET", headers: { accept: "application/pdf, application/json;q=0.9" }, credentials: "same-origin", cache: "no-store", signal });
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    return { ok: false, error: networkError() };
+  }
+
+  if (response.ok) {
+    const type = (response.headers.get("content-type") ?? "").toLowerCase().trim();
+    if (type !== "application/pdf") return { ok: false, error: normalizeError(502, undefined) };
+    return { ok: true, status: response.status, data: { blob: await response.blob(), filename: downloadFilename(response.headers.get("content-disposition")) } };
+  }
+
+  let body: unknown = undefined;
+  try {
+    body = JSON.parse(await response.text());
+  } catch {
+    body = undefined;
+  }
+  const error = normalizeError(response.status, body);
+  if (error.kind === "unauthorized") onUnauthorized();
+  return { ok: false, error };
+}

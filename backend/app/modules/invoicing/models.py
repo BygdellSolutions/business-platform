@@ -19,6 +19,7 @@ from typing import Any
 
 from sqlalchemy import (
     BigInteger,
+    LargeBinary,
     CheckConstraint,
     Date,
     DateTime,
@@ -32,6 +33,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
+from sqlalchemy import event
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -251,3 +253,46 @@ class InvoiceCounter(Base):
     organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id", ondelete="RESTRICT"))
     series: Mapped[str] = mapped_column(String(32))
     next_number: Mapped[int] = mapped_column(BigInteger)
+
+
+class InvoicePdf(TenantOwned, Base):
+    """The frozen PDF of an issued invoice: the bytes first served, stored once and served forever.
+
+    One per invoice. Never updated or deleted (a trigger refuses both) and only an ISSUED invoice can
+    have one. `source_sha256` is the hash of the canonical document the PDF was rendered from, so the
+    artifact can always be checked against the immutable invoice; `renderer` and `template_version`
+    say what produced it. The bytes live here (not in a file store) so they are backed up, restored and
+    tenant-protected exactly like the invoice they belong to.
+    """
+
+    __tablename__ = "invoice_pdfs"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "invoice_id", name="uq_invoice_pdfs_one_per_invoice"),
+        ForeignKeyConstraint(
+            ["organization_id", "invoice_id"],
+            ["invoices.organization_id", "invoices.id"],
+            ondelete="RESTRICT",
+            name="fk_invoice_pdfs_invoice_same_organization",
+        ),
+        CheckConstraint("byte_size > 0 AND byte_size = octet_length(content)", name="ck_invoice_pdfs_byte_size"),
+        CheckConstraint("sha256 ~ '^[0-9a-f]{64}$' AND source_sha256 ~ '^[0-9a-f]{64}$'", name="ck_invoice_pdfs_hash_shape"),
+        CheckConstraint("sha256 = encode(sha256(content), 'hex')", name="ck_invoice_pdfs_sha256_matches"),
+        CheckConstraint("substring(content from 1 for 5) = decode('255044462d', 'hex')", name="ck_invoice_pdfs_is_pdf"),
+        CheckConstraint("template_version >= 1 AND renderer <> ''", name="ck_invoice_pdfs_provenance"),
+    )
+
+    invoice_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    content: Mapped[bytes] = mapped_column(LargeBinary)
+    byte_size: Mapped[int] = mapped_column(Integer)
+    sha256: Mapped[str] = mapped_column(String(64))
+    renderer: Mapped[str] = mapped_column(String(255))
+    template_version: Mapped[int] = mapped_column(Integer)
+    source_sha256: Mapped[str] = mapped_column(String(64))
+
+
+@event.listens_for(InvoicePdf, "before_update")
+@event.listens_for(InvoicePdf, "before_delete")
+def _frozen_artifact(mapper, connection, target) -> None:
+    """Application-level guard (the database trigger is the one that cannot be bypassed): the ORM
+    never changes or removes a stored PDF, so no code path can do it by accident."""
+    raise ValueError("an invoice PDF is a frozen artifact and cannot be changed or deleted")

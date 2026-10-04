@@ -16,7 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from tests.test_migration_currency import _alembic, _columns, _downgrade, _execute, _scalar, _upgrade, scratch_url  # noqa: F401
 
 BEFORE_INVOICING = "e63c9a2b8d45"
-INVOICE_TABLES = {"invoices", "invoice_transactions", "invoice_lines", "invoice_vat_rows", "invoice_counters"}
+INVOICE_TABLES = {"invoices", "invoice_transactions", "invoice_lines", "invoice_vat_rows", "invoice_counters", "invoice_pdfs"}
 
 
 def _tables(url: str) -> set[str]:
@@ -146,13 +146,13 @@ def test_downgrade_removes_exactly_what_the_upgrade_added_and_reupgrade_restores
 
     _downgrade(scratch_url, BEFORE_INVOICING)
     assert not INVOICE_TABLES & _tables(scratch_url)
-    assert _scalar(scratch_url, "select count(*) from pg_proc where proname in ('invoices_immutability', 'invoice_children_immutability')") == 0
+    assert _scalar(scratch_url, "select count(*) from pg_proc where proname in ('invoices_immutability', 'invoice_children_immutability', 'invoice_pdfs_guard')") == 0
     assert _scalar(scratch_url, "select count(*) from pg_constraint where conname = 'uq_transactions_org_id_customer_currency'") == 0
     assert _fingerprint(scratch_url) == before
 
     _upgrade(scratch_url, "head")
     assert INVOICE_TABLES <= _tables(scratch_url)
-    assert _scalar(scratch_url, "select count(*) from pg_trigger where tgname like 'trg_invoice%' and not tgisinternal") == 4
+    assert _scalar(scratch_url, "select count(*) from pg_trigger where tgname like 'trg_invoice%' and not tgisinternal") == 5
     assert _fingerprint(scratch_url) == before
 
 

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, useT
 
 import { useOrgId } from "@/components/shell/org-context";
 import { Notice } from "@/components/ui/Notice";
+import { DownloadPdf } from "@/features/invoices/DownloadPdf";
 import { DraftHeader } from "@/features/invoices/DraftHeader";
 import { TEXT, type InvoiceFailure } from "@/features/invoices/failures";
 import { InvoiceActions } from "@/features/invoices/InvoiceActions";
@@ -204,6 +205,7 @@ export function InvoiceView({ invoice, canMutate }: { invoice: Invoice; canMutat
             <p>{notice.text}</p>
           </Notice>
         )}
+        <DownloadPdf invoice={invoice} />
         <InvoiceActions />
         <DraftHeader />
         <div className={refreshing ? "opacity-50" : ""} aria-busy={refreshing} data-updating={refreshing || undefined}>

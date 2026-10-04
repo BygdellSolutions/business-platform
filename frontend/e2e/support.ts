@@ -323,6 +323,7 @@ export function createWorld(options: { currency?: string | null; label?: string 
       // purpose (immutability triggers, RESTRICT keys), and this is a throwaway organization in the
       // disposable TEST database. Everything the organization can own is removed.
       const tables = [
+        "invoice_pdfs",
         "invoice_vat_rows",
         "invoice_lines",
         "invoice_transactions",
