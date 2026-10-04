@@ -751,7 +751,7 @@ The PDF of an issued invoice, made by the backend, stored once, and served from 
 
 ## Production authentication and membership administration (approved design; S1 built)
 
-**Status.** The design below is approved. **S1 (backend identity core)** and **S2 (browser authentication)** are implemented; organization creation, membership administration and invitations are not yet (S3 to S6). The development workflow (`AUTH_MODE=dev`, `/dev-login`) is unchanged.
+**Status.** The design below is approved. **S1 (backend identity core)**, **S2 (browser authentication)** and **S3 (organization onboarding)** are implemented; membership administration and invitations are not yet (S4 to S6). The development workflow (`AUTH_MODE=dev`, `/dev-login`) is unchanged.
 
 **Two questions, kept apart.** *Authentication* answers "who is this user?": a `User` (stable internal id) proven by a password and a server-side session. *Membership* answers "what may this user do in this organization?": `organization_users` (role per organization), resolved by `get_tenant_context` exactly as before. Nothing in the authentication code reads a membership, a role or an organization (a static test enforces it), and the tenant code reads no credential, session or token table.
 
@@ -812,7 +812,7 @@ A refused attempt (429 or 503) **writes nothing**. A block therefore cannot be k
 - Setup-link redemption has a per-source failure budget (`setup_source_max_failures`, 10); a wrong current password on `change-password` has a per-user budget (`password_change_max_failures`, 5).
 - No Redis or distributed rate limiting: one PostgreSQL instance is the counter store.
 
-### Review change 3: the owner invariant (not yet implemented; the contract for S3 and S4)
+### Review change 3: the owner invariant (new organizations: built in S3; the rest is the contract for S4)
 
 - **New organization.** `POST /organizations` inserts the organization **and** the caller's owner membership in **one** database transaction; an injected failure between the two inserts rolls everything back. The owner-loss trigger does not duplicate or guarantee this.
 - **Existing organization with at least one owner.** The application locks the actor, the target and all owner rows (`ORDER BY id FOR UPDATE`, fresh reads) and re-checks authority and the remaining-owner count inside the transaction; a deferred database trigger backs it up. A transition from at least one owner to zero is impossible.
@@ -917,3 +917,92 @@ The BFF is the only caller of the authentication endpoints, and FastAPI is meant
 - A second Playwright configuration (`playwright.session.config.ts`, `npm run test:e2e:session`) runs real authentication end to end on its own ports (BFF 3101, FastAPI 8002) against the disposable test database: the session-only specs (`e2e/session/`) and the representative dev specs (tenant isolation, customers, catalog, horses, transactions, invoices) unchanged, signing in through `signIn`. Credentials are provisioned through the real mechanism (the operator CLI's setup link); `seed_dev` creates none. The backend of that run is started with `DEV_USER_EMAIL` set on purpose, to prove it is ignored. Specs about forged dev headers and direct dev-header reads of FastAPI stay in the dev run.
 - The CSRF cookie is readable by script by design (double-submit). The session cookie persists until the session's absolute end (idle and absolute limits are enforced server-side regardless). `GET /api/auth/pre` is a GET that sets a cookie: another site can only make a victim's in-flight login fail (a nuisance), never read or use the value. No Content-Security-Policy is set yet (a candidate for hardening).
 - NextResponse shows an internal `x-middleware-set-cookie` header in unit tests; the real server sends only `Set-Cookie` (a Playwright spec asserts no `x-middleware-*` header).
+---
+
+## Organization onboarding (S3 as built)
+
+S3 lets an authenticated user create an organization and become its owner. Still NOT built (later slices): membership administration (S4), invitations (S5). Authentication identifies the User; `organization_users` decides tenant membership and role. Nothing below creates a shortcut around that.
+
+```
+authenticated User ──► POST /api/organizations ──► ONE transaction:
+ (session or dev seam)    (not tenant-scoped)        lock the user row (fresh read), judge users.can_create_organizations
+                                                     INSERT organizations
+                                                     INSERT organization_users (role = owner, user = the authenticated user)
+                                                     INSERT organization_creation_requests (only with an Idempotency-Key)
+                                                     INSERT security_events (organization_created)
+                                                     COMMIT
+        ──► full navigation to /o/{id}  ──►  the ordinary tenant path: membership read, X-Organization-Id selector, role
+```
+
+### Who may create an organization
+
+- Only a user whose **account** has `users.can_create_organizations = true`. It is a property of the account, set by an operator, **not derived from any membership role** (owning an organization does not allow creating another) and not set by creating one. There are no plans, quotas or billing.
+- **Operator CLI only, no application UI:** `python -m app.scripts.admin grant-org-creation --email ...` / `revoke-org-creation --email ...`. They change that one column (never a membership or a role) and record a `capability_changed` security event (`org_creation_granted:cli`, `org_creation_revoked:cli`, with `:unchanged` appended when nothing changed; no email, no secret). `bootstrap-user` already sets it by default (`--no-org-creation` to refuse). `seed_dev` gives it to `fredrik@dev.test` only, in the disposable seed data.
+- The frontend shows the creation controls only when `GET /api/me/user` says the flag is true. That is **presentation**: FastAPI judges the flag on every request (a forged request from an account without it is a 403, tested end to end).
+- It is not part of `/dev-login`. In dev mode the creator is resolved through the same dev identity seam as everything else and the same flag applies (no bypass).
+
+### The contract
+
+`POST /api/organizations` (BFF: `POST /api/organizations`, a dedicated route, not part of the `/api/o/{orgId}/...` catch-all, so the organization-scoped door can never be used to reach it)
+
+| | |
+|---|---|
+| Request body | `name` (required, trimmed, 1 to 255), `default_currency` (**required**, three capital letters, upper-cased), optional `legal_name` and the profile fields (`address_line1`, `address_line2`, `postal_code`, `city`, `country_code`, `registration_number`, `vat_number`). Unknown fields are refused (422): there is **no** owner, user, role, creator or organization id field. |
+| Header | `Idempotency-Key` (optional): 43 URL-safe base64 characters (32 random bytes), generated by the browser. A malformed key is a 422. |
+| Success | **201** with the new `OrganizationRead` (the same shape as `GET /api/organization`); **200** with the same shape when the key was used before with the same body (see Retries). |
+| Errors | 401 not authenticated (or CSRF: 403 `csrf_failed`), 403 `organization_creation_not_allowed`, 409 `request_key_conflict`, 422 validation. Nothing says whether any other organization exists. |
+
+The owner is always the authenticated user. Client-supplied `X-Organization-Id`, role, owner or dev-identity headers are irrelevant (the BFF never forwards them; FastAPI ignores any that arrive).
+
+### One transaction, locking
+
+- **Atomic unit.** The organization, the owner membership, the retry record and the event are inserted inside one savepoint and then committed once. If anything fails nothing remains; an organization without its owner can never be committed, and there is no compensating deletion and no background task. `app.core.organizations._between_inserts` is a no-op seam between the two main inserts; tests make it fail (and pause) to prove, from another connection, that nothing is visible or left behind.
+- **Fresh permission and serialization.** The service locks the creator's `users` row (`SELECT ... FOR UPDATE` with `populate_existing`, so the flag is read from the database and never from the identity map `get_current_user` filled earlier) and judges the flag under that lock. The same lock serializes two creations by one user and a capability change by the operator (`auth_service.set_creation_capability` takes it too): a revoke waits for a creation in flight, which completes under the right it held, and a revoke that commits first refuses the creation. Lock order is always `users` first, then the rows it inserts; nothing locks a user while holding an organization row, so the order cannot invert (a mixed creations-and-toggles race test completes with no deadlock and no organization without exactly one owner).
+- The last-owner trigger is **not** part of S3 (it comes with S4).
+
+### Retries: the idempotency decision
+
+A browser can lose the response after the server committed. The browser therefore generates a high-entropy request key per attempt and sends it as `Idempotency-Key`. `organization_creation_requests` (`PRIMARY KEY (user_id, request_key)`, `organization_id` unique, key and hash shape CHECKs) is written in the same transaction as the organization.
+
+- Same creator, same key, same body: **200** with the organization created the first time, **only while the creator is still a member of it** (through the current membership; its role may have changed). If they are not, the answer is a 409, never the organization.
+- Same key, different body (compared by SHA-256 of the validated body): **409**; nothing is created.
+- The key is scoped to the authenticated creator: another user presenting the same key creates their own organization and can never replay someone else's.
+- The authority check (flag) comes first: a replay after the right was revoked is a 403.
+- A failed attempt writes no record, so the same key can be retried after a server error without colliding.
+- Without a key nothing is deduplicated (each request creates). There is **no** uniqueness on organization names, per user or globally: two tenants may share a display name.
+- Deliberately small: one table, one lookup under the user lock, no platform-wide idempotency framework.
+
+### The currency rule at onboarding
+
+The currency is required and chosen explicitly: the form starts empty, nothing is preselected, nothing is inferred from a country, locale or browser, and the API refuses a missing or invalid code. It reuses the existing representation unchanged: `Organization.default_currency`, the shape-only `CurrencyCode` (three capital letters), the same typed code as the Settings screen, and the existing lock once items or transactions exist. **There is no supported-currency catalogue in the platform** (Settings is a free-text three-letter field), so onboarding does not invent one: it is the same typed code, not a dropdown. No exchange rates, no multi-currency.
+
+### Profile fields
+
+Onboarding asks only for what is needed to create and use the tenant: name and currency. The business profile (legal name, address, registration and VAT numbers) is completed later in Settings; the API accepts it already but the form does not ask. Invoicing validation is unchanged (issuing still requires its own prerequisites).
+
+### The URL stays the tenant selector
+
+After a 201 or 200 the page does a **full navigation** to `/o/{id}`. There is no active-organization cookie, storage, session or `User` column; two tabs can work in two organizations (tested), and the new organization is an ordinary membership: the shell, `GET /api/me/organizations` and the home list read it with no special casing (role `owner`). Eligible users reach creation from the home page (explicit link; with no organization, the notice offers it) and from the organization switcher in the shell. A user with exactly one organization is still redirected from `/` into it; the switcher link is their path.
+
+### Ambiguous outcomes in the browser
+
+The form keeps the key and the exact details of the last attempt. If the outcome is unknown (network failure, or a 5xx after the request may have committed) it says so, and "try again" resends the **same key and body**, so the backend returns the organization it already created. A definite refusal (422, 403) discards the key; changed details are a different request and get a new key (the notice says to check "your organizations" in case the first attempt did succeed). A double click is one request.
+
+### Security event
+
+`organization_created`: stable actor user id, the new organization id (`security_events.organization_id`, added in the migration, nullable, **no foreign key** so an event outlives anything, indexed partially), event type, timestamp, source and a non-secret `detail` (`keyed` or `unkeyed`). The form's contents (name, currency, profile) are never recorded; failed validation and refusals are not events (no Audit module). `security_events.record` stays free of tenant concepts: the organization service writes this row itself, and the authentication-boundary test allows exactly one marked exception (the `organization_id` reference column in `models/auth.py`).
+
+### Legacy ownerless organizations
+
+Existing organizations with no owner (the seed's second organization) are not repaired, altered or assigned: creation touches only the rows it inserts (tested at both levels). Every organization created through S3 begins with exactly one owner, the creator.
+
+### Schema (migration `c07a3e5f9b24`, additive, reversible)
+
+`organization_creation_requests`; `security_events.organization_id` plus its partial index; the `ck_security_events_type` CHECK widened with `organization_created` and `capability_changed`. Downgrade removes the two new kinds of event first (the append-only trigger is lifted for that one statement and restored) and then restores the CHECK; upgrade changes no existing row and grants no right to anyone.
+
+### Verification, trade-offs and deviations
+
+- Tests: backend (`test_organization_creation.py`, `test_organization_creation_concurrency.py` on committed data with genuine waiting, `test_migration_org_creation.py`), Vitest (BFF route in both modes, the form's retry and no-storage behaviour, boundary tests) and Playwright (`e2e/onboarding.spec.ts` in both the dev and the session run, `e2e/session/onboarding.spec.ts`: real login, the two CSRF layers, the operator's grant and revoke taking effect immediately).
+- The idempotency key is optional at the API (a script can call it without one); the browser always sends one.
+- A replay by a user who left the organization is a 409, not a 404: the key is theirs, but the organization is no longer visible to them.
+- Currency selection is a typed code (see above), not a list: stopping there would have left no way to onboard, and there is no second currency system.

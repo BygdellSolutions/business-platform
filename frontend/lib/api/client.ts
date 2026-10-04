@@ -43,6 +43,8 @@ export interface ApiRequest {
   body?: unknown;
   /** The version of the record this change is based on (sent as If-Match). */
   ifMatch?: number;
+  /** A client-generated retry key (organization creation only): see `app/api/organizations/route.ts`. */
+  idempotencyKey?: string;
   signal?: AbortSignal;
 }
 
@@ -63,14 +65,28 @@ function csrfHeader(method: string | undefined): Record<string, string> {
 }
 
 export async function apiFetch<T>(orgId: string, path: string, request: ApiRequest = {}): Promise<ApiResult<T>> {
+  return send<T>(bffPath(orgId, path), request);
+}
+
+/**
+ * A request that belongs to no organization (creating one): same-origin to the BFF's `/api/organizations`, with
+ * the same CSRF echo, the same session-loss handling and the same result shape. There is no organization
+ * argument to forget or to forge: the backend takes the owner from the authenticated user.
+ */
+export async function apiFetchAccount<T>(request: ApiRequest): Promise<ApiResult<T>> {
+  return send<T>("/api/organizations", request);
+}
+
+async function send<T>(url: string, request: ApiRequest): Promise<ApiResult<T>> {
   let response: Response;
   try {
-    response = await fetch(bffPath(orgId, path), {
+    response = await fetch(url, {
       method: request.method ?? "GET",
       headers: {
         accept: "application/json",
         ...(request.body === undefined ? {} : { "content-type": "application/json" }),
         ...(request.ifMatch === undefined ? {} : { "if-match": `"${request.ifMatch}"` }),
+        ...(request.idempotencyKey === undefined ? {} : { "idempotency-key": request.idempotencyKey }),
         ...csrfHeader(request.method),
       },
       body: request.body === undefined ? undefined : JSON.stringify(request.body),

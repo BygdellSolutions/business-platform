@@ -48,7 +48,7 @@ export default async function OrgLayout({
             {(mode === "dev" || mode === "session") && <SignOut mode={mode} />}
           </div>
         </div>
-        <OrgSwitcher organizations={result.memberships} currentId={orgId} />
+        <OrgSwitcher organizations={result.memberships} currentId={orgId} canCreate={current.user.can_create_organizations} />
         <nav aria-label="Main" className="flex flex-wrap gap-4 text-sm">
           {NAV.map((item) =>
             item.enabled ? (

@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api/organization", tags=["organization"])
 SETTINGS_ROLES = (Role.OWNER, Role.ADMIN)
 
 
-def _read(db: Session, organization: Organization) -> OrganizationRead:
+def read_organization_profile(db: Session, organization: Organization) -> OrganizationRead:
     reason = None
     if organization.default_currency is not None:
         reason = default_currency_lock_reason(db, organization.id)
@@ -43,7 +43,7 @@ def read_organization(
 ) -> OrganizationRead:
     """The active organization's settings. Any member may read them: the currency and the
     business profile are shown to everyone who works in the organization."""
-    return _read(db, _active_organization(db, ctx))
+    return read_organization_profile(db, _active_organization(db, ctx))
 
 
 @router.patch("", response_model=OrganizationRead)
@@ -72,4 +72,4 @@ def update_organization(
                 },
             )
     apply_update(db, organization, values)
-    return _read(db, organization)
+    return read_organization_profile(db, organization)

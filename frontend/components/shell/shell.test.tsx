@@ -86,6 +86,16 @@ describe("OrgSwitcher", () => {
     expect([...link.attributes].map((a) => a.name).sort()).toEqual(["class", "href"]); // no next/link prefetch or data attributes
   });
 
+  it("offers the creation link only when told the account may create organizations (presentation; the backend decides)", () => {
+    const { rerender } = render(<OrgSwitcher organizations={ORGS} currentId={A} />);
+    expect(screen.queryByTestId("create-organization-link")).toBeNull();
+
+    rerender(<OrgSwitcher organizations={ORGS} currentId={A} canCreate />);
+    const link = screen.getByTestId("create-organization-link");
+    expect(link).toHaveAttribute("href", "/organizations/new");
+    expect(link.tagName).toBe("A");
+  });
+
   it("lists every organization the user belongs to, once", () => {
     render(<OrgSwitcher organizations={ORGS} currentId={B} />);
 

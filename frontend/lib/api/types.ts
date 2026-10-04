@@ -74,6 +74,15 @@ export interface Organization extends Profile {
   updated_at: string;
 }
 
+/**
+ * The body of organization creation. There is deliberately no owner, user, role or id: the backend makes the
+ * authenticated user the owner. The currency is required and chosen by the person (no default).
+ */
+export interface OrganizationCreate {
+  name: string;
+  default_currency: string;
+}
+
 /** Partial update of the organization's settings; only the fields present are changed. */
 export type OrganizationUpdate = Partial<Profile> & {
   name?: string;

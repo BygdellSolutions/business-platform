@@ -107,6 +107,7 @@ describe("the authentication mode is decided in one place", () => {
     expect(branching).toEqual([
       "app/api/dev-session/route.ts",
       "app/api/o/[orgId]/[...path]/route.ts",
+      "app/api/organizations/route.ts",
       "app/dev-login/page.tsx",
       "app/login/page.tsx",
       "app/o/[orgId]/layout.tsx",

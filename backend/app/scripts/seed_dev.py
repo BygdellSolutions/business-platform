@@ -57,6 +57,8 @@ class SeedUser:
     email: str
     name: str
     memberships: tuple[tuple[uuid.UUID, Role], ...]
+    # An account property (NOT implied by any role); Maria deliberately has it off so both cases exist in dev data.
+    can_create_organizations: bool = False
 
 
 ORGANIZATIONS = {
@@ -69,6 +71,7 @@ USERS = (
         "fredrik@dev.test",
         "Fredrik (dev)",
         ((ORG_HORSE_THERAPY_ID, Role.OWNER), (ORG_STABLE_SERVICES_ID, Role.ADMIN)),
+        can_create_organizations=True,
     ),
     SeedUser("maria@dev.test", "Maria (dev)", ((ORG_STABLE_SERVICES_ID, Role.EMPLOYEE),)),
 )
@@ -204,7 +207,7 @@ def seed(db: Session) -> None:
     for seed_user in USERS:
         user = db.scalar(select(User).where(User.email == seed_user.email))
         if user is None:
-            user = User(email=seed_user.email, name=seed_user.name)
+            user = User(email=seed_user.email, name=seed_user.name, can_create_organizations=seed_user.can_create_organizations)
             db.add(user)
             db.flush()
         for org_id, role in seed_user.memberships:

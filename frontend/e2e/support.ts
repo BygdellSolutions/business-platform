@@ -343,6 +343,7 @@ export function createWorld(options: { currency?: string | null; label?: string 
         "horses",
         "items",
         "customers",
+        "organization_creation_requests",
         "organization_users",
       ];
       const statements = [
@@ -447,4 +448,82 @@ export function insertCompletedTransaction(orgId: string, customerId: string, cu
     `insert into transaction_lines (organization_id, transaction_id, position, description, unit, quantity, unit_price_ex_vat, vat_rate, net_amount, vat_amount, gross_amount) values (${sql(orgId)}, ${sql(id)}, 1, 'Direct line', 'session', 1, 100.00, 25.00, 100.00, 25.00, 125.00)`,
   );
   return id;
+}
+
+// --- Organization onboarding ---------------------------------------------------------------------------------------------------
+
+export interface Account {
+  id: string;
+  email: string;
+  /** Remove the account and every organization it created (test database only). */
+  cleanup: () => void;
+  /** The organizations this account owns because it created them through the API, newest last. */
+  createdOrganizations: () => string[];
+}
+
+const ORGANIZATION_TABLES = [
+  "invoice_pdfs",
+  "invoice_vat_rows",
+  "invoice_lines",
+  "invoice_transactions",
+  "invoices",
+  "invoice_counters",
+  "custom_field_values",
+  "custom_field_options",
+  "custom_field_definitions",
+  "transaction_lines",
+  "transactions",
+  "horses",
+  "items",
+  "customers",
+];
+
+/**
+ * A user of its own in the TEST database, with or without the account-level right to create organizations,
+ * optionally a member of existing organizations (a world's, say). `cleanup` also removes every organization this
+ * account created through the application, with everything inside them.
+ */
+export function createAccount(options: { canCreate: boolean; memberships?: { orgId: string; role: RoleName }[]; label?: string }): Account {
+  const id = randomUUID();
+  const email = `${options.label ?? "newcomer"}-${id.slice(0, 8)}@dev.test`;
+  testRow(`insert into users (id, email, name, can_create_organizations) values (${sql(id)}, ${sql(email)}, ${sql("Newcomer")}, ${options.canCreate})`);
+  for (const membership of options.memberships ?? []) {
+    testRow(`insert into organization_users (organization_id, user_id, role) values (${sql(membership.orgId)}, ${sql(id)}, ${sql(membership.role)})`);
+  }
+  const createdOrganizations = () =>
+    testRow(`select organization_id from security_events where actor_user_id = ${sql(id)} and event_type = 'organization_created' order by id`)
+      .split("\n")
+      .filter(Boolean);
+  return {
+    id,
+    email,
+    createdOrganizations,
+    cleanup: () => {
+      const created = createdOrganizations();
+      const statements = [
+        "set local session_replication_role = replica",
+        ...created.flatMap((org) => [...ORGANIZATION_TABLES.map((table) => `delete from ${table} where organization_id = ${sql(org)}`), `delete from organization_users where organization_id = ${sql(org)}`, `delete from organizations where id = ${sql(org)}`]),
+        `delete from organization_creation_requests where user_id = ${sql(id)}`,
+        `delete from security_events where actor_user_id = ${sql(id)}`,
+        `delete from auth_sessions where user_id = ${sql(id)}`,
+        `delete from user_setup_tokens where user_id = ${sql(id)}`,
+        `delete from user_credentials where user_id = ${sql(id)}`,
+        `delete from organization_users where user_id = ${sql(id)}`,
+        `delete from users where id = ${sql(id)}`,
+      ];
+      testRow(statements.join("; "));
+    },
+  };
+}
+
+/** The membership rows of an organization as `email:role` pairs, sorted (test database). */
+export function membersOf(orgId: string): string[] {
+  return testRow(`select u.email || ':' || ou.role from organization_users ou join users u on u.id = ou.user_id where ou.organization_id = ${sql(orgId)} order by 1`)
+    .split("\n")
+    .filter(Boolean);
+}
+
+/** How many organizations, memberships and creation requests exist right now (test database): "unchanged" proofs. */
+export function onboardingCounts(): string {
+  return testRow("select (select count(*) from organizations) || '/' || (select count(*) from organization_users) || '/' || (select count(*) from organization_creation_requests)");
 }

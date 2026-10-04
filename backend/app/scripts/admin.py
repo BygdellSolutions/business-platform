@@ -4,6 +4,8 @@
     python -m app.scripts.admin reissue-setup-link --email owner@example.com
     python -m app.scripts.admin disable-user --email someone@example.com
     python -m app.scripts.admin enable-user --email someone@example.com
+    python -m app.scripts.admin grant-org-creation --email someone@example.com
+    python -m app.scripts.admin revoke-org-creation --email someone@example.com
     python -m app.scripts.admin purge
 
 There is no way to give anyone a password here, on purpose: a command line argument or an environment
@@ -82,6 +84,13 @@ def enable_user(db: Session, *, email: str) -> None:
     db.commit()
 
 
+def set_org_creation(db: Session, *, email: str, allowed: bool) -> bool:
+    """Grant or revoke the account-level right to create organizations. Memberships and roles are never touched."""
+    changed = auth_service.set_creation_capability(db, _user_by_email(db, email), allowed, clock.utcnow())
+    db.commit()
+    return changed
+
+
 def purge(db: Session) -> dict[str, int]:
     now = clock.utcnow()
     counts = sessions.purge_records(db, now)
@@ -103,6 +112,8 @@ def build_parser() -> argparse.ArgumentParser:
         ("reissue-setup-link", "print a new single-use setup link for an existing user (recovery)"),
         ("disable-user", "disable a user and end all of their sessions"),
         ("enable-user", "enable a user again"),
+        ("grant-org-creation", "allow a user to create organizations (an account property, not a role)"),
+        ("revoke-org-creation", "stop a user from creating organizations (existing organizations and roles are untouched)"),
     ):
         command = commands.add_parser(name, help=help_text)
         command.add_argument("--email", required=True)
@@ -125,6 +136,10 @@ def main(argv: list[str] | None = None) -> int:
             elif args.command == "enable-user":
                 enable_user(db, email=args.email)
                 print("User enabled. They have no sessions; they sign in again.")
+            elif args.command in ("grant-org-creation", "revoke-org-creation"):
+                allowed = args.command == "grant-org-creation"
+                changed = set_org_creation(db, email=args.email, allowed=allowed)
+                print(("Organization creation allowed." if allowed else "Organization creation no longer allowed.") + ("" if changed else " (no change)"))
             elif args.command == "purge":
                 print(", ".join(f"{name}: {count}" for name, count in purge(db).items()))
     except OperatorError as error:

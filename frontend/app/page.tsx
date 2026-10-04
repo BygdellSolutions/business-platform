@@ -17,6 +17,8 @@ export default async function Home() {
   const { memberships } = result;
   if (memberships.length === 1) redirect(`/o/${memberships[0].id}`);
   const mode = authMode();
+  // Presentation only: FastAPI refuses creation for an account without the right, whatever this page shows.
+  const canCreate = current.user.can_create_organizations;
 
   return (
     <main className="mx-auto flex max-w-xl flex-col gap-4 p-8">
@@ -25,7 +27,9 @@ export default async function Home() {
         Signed in as <span data-testid="user-email">{current.user.email}</span>
       </p>
       {memberships.length === 0 ? (
-        <Notice testId="no-organizations">You do not belong to any organization yet.</Notice>
+        <Notice testId="no-organizations">
+          {canCreate ? "You do not belong to any organization yet. Create one to get started." : "You do not belong to any organization yet."}
+        </Notice>
       ) : (
         <ul data-testid="organization-list" className="flex flex-col gap-2">
           {memberships.map((organization) => (
@@ -37,6 +41,13 @@ export default async function Home() {
             </li>
           ))}
         </ul>
+      )}
+      {canCreate && (
+        <p>
+          <a href="/organizations/new" className="underline" data-testid="create-organization-link">
+            Create organization
+          </a>
+        </p>
       )}
       {(mode === "dev" || mode === "session") && <SignOut mode={mode} />}
     </main>

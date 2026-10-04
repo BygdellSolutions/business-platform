@@ -160,8 +160,8 @@ def test_models_and_migrations_agree_at_head_and_the_chain_has_one_head(scratch_
     assert result.returncode == 0, result.stdout[-2000:] + result.stderr[-2000:]
     heads = _alembic(scratch_url, "heads")
     assert heads.stdout.count("(head)") == 1
-    assert AUTH_REVISION in heads.stdout
-    assert _scalar(scratch_url, "select version_num from alembic_version") == AUTH_REVISION
+    # Later migrations may follow the authentication one; the database is at whatever the single head is.
+    assert _scalar(scratch_url, "select version_num from alembic_version") in heads.stdout
 
 
 def test_seeding_the_development_data_creates_no_credentials(db_session):

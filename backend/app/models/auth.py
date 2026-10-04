@@ -30,6 +30,8 @@ SECURITY_EVENT_TYPES = (
     "setup_failure",
     "user_disabled",
     "user_enabled",
+    "organization_created",
+    "capability_changed",
 )
 
 HEX64 = "^[0-9a-f]{64}$"
@@ -113,12 +115,18 @@ class SecurityEvent(Base):
         Index("ix_security_events_type_identifier_time", "event_type", "identifier_hash", "occurred_at"),
         Index("ix_security_events_type_time", "event_type", "occurred_at"),
         Index("ix_security_events_occurred_at", "occurred_at"),
+        Index("ix_security_events_organization_time", "organization_id", "occurred_at", postgresql_where=text("organization_id IS NOT NULL")),  # event-reference
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     event_type: Mapped[str] = mapped_column(String(40))
     actor_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
+    # The organization the event is about, when there is one: an id only (no foreign key, so an event never blocks or
+    # follows the deletion of an organization). Never a name or any form content.
+    # Which organization an event is ABOUT (set only by organization creation; no foreign key, so an event outlives
+    # anything). A reference for readers of the log, never used to decide access.
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))  # event-reference
     source: Mapped[str | None] = mapped_column(String(64))
     identifier_hash: Mapped[str | None] = mapped_column(String(64))
     detail: Mapped[str | None] = mapped_column(String(64))

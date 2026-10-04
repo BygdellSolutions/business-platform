@@ -89,10 +89,10 @@ class CommittedUser:
     source: str  # a unique client address, so throttling counters of different tests never meet
 
 
-def build_committed_user(password: str = PASSWORD, *, with_credential: bool = True) -> CommittedUser:
+def build_committed_user(password: str = PASSWORD, *, with_credential: bool = True, **fields) -> CommittedUser:
     source = f"10.{uuid.uuid4().int % 250}.{uuid.uuid4().int % 250}.{uuid.uuid4().int % 250}"
     with SessionLocal() as db:
-        user = make_user(db)
+        user = make_user(db, **fields)
         if with_credential:
             make_credential(db, user, password)
         committed = CommittedUser(user.id, user.email, source)
@@ -110,5 +110,10 @@ def purge_committed(users: list[CommittedUser], extra_sources: tuple[str, ...] =
         connection.execute(text("delete from auth_sessions where user_id = any(:u)"), {"u": ids})
         connection.execute(text("delete from user_setup_tokens where user_id = any(:u)"), {"u": ids})
         connection.execute(text("delete from user_credentials where user_id = any(:u)"), {"u": ids})
-        connection.execute(text("delete from organization_users where user_id = any(:u)"), {"u": ids})
+        # Organizations these users created through the API (and everything inside them: only memberships here).
+        created = [row[0] for row in connection.execute(text("select organization_id from organization_creation_requests where user_id = any(:u)"), {"u": ids})]
+        created += [row[0] for row in connection.execute(text("select organization_id from organization_users where user_id = any(:u) and role = 'owner'"), {"u": ids})]
+        connection.execute(text("delete from organization_creation_requests where user_id = any(:u)"), {"u": ids})
+        connection.execute(text("delete from organization_users where user_id = any(:u) or organization_id = any(:o)"), {"u": ids, "o": created})
+        connection.execute(text("delete from organizations where id = any(:o)"), {"o": created})
         connection.execute(text("delete from users where id = any(:u)"), {"u": ids})

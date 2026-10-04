@@ -43,7 +43,9 @@ def imports_of(name: str) -> set[str]:
 
 @pytest.mark.parametrize("name", AUTH_FILES)
 def test_authentication_code_knows_nothing_about_tenants_or_roles(name):
-    code = re.sub(r'""".*?"""', "", source(name), flags=re.S)  # (docstrings may explain the separation)
+    # The one exception: the log may record which organization an event is ABOUT (a plain reference, marked in the source).
+    text = chr(10).join(line for line in source(name).splitlines() if "# event-reference" not in line)
+    code = re.sub(r'""".*?"""', "", text, flags=re.S)  # (docstrings may explain the separation)
     code = re.sub(r"#.*", "", code)
     assert TENANT_WORDS.search(code) is None, TENANT_WORDS.search(code).group(0)
 

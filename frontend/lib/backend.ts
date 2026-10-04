@@ -81,6 +81,13 @@ export interface HeaderOptions {
   csrf?: string;
   /** The client address the BFF itself established (login and setup only); see `clientAddress`. */
   clientAddress?: string;
+  /** A client-generated retry key, already validated by `isRequestKey` (organization creation only). */
+  idempotencyKey?: string;
+}
+
+/** The shape of an `Idempotency-Key`: 32 random bytes, base64url without padding (43 characters). */
+export function isRequestKey(value: string | null | undefined): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{43}$/.test(value);
 }
 
 /**
@@ -98,6 +105,7 @@ export function buildBackendHeaders(identity: BackendIdentity, options: HeaderOp
   if (options.ifMatch) headers.set("if-match", options.ifMatch);
   if (options.csrf) headers.set("x-csrf-token", options.csrf);
   if (options.clientAddress) headers.set("x-client-ip", options.clientAddress);
+  if (options.idempotencyKey) headers.set("idempotency-key", options.idempotencyKey);
   return headers;
 }
 
@@ -113,6 +121,7 @@ export interface BackendRequest {
   accept?: string;
   csrf?: string;
   clientAddress?: string;
+  idempotencyKey?: string;
 }
 
 /**
@@ -138,7 +147,7 @@ export async function backendFetch(
   }
   return fetch(`${backendUrl()}${path}${request.search ?? ""}`, {
     method: request.method ?? "GET",
-    headers: buildBackendHeaders(identity, { json: request.body !== undefined, ifMatch: request.ifMatch, accept: request.accept, csrf: request.csrf, clientAddress: request.clientAddress }),
+    headers: buildBackendHeaders(identity, { json: request.body !== undefined, ifMatch: request.ifMatch, accept: request.accept, csrf: request.csrf, clientAddress: request.clientAddress, idempotencyKey: request.idempotencyKey }),
     body: request.body,
     cache: "no-store",
     redirect: "manual",

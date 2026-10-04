@@ -65,7 +65,7 @@ class SessionIssued:
     user: User
 
 
-def _lock_user(db: Session, user_id) -> User | None:
+def lock_user(db: Session, user_id) -> User | None:
     return db.scalar(select(User).where(User.id == user_id).with_for_update().execution_options(populate_existing=True))
 
 
@@ -103,7 +103,7 @@ def login(db: Session, *, email: str, password: str, source: str, user_agent: st
                 new_hash = passwords.hash_password(password)
 
     if valid:
-        locked = _lock_user(db, user.id)  # 6
+        locked = lock_user(db, user.id)  # 6
         if locked is None or not locked.is_active:
             valid = False
         else:
@@ -148,7 +148,7 @@ def change_password(db: Session, *, user: User, session, current_password: str, 
     if new_password == current_password:
         raise PasswordProblem("The new password must differ from the current one.")
 
-    locked = _lock_user(db, user.id)
+    locked = lock_user(db, user.id)
     if locked is None or not locked.is_active:
         raise WrongCurrentPassword()
     db.execute(update(UserCredential).where(UserCredential.user_id == user.id).values(password_hash=new_hash, password_changed_at=now))
@@ -219,7 +219,7 @@ def redeem_setup(db: Session, *, token: str, password: str, source: str, user_ag
             user_id = db.execute(update(UserSetupToken).where(*live()).values(used_at=now).returning(UserSetupToken.user_id)).scalar()
             if user_id is None:  # lost a race for the link
                 raise InvalidSetupLink()
-            user = _lock_user(db, user_id)
+            user = lock_user(db, user_id)
             if user is None or not user.is_active or passwords.policy_problem(password, user.email) is not None:
                 raise InvalidSetupLink()
             credential = db.get(UserCredential, user.id)
@@ -239,10 +239,25 @@ def redeem_setup(db: Session, *, token: str, password: str, source: str, user_ag
 
 def set_user_active(db: Session, user: User, active: bool, now: datetime) -> int:
     """Enable or disable a user (operator action). Disabling also revokes every session. Returns revoked sessions."""
-    locked = _lock_user(db, user.id)
+    locked = lock_user(db, user.id)
     locked.is_active = active
     revoked = 0
     if not active:
         revoked = sessions.revoke_all_for_user(db, locked.id, "disabled", now)
     security_events.record(db, "user_enabled" if active else "user_disabled", now, actor_user_id=locked.id, detail="cli")
     return revoked
+
+
+def set_creation_capability(db: Session, user: User, allowed: bool, now: datetime) -> bool:
+    """Grant or revoke the account-level right to create organizations (operator action).
+
+    The same user-row lock that organization creation takes, so a revoke either waits for a creation in flight
+    (which then completes under the old right) or happens first (and the creation is refused). Memberships and
+    roles are never touched: this right is a property of the account, not of any membership. Returns whether
+    the value changed.
+    """
+    locked = lock_user(db, user.id)
+    changed = locked.can_create_organizations != allowed
+    locked.can_create_organizations = allowed
+    security_events.record(db, "capability_changed", now, actor_user_id=locked.id, detail=("org_creation_granted" if allowed else "org_creation_revoked") + (":cli" if changed else ":cli:unchanged"))
+    return changed

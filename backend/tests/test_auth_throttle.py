@@ -181,7 +181,7 @@ def test_events_have_a_fixed_small_shape(db_session):
         for row in db_session.execute(text("select column_name, character_maximum_length from information_schema.columns where table_name = 'security_events'"))
     }
     assert columns["source"] == 64 and columns["identifier_hash"] == 64 and columns["detail"] == 64 and columns["event_type"] == 40
-    assert set(columns) == {"id", "occurred_at", "event_type", "actor_user_id", "source", "identifier_hash", "detail"}
+    assert set(columns) == {"id", "occurred_at", "event_type", "actor_user_id", "organization_id", "source", "identifier_hash", "detail"}
 
 
 def test_every_throttle_count_is_a_limited_index_scan(db_session):
