@@ -4,6 +4,9 @@ import { LoginForm } from "@/features/auth/LoginForm";
 import { authMode } from "@/lib/auth/config";
 import { safeNext } from "@/lib/auth/safe-next";
 
+// Evaluated when a request arrives, never at build time (see next.config.test.ts and the image tests).
+export const dynamic = "force-dynamic";
+
 /** The real login (session mode only). The return path is validated here and again by the BFF. */
 export default async function LoginPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   if (authMode() !== "session") notFound();

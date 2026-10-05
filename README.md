@@ -225,6 +225,24 @@ Next.js (App Router). See `docs/architecture.md` ("Implementation notes: fronten
 
 - **Custom fields in transactions:** the transaction page loads the organization's enabled field definitions for `transaction` and `transaction_line` (and the values of this transaction and its lines) on the server and shows them with the transaction and with each line. The renderer is **generic** (`components/custom-fields/`, `lib/custom-fields/`): it understands field metadata and six types (text, number, date, boolean, select, reference) and nothing about what a field is for, which a boundary test enforces (no imports of feature modules, no comparison of metadata to literals such as a field key or source, no domain words). Types are kept exactly: a number is a decimal string, a date is `YYYY-MM-DD`, a boolean has three states (not set / yes / no; `false` is a value), a select stores its option's UUID, a reference stores the record's UUID (the picker shows labels, only ids are sent). Reference choices come from the definition's generic choices endpoint (`/custom-fields/definitions/{id}/choices`), narrowed by the parent field's value when the definition says it depends on another field. Changing or clearing a field clears everything that depends on it, through any number of levels, and **the parent change and the cleared children travel in one request**. A record's fields are saved together (only the changed ones), because the backend validates a record's values as a whole (including required fields). Inactive reference targets stay displayed but are not newly assignable; a missing target is shown as "(no longer exists)". Fields are editable only while the transaction is a draft; completed and cancelled transactions show their values read-only. A blocked completion's problems appear in the banner (with links) **and at the controls they are about**. Custom-field writes carry no Sales version (they are outside the Sales concurrency contract; the backend locks the transaction, so a write and a completion cannot interleave).
 
+## Containers (production images, slice D1)
+
+Two production images exist (nothing is deployed yet): `backend/Dockerfile` (FastAPI, uid 10001, **one Uvicorn worker**,
+port 8000; it never runs migrations) and `frontend/Dockerfile` (Next.js standalone, non-root, port 3000; ONE image for
+every environment: all configuration is read at run time). Build and run:
+
+```bash
+docker build -t business-platform-backend backend
+docker build -t business-platform-frontend frontend
+```
+
+`deploy/compose.rehearsal.yml` is a local, production-LIKE stack for proving the images (frontend published on loopback
+only; backend and a disposable PostgreSQL private); it is not the production topology (Coolify proxy, private backend,
+Coolify-managed PostgreSQL 17). Run migrations explicitly, never in the web process:
+`docker compose -f deploy/compose.rehearsal.yml run --rm --no-deps backend python -m alembic upgrade head`. The image
+and topology tests (need Docker): `cd backend && uv run pytest ../deploy/tests -q`. Details: `docs/architecture.md`,
+"Container foundation (D1 as built)".
+
 ## Tests and migrations
 
 End-to-end tests have two runs, never at the same time and never against the development database: `npm run test:e2e` (the dev identity, ports 8001/3100) and `npm run test:e2e:session` (real authentication, ports 8002/3101; users get their passwords through the operator CLI's setup link in the disposable test database). Both need `docker compose up -d postgres-test`.

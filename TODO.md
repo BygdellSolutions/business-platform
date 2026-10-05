@@ -60,7 +60,11 @@
 - Preview and account creation have no per-source throttle of their own (256-bit tokens cannot be guessed; password hashing is bounded by the existing admission); revisit with the deployment milestone's client-address work.
 
 ## Deployment readiness (next milestone: proposal under review, nothing implemented)
-- [ ] Architecture review of production deployment readiness (first Coolify deployment), then slices D1 to D5
+- [x] Architecture review approved (staging rehearsal first, Coolify-managed PostgreSQL 17, one Uvicorn worker, exact-head schema readiness, BFF internal secret and migration/runtime DB roles in D2, CSP deferred, GitHub-hosted CI, no production backups in ordinary CI)
+- [x] **D1 Container foundation:** backend and frontend production images, `.dockerignore`s, standalone output, bundled local font (no Google fonts), prerendering of config-dependent pages eliminated, production exits on an unusable frontend configuration, local rehearsal compose, image and topology tests (implemented and verified; NOT yet committed)
+- [ ] **D2** configuration/proxy/health/logging hardening (migrate wrapper with advisory lock, `/health/ready` = exactly this image's Alembic head, BFF internal secret, migration/runtime DB roles, `hide_parameters`, CORS default `[]`, required `PUBLIC_ORIGIN`/`BACKEND_URL` in production, global security headers and HSTS, request id and log redaction)
+- [ ] **D3** CI (GitHub-hosted); **D4** backup/restore tooling and runbooks; **D5** staging rehearsal on Coolify (must prove: a failed migration prevents a healthy deployment)
+- Tracked, deferred beyond D2: Content-Security-Policy (report-only first)
 
 ## Later
 - [ ] Payments

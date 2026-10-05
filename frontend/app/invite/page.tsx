@@ -5,6 +5,9 @@ import { authMode } from "@/lib/auth/config";
 import { getCredential } from "@/lib/auth/credential";
 import { getCurrentUser } from "@/lib/orgs";
 
+// Evaluated when a request arrives, never at build time (see next.config.test.ts and the image tests).
+export const dynamic = "force-dynamic";
+
 /**
  * Accept an invitation (session mode only). The page is rendered WITHOUT the secret: the invitation token is in the
  * URL fragment, which never reaches the server, so no server component, log or redirect can see it; the client

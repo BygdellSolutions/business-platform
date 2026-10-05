@@ -1143,3 +1143,50 @@ The Members page (owner/admin) gains Invitations: a form (owners may pick any ro
 - Regeneration is one atomic endpoint instead of revoke-then-create from the browser.
 - Preview and account creation are limited to session mode (the dev identity has no sign-in page); the signed-in acceptance endpoint works in both modes at the backend.
 - An invitation's expiry is checked at use; there is no background job that revokes expired rows (they are superseded on the next create).
+
+---
+
+## Container foundation (D1 as built)
+
+First slice of production-deployment readiness: the two application images and a local, production-LIKE rehearsal.
+Nothing is deployed; the readiness endpoint, configuration hardening, CI, backups and runbooks are later slices (D2 to D5).
+
+**Intended production topology** (decided; not built here): Internet -> Coolify proxy (TLS ends here) -> frontend/BFF
+(the only public service) -> private FastAPI backend -> private **Coolify-managed PostgreSQL 17**. The browser never
+reaches the backend or the database.
+
+**Local rehearsal** (`deploy/compose.rehearsal.yml`) is NOT that topology; it only proves the images: `127.0.0.1:3300 ->
+frontend -> backend -> a disposable postgres container on tmpfs`. Only the frontend is published (on loopback); the
+backend and the database publish nothing and are reachable by service name only. Its one deviation: the frontend runs
+with `APP_ENV=development` because the rehearsal is plain http (production requires an https `PUBLIC_ORIGIN`); the
+image tests start the image with `APP_ENV=production` separately.
+
+**Backend image** (`backend/Dockerfile`, context `backend/`): multi-stage; `uv sync --frozen --no-dev` from `uv.lock`
+in a builder; the runtime is `python:3.13-slim` with the venv, `app/` (including the checksummed bundled PDF fonts),
+`alembic/` and `alembic.ini` (so a SEPARATE one-shot migrate job can run from the same image), no tests, no dev
+dependencies, no compilers, no uv/pip, no `.env`, no `seed_dev`/`reset_test_db`. Runs as uid 10001, **one Uvicorn
+worker** (decision: do not raise it until the deployment rehearsal has measured memory, Argon2 pressure and database
+connections), port 8000. **The web process never migrates**: no startup hook runs Alembic. Container health check
+(interim): the cheap `/health`; D2 replaces it with the readiness check.
+
+**Frontend image** (`frontend/Dockerfile`, context `frontend/`): Node 22, `npm ci`, `next build` with
+`output: "standalone"`, then only `.next/standalone`, `.next/static` and `public` are copied into the runtime stage,
+which runs `node server.js` as the non-root `node` user (uid 1000) on port 3000. `poweredByHeader` is off. Health check
+(interim): a TCP connect (D2 adds `/api/health`). The sans font is Noto Sans bundled in `app/fonts` (SIL OFL, byte-identical
+to the PDF renderer's fonts): the build contacts no font service.
+
+**One image for every environment (invariant).** Nothing about the deployment is baked into the frontend image. The
+authentication mode, environment, public origin and backend address are read from the environment when the server
+starts, and every page that depends on them is rendered per request: `/setup`, `/dev-login`, `/login` and `/invite`
+declare `dynamic = "force-dynamic"`, the rest read the request's cookies. Before D1, `/setup` and `/dev-login` were
+PRERENDERED at build time with the build's `AUTH_MODE`, so an image built without it would have shipped a permanently
+404 `/setup` (the first-operator link). `lib/build-config.test.ts` guards the sources; the image tests build the image
+under three different build environments and prove the same runtime behaviour from each. The `TEST_BUILD_*` Dockerfile
+arguments exist only for that proof; a real build passes none.
+
+**Production fails by exiting.** A standalone Next server only LOGS a failed `register()` and keeps answering 500, which
+a connect-only health check would call healthy; `instrumentation.ts` therefore exits the process (status 1) in
+production on an unusable authentication configuration.
+
+**Tests:** `cd backend && uv run pytest ../deploy/tests -q` (needs Docker; builds real images, a few minutes; disposable
+containers only). They are not part of the ordinary backend suite.

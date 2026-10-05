@@ -9,6 +9,11 @@ const NO_STORE = { key: "Cache-Control", value: "no-store" };
 const NO_REFERRER = { key: "Referrer-Policy", value: "no-referrer" };
 
 const nextConfig: NextConfig = {
+  // A self-contained server (`node server.js`) with only the files it needs: the production image copies this, not
+  // the source tree or node_modules.
+  output: "standalone",
+  // No "X-Powered-By: Next.js" header.
+  poweredByHeader: false,
   async headers() {
     return [
       { source: "/login", headers: [NO_STORE, NO_REFERRER] },

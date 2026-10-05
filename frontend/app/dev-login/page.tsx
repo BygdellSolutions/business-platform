@@ -13,6 +13,9 @@ const MESSAGES: Record<string, string> = {
 /** The seeded development users (see backend/app/scripts/seed_dev.py). */
 const PRESETS = ["fredrik@dev.test", "maria@dev.test"];
 
+// Evaluated when a request arrives, never at build time (see next.config.test.ts and the image tests).
+export const dynamic = "force-dynamic";
+
 /** Development-only sign-in. Not found unless AUTH_MODE=dev with APP_ENV=development on the server. */
 export default async function DevLogin({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   if (!devIdentityEnabled()) notFound();

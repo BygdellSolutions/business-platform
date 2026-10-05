@@ -1,0 +1,16 @@
+# Safety net for a build whose context is the repository ROOT (the real contexts are backend/ and frontend/, each with
+# its own .dockerignore): even then nothing secret, host-specific or bulky is sent.
+.git
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+**/node_modules
+**/.venv
+**/.next
+**/__pycache__
+**/test-results
+**/playwright-report
+*.dump
+*.sql.gz

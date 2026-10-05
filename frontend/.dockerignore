@@ -1,0 +1,21 @@
+# Build context = frontend/. The BUILD stage needs the sources and the TypeScript test/e2e files (the type check covers
+# them), but never the host's node_modules or build output, never a .env file, and never test results. The final image
+# copies only the standalone output, so none of these can reach it anyway.
+node_modules
+.next
+out
+coverage
+test-results
+playwright-report
+*.tsbuildinfo
+next-env.d.ts
+
+.env
+.env.*
+**/.env
+**/.env.*
+
+.git
+.gitignore
+Dockerfile
+.dockerignore
