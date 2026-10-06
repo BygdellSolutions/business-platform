@@ -87,6 +87,9 @@ test.describe("the real workflow", () => {
       // 3. A transaction billed to Umeå HK.
       await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Transactions" }).click();
       await page.getByTestId("new-transaction").click();
+      // A client-side navigation does not wait for the new page: the transactions LIST has a picker with the same test id (its
+      // filter), so interacting before the form has replaced the list acts on the wrong, soon unmounted, picker.
+      await expect(page).toHaveURL(/\/transactions\/new$/);
       await pick(page, "billing_customer_id", "Umeå HK");
       await page.getByTestId("submit").click();
       await expect(page.getByTestId("created")).toBeVisible();

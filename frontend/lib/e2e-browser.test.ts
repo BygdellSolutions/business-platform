@@ -20,9 +20,10 @@ async function env(values: Record<string, string | undefined>) {
 }
 
 describe("browserChannel", () => {
-  it("uses E2E_BROWSER when it is set", async () => {
-    expect((await env({ CI: "true", E2E_BROWSER: "chromium" })).browserChannel()).toBe("chromium");
+  it("uses E2E_BROWSER when it is set; `chromium` is Playwright's own Chromium in its default headless mode (no channel)", async () => {
+    expect((await env({ CI: "true", E2E_BROWSER: "chromium" })).browserChannel()).toBeUndefined(); // NOT the "new headless" channel
     expect((await env({ E2E_BROWSER: "chrome" })).browserChannel()).toBe("chrome");
+    expect((await env({ E2E_BROWSER: "msedge" })).browserChannel()).toBe("msedge");
   });
 
   it("falls back to the installed Microsoft Edge on a developer machine only", async () => {

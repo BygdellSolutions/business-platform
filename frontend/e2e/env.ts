@@ -41,12 +41,20 @@ export const POSTGRES_DB = merged.POSTGRES_DB ?? "business_platform";
 export const POSTGRES_TEST_DB = merged.POSTGRES_TEST_DB ?? "business_platform_test";
 
 /**
- * The browser Playwright drives. Locally the installed Microsoft Edge (E2E_BROWSER=chrome for Chrome). In CI there is NO
- * fallback: a runner has no Edge, so E2E_BROWSER must be set (the workflows use "chromium", installed by
- * `playwright install chromium`) and an unset value stops the run instead of silently asking for a browser that is not there.
+ * The browser Playwright drives, as a Playwright `channel` (undefined: Playwright's own Chromium).
+ *
+ *   E2E_BROWSER=chromium   the Chromium that `npx playwright install chromium` installs, in Playwright's default headless mode
+ *                          (the lightweight headless shell). This is what CI uses. It is NOT `channel: "chromium"`, the opt-in
+ *                          "new headless" full browser: on hosted 2-vCPU runners that mode stalled on context close and
+ *                          mid-test in about one run in eight, the headless shell in none of 40 runs measured.
+ *   E2E_BROWSER=msedge|chrome   an installed browser (Edge is the local default)
+ *
+ * In CI there is NO fallback: a runner has no Microsoft Edge to rely on, so an unset E2E_BROWSER stops the run instead of
+ * silently asking for a browser that is not there (the workflows set "chromium", see .github/workflows/ci.yml).
  */
-export function browserChannel(): string {
+export function browserChannel(): string | undefined {
   const configured = process.env.E2E_BROWSER;
+  if (configured === "chromium") return undefined;
   if (configured) return configured;
   if (process.env.CI) throw new Error("E2E_BROWSER is not set. CI has no installed Microsoft Edge: set E2E_BROWSER=chromium (see .github/workflows/ci.yml).");
   return "msedge";
