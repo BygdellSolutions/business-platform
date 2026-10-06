@@ -41,6 +41,12 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 FROM python:3.13-slim AS runtime
+# The PostgreSQL 17 client programs (pg_dump, pg_restore) for the OPERATOR backup/restore tools (`python -m app.scripts.backup`,
+# `restore`), run as one-shot jobs from this same image. The web process never calls them. The client major version must be at
+# least the server's (backup.py refuses an older one).
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends postgresql-client-17 \
+ && rm -rf /var/lib/apt/lists/*
 RUN groupadd --system --gid 10001 app \
  && useradd --system --uid 10001 --gid app --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin app
 WORKDIR /app

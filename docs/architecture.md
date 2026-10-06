@@ -1575,3 +1575,72 @@ CI's guard refuses one on a runner.)
 * **workflows:** `docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7`.
 * **audits:** `cd backend && uv export --frozen --no-dev --no-hashes --no-emit-project -o req.txt && uvx pip-audit -r req.txt --disable-pip --no-deps`;
   `cd frontend && npm audit --omit=dev`; Trivy: `docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy image --severity HIGH,CRITICAL --ignore-unfixed <image>`.
+
+
+## Backup and restore (D4 as built)
+
+Fourth slice of production-deployment readiness. **The invariant: a backup is not verified until it has been restored into a
+separate, isolated database and the restored state has been checked.** Everything here was built and run against disposable
+databases and containers only; nothing is deployed, no storage is configured, and the application's business behaviour is untouched.
+Operator-facing procedures are in `docs/backup-restore.md` (commands, guards, roles, drill, disaster recovery) and
+`docs/deployment.md` (topology, configuration, migration gating, first operator, rollback); this section records the decisions.
+
+### Decisions
+
+* **Logical, whole-database, custom format** (`pg_dump --format=custom`, PostgreSQL 17 client in the backend image). Nothing is selected
+  or excluded: auth records and `invoice_pdfs` are inside the dump because the system cannot be recovered without them. Not built, by
+  decision: WAL archiving/PITR, a scheduler, off-host upload, encryption, an automatic pre-migration backup.
+* **RPO is up to 24 hours** (nightly dumps), an accepted limitation. **No RTO is promised**: the drill's restore time is a measured
+  baseline on a tiny database. Upgrade paths: more frequent dumps, WAL/PITR, a managed provider.
+* **Each tool takes its database from ONE explicit variable and never from `DATABASE_URL`** (`BACKUP_DATABASE_URL`,
+  `RESTORE_DATABASE_URL`, `VERIFY_DATABASE_URL`, `STATS_DATABASE_URL`). `app.core.pgtools` is the shared helper: URL parsing that
+  never echoes a malformed URL, client programs run with the credentials in `PGPASSWORD` (never in argv) and without any ambient `PG*`
+  variable, and a scrubber that removes the known secrets, any URL and libpq's `connection to server at ...` text from whatever a client prints.
+* **The backup is consistent with its manifest:** one `REPEATABLE READ` read-only transaction collects counts and exports a snapshot
+  that `pg_dump --snapshot` uses. The dump is written to `.partial`, proved readable (`pg_restore --list`), hashed, then published with a
+  hard link that cannot replace a file; the manifest the same way. A failure removes everything the run created (a dump whose manifest
+  cannot be written is removed too).
+* **Role model: the dump carries no owner and no ACL** (`--no-owner --no-acl`). The restore connects as the target environment's owner
+  role (never a superuser, never the runtime role), so everything is owned by it, and then runs the SAME `reconcile_runtime_grants`
+  the migration job runs, which gives the runtime role DML and nothing else. Same role names or different ones: one deterministic
+  result, no password in a dump or a runbook, and the runtime role is never made powerful to make a restore work. `bootstrap_roles`
+  gained an optional third, read-only **backup role** (`pg_read_all_data`).
+* **The restore refuses unless the target is a scratch database**: the name must match `^[a-z][a-z0-9_]*_restore(_[a-z0-9]+)?$` whatever the
+  host, must not be the manifest's source nor any configured source URL, must be owned by the connecting non-superuser role, and must be
+  empty unless `--reset-target` (which drops only the target's `public` schema). The dump must match its manifest (size and SHA-256).
+  `pg_restore --single-transaction --exit-on-error`: a failure leaves the target empty and exits non-zero. Recovery is never in place.
+* **`verify_restore` is read-only** (a read-only connection even for a role that could write) and checks: exactly one revision equal to
+  the code's head and optionally `alembic check`; the triggers and functions the guarantees rest on; every constraint validated;
+  tenant `organization_id` NOT NULL; counts against the manifest; every stored PDF (bytes present, length, SHA-256, `%PDF-`); auth record
+  presence and shape; and, with the runtime role's own credentials, DML yes / DDL denied (a real `CREATE TABLE`, rolled back). The
+  verifier's lists are tied to the migrated schema by a test, so a new trigger, function or tenant table cannot be forgotten.
+  `--fingerprint` makes "the restore equals the source" and "the source did not change" comparable facts.
+* **Finding, recorded:** the schema's own CHECK constraints already refuse a PDF whose hash, size or signature disagrees with its
+  bytes, and `pg_restore` applies them while loading. The verifier's PDF checks are therefore a second, independent line (for a restore
+  made with constraints skipped, or damage the database never validated); their tests drop the CHECK first so the verifier is the only
+  barrier being tested.
+* **The drill is automated** (`deploy/drill/test_restore_drill.py`): two disposable PostgreSQL 17 servers, the real production backend
+  image (which now carries `postgresql-client-17`), a source with representative data built through the application as the restricted
+  role, a restore into a separate server with different role names, verification, the real backend served from the restored
+  database as the restricted role (readiness, a session created before the backup, tenant reads, a foreign invoice = 404, the PDF
+  byte-for-byte equal to the frozen one), restored fingerprint equal to the source's, source unchanged, and a damaged dump that fails in
+  `pg_restore` leaving its target empty. It lives outside `deploy/tests` so the merge-gating container job does not contain it; it runs
+  from `.github/workflows/restore-drill.yml` (on demand and weekly), never as a gate, never with a real backup or credential.
+
+### Verification, trade-offs and deviations (D4)
+
+**Verified (disposable databases and containers only; the development database stayed at `e29c5d7a3b48`, row-for-row):** backend
+`pytest` 2950 passed (6 skipped as before: 2904 main, 18 migration job, 28 restricted role), container suite 59 passed, restore drill 11
+passed; `actionlint` clean on the new workflow. **Fault injection:** 56 mutations of the real source (tools, scrubber, role bootstrap,
+runbooks, and the drill itself), each applied to a baseline that passes and the file restored: 51 killed outright. Five single faults
+survived, all by intentional redundancy, and each is killed by its joint fault: the early existence check AND the atomic no-overwrite
+publish (B4a was in fact killed alone, because the early check is the only guard for a leftover manifest or partial file; only the
+atomic publish alone survives); the verifier's real `CREATE TABLE` probe and its privilege check (V6); its `read_only` flag and its
+`default_transaction_read_only` option (V7). Trade-offs to know about:
+
+* The tool-logic tests use a fake `pg_dump`/`pg_restore` (`backend/tests/fake_pg.py`) so they run anywhere; only the drill runs the real clients.
+* `bootstrap_roles` resets the password of a role that already exists (it always did); on a server that already hosts the production roles, give it their current passwords.
+* A recovered database may keep its `..._restore_...` name; renaming needs a moment with no connections.
+* There is no bulk session-revocation command; after a compromise (as opposed to a failure) a restore brings back the sessions of the backup moment.
+* The pre-migration backup is a documented contract, not code; D5 proves the orchestration.
+* One new static-test count changed: the CI test that pins the number of artifact uploads now expects five (the drill workflow's failure log, under the same rules).

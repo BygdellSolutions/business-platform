@@ -383,7 +383,7 @@ def test_artifacts_are_only_redacted_logs_uploaded_on_failure_with_a_short_reten
             for step in steps(job):
                 if step.get("uses", "").startswith("actions/upload-artifact@"):
                     uploads.append((path.name, name, step))
-    assert len(uploads) == 4
+    assert len(uploads) == 5  # the four ci.yml jobs that upload and the restore drill (D4); each is held to the rules below
     for file, name, step in uploads:
         assert step["if"] == "failure()", (file, name)
         assert step["with"]["path"] == "ci-logs/*.log", (file, name)

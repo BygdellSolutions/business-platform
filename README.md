@@ -282,6 +282,26 @@ docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7
 Details (job graph, the disposable-database guard, generated credentials, caching, artifacts, the required-check recommendation, the
 audit baseline and policy): `docs/architecture.md`, "Continuous integration (D3 as built)".
 
+## Backup, restore and runbooks (slice D4)
+
+Nightly logical backups of the whole database (`pg_dump`, custom format, with a manifest), a restore into a **separate, scratch**
+database, and a read-only verification of the result. A backup is not verified until it has been restored into an isolated database and
+checked. Recovery point objective: up to 24 hours. All commands run from the backend image (`python -m app.scripts.<tool>`), each taking
+its database from one explicit variable (never `DATABASE_URL`):
+
+```bash
+BACKUP_DATABASE_URL=...  python -m app.scripts.backup  --output /backups/bp-<label>-<UTC>.dump --label <label>
+RESTORE_DATABASE_URL=... RUNTIME_DB_ROLE=... python -m app.scripts.restore --dump /backups/bp-....dump
+VERIFY_DATABASE_URL=... [VERIFY_APP_DATABASE_URL=...] python -m app.scripts.verify_restore --manifest /backups/bp-....dump.manifest.json --alembic-check
+STATS_DATABASE_URL=...   python -m app.scripts.db_stats
+# the full rehearsal, on disposable containers only (Docker needed; also a manual/weekly GitHub workflow, never a merge gate):
+cd backend && uv run pytest ../deploy/drill -q -s
+```
+
+Runbooks: `docs/backup-restore.md` (commands, guards, roles, manifest, off-host and retention contract, disaster recovery, drill log) and
+`docs/deployment.md` (topology, production configuration, migration gating and the pre-migration backup contract, first operator,
+rollback). Nothing is deployed and no storage is configured yet (D5).
+
 ## Tests and migrations
 
 End-to-end tests have two runs, never at the same time and never against the development database: `npm run test:e2e` (the dev identity, ports 8001/3100) and `npm run test:e2e:session` (real authentication, ports 8002/3101; users get their passwords through the operator CLI's setup link in the disposable test database). Both need `docker compose up -d postgres-test`.
