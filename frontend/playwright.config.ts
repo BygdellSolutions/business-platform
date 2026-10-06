@@ -1,6 +1,6 @@
 import { defineConfig } from "@playwright/test";
 
-import { BACKEND_DIR, BACKEND_PORT, BACKEND_URL, BASE_URL, FRONTEND_DIR, FRONTEND_PORT, PYTHON, assertTestDatabase } from "./e2e/env";
+import { BACKEND_DIR, BACKEND_PORT, BACKEND_URL, BASE_URL, FRONTEND_DIR, FRONTEND_PORT, PYTHON, TRACE_MODE, assertTestDatabase, browserChannel } from "./e2e/env";
 
 /**
  * End-to-end tests run against a REAL stack that is entirely separate from development:
@@ -27,8 +27,8 @@ export default defineConfig({
   reporter: [["list"]],
   use: {
     baseURL: BASE_URL,
-    channel: process.env.E2E_BROWSER ?? "msedge",
-    trace: "retain-on-failure",
+    channel: browserChannel(),
+    trace: TRACE_MODE,
   },
   webServer: [
     {

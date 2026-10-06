@@ -29,3 +29,7 @@ Thumbs.db
 # Data
 *.dump
 *.sql.gz
+
+# CI (local reproductions)
+ci-logs/
+backend/.venv313/

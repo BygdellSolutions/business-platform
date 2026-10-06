@@ -1413,8 +1413,165 @@ would have been reported as such (none).
 * `/api/ready` is public and uncached (one backend readiness call per request); the request log also records every probe.
 * The internal secret has no dual-key rotation window; rotation briefly yields 502s.
 * A database that cannot be reached during an ordinary request is now a fixed 503 from FastAPI (before: an unhandled 500).
-* `alembic/env.py` loads no model metadata for the migration job (autogenerate and `alembic check` still load it in development).
+* `alembic/env.py` loads no model metadata for the migration job (`alembic check` and autogenerate still load it, and then need the web settings too).
 * The role-restricted test run deselects four tests that arrange state by disabling triggers (they need an owner by nature).
 * A pre-existing thread warning in the concurrency suite (`BrokenBarrierError` in a barrier helper) still appears in some full runs (it was already there in the first full run of this slice, before any
   D2 concurrency test existed); the barrier helper is older code.
 * HSTS is emitted by the application (option B); D5 must confirm the proxy does not add a second, different value.
+
+
+## Continuous integration (D3 as built)
+
+Third slice of production-deployment readiness. GitHub Actions encodes the already-approved application, security, migration
+and container invariants as gates. **Nothing is deployed, no repository or deployment secret exists, and no workflow can reach the
+development database, staging, production, a backup or Coolify:** every job runs on a fresh runner against infrastructure it
+creates itself, and static tests (below) fail if that changes. The files are in `.github/`; the workflow tests are
+`backend/tests/test_ci_workflows.py`.
+
+### Job graph and triggers
+
+`ci.yml` runs on every pull request, every push to `main` and on demand. All jobs run in parallel (wall time is the slowest job,
+not the sum); `ci-gate` waits for all of them.
+
+| job | what it proves | measured locally* |
+|---|---|---|
+| `workflows` | actionlint (with shellcheck) over every workflow | seconds |
+| `backend` | frozen `uv` install on Python 3.13 (the image's version); the full pytest suite on a disposable PostgreSQL 17, split into three visible steps: everything else (this includes the architecture, boundary and workflow tests), the migration job (`test_migrate_runner.py`: real processes, advisory-lock concurrency, refusal, failure) and the restricted runtime role (`test_db_roles.py`: DDL denied, future objects usable, ~1000 application tests connected AS the app role); then a fresh database migrated by the ACTUAL job (`python -m app.scripts.migrate`), `alembic upgrade head` and `alembic check` | ~7 min (4:37 + 0:32 + 1:05 + migration step) |
+| `frontend` | `npm ci`, typecheck, lint, all of Vitest, the production build with NO configuration (no `AUTH_MODE`, `BACKEND_URL`, secret or font service) | ~3 min |
+| `containers` | builds BOTH production Dockerfiles from a clean runner (no layer cache) and runs the whole D1 + D2 suite: non-root users, one worker, PDF and fonts, standalone runtime, only the intended ports, the migration orchestration (success, refusal, failure), exact-head readiness, the BFF internal secret, the restricted runtime role, a paused database | ~4.5 min |
+| `e2e-dev` | the full Playwright suite with the dev identity (Chromium) | ~8 min |
+| `e2e-session` | the full real-session Playwright suite: real login, the BFF internal secret enforced end to end, tenant behaviour, invitations, `hardening.spec.ts` (Chromium) | ~8 min |
+| `ci-gate` | green only if EVERY job above succeeded (skipped or cancelled counts as failure) | seconds |
+
+\* local single-machine times from clean-checkout runs (below); hosted 2-vCPU runners are expected to be 1.5 to 2 times slower, which the job timeouts allow for
+(see "Timeouts"). Real runner timings are an open item until the first runs exist.
+
+**Why all five heavy jobs run on pull requests too, not only on `main`:** they are parallel (no extra wall time), and a gate that
+only runs after merge cannot stop the merge. If runner minutes become a constraint, the first lever is to move `e2e-dev` and
+`e2e-session` to `main` plus a label or path filter; the aggregate `ci-gate` keeps the required-check name stable either way.
+
+**Concurrency.** A newer commit on the same pull request cancels the obsolete run. A push to `main` gets a concurrency group of its
+own (the run id), so no later push can cancel or replace a main run, and no required gate is hidden. Concurrent runs are
+separate virtual machines, so they cannot share a Docker daemon; inside a job every Compose project has a unique name
+(`bp-ci-<run>-<attempt>-<label>`, one label per job) and the container tests name their stacks per session.
+
+### Reproduced from a clean checkout (what that found)
+
+Every job was run locally from a copy of the tree that contains exactly what a commit would (`git ls-files -co --exclude-standard`: no
+`.env`, no `node_modules`, no `.venv`), the job's own `run:` steps executed in bash against a freshly started disposable
+database, on Python 3.13 for the backend. That found four hidden dependencies on a developer's machine, all fixed: nine backend
+tests relied on a developer's `.env` (`AUTH_MODE=dev`, a known development database URL); `reset_test_db` (Playwright's global
+setup) needed an `APP_ENV` that only `.env` supplied; plain `alembic upgrade` loaded the web settings (it now needs only the
+migration credentials; `alembic check` and `revision` still read the models and so also need `DATABASE_URL`); and one Playwright
+spec queried the development database service, which does not exist in CI (it now asserts that none is running). Not reproducible
+locally: Chromium (its download is blocked on the development machine), so those runs used the installed Edge through the same
+`E2E_BROWSER` mechanism; the Chromium install and launch will first be exercised by GitHub.
+
+### Disposable infrastructure only
+
+* **The database.** `.github/actions/disposable-db` starts the repository's own `postgres-test` service (PostgreSQL 17, tmpfs,
+  loopback port 5433: the same service developers use) with a freshly generated, masked password, waits for it with a bounded
+  `--wait-timeout 90`, and exports `TEST_DATABASE_URL`. The database is named `business_platform_test`; the privileged role is
+  `ci_admin`. Everything vanishes with the runner.
+* **The guard.** `.github/scripts/assert_ci_database.py` (standard library, runs right after the server is up) refuses unless
+  `TEST_DATABASE_URL` is the only database URL in the environment, points at the runner's loopback on port 5433, names a `*_test`
+  database, no `DATABASE_URL`/`MIGRATION_DATABASE_URL`/`BOOTSTRAP_DATABASE_URL`/`PG*` variable exists (no fallback to anywhere
+  else) and no `.env` file is in the checkout. It never echoes a URL or value. The existing guards (`reset_test_db`, the Playwright
+  `assertTestDatabase`) remain and still apply. No real `DATABASE_URL` appears in any workflow (a static test).
+* **The restricted role.** The role proof never uses a superuser as evidence: `test_db_roles.py` creates its own owner and app
+  roles, and the child run's `conftest.py` refuses to start (exit 2) unless its connection is a role that is not a superuser,
+  creator, table owner, database owner or schema-CREATE holder; a test hands it the owner's and the superuser's URL to prove the refusal.
+
+### Generated credentials (no repository secrets)
+
+Nothing is stored in GitHub. The database password and, for the session run, `E2E_BFF_SECRET`, `E2E_SECURITY_KEY` and
+`E2E_PASSWORD` are generated per job with `openssl rand`, registered with `::add-mask::` BEFORE they are written to `GITHUB_ENV`,
+and never echoed; `set -x` is forbidden by a test. The Playwright support code reads those variables and falls back to its
+throwaway local defaults only outside CI. The container suite generates its secrets per test session. The backend unit tests use
+fixed sentinel constants that configure only in-process test instances, never a service.
+
+### Browser
+
+Playwright drives **Chromium** installed by `npx playwright install --with-deps chromium` (exactly that one browser and its
+system libraries) and selected through the existing `E2E_BROWSER` mechanism, set at job level. In CI there is no fallback: an
+unset `E2E_BROWSER` throws (a runner has no Microsoft Edge) instead of silently asking for a browser that is not there. No
+assertion was weakened. Traces and screenshots are off in CI (they hold cookies, tokens and one-time links).
+
+### Caching
+
+`setup-uv` caches by `backend/uv.lock`; `setup-node` caches npm by `frontend/package-lock.json`. Nothing else: no Playwright
+browser cache (installed fresh, a minute), no Docker layer cache (the container job is a clean build by design), and never a
+`.env`, database, session, credential or token. A test forbids `actions/cache` and every cache-from/to setting.
+
+### Artifacts
+
+Only on failure, only `ci-logs/*.log`, retained 7 days: the job's own test output after it has passed through
+`.github/scripts/redact.py`, which replaces database credentials, `Authorization`/`Cookie`/`Set-Cookie` values, the BFF, CSRF
+and pre-auth headers, the session/CSRF/dev cookies, JSON secret fields, one-time `/setup#` and `/invite#` links and any bare
+43-character token or long hex secret by `[redacted]`. The same filter sits in front of the console copy. No trace, screenshot,
+cookie jar, storage state, database dump or `.env` is ever uploaded (a test fixes the exact artifact path and requires the filter
+on every line that writes a log).
+
+### Required checks (recommendation; branch protection is NOT configured by D3)
+
+* **Require on pull requests to `main`:** the single aggregate **`ci-gate`** (it is green only if all of `workflows`, `backend`,
+  `frontend`, `containers`, `e2e-dev` and `e2e-session` are). One name keeps protection stable when jobs are added or renamed.
+  Equivalent, less maintainable: require those six individually. Also: require branches to be up to date, and disallow bypass.
+* **Main/deployment-quality:** the same run on every push to `main`; a red `main` blocks a deployment (D5).
+* **Scheduled, informational (never required):** `audit.yml`.
+
+### Scheduled audits
+
+`audit.yml` runs Mondays 05:17 UTC and on demand, never on pull requests: `pip-audit` over the locked production dependencies,
+`npm audit --omit=dev` (what the image ships) plus a full `npm audit` reported informationally, and Trivy on both production
+images (HIGH and CRITICAL with a fix available). **Baseline reviewed for D3 (2026-10-06):** `pip-audit` 0 findings; `npm audit
+--omit=dev` 0; full `npm audit` 5 HIGH, all in the development lint chain (`eslint-config-next`, `@next/eslint-plugin-next`,
+`fast-glob`, `micromatch`, `braces`: stack-exhaustion in glob patterns; npm's "fix" is a downgrade to `eslint-config-next@14`,
+which is wrong for Next 16) and not in any image; Trivy backend image 1 HIGH (Debian `libpcre2-8-0`, fixed in
+`10.46-1~deb13u3`); Trivy frontend image 2 HIGH OS packages (`libpcre2-8-0`, `perl-base`) and 10 HIGH in the npm CLI that
+`node:22-slim` bundles under `/usr/local/lib/node_modules/npm` (`brace-expansion`, `ip-address`, `pacote`, `picomatch`,
+`sigstore`), none in the application's own `node_modules`. **Proposed policy (for review):** the dependency audits fail the
+scheduled run on any production finding (they are clean today); the dev-tooling audit stays informational; Trivy stays at
+`exit-code: 0` (findings visible in the log, run green) until this baseline is accepted, then flips to `1`. The frontend image's
+npm findings disappear if the runtime stage deletes the unused npm CLI, and the Debian ones with a base-image refresh; both are
+Dockerfile changes left out of D3 on purpose. A new finding becomes a TODO item, not a blanket ignore.
+
+### Supply chain
+
+Action pinning policy: only maintained publishers (`actions/*`, `astral-sh/setup-uv`, `aquasecurity/trivy-action`), **every
+action pinned to a full commit SHA with a `# vX.Y.Z` comment** (immutable, unlike a movable major tag); a weekly Dependabot
+configuration (`.github/dependabot.yml`, GitHub Actions only) proposes updates. A test enforces owner, SHA and comment.
+Tool images run by workflows carry an explicit version tag (`rhysd/actionlint:1.7.7`); the workflows have `contents: read`
+only, checkouts do not persist credentials, and there is no `pull_request_target`, `workflow_run`, self-hosted runner or secret.
+**Docker base images remain FLOATING TAGS** (`python:3.13-slim`, `node:22-slim`, `postgres:17`; the `uv` image is pinned to
+`0.12.23`): digest pinning (with an automated refresh) is recommended as a pre-production hardening task, together with the
+Trivy flip above; it was not changed in D3. Unauthenticated Docker Hub pulls from shared runners can be rate limited; the
+container job would then fail loudly rather than pass.
+
+### Timeouts
+
+Explicit job limits sized at roughly three times the local measurement: `backend` 30 min, `frontend` 20, `containers` 40, each
+Playwright job 40, `workflows` and `ci-gate` 5. A hung migration, concurrency test or browser run is killed by its job limit.
+
+### Restore boundary
+
+D3 contains no backup, dump or restore step. The backup format, the verification script, the latest-backup restore drill and the
+runbook belong to D4; no production backup ever enters GitHub Actions.
+
+### Reproduce each job locally
+
+(From the repository root; `docker compose up -d postgres-test` is the same service CI uses. A local `.env` is fine locally;
+CI's guard refuses one on a runner.)
+
+* **backend:** `cd backend && uv sync --frozen`, then `uv run pytest -q --ignore=tests/test_migrate_runner.py --ignore=tests/test_db_roles.py`,
+  `uv run pytest -q tests/test_migrate_runner.py`, `uv run pytest -q tests/test_db_roles.py`; the fresh-database step: create a
+  throwaway `*_test` database on the test server, then with `APP_ENV=development MIGRATION_DATABASE_URL=<its url>` run
+  `uv run python -m app.scripts.migrate`, `uv run alembic upgrade head`, `uv run alembic check`.
+* **frontend:** `cd frontend && npm ci && npm run typecheck && npm run lint && npm run test && npm run build`.
+* **containers:** `cd backend && uv run pytest ../deploy/tests -q` (needs Docker).
+* **e2e-dev / e2e-session:** `cd frontend && npx playwright install --with-deps chromium`, then `E2E_BROWSER=chromium npm run test:e2e`
+  and `E2E_BROWSER=chromium E2E_BFF_SECRET=... E2E_SECURITY_KEY=... E2E_PASSWORD=... npm run test:e2e:session` (any throwaway
+  values; locally `E2E_BROWSER=msedge` or `chrome` uses an installed browser).
+* **workflows:** `docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7`.
+* **audits:** `cd backend && uv export --frozen --no-dev --no-hashes --no-emit-project -o req.txt && uvx pip-audit -r req.txt --disable-pip --no-deps`;
+  `cd frontend && npm audit --omit=dev`; Trivy: `docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy image --severity HIGH,CRITICAL --ignore-unfixed <image>`.

@@ -12,14 +12,16 @@ import { BACKEND_DIR, BACKEND_URL, BASE_URL, PYTHON, assertTestDatabase } from "
  * credential mechanism.
  */
 
-export const E2E_PASSWORD = "e2e long passphrase 123";
+// Throwaway test values for a DISPOSABLE database. CI generates fresh ones per job (E2E_PASSWORD, E2E_BFF_SECRET,
+// E2E_SECURITY_KEY, masked in the log); the defaults only serve a developer's machine.
+export const E2E_PASSWORD = process.env.E2E_PASSWORD ?? "e2e long passphrase 123";
 
 /**
  * The SESSION run enforces the BFF internal secret end to end: the BFF sends it, FastAPI requires it. A test that talks
  * to FastAPI directly (to check what the backend itself says) must act as the BFF, so it goes through `direct`.
  * Specs that prove what happens WITHOUT the secret use a bare `fetch`.
  */
-export const E2E_BFF_SECRET = "e2e-bff-secret-5c1f9a3e7b2d40869e1c7a35b8d20f64";
+export const E2E_BFF_SECRET = process.env.E2E_BFF_SECRET ?? "e2e-bff-secret-5c1f9a3e7b2d40869e1c7a35b8d20f64";
 
 export function direct(url: string, init: RequestInit = {}): Promise<Response> {
   return fetch(url, { ...init, headers: { ...(init.headers as Record<string, string> | undefined), "x-bff-secret": E2E_BFF_SECRET } });
@@ -30,7 +32,7 @@ export const BACKEND_AUTH_ENV: Record<string, string> = {
   ARGON2_MEMORY_KIB: "1024",
   ARGON2_TIME_COST: "1",
   ARGON2_PARALLELISM: "1",
-  SECURITY_KEY: "e2e-session-security-key-0123456789abcdef",
+  SECURITY_KEY: process.env.E2E_SECURITY_KEY ?? "e2e-session-security-key-0123456789abcdef",
   BFF_INTERNAL_SECRET: E2E_BFF_SECRET,
   // Many specs sign in from the one local address: keep their throttling budgets out of each other's way.
   THROTTLE_SOURCE_MAX_FAILURES: "1000",

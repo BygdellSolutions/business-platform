@@ -1,6 +1,8 @@
+import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { expect, test } from "./fixtures";
 
+import { ROOT_DIR } from "./env";
 import { FREDRIK, ORG_A, createCustomer, psql, signIn } from "./support";
 
 /**
@@ -17,9 +19,15 @@ test("data written through the running stack goes to the test database, never th
   await createCustomer(context, ORG_A.id, marker);
 
   expect(psql("postgres-test", `select count(*) from customers where name = '${marker}'`)).toBe("1");
+  expect(psql("postgres-test", "select current_database()")).toMatch(/_test$/);
+  if (process.env.CI) {
+    // A CI runner has no development database at all (the guard in .github/scripts refuses any other): there is nothing to compare
+    // with, so assert that none is running, which is the strongest form of "the run cannot touch it".
+    expect(execFileSync("docker", ["compose", "ps", "-q", "postgres"], { cwd: ROOT_DIR, encoding: "utf8" }).trim()).toBe("");
+    return;
+  }
   expect(psql("postgres", `select count(*) from customers where name = '${marker}'`)).toBe("0");
   // and the two are different servers, not two databases of one
-  expect(psql("postgres-test", "select current_database()")).toMatch(/_test$/);
   expect(psql("postgres", "select current_database()")).not.toMatch(/_test$/);
 });
 

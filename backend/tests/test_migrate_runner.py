@@ -302,3 +302,25 @@ def test_the_failure_scrubber_removes_the_password_and_the_whole_url_from_a_mess
     assert "SENTINEL-SCRUB-PASSWORD" not in _scrub(f"could not connect using {url}: refused", url)
     assert "SENTINEL-SCRUB-PASSWORD" not in _scrub("password authentication failed (SENTINEL-SCRUB-PASSWORD)", url)
     assert _scrub("line one\nline two", url) == "line one"  # only the first line (parameters and statements follow it)
+
+
+def _alembic_cli(url: str, *args: str, with_web_settings: bool) -> subprocess.CompletedProcess[str]:
+    import os
+
+    environment = {k: v for k, v in os.environ.items() if k not in {"DATABASE_URL", "MIGRATION_DATABASE_URL", "APP_ENV", "SECURITY_KEY", "BFF_INTERNAL_SECRET"}}
+    environment.update({"MIGRATION_DATABASE_URL": url, "APP_ENV": "development"})
+    if with_web_settings:
+        environment["DATABASE_URL"] = url
+    return subprocess.run([sys.executable, "-m", "alembic", "-c", str(BACKEND_DIR / "alembic.ini"), *args], cwd=BACKEND_DIR, env=environment, capture_output=True, text=True, timeout=120)
+
+
+def test_the_alembic_cli_upgrade_needs_only_the_migration_credentials_and_check_needs_the_web_settings():
+    with disposable_database("mig") as url:
+        upgraded = _alembic_cli(url, "upgrade", "head", with_web_settings=False)  # no DATABASE_URL, no secrets: just MIGRATION_DATABASE_URL
+        assert upgraded.returncode == 0, upgraded.stderr[-1500:]
+        assert scalar(url, "select version_num from alembic_version") == HEAD
+        assert _alembic_cli(url, "current", with_web_settings=False).returncode == 0
+        checked = _alembic_cli(url, "check", with_web_settings=True)  # the schema matches the models
+        assert checked.returncode == 0 and "No new upgrade operations detected" in checked.stdout + checked.stderr
+        if __import__("os").environ.get("CI"):  # (a developer's .env would supply the web settings; a clean checkout does not)
+            assert _alembic_cli(url, "check", with_web_settings=False).returncode != 0  # check reads the models, which need the web settings

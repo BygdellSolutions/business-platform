@@ -279,3 +279,15 @@ def test_the_ordinary_application_tests_pass_connected_as_the_runtime_role(world
     summary = result.stdout.strip().splitlines()[-1]
     assert " passed" in summary and "failed" not in summary and "error" not in summary
     assert int(summary.split(" passed")[0].split()[-1]) > 300  # it really ran the suite
+
+
+def test_a_role_run_refuses_to_start_as_the_owner_or_a_superuser(world):
+    """The child run's own guard (tests/conftest.py): handing it the OWNER's or the superuser's URL stops it before any test."""
+    for url in (world.owner_url, world.admin):
+        environment = {k: v for k, v in os.environ.items() if k not in {"DATABASE_URL", "MIGRATION_DATABASE_URL"}}
+        environment.update({"TEST_DATABASE_URL": world.admin, "TEST_RUNTIME_ROLE_URL": url})
+        result = subprocess.run(
+            [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/test_customers_api.py"],
+            cwd=BACKEND_DIR, env=environment, capture_output=True, text=True, timeout=300,
+        )
+        assert result.returncode == 2 and "not a restricted runtime role" in result.stdout + result.stderr

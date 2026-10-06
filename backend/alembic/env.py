@@ -6,9 +6,9 @@ from app.core import migration
 
 # The migration job (app.scripts.migrate) runs with the MIGRATION credentials and no web configuration or secrets, and
 # the model modules cannot be imported without the web process's settings (a module package imports its API). The
-# migrations themselves are plain operations that never read the models, so the job passes its connection and no
-# metadata is loaded. The metadata is needed only for `alembic revision --autogenerate` and `alembic check`, which
-# are development commands.
+# migrations themselves are plain operations that never read the models, so `upgrade` (the job's, or the CLI's) loads no
+# metadata. The metadata is needed only for `alembic revision --autogenerate` and `alembic check`, which are development
+# and CI commands and therefore also need the web settings (DATABASE_URL, APP_ENV).
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -21,9 +21,18 @@ if config.config_file_name is not None:
     # reset does) must not silence the application's own loggers.
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 
+def wants_metadata() -> bool:
+    """Only autogenerate-style work reads the models. The migration job (it passes its connection) and the CLI's `upgrade`,
+    `downgrade`, `current` ... never do, so they need the MIGRATION credentials and nothing of the web configuration."""
+    options = config.cmd_opts
+    if options is None:  # called programmatically
+        return config.attributes.get("connection") is None
+    return getattr(options.cmd[0], "__name__", "") in ("check", "revision")  # the command alembic is running
+
+
 def load_target_metadata():
-    if config.attributes.get("connection") is not None:
-        return None  # the migration job: upgrade only
+    if not wants_metadata():
+        return None
     from app.core.base import Base
     from app import models  # noqa: F401  (registers models on Base.metadata)
     from app.modules.equine import models as equine_models  # noqa: F401  (domain module models)

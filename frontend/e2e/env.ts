@@ -40,6 +40,21 @@ export const POSTGRES_USER = merged.POSTGRES_USER ?? "business_platform";
 export const POSTGRES_DB = merged.POSTGRES_DB ?? "business_platform";
 export const POSTGRES_TEST_DB = merged.POSTGRES_TEST_DB ?? "business_platform_test";
 
+/**
+ * The browser Playwright drives. Locally the installed Microsoft Edge (E2E_BROWSER=chrome for Chrome). In CI there is NO
+ * fallback: a runner has no Edge, so E2E_BROWSER must be set (the workflows use "chromium", installed by
+ * `playwright install chromium`) and an unset value stops the run instead of silently asking for a browser that is not there.
+ */
+export function browserChannel(): string {
+  const configured = process.env.E2E_BROWSER;
+  if (configured) return configured;
+  if (process.env.CI) throw new Error("E2E_BROWSER is not set. CI has no installed Microsoft Edge: set E2E_BROWSER=chromium (see .github/workflows/ci.yml).");
+  return "msedge";
+}
+
+/** Traces and screenshots hold cookies, tokens and one-time links; CI keeps none of them (failure artifacts are redacted text only). */
+export const TRACE_MODE = process.env.CI ? ("off" as const) : ("retain-on-failure" as const);
+
 export const PYTHON = path.join(BACKEND_DIR, process.platform === "win32" ? ".venv/Scripts/python.exe" : ".venv/bin/python");
 
 /** Throws unless TEST_DATABASE_URL is set and clearly a test database that is not the dev one. */

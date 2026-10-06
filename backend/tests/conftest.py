@@ -30,6 +30,7 @@ os.environ["DATABASE_URL"] = RUNTIME_ROLE_URL or TEST_DATABASE_URL  # before app
 os.environ["MIGRATION_DATABASE_URL"] = TEST_DATABASE_URL  # a developer's .env value must never redirect a migration to the dev database
 os.environ.pop("BFF_INTERNAL_SECRET", None)  # tests are the documented unauthenticated development mode unless a test opts in
 os.environ.setdefault("APP_ENV", "development")  # tests are development by definition (production refuses AUTH_MODE=dev)
+os.environ.setdefault("AUTH_MODE", "dev")  # ... with the dev identity unless a test chooses otherwise (never rely on a developer's .env for it)
 
 from collections.abc import Iterator
 from types import SimpleNamespace
@@ -62,7 +63,26 @@ from tests.factories import (
 def fresh_test_database() -> None:
     """Drop and re-migrate the test database once per session (no seed: tests build their own data)."""
     if RUNTIME_ROLE_URL:
-        return  # a role run: the database was bootstrapped (roles, grants) and migrated by the owner role already
+        # A role run: the database was bootstrapped (roles, grants) and migrated by the owner role already. PROVE that this
+        # connection really is the restricted runtime role (a run as the owner or a superuser would prove nothing).
+        from sqlalchemy import create_engine, text
+
+        engine = create_engine(RUNTIME_ROLE_URL)
+        try:
+            with engine.connect() as connection:
+                privileged = connection.execute(
+                    text(
+                        "select (select rolsuper or rolcreatedb or rolcreaterole or rolreplication or rolbypassrls from pg_roles where rolname = current_user)"
+                        " or has_schema_privilege(current_user, 'public', 'CREATE')"
+                        " or exists (select 1 from pg_class c join pg_roles r on r.oid = c.relowner where r.rolname = current_user)"
+                        " or exists (select 1 from pg_database d join pg_roles r on r.oid = d.datdba where d.datname = current_database() and r.rolname = current_user)"
+                    )
+                ).scalar()
+        finally:
+            engine.dispose()
+        if privileged:
+            pytest.exit("Refusing to run: TEST_RUNTIME_ROLE_URL is not a restricted runtime role (superuser, creator, owner or schema CREATE).", returncode=2)
+        return
     reset_test_db.reset(TEST_DATABASE_URL)
 
 

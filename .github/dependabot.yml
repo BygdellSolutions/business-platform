@@ -1,0 +1,9 @@
+# Keeps the pinned action SHAs (and their `# vX.Y.Z` comments) current. Only GitHub Actions: application dependencies and base
+# images are reviewed deliberately (see docs/architecture.md, "Continuous integration (D3 as built)").
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5

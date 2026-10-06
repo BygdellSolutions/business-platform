@@ -1,5 +1,6 @@
 """Test execution can never modify the development database."""
 
+import os
 import uuid
 
 import pytest
@@ -14,6 +15,12 @@ from app.scripts.reset_test_db import UnsafeDatabase, assert_is_test_database
 DEV = "postgresql+psycopg://user:pw@localhost:5432/business_platform"
 
 
+def development_urls() -> tuple[str, ...]:
+    """The developer's development URL(s) from .env, or, where none exists (CI has no development database), a synthetic one,
+    so the guard is still exercised against a development-shaped URL."""
+    return reset_test_db.DEVELOPMENT_DATABASE_URLS or (DEV,)
+
+
 # --- what this pytest session is connected to ----------------------------------------------------
 
 
@@ -23,8 +30,9 @@ def test_the_application_engine_points_at_the_test_database():
 
 
 def test_the_test_database_is_not_any_development_database():
-    assert reset_test_db.DEVELOPMENT_DATABASE_URLS, "the dev URL should be known from .env"
-    for dev_url in reset_test_db.DEVELOPMENT_DATABASE_URLS:
+    if not os.environ.get("CI"):
+        assert reset_test_db.DEVELOPMENT_DATABASE_URLS, "the dev URL should be known from .env"  # (CI has no development database at all)
+    for dev_url in development_urls():
         dev, test = make_url(dev_url), engine.url
         assert dev.database != test.database
         assert (dev.host, dev.port) != (test.host, test.port) or dev.database != test.database
@@ -79,7 +87,7 @@ def test_destructive_setup_refuses_before_it_ever_connects(monkeypatch: pytest.M
         raise AssertionError("tried to connect to a database that must be refused")
 
     monkeypatch.setattr(reset_test_db, "create_engine", never_connect)
-    for dev_url in reset_test_db.DEVELOPMENT_DATABASE_URLS:
+    for dev_url in development_urls():
         with pytest.raises(UnsafeDatabase):
             reset_test_db.reset_schema(dev_url)
         with pytest.raises(UnsafeDatabase):
@@ -88,7 +96,7 @@ def test_destructive_setup_refuses_before_it_ever_connects(monkeypatch: pytest.M
 
 def test_the_reset_command_refuses_when_pointed_at_the_development_database(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(reset_test_db, "create_engine", lambda *a, **k: pytest.fail("connected"))
-    monkeypatch.setattr(reset_test_db, "test_database_url", lambda env=None: reset_test_db.DEVELOPMENT_DATABASE_URLS[0])
+    monkeypatch.setattr(reset_test_db, "test_database_url", lambda env=None: development_urls()[0])
 
     assert reset_test_db.main(["--seed"]) == 2
 
@@ -102,6 +110,8 @@ def test_a_missing_test_database_url_is_an_error_not_a_fallback():
 
 
 def test_data_written_by_tests_never_appears_in_the_development_database():
+    if not reset_test_db.DEVELOPMENT_DATABASE_URLS:
+        pytest.skip("no development database is configured (CI has none): nothing to compare against")
     marker = f"isolation-canary-{uuid.uuid4().hex}"
     with engine.begin() as connection:  # committed, on the TEST server
         connection.execute(text("insert into organizations (name) values (:n)"), {"n": marker})
@@ -121,3 +131,17 @@ def test_data_written_by_tests_never_appears_in_the_development_database():
     finally:
         with engine.begin() as connection:
             connection.execute(text("delete from organizations where name = :n"), {"n": marker})
+
+
+def test_the_reset_command_needs_no_developer_env_file_or_app_env():
+    """Playwright's global setup runs it with nothing but TEST_DATABASE_URL (a CI runner has no .env and no APP_ENV)."""
+    import subprocess
+    import sys
+
+    from tests.db_support import BACKEND_DIR, disposable_database
+
+    with disposable_database("reset") as url:
+        environment = {k: v for k, v in os.environ.items() if k not in {"DATABASE_URL", "MIGRATION_DATABASE_URL", "APP_ENV", "AUTH_MODE"}}
+        environment["TEST_DATABASE_URL"] = url
+        result = subprocess.run([sys.executable, "-m", "app.scripts.reset_test_db", "--seed"], cwd=BACKEND_DIR, env=environment, capture_output=True, text=True, timeout=180)
+        assert result.returncode == 0, result.stderr[-1500:]

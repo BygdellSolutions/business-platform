@@ -1,0 +1,92 @@
+name: Security audit
+
+# INFORMATIONAL, scheduled (and on demand): never a pull-request or merge gate. Third-party advisory databases and scanners change
+# daily, so a new advisory must not block unrelated work; the result is read by a person (the run's summary and logs), and a
+# finding that matters becomes a TODO. The correctness gates are in ci.yml. Policy and the reviewed baseline: docs/architecture.md,
+# "Continuous integration (D3 as built)". Nothing here uses a secret, the network of a real environment or a real database.
+
+on:
+  schedule:
+    - cron: "17 5 * * 1" # Mondays 05:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audit-${{ github.run_id }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  python-dependencies:
+    name: python-dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: "0.12.23"
+          python-version: "3.13"
+      - name: pip-audit over the locked PRODUCTION dependencies
+        working-directory: backend
+        run: |
+          uv export --frozen --no-dev --no-hashes --no-emit-project -o "${RUNNER_TEMP}/requirements.txt"
+          uvx pip-audit==2.10.1 -r "${RUNNER_TEMP}/requirements.txt" --disable-pip --no-deps 2>&1 | tee -a "${GITHUB_STEP_SUMMARY}"
+
+  npm-dependencies:
+    name: npm-dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+      - name: npm audit, production dependencies (what the image ships)
+        working-directory: frontend
+        run: npm audit --omit=dev 2>&1 | tee -a "${GITHUB_STEP_SUMMARY}"
+      # Development tooling is reported but does not fail the run: its findings are not in the runtime image.
+      - name: npm audit, all dependencies (informational)
+        working-directory: frontend
+        continue-on-error: true
+        run: npm audit 2>&1 | tee -a "${GITHUB_STEP_SUMMARY}"
+
+  images:
+    name: images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build the two production images
+        run: |
+          docker build -t bp-audit-backend backend
+          docker build -t bp-audit-frontend frontend
+      # exit-code "0" until the BASELINE has been reviewed (the first run reports base-image findings: Debian packages and the
+      # npm CLI that node:22-slim bundles). The full table is in the log; flip to "1" once the policy in docs/architecture.md is accepted.
+      - name: Trivy, backend image (HIGH and CRITICAL with a fix available)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: bp-audit-backend
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          vuln-type: os,library
+          exit-code: "0"
+      - name: Trivy, frontend image (HIGH and CRITICAL with a fix available)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: bp-audit-frontend
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          vuln-type: os,library
+          exit-code: "0"

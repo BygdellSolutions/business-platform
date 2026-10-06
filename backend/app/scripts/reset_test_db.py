@@ -90,6 +90,7 @@ def reset_schema(url: str) -> None:
 def migrate(url: str) -> None:
     assert_is_test_database(url)
     os.environ["DATABASE_URL"] = url
+    os.environ.setdefault("APP_ENV", "development")  # test databases are development by definition (the settings have no default)
     from alembic import command
     from alembic.config import Config
 
@@ -106,6 +107,7 @@ def migrate(url: str) -> None:
 def seed(url: str) -> None:
     assert_is_test_database(url)
     os.environ["DATABASE_URL"] = url
+    os.environ.setdefault("APP_ENV", "development")  # test databases are development by definition (the settings have no default)
     from app.core.config import settings
     from app.core.db import SessionLocal
     from app.scripts.seed_dev import seed as seed_development_data
@@ -132,6 +134,7 @@ def main(argv: list[str] | None = None) -> int:
         url = test_database_url()
         assert_is_test_database(url)
         os.environ["DATABASE_URL"] = url
+        os.environ.setdefault("APP_ENV", "development")  # test databases are development by definition (the settings have no default)
         os.environ["MIGRATION_DATABASE_URL"] = url
         reset(url, with_seed=args.seed)
     except UnsafeDatabase as exc:

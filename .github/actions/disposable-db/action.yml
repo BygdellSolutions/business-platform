@@ -1,0 +1,39 @@
+name: Disposable PostgreSQL 17 test server
+description: >-
+  Starts the repository's own `postgres-test` service (root docker-compose.yml: PostgreSQL 17 on tmpfs, port 5433, loopback
+  only) with a freshly generated, masked password and a unique Compose project name, exports TEST_DATABASE_URL, and runs the CI
+  database guard. The server and its data vanish with the job; nothing here is a repository or deployment secret.
+
+inputs:
+  label:
+    description: Short job label, part of the unique Compose project name (two jobs never share Docker resources).
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Start the disposable database
+      shell: bash
+      env:
+        LABEL: ${{ inputs.label }}
+      run: |
+        set -euo pipefail
+        password="$(openssl rand -hex 24)"
+        echo "::add-mask::${password}"
+        {
+          echo "POSTGRES_USER=ci_admin"
+          echo "POSTGRES_PASSWORD=${password}"
+          echo "POSTGRES_DB=ci_unused"
+          echo "POSTGRES_TEST_DB=business_platform_test"
+          echo "POSTGRES_TEST_PORT=5433"
+          echo "COMPOSE_PROJECT_NAME=bp-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${LABEL}"
+          echo "TEST_DATABASE_URL=postgresql+psycopg://ci_admin:${password}@127.0.0.1:5433/business_platform_test"
+        } >> "${GITHUB_ENV}"
+
+    - name: Wait for it (bounded) and run the guard
+      shell: bash
+      run: |
+        set -euo pipefail
+        docker compose version
+        docker compose up -d --wait --wait-timeout 90 postgres-test
+        python3 .github/scripts/assert_ci_database.py

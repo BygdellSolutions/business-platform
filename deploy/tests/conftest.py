@@ -133,8 +133,9 @@ def frontend_images() -> Iterator[dict[str, str]]:
         docker("rmi", "-f", tag, check=False)
 
 
-BFF_SECRET = "5c1f9a3e7b2d40869e1c7a35b8d20f64a1c7e903d5b6f2a8"
-SECURITY_KEY = "9e4b7a1d3c6f20851b7d9a4e6c3f08295d1a7b4e"
+# Generated per test session (nothing here is a fixed secret, and nothing leaves the disposable containers they configure).
+BFF_SECRET = secrets.token_hex(24)
+SECURITY_KEY = secrets.token_hex(24)
 
 # A COMPLETE production configuration (D2): every rule the backend enforces at startup is satisfied.
 BACKEND_ENV = {
