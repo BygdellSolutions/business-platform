@@ -9,9 +9,11 @@ import pytest
 from sqlalchemy import text
 from starlette.requests import Request
 
-from app.core import clock, passwords, security_events
+from app.core import clock, internal_auth, passwords, security_events
+from pydantic import SecretStr
+
 from app.core.config import settings
-from tests.auth_support import OTHER_PASSWORD, PASSWORD, events, login, login_user
+from tests.auth_support import BFF_SECRET, OTHER_PASSWORD, PASSWORD, events, login, login_user
 
 pytestmark = pytest.mark.usefixtures("session_mode")
 
@@ -19,6 +21,7 @@ pytestmark = pytest.mark.usefixtures("session_mode")
 @pytest.fixture(autouse=True)
 def client_ip_from_header(session_mode, monkeypatch):
     monkeypatch.setattr(settings, "trust_client_ip_header", True)
+    monkeypatch.setattr(settings, "bff_internal_secret", SecretStr(BFF_SECRET))  # the client address is believed only from the BFF
 
 
 @pytest.fixture
@@ -220,8 +223,8 @@ def test_every_throttle_count_is_a_limited_index_scan(db_session):
 # --- the source key ---------------------------------------------------------------------------------------------------------------------------------
 
 
-def request_with(headers: dict[str, str], peer: str | None = "10.0.0.1") -> Request:
-    scope = {"type": "http", "headers": [(k.lower().encode(), v.encode()) for k, v in headers.items()], "client": (peer, 1234) if peer else None}
+def request_with(headers: dict[str, str], peer: str | None = "10.0.0.1", authenticated: bool = True) -> Request:
+    scope = {"type": "http", "headers": [(k.lower().encode(), v.encode()) for k, v in headers.items()], "client": (peer, 1234) if peer else None, internal_auth.AUTHENTICATED_KEY: authenticated}
     return Request(scope)
 
 

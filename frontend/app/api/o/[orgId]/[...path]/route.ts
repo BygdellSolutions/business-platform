@@ -5,6 +5,8 @@ import { authMode } from "@/lib/auth/config";
 import { credentialFromRequest, loginPath } from "@/lib/auth/credential";
 import { originProblem, validCsrf } from "@/lib/auth/request";
 import { isSameOrigin } from "@/lib/origin";
+import { instrument } from "@/lib/observability";
+import { infrastructureFailure, isInfrastructureFailure, upstreamUnavailable } from "@/lib/upstream";
 import { pdfPassThrough, unexpected } from "@/lib/pdf-response";
 
 /**
@@ -29,7 +31,10 @@ import { pdfPassThrough, unexpected } from "@/lib/pdf-response";
  *  - responses carry only the status and body; no headers or cookies from the backend. The one
  *    exception in KIND is the binary PDF of an invoice (see lib/pdf-response.ts): it is validated, and
  *    its headers are rebuilt, never copied.
- *  - requests carry no client headers EXCEPT a validated If-Match (optimistic concurrency).
+ *  - requests carry no client headers EXCEPT a validated If-Match (optimistic concurrency). The internal secret and the
+ *    request id are added by `backendFetch` from the BFF's own state; the browser cannot supply either.
+ *  - when FastAPI cannot answer (refused connection, timeout, any 5xx, or it refusing our internal secret) the browser gets
+ *    a fixed, coarse 502/503/504 (see lib/upstream.ts); ordinary 4xx answers pass through untouched.
  */
 
 type Context = { params: Promise<{ orgId: string; path: string[] }> };
@@ -104,10 +109,12 @@ async function handle(request: NextRequest, context: Context): Promise<NextRespo
       csrf,
       accept: wantsPdf ? "application/pdf, application/json;q=0.9" : undefined,
     });
-  } catch {
-    return failure(502, "Backend unavailable");
+  } catch (error) {
+    return upstreamUnavailable(error);
   }
   if (upstream.status >= 300 && upstream.status < 400) return failure(502, "Unexpected response from the backend");
+  // A 5xx, or FastAPI refusing the BFF's own secret, is replaced by a fixed answer; ordinary 4xx pass through below.
+  if (isInfrastructureFailure(upstream)) return infrastructureFailure(upstream);
   if (upstream.status === 401) return unauthenticated();
 
   const upstreamType = (upstream.headers.get("content-type") ?? "").toLowerCase();
@@ -126,7 +133,7 @@ async function handle(request: NextRequest, context: Context): Promise<NextRespo
 }
 
 // Only these methods exist; everything else is answered 405 by Next.js.
-export const GET = handle;
-export const POST = handle;
-export const PATCH = handle;
-export const DELETE = handle;
+export const GET = instrument(handle);
+export const POST = instrument(handle);
+export const PATCH = instrument(handle);
+export const DELETE = instrument(handle);

@@ -37,6 +37,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+const preRequest = () => new NextRequest(`${ORIGIN}/api/auth/pre`);
+
 function post(path: string, options: { headers?: Record<string, string>; cookies?: Record<string, string>; body?: unknown; rawBody?: string } = {}) {
   const { headers = {}, cookies = {}, body, rawBody } = options;
   const cookie = Object.entries(cookies).map(([k, v]) => `${k}=${v}`).join("; ");
@@ -58,8 +60,8 @@ function setCookies(response: Response): string[] {
 
 describe("GET /api/auth/pre", () => {
   it("issues a fresh random pre-auth secret as an HttpOnly cookie and in the body, uncached", async () => {
-    const first = pre.GET();
-    const second = pre.GET();
+    const first = await pre.GET(preRequest());
+    const second = await pre.GET(preRequest());
 
     const a = ((await first.json()) as { token: string }).token;
     const b = ((await second.json()) as { token: string }).token;
@@ -75,10 +77,10 @@ describe("GET /api/auth/pre", () => {
     expect(first.headers.get("cache-control")).toBe("no-store");
   });
 
-  it("uses the __Host- name and Secure over https", () => {
+  it("uses the __Host- name and Secure over https", async () => {
     vi.stubEnv("APP_ENV", "production");
     vi.stubEnv("PUBLIC_ORIGIN", "https://app.example.com");
-    const cookie = pre.GET().headers.getSetCookie()[0];
+    const cookie = (await pre.GET(preRequest())).headers.getSetCookie()[0];
     expect(cookie).toMatch(/^__Host-bp_pre=/);
     expect(cookie).toMatch(/Secure/i);
     expect(cookie).toMatch(/Path=\//);
@@ -87,7 +89,7 @@ describe("GET /api/auth/pre", () => {
 
   it("does not exist outside session mode", async () => {
     vi.stubEnv("AUTH_MODE", "dev");
-    expect(pre.GET().status).toBe(404);
+    expect((await pre.GET(preRequest())).status).toBe(404);
   });
 });
 
@@ -129,6 +131,7 @@ describe("POST /api/auth/login", () => {
 
   it("over https the cookies are __Host- prefixed and Secure", async () => {
     vi.stubEnv("APP_ENV", "production");
+    vi.stubEnv("BACKEND_URL", "http://backend:8000"); // production accepts only a private backend address
     vi.stubEnv("PUBLIC_ORIGIN", "https://app.example.com");
     const request = loginRequest(undefined, { headers: { origin: "https://app.example.com", "x-pre-auth": PRE }, cookies: { "__Host-bp_pre": PRE } });
 

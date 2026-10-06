@@ -13,7 +13,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.db import Base
+from app.core.base import Base
 from app.models.mixins import TenantOwned
 
 # Sanity bounds enforced by the database; the API additionally rejects future years.

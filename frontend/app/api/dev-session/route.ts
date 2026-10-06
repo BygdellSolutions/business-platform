@@ -4,6 +4,7 @@ import { backendFetch } from "@/lib/backend";
 import { isSameOrigin } from "@/lib/origin";
 import { devIdentityEnabled } from "@/lib/auth/config";
 import { DEV_USER_COOKIE, DEV_USER_MAX_AGE_SECONDS, parseEmail } from "@/lib/identity";
+import { instrument } from "@/lib/observability";
 
 /**
  * Development sign-in: sets or clears the httpOnly dev identity cookie.
@@ -20,7 +21,7 @@ function redirect(_request: NextRequest, to: string): NextResponse {
   return new NextResponse(null, { status: 303, headers: { location: to } });
 }
 
-export async function POST(request: NextRequest): Promise<NextResponse> {
+export const POST = instrument(async function POST(request: NextRequest): Promise<NextResponse> {
   if (!devIdentityEnabled()) return new NextResponse(null, { status: 404 });
 
   if (!isSameOrigin(request)) {
@@ -60,4 +61,4 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     secure: request.nextUrl.protocol === "https:",
   });
   return response;
-}
+});

@@ -11,7 +11,24 @@
 # and the package managers (uv and pip are removed).
 #
 # Runtime: a non-root user, ONE Uvicorn worker, port 8000. The web process never runs migrations; they are an explicit,
-# separate step (D2 adds the migrate wrapper). All configuration comes from the environment at run time.
+# separate one-shot job from the SAME image with its own credentials: `python -m app.scripts.migrate` (advisory lock, exact
+# head, runtime-role grants). All configuration comes from the environment at run time.
+#
+# Uvicorn flags: no access log (it prints the whole request target, query string included; the application writes its own
+# safe JSON line) and no proxy-header handling (the client address is the BFF's job, believed only after the BFF secret).
+#
+# HEALTHCHECK = READINESS (database reachable and at exactly this image's Alembic head). It gates deployments: a new
+# container is not "healthy" until it is migrated and connected. It is NOT a restart signal: nothing here exits on an
+# unready answer, and the plain liveness probe is GET /health (no dependencies). An orchestrator that restarts unhealthy
+# containers must be pointed at /health instead, or a database outage becomes a restart storm.
+#
+# Uvicorn flags: no access log (it prints the whole request target, query string included; the application writes its own
+# safe JSON line) and no proxy-header handling (the client address is the BFF's job, believed only after the BFF secret).
+#
+# HEALTHCHECK = READINESS (database reachable and at exactly this image's Alembic head). It gates deployments: a new
+# container is not "healthy" until it is migrated-and-connected. It is NOT a restart signal: nothing here exits on an
+# unready answer, and the plain liveness probe is GET /health (no dependencies). An orchestrator that restarts unhealthy
+# containers must be pointed at /health instead, or a database outage becomes a restart storm.
 
 FROM ghcr.io/astral-sh/uv:0.12.23 AS uv
 
@@ -36,8 +53,6 @@ RUN /app/.venv/bin/python -m compileall -q /app/app  && python -m pip uninstall 
 ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/app
 USER 10001:10001
 EXPOSE 8000
-# Interim (D1): the existing cheap liveness endpoint. D2 replaces it with the readiness check (database reachable and
-# exactly this image's Alembic head); until then this only says "the process answers".
-HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=3 \
-  CMD ["python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2).status == 200 else 1)"]
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
+  CMD ["python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=4).status == 200 else 1)"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--no-access-log", "--no-proxy-headers", "--no-server-header"]

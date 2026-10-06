@@ -5,6 +5,7 @@ import { json, problem, readJsonObject, sessionModeOnly } from "@/lib/auth/handl
 import { originProblem, validCsrf } from "@/lib/auth/request";
 import { backendFetch, isUuid } from "@/lib/backend";
 import { isInviteToken } from "@/lib/invite";
+import { instrument } from "@/lib/observability";
 
 /**
  * Accept an invitation as an EXISTING, signed-in account: an authenticated operation, so the ordinary session
@@ -13,7 +14,7 @@ import { isInviteToken } from "@/lib/invite";
  * the browser (no organization header is sent): FastAPI reads it from the invitation row, and only if the signed-in
  * account is the one the invitation was made for. Nothing the browser says about role or organization is forwarded.
  */
-export async function POST(request: NextRequest) {
+export const POST = instrument(async function POST(request: NextRequest) {
   const refused = sessionModeOnly();
   if (refused) return refused;
   if (originProblem(request) !== null) return problem(403, "forbidden_origin", "This request was not accepted.");
@@ -47,4 +48,4 @@ export async function POST(request: NextRequest) {
     return problem(502, "unavailable", "Invitations are unavailable right now.");
   }
   return json({ organization_id: data.organization_id, role: data.role, joined: data.joined });
-}
+});

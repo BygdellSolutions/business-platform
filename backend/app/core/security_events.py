@@ -19,6 +19,7 @@ from fastapi import Request
 from sqlalchemy import delete, exists, func, select
 from sqlalchemy.orm import Session
 
+from app.core import internal_auth
 from app.core.config import settings
 from app.models.auth import SecurityEvent
 
@@ -37,16 +38,21 @@ def identifier_hash(normalized_identifier: str) -> str:
 def client_source(request: Request) -> str:
     """The caller's address as a throttling key: an IPv4 address, an IPv6 /64 or "unknown".
 
-    Behind the BFF the address comes from `client_ip_header` (TRUST_CLIENT_IP_HEADER=true, valid only while
-    FastAPI is reachable from the BFF alone); otherwise it is the connection's peer.
+    Behind the BFF the address comes from `client_ip_header`, but ONLY with TRUST_CLIENT_IP_HEADER=true AND on a request
+    that passed the BFF internal-secret check (valid only while FastAPI is reachable from the BFF alone); otherwise it
+    is the connection's peer. An unauthenticated caller's header is never believed, whatever the setting.
     """
-    raw = request.headers.get(settings.client_ip_header) if settings.trust_client_ip_header else None
+    raw = None
+    if settings.trust_client_ip_header and internal_auth.is_authenticated(request.scope):
+        raw = request.headers.get(settings.client_ip_header)
     if raw is None and request.client is not None:
         raw = request.client.host
     try:
         address = ipaddress.ip_address((raw or "").split(",")[0].strip())
     except ValueError:
         return "unknown"
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
+        address = address.ipv4_mapped  # "::ffff:203.0.113.7" is the IPv4 client, not one /64 shared by every IPv4 client
     if isinstance(address, ipaddress.IPv6Address):
         return str(ipaddress.ip_network(f"{address}/64", strict=False))
     return str(address)

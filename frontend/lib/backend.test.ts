@@ -107,6 +107,7 @@ describe("backendFetch", () => {
     fetchMock = vi.fn().mockResolvedValue(new Response("[]"));
     vi.stubGlobal("fetch", fetchMock);
     vi.stubEnv("BACKEND_URL", "http://backend.test:9000/");
+    vi.stubEnv("APP_ENV", "development"); // production accepts only a private backend address
   });
   afterEach(() => {
     vi.unstubAllGlobals();

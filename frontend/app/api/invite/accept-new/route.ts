@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { callAuthEndpoint, parseSession, preAuthProblem, problem, readJsonObject, retryAfter, sessionModeOnly, signedIn } from "@/lib/auth/handlers";
 import { isUuid } from "@/lib/backend";
 import { isInviteToken } from "@/lib/invite";
+import { instrument } from "@/lib/observability";
 
 /**
  * Create the account an invitation was made for, BEFORE authentication (the invitee has no session): the invite
@@ -11,7 +12,7 @@ import { isInviteToken } from "@/lib/invite";
  * and the organization and role from its locked row. FastAPI creates user, credential, membership and session in
  * one transaction; on success the BFF sets the protected cookies exactly as for a login and says where to go.
  */
-export async function POST(request: NextRequest) {
+export const POST = instrument(async function POST(request: NextRequest) {
   const refused = sessionModeOnly() ?? preAuthProblem(request);
   if (refused) return refused;
 
@@ -46,4 +47,4 @@ export async function POST(request: NextRequest) {
   if (upstream.status === 429) return problem(429, "throttled", "Too many attempts. Try again later.", retryAfter(upstream));
   if (upstream.status === 503) return problem(503, "busy", "The service is busy. Try again in a moment.", retryAfter(upstream));
   return problem(502, "unavailable", "Creating the account is unavailable right now.");
-}
+});

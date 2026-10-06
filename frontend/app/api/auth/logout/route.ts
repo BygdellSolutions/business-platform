@@ -5,6 +5,7 @@ import { json, problem, sessionModeOnly } from "@/lib/auth/handlers";
 import { originProblem, validCsrf } from "@/lib/auth/request";
 import { clearSessionCookies } from "@/lib/auth/session-cookies";
 import { backendFetch } from "@/lib/backend";
+import { instrument } from "@/lib/observability";
 
 /**
  * Logout: a CSRF-protected state change (Origin equal to PUBLIC_ORIGIN and the CSRF double-submit), so another
@@ -17,7 +18,7 @@ import { backendFetch } from "@/lib/backend";
  *   "unconfirmed"      FastAPI could not be reached or answered something else: the browser is signed out, but
  *                      the session may still be valid on the server until it expires
  */
-export async function POST(request: NextRequest) {
+export const POST = instrument(async function POST(request: NextRequest) {
   const refused = sessionModeOnly();
   if (refused) return refused;
   if (originProblem(request) !== null) return problem(403, "forbidden_origin", "This request was not accepted.");
@@ -41,4 +42,4 @@ export async function POST(request: NextRequest) {
   const response = json({ revoked });
   clearSessionCookies(response);
   return response;
-}
+});

@@ -118,7 +118,7 @@ def test_every_kind_of_failure_looks_exactly_the_same(session_client, db_session
     seen = {}
     for name, (email, password) in failure_cases(db_session).items():
         response = login(session_client, email, password)
-        seen[name] = (response.status_code, response.json(), {k: v for k, v in response.headers.items() if k not in ("date",)})
+        seen[name] = (response.status_code, response.json(), {k: v for k, v in response.headers.items() if k not in ("date", "x-request-id")})  # (the request id differs per request on purpose)
     assert {value[0] for value in seen.values()} == {401}
     reference = seen["wrong password"]
     for name, outcome in seen.items():

@@ -60,7 +60,7 @@ describe("upstream authentication is built from the protected cookie", () => {
     await call("GET");
 
     const headers = Object.fromEntries(sentHeaders());
-    expect(headers).toEqual({ accept: "application/json", authorization: `Bearer ${SESSION}`, "x-organization-id": ORG });
+    expect(headers).toEqual({ accept: "application/json", authorization: `Bearer ${SESSION}`, "x-organization-id": ORG, "x-request-id": expect.stringMatching(/^[0-9a-f]{32}$/) });
   });
 
   it("ignores a client-supplied Authorization header", async () => {
@@ -88,7 +88,7 @@ describe("upstream authentication is built from the protected cookie", () => {
     });
 
     const names = [...sentHeaders().keys()].sort();
-    expect(names).toEqual(["accept", "authorization", "x-organization-id"]);
+    expect(names).toEqual(["accept", "authorization", "x-organization-id", "x-request-id"]);
     expect(sentHeaders().get("x-organization-id")).toBe(ORG);
     expect(sentHeaders().has("cookie")).toBe(false);
   });
@@ -180,6 +180,7 @@ describe("state-changing requests: the browser half of CSRF", () => {
 
   it("over https uses the __Host- cookies and the https origin", async () => {
     vi.stubEnv("APP_ENV", "production");
+    vi.stubEnv("BACKEND_URL", "http://backend:8000"); // production accepts only a private backend address
     vi.stubEnv("PUBLIC_ORIGIN", "https://app.example.com");
     const cookies = { "__Host-bp_session": SESSION, "__Host-bp_csrf": CSRF };
     const headers = { ...MUTATION.headers, origin: "https://app.example.com" };
@@ -234,6 +235,6 @@ describe("modes do not leak into each other", () => {
     expect((await call("GET", { cookies: { bp_session: SESSION } })).status).toBe(401);
     expect(fetchMock).not.toHaveBeenCalled();
     await call("GET", { cookies: { bp_dev_user: "maria@dev.test" } });
-    expect(Object.fromEntries(sentHeaders())).toEqual({ accept: "application/json", "x-dev-user-email": "maria@dev.test", "x-organization-id": ORG });
+    expect(Object.fromEntries(sentHeaders())).toEqual({ accept: "application/json", "x-dev-user-email": "maria@dev.test", "x-organization-id": ORG, "x-request-id": expect.stringMatching(/^[0-9a-f]{32}$/) });
   });
 });

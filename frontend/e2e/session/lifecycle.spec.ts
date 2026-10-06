@@ -1,6 +1,6 @@
 import { expect, test } from "../fixtures";
 
-import { E2E_PASSWORD, signInThroughPage, signInWithPassword } from "../auth-support";
+import { direct, E2E_PASSWORD, signInThroughPage, signInWithPassword } from "../auth-support";
 import { BACKEND_URL, BASE_URL } from "../env";
 import { FREDRIK, MARIA, ORG_A, ORG_B, createWorld, sql, testRow, type World } from "../support";
 
@@ -18,7 +18,7 @@ test.afterEach(() => {
 
 const SESSIONS_OF = (email: string) => `user_id = (select id from users where email = ${sql(email)})`;
 const tokenOf = async (context: import("@playwright/test").BrowserContext) => (await context.cookies()).find((c) => c.name === "bp_session")!.value;
-const backendStatus = async (token: string, path = "/api/me/user") => (await fetch(`${BACKEND_URL}${path}`, { headers: { authorization: `Bearer ${token}` } })).status;
+const backendStatus = async (token: string, path = "/api/me/user") => (await direct(`${BACKEND_URL}${path}`, { headers: { authorization: `Bearer ${token}` } })).status;
 
 test.describe("logout", () => {
   test("signs this browser out, ends the session at the server, and a copied token cannot be reused", async ({ page, context }) => {

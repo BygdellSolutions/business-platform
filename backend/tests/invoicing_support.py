@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.core.db import SessionLocal, engine
 from app.main import app
 from app.models import Customer, CustomerType, Organization, Role
+from tests.auth_support import as_bff
 from tests.factories import add_member, make_customer, make_org, make_transaction, make_user
 
 INVOICES = "/api/invoices"
@@ -135,7 +136,7 @@ class Request:
 
         def run():
             try:
-                self.response = getattr(TestClient(app, raise_server_exceptions=False), method)(url, headers=headers, **kwargs)
+                self.response = getattr(TestClient(app, raise_server_exceptions=False), method)(url, headers=as_bff(headers), **kwargs)
             finally:
                 self.finished.set()
 

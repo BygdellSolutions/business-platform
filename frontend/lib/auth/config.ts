@@ -78,9 +78,37 @@ export function cookiePolicy(origin: string | null = authConfig().publicOrigin):
   return { secure, name: (kind) => (secure ? "__Host-" : "") + BASE[kind] };
 }
 
-/** How many trusted reverse-proxy hops sit in front of the BFF (default 0: no client address is forwarded). */
+/**
+ * How many trusted reverse-proxy hops sit in front of the BFF (default 0: no client address is forwarded). It stays 0
+ * until the deployment's proxy chain has been verified; the real count is a D5 finding, never a guess.
+ */
 export function trustedProxyHops(): number {
   const raw = process.env.TRUSTED_PROXY_HOPS;
   if (raw === undefined || !/^[0-9]$/.test(raw.trim())) return 0;
   return Number.parseInt(raw.trim(), 10);
+}
+
+/** Why TRUSTED_PROXY_HOPS is set but unusable (it would silently mean 0 hops), or null. */
+export function trustedProxyHopsProblem(): string | null {
+  const raw = process.env.TRUSTED_PROXY_HOPS;
+  if (raw === undefined || raw.trim() === "") return null;
+  return /^[0-9]$/.test(raw.trim()) ? null : "TRUSTED_PROXY_HOPS must be a single digit (the number of reverse proxies in front of the BFF)";
+}
+
+/** Whether APP_ENV was set to a value this code knows (an unset APP_ENV is treated as production, but production demands it explicitly). */
+export function appEnvIsExplicit(): boolean {
+  return process.env.APP_ENV === "production" || process.env.APP_ENV === "development";
+}
+
+/**
+ * The Strict-Transport-Security value for responses, or null. Emitted by `proxy.ts` only in production with an https
+ * PUBLIC_ORIGIN: never on development or plain http (a browser would ignore it there, but it must not be sent). One year,
+ * NO includeSubDomains (we do not control every subdomain of the host) and NO preload (not something to commit a domain to
+ * from application code). TLS terminates at the reverse proxy; a browser honours the header only when it arrived over TLS.
+ */
+export const HSTS_VALUE = "max-age=31536000";
+
+export function hstsPolicy(): string | null {
+  if (appEnv() !== "production") return null;
+  return authConfig().publicOrigin?.startsWith("https:") ? HSTS_VALUE : null;
 }

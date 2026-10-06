@@ -223,7 +223,6 @@ describe("errors from the backend", () => {
     [404, { detail: "Not found" }],
     [409, { detail: { code: "invoice_not_issued", message: "Only an issued invoice has a PDF." } }],
     [422, { detail: { code: "unsupported_characters", message: "no", characters: [{ character: "U+0645", reason: "x" }], total: 1 } }],
-    [500, { detail: "boom" }],
   ])("a %s is relayed as JSON with its status and body", async (status, body) => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }));
 

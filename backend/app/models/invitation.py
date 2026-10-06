@@ -20,7 +20,7 @@ from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, tex
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.db import Base
+from app.core.base import Base
 from app.models.mixins import TenantOwned
 from app.models.organization_user import Role
 

@@ -190,7 +190,8 @@ The browser never talks to FastAPI. The frontend's server (`BACKEND_URL`) does, 
 ## Check that it works
 
 - `http://localhost:8000/health` returns `{"status":"ok"}`
-- `http://localhost:8000/health/db` returns `{"database":"ok"}` when PostgreSQL is reachable (503 otherwise)
+- `http://localhost:8000/health/ready` returns `{"status":"ready"}` when PostgreSQL is reachable AND its Alembic revision is exactly this code's head (`503 {"status":"unready"}` otherwise, e.g. before `alembic upgrade head`)
+- `http://localhost:3000/api/health` (frontend liveness) and `http://localhost:3000/api/ready` (the whole chain)
 - `http://localhost:3000/dev-login` lets you sign in as a seeded user; then pick an organization
 
 ## Frontend
@@ -225,11 +226,11 @@ Next.js (App Router). See `docs/architecture.md` ("Implementation notes: fronten
 
 - **Custom fields in transactions:** the transaction page loads the organization's enabled field definitions for `transaction` and `transaction_line` (and the values of this transaction and its lines) on the server and shows them with the transaction and with each line. The renderer is **generic** (`components/custom-fields/`, `lib/custom-fields/`): it understands field metadata and six types (text, number, date, boolean, select, reference) and nothing about what a field is for, which a boundary test enforces (no imports of feature modules, no comparison of metadata to literals such as a field key or source, no domain words). Types are kept exactly: a number is a decimal string, a date is `YYYY-MM-DD`, a boolean has three states (not set / yes / no; `false` is a value), a select stores its option's UUID, a reference stores the record's UUID (the picker shows labels, only ids are sent). Reference choices come from the definition's generic choices endpoint (`/custom-fields/definitions/{id}/choices`), narrowed by the parent field's value when the definition says it depends on another field. Changing or clearing a field clears everything that depends on it, through any number of levels, and **the parent change and the cleared children travel in one request**. A record's fields are saved together (only the changed ones), because the backend validates a record's values as a whole (including required fields). Inactive reference targets stay displayed but are not newly assignable; a missing target is shown as "(no longer exists)". Fields are editable only while the transaction is a draft; completed and cancelled transactions show their values read-only. A blocked completion's problems appear in the banner (with links) **and at the controls they are about**. Custom-field writes carry no Sales version (they are outside the Sales concurrency contract; the backend locks the transaction, so a write and a completion cannot interleave).
 
-## Containers (production images, slice D1)
+## Containers (production images, slices D1 and D2)
 
 Two production images exist (nothing is deployed yet): `backend/Dockerfile` (FastAPI, uid 10001, **one Uvicorn worker**,
-port 8000; it never runs migrations) and `frontend/Dockerfile` (Next.js standalone, non-root, port 3000; ONE image for
-every environment: all configuration is read at run time). Build and run:
+port 8000; it never runs migrations; health check = readiness) and `frontend/Dockerfile` (Next.js standalone, non-root,
+port 3000; ONE image for every environment: all configuration is read at run time; health check = liveness). Build and run:
 
 ```bash
 docker build -t business-platform-backend backend
@@ -238,10 +239,21 @@ docker build -t business-platform-frontend frontend
 
 `deploy/compose.rehearsal.yml` is a local, production-LIKE stack for proving the images (frontend published on loopback
 only; backend and a disposable PostgreSQL private); it is not the production topology (Coolify proxy, private backend,
-Coolify-managed PostgreSQL 17). Run migrations explicitly, never in the web process:
-`docker compose -f deploy/compose.rehearsal.yml run --rm --no-deps backend python -m alembic upgrade head`. The image
-and topology tests (need Docker): `cd backend && uv run pytest ../deploy/tests -q`. Details: `docs/architecture.md`,
-"Container foundation (D1 as built)".
+Coolify-managed PostgreSQL 17). Its startup order is `postgres -> db-bootstrap -> migrate -> backend (ready) -> frontend`;
+migrations run ONLY in the one-shot job `python -m app.scripts.migrate` (the owner role, under an advisory lock; exit
+non-zero on any failure), never in the web process, and the backend runs as a restricted role that cannot change the schema.
+The image, topology and orchestration tests (need Docker): `cd backend && uv run pytest ../deploy/tests -q`. Details:
+`docs/architecture.md`, "Container foundation (D1 as built)" and "Deployment configuration, health and trust (D2 as built)".
+
+**Production configuration (fail closed; nothing is guessed or defaulted):**
+
+| backend (`APP_ENV=production`) | frontend (`APP_ENV=production`) |
+|---|---|
+| `AUTH_MODE=session`, `DATABASE_URL` (the restricted app role), `SECURITY_KEY`, `PUBLIC_ORIGIN` (https, not localhost), `BFF_INTERNAL_SECRET`, `CORS_ORIGINS=[]` | `AUTH_MODE=session`, `PUBLIC_ORIGIN` (https), `BACKEND_URL` (a private/internal address), `BFF_INTERNAL_SECRET` (the same value) |
+| refused: `AUTH_MODE=dev/disabled`, `DEV_USER_EMAIL`, `TEST_DATABASE_URL`, `MIGRATION_DATABASE_URL`, wildcard/localhost CORS | optional `TRUSTED_PROXY_HOPS` (stays 0 until the real proxy chain is verified) |
+
+The migration job takes `MIGRATION_DATABASE_URL` (the schema owner) and `RUNTIME_DB_ROLE`; the one-time role bootstrap
+(`python -m app.scripts.bootstrap_roles`) is described in the architecture notes.
 
 ## Tests and migrations
 

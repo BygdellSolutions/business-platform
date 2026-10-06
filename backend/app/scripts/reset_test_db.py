@@ -99,6 +99,7 @@ def migrate(url: str) -> None:
         raise UnsafeDatabase("The application is configured for a different database than the one being reset.")
     config = Config(str(BACKEND_DIR / "alembic.ini"))
     config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+    config.attributes["database_url"] = url  # explicit, so no environment variable can redirect the migration
     command.upgrade(config, "head")
 
 
@@ -131,6 +132,7 @@ def main(argv: list[str] | None = None) -> int:
         url = test_database_url()
         assert_is_test_database(url)
         os.environ["DATABASE_URL"] = url
+        os.environ["MIGRATION_DATABASE_URL"] = url
         reset(url, with_seed=args.seed)
     except UnsafeDatabase as exc:
         print(f"refused: {exc}", file=sys.stderr)

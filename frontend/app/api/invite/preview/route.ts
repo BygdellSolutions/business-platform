@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { json, preAuthProblem, problem, readJsonObject, sessionModeOnly } from "@/lib/auth/handlers";
 import { backendFetch } from "@/lib/backend";
 import { isInviteToken } from "@/lib/invite";
+import { instrument } from "@/lib/observability";
 
 /**
  * Invitation preview, BEFORE authentication: the invite page posts the token (never in a URL) with the pre-auth
@@ -10,7 +11,7 @@ import { isInviteToken } from "@/lib/invite";
  * needs; every unusable token (unknown, revoked, expired, used) gets the one generic answer. The pre-auth secret
  * is never forwarded and the browser's credentials are not used (this is not an authenticated operation).
  */
-export async function POST(request: NextRequest) {
+export const POST = instrument(async function POST(request: NextRequest) {
   const refused = sessionModeOnly() ?? preAuthProblem(request);
   if (refused) return refused;
 
@@ -32,4 +33,4 @@ export async function POST(request: NextRequest) {
   }
   // Rebuilt field by field: nothing else FastAPI says is passed on.
   return json({ organization_name: data.organization_name, email: data.email, role: data.role, account_exists: data.account_exists });
-}
+});

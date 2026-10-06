@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { expect, test } from "../fixtures";
 
-import { E2E_PASSWORD, adminCli, tokenFromCli } from "../auth-support";
+import { adminCli, direct, E2E_PASSWORD, tokenFromCli } from "../auth-support";
 import { BACKEND_URL, BASE_URL } from "../env";
 import { sql, testRow } from "../support";
 
@@ -62,7 +62,7 @@ test("the first user: the link becomes a password and a session, and the secret 
   // A real session now, and the pre-auth secret was consumed.
   expect((await context.cookies()).map((c) => c.name).sort()).toEqual(["bp_csrf", "bp_session"]);
   // The password works for an ordinary login afterwards.
-  const login = await fetch(`${BACKEND_URL}/api/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password: GOOD_PASSWORD }) });
+  const login = await direct(`${BACKEND_URL}/api/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password: GOOD_PASSWORD }) });
   expect(login.status).toBe(200);
 });
 
@@ -150,9 +150,9 @@ test("a mismatching repeat sends nothing, and a weak password shows the backend'
 
 test("recovery: a reissued link replaces the password and ends the old sessions", async ({ page, browser }) => {
   const first = bootstrap();
-  const response = await fetch(`${BACKEND_URL}/api/auth/setup`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: first.token, password: E2E_PASSWORD }) });
+  const response = await direct(`${BACKEND_URL}/api/auth/setup`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: first.token, password: E2E_PASSWORD }) });
   const oldSession = ((await response.json()) as { token: string }).token;
-  expect((await fetch(`${BACKEND_URL}/api/me/organizations`, { headers: { authorization: `Bearer ${oldSession}` } })).status).toBe(200);
+  expect((await direct(`${BACKEND_URL}/api/me/organizations`, { headers: { authorization: `Bearer ${oldSession}` } })).status).toBe(200);
 
   const recovery = tokenFromCli(adminCli(["reissue-setup-link", "--email", first.email]));
   await page.goto(`/setup#${recovery}`);
@@ -162,9 +162,9 @@ test("recovery: a reissued link replaces the password and ends the old sessions"
   await page.getByTestId("setup-submit").click();
   await expect(page).toHaveURL(`${BASE_URL}/`);
 
-  expect((await fetch(`${BACKEND_URL}/api/me/organizations`, { headers: { authorization: `Bearer ${oldSession}` } })).status).toBe(401);
+  expect((await direct(`${BACKEND_URL}/api/me/organizations`, { headers: { authorization: `Bearer ${oldSession}` } })).status).toBe(401);
   const other = await browser.newContext({ baseURL: BASE_URL });
-  const old = await fetch(`${BACKEND_URL}/api/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: first.email, password: E2E_PASSWORD }) });
+  const old = await direct(`${BACKEND_URL}/api/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: first.email, password: E2E_PASSWORD }) });
   expect(old.status).toBe(401); // the old password is gone
   await other.close();
 });

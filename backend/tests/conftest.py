@@ -18,7 +18,17 @@ try:
     reset_test_db.assert_is_test_database(TEST_DATABASE_URL)
 except reset_test_db.UnsafeDatabase as exc:
     pytest.exit(f"Refusing to run tests: {exc}", returncode=2)
-os.environ["DATABASE_URL"] = TEST_DATABASE_URL  # before app.core.config is first imported
+# Set only by tests/test_db_roles.py, for a child pytest run: the SAME disposable test database, but connected as the
+# restricted RUNTIME role (DML only), so the ordinary application tests prove the runtime role can do everything the app does.
+RUNTIME_ROLE_URL = os.environ.get("TEST_RUNTIME_ROLE_URL")
+if RUNTIME_ROLE_URL:
+    try:
+        reset_test_db.assert_is_test_database(RUNTIME_ROLE_URL)
+    except reset_test_db.UnsafeDatabase as exc:
+        pytest.exit(f"Refusing to run tests: {exc}", returncode=2)
+os.environ["DATABASE_URL"] = RUNTIME_ROLE_URL or TEST_DATABASE_URL  # before app.core.config is first imported
+os.environ["MIGRATION_DATABASE_URL"] = TEST_DATABASE_URL  # a developer's .env value must never redirect a migration to the dev database
+os.environ.pop("BFF_INTERNAL_SECRET", None)  # tests are the documented unauthenticated development mode unless a test opts in
 os.environ.setdefault("APP_ENV", "development")  # tests are development by definition (production refuses AUTH_MODE=dev)
 
 from collections.abc import Iterator
@@ -32,6 +42,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.db import engine, get_db
 from app.main import app
+from tests.auth_support import as_bff
 from tests.versions import FreshVersionClient
 from app.models import CustomerType, Role
 from app.modules.sales.models import TransactionLine
@@ -50,6 +61,8 @@ from tests.factories import (
 @pytest.fixture(scope="session", autouse=True)
 def fresh_test_database() -> None:
     """Drop and re-migrate the test database once per session (no seed: tests build their own data)."""
+    if RUNTIME_ROLE_URL:
+        return  # a role run: the database was bootstrapped (roles, grants) and migrated by the owner role already
     reset_test_db.reset(TEST_DATABASE_URL)
 
 
@@ -189,6 +202,6 @@ def session_client(db_session: Session, session_mode: None) -> Iterator[TestClie
     """An API client in session mode whose requests share the rollback-only test session."""
     app.dependency_overrides[get_db] = lambda: db_session
     try:
-        yield TestClient(app)
+        yield TestClient(app, headers=as_bff())  # acts as the BFF when a test configured the internal secret
     finally:
         app.dependency_overrides.clear()

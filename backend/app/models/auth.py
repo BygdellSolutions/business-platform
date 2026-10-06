@@ -14,7 +14,7 @@ from sqlalchemy import BigInteger, CheckConstraint, DateTime, ForeignKey, Identi
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.db import Base
+from app.core.base import Base
 
 SESSION_REVOKED_REASONS = ("logout", "rotated", "password_changed", "cap", "disabled", "setup")
 SETUP_PURPOSES = ("set_password",)

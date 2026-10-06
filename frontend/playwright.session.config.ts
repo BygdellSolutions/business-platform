@@ -2,7 +2,7 @@ import "./e2e/session-env"; // FIRST: selects the session ports and helpers befo
 
 import { defineConfig } from "@playwright/test";
 
-import { BACKEND_AUTH_ENV } from "./e2e/auth-support";
+import { BACKEND_AUTH_ENV, E2E_BFF_SECRET } from "./e2e/auth-support";
 import { BACKEND_DIR, BACKEND_PORT, BACKEND_URL, BASE_URL, FRONTEND_DIR, FRONTEND_PORT, PYTHON, assertTestDatabase } from "./e2e/env";
 
 /**
@@ -83,6 +83,7 @@ export default defineConfig({
         AUTH_MODE: "session",
         APP_ENV: "development",
         PUBLIC_ORIGIN: BASE_URL,
+        BFF_INTERNAL_SECRET: E2E_BFF_SECRET, // sent on every upstream request; FastAPI enforces it (BACKEND_AUTH_ENV)
         DEV_IDENTITY: "enabled", // the retired switch: must change nothing
       },
     },

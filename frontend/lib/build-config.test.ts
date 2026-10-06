@@ -66,12 +66,12 @@ describe("a production build is self-contained and reproducible", () => {
     expect(read("app/fonts/OFL-notosans.txt")).toMatch(/SIL OPEN FONT LICENSE/i);
   });
 
-  it("no public (browser-visible) environment variable exists, and only lib/backend.ts reads BACKEND_URL", () => {
+  it("no public (browser-visible) environment variable exists, and only lib/runtime-config.ts reads BACKEND_URL", () => {
     const all = [...files("app", /\.(ts|tsx)$/), ...files("components", /\.(ts|tsx)$/), ...files("features", /\.(ts|tsx)$/), ...files("lib", /\.(ts|tsx)$/)];
     for (const file of all) {
       const source = read(file);
       expect(source, file).not.toMatch(/NEXT_PUBLIC_/);
-      if (file !== "lib/backend.ts") expect(source, file).not.toMatch(/BACKEND_URL|localhost:8000/);
+      if (file !== "lib/runtime-config.ts") expect(source, file).not.toMatch(/BACKEND_URL|localhost:8000/);
     }
   });
 });

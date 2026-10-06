@@ -9,18 +9,24 @@ import "server-only";
  * are added here and nowhere else. FastAPI stays the authority: it independently verifies
  * the user and their membership in the organization on every scoped request; the header is
  * only a selector.
+ *
+ * Every upstream request also carries, set here and nowhere else: the BFF internal secret (when configured; always
+ * in production) and the request id the BFF generated. Neither can come from the browser.
  */
 
 import type { Credential } from "@/lib/auth/credential";
+import { REQUEST_ID_HEADER, currentRequestId, errorType, logEvent, newRequestId } from "@/lib/observability";
+import { BFF_SECRET_HEADER, backendOrigin, bffSecret } from "@/lib/runtime-config";
 import { UUID, isUuid } from "@/lib/uuid";
 
-const DEFAULT_BACKEND_URL = "http://localhost:8000";
 const TIMEOUT_MS = 15_000;
+const READINESS_TIMEOUT_MS = 3_000;
 
 export { UUID, isUuid };
 
+/** The backend origin (see lib/runtime-config.ts: development defaults to localhost, production requires a private address and never falls back). */
 export function backendUrl(): string {
-  return (process.env.BACKEND_URL ?? DEFAULT_BACKEND_URL).replace(/\/+$/, "");
+  return backendOrigin();
 }
 
 /** Areas of the FastAPI app the browser may reach through the BFF. */
@@ -85,6 +91,8 @@ export interface HeaderOptions {
   clientAddress?: string;
   /** A client-generated retry key, already validated by `isRequestKey` (organization creation only). */
   idempotencyKey?: string;
+  /** The BFF-generated correlation id (never one the browser sent). */
+  requestId?: string;
 }
 
 /** The shape of an `Idempotency-Key`: 32 random bytes, base64url without padding (43 characters). */
@@ -94,11 +102,14 @@ export function isRequestKey(value: string | null | undefined): value is string 
 
 /**
  * Headers for a backend request, built from scratch: nothing the client sent is copied. The only values are
- * the credential (as `Authorization: Bearer` or, in development, `X-Dev-User-Email`), the organization taken
- * from the URL, and the few validated extras above.
+ * the BFF's own (the internal secret and the request id), the credential (as `Authorization: Bearer` or, in
+ * development, `X-Dev-User-Email`), the organization taken from the URL, and the few validated extras above.
  */
 export function buildBackendHeaders(identity: BackendIdentity, options: HeaderOptions = {}): Headers {
   const headers = new Headers({ accept: options.accept ?? "application/json" });
+  const secret = bffSecret();
+  if (secret !== null) headers.set(BFF_SECRET_HEADER, secret);
+  if (options.requestId) headers.set(REQUEST_ID_HEADER, options.requestId);
   const { credential } = identity;
   if (credential?.kind === "dev") headers.set("x-dev-user-email", credential.email);
   if (credential?.kind === "session") headers.set("authorization", `Bearer ${credential.token}`);
@@ -147,12 +158,52 @@ export async function backendFetch(
   if (identity.orgId !== undefined && !isUuid(identity.orgId)) {
     throw new Error("refusing to call the backend with a malformed organization id");
   }
-  return fetch(`${backendUrl()}${path}${request.search ?? ""}`, {
-    method: request.method ?? "GET",
-    headers: buildBackendHeaders(identity, { json: request.body !== undefined, ifMatch: request.ifMatch, accept: request.accept, csrf: request.csrf, clientAddress: request.clientAddress, idempotencyKey: request.idempotencyKey }),
-    body: request.body,
-    cache: "no-store",
-    redirect: "manual",
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  });
+  const requestId = currentRequestId() ?? newRequestId();
+  const method = request.method ?? "GET";
+  const started = performance.now();
+  const took = () => Math.round((performance.now() - started) * 10) / 10;
+  try {
+    const response = await fetch(`${backendUrl()}${path}${request.search ?? ""}`, {
+      method,
+      headers: buildBackendHeaders(identity, {
+        json: request.body !== undefined,
+        ifMatch: request.ifMatch,
+        accept: request.accept,
+        csrf: request.csrf,
+        clientAddress: request.clientAddress,
+        idempotencyKey: request.idempotencyKey,
+        requestId,
+      }),
+      body: request.body,
+      cache: "no-store",
+      redirect: "manual",
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    logEvent(response.status >= 500 ? "error" : "info", "upstream", { request_id: requestId, method, path, status: response.status, duration_ms: took() });
+    return response;
+  } catch (error) {
+    // The class only: a fetch failure's message can name the backend host.
+    logEvent("error", "upstream", { request_id: requestId, method, path, status: 0, duration_ms: took(), error_type: errorType(error) });
+    throw error;
+  }
+}
+
+/** Is the backend ready (database reachable and at exactly its image's schema head)? Never throws; never says more than yes or no. */
+export async function backendReady(): Promise<boolean> {
+  const requestId = currentRequestId() ?? newRequestId();
+  try {
+    const response = await fetch(`${backendUrl()}/health/ready`, {
+      method: "GET",
+      headers: buildBackendHeaders({ credential: null }, { requestId }),
+      cache: "no-store",
+      redirect: "manual",
+      signal: AbortSignal.timeout(READINESS_TIMEOUT_MS),
+    });
+    if (response.status !== 200) return false;
+    const data = (await response.json().catch(() => undefined)) as { status?: unknown } | undefined;
+    return data?.status === "ready";
+  } catch (error) {
+    logEvent("warn", "readiness_check_failed", { request_id: requestId, error_type: errorType(error) });
+    return false;
+  }
 }

@@ -54,13 +54,13 @@ describe("development mode", () => {
     expect(url).toBe("http://backend.test:8000/api/organizations");
     expect(init.method).toBe("POST");
     expect(init.body).toBe(BODY);
-    expect(Object.fromEntries(init.headers)).toEqual({ accept: "application/json", "content-type": "application/json", "x-dev-user-email": "fredrik@dev.test", "idempotency-key": KEY });
+    expect(Object.fromEntries(init.headers)).toEqual({ accept: "application/json", "content-type": "application/json", "x-dev-user-email": "fredrik@dev.test", "idempotency-key": KEY, "x-request-id": expect.stringMatching(/^[0-9a-f]{32}$/) });
   });
 
   it("ignores client-supplied identity, organization, role and proxy headers", async () => {
     await post({ headers: { "x-dev-user-email": "maria@dev.test", "x-organization-id": "00000000-0000-4000-8000-0000000000b2", "x-role": "owner", "x-owner-email": "x@y.test", authorization: "Bearer evil", "x-forwarded-for": "6.6.6.6" } });
 
-    expect(Object.fromEntries(upstream()[1].headers)).toEqual({ accept: "application/json", "content-type": "application/json", "x-dev-user-email": "fredrik@dev.test" });
+    expect(Object.fromEntries(upstream()[1].headers)).toEqual({ accept: "application/json", "content-type": "application/json", "x-dev-user-email": "fredrik@dev.test", "x-request-id": expect.stringMatching(/^[0-9a-f]{32}$/) });
   });
 
   it("is a 401 naming the login page without a credential, and never calls the backend", async () => {
@@ -130,7 +130,7 @@ describe("session mode", () => {
     const response = await post({ cookie: signedIn, headers: { ...csrf, "idempotency-key": KEY, "x-dev-user-email": "maria@dev.test", "x-organization-id": "00000000-0000-4000-8000-0000000000b2" } });
 
     expect(response.status).toBe(201);
-    expect(Object.fromEntries(upstream()[1].headers)).toEqual({ accept: "application/json", "content-type": "application/json", authorization: `Bearer ${SESSION}`, "x-csrf-token": CSRF, "idempotency-key": KEY });
+    expect(Object.fromEntries(upstream()[1].headers)).toEqual({ accept: "application/json", "content-type": "application/json", authorization: `Bearer ${SESSION}`, "x-csrf-token": CSRF, "idempotency-key": KEY, "x-request-id": expect.stringMatching(/^[0-9a-f]{32}$/) });
   });
 
   it("refuses a missing, mismatched or absent CSRF token before contacting the backend", async () => {

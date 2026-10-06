@@ -1,6 +1,6 @@
 import { expect, test } from "../fixtures";
 
-import { csrfCookie, installBrowserHeaders, signInWithPassword } from "../auth-support";
+import { csrfCookie, direct, installBrowserHeaders, signInWithPassword } from "../auth-support";
 import { BACKEND_URL, BASE_URL } from "../env";
 import { FREDRIK, MARIA, ORG_A, ORG_B, RANDOM_ORG, bffUrl, sql, testRow, unique } from "../support";
 
@@ -132,7 +132,7 @@ test.describe("what the browser cannot assert", () => {
     await signInWithPassword(fredrik, FREDRIK);
     await signInWithPassword(maria, MARIA);
     const fredriksToken = (await fredrik.cookies()).find((c) => c.name === "bp_session")!.value;
-    expect((await fetch(`${BACKEND_URL}/api/me/user`, { headers: { authorization: `Bearer ${fredriksToken}` } })).status).toBe(200); // a real credential ...
+    expect((await direct(`${BACKEND_URL}/api/me/user`, { headers: { authorization: `Bearer ${fredriksToken}` } })).status).toBe(200); // a real credential ...
 
     const me = await maria.request.get(bffUrl(ORG_B.id, "/me/user"), { headers: { authorization: `Bearer ${fredriksToken}` } });
 
@@ -149,8 +149,8 @@ test.describe("what the browser cannot assert", () => {
     await anonymous.dispose();
 
     // The backend itself, asked directly: no header, the dev header, and the configured DEV_USER_EMAIL all identify nobody.
-    expect((await fetch(`${BACKEND_URL}/api/me/organizations`)).status).toBe(401);
-    expect((await fetch(`${BACKEND_URL}/api/me/organizations`, { headers: { "x-dev-user-email": FREDRIK } })).status).toBe(401);
+    expect((await direct(`${BACKEND_URL}/api/me/organizations`)).status).toBe(401);
+    expect((await direct(`${BACKEND_URL}/api/me/organizations`, { headers: { "x-dev-user-email": FREDRIK } })).status).toBe(401);
   });
 
   test("a failed session does not fall back to the dev identity", async ({ context }) => {
@@ -160,7 +160,7 @@ test.describe("what the browser cannot assert", () => {
     ]);
     const response = await context.request.get(bffUrl(ORG_A.id, "/customers"), { headers: { "x-dev-user-email": FREDRIK } });
     expect(response.status()).toBe(401);
-    expect((await fetch(`${BACKEND_URL}/api/me/organizations`, { headers: { authorization: `Bearer ${"D".repeat(43)}`, "x-dev-user-email": FREDRIK } })).status).toBe(401);
+    expect((await direct(`${BACKEND_URL}/api/me/organizations`, { headers: { authorization: `Bearer ${"D".repeat(43)}`, "x-dev-user-email": FREDRIK } })).status).toBe(401);
   });
 
   test("a forged organization header is replaced by the one in the URL, and a foreign organization stays a 404", async ({ context }) => {

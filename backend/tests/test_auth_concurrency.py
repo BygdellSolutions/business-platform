@@ -12,10 +12,12 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core import passwords
+from pydantic import SecretStr
+
 from app.core.config import settings
 from app.core.db import SessionLocal, engine
 from app.scripts import admin
-from tests.auth_support import OTHER_PASSWORD, PASSWORD, CommittedUser, build_committed_user, purge_committed
+from tests.auth_support import BFF_SECRET, OTHER_PASSWORD, PASSWORD, CommittedUser, build_committed_user, purge_committed
 from tests.invoicing_support import Request, race, scalar
 
 pytestmark = pytest.mark.usefixtures("session_mode")
@@ -24,6 +26,7 @@ pytestmark = pytest.mark.usefixtures("session_mode")
 @pytest.fixture(autouse=True)
 def committed(session_mode, monkeypatch):
     monkeypatch.setattr(settings, "trust_client_ip_header", True)
+    monkeypatch.setattr(settings, "bff_internal_secret", SecretStr(BFF_SECRET))  # the client address is believed only from the BFF
     created: list[CommittedUser] = []
     extra_sources: list[str] = []
     yield created, extra_sources

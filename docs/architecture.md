@@ -1166,13 +1166,13 @@ in a builder; the runtime is `python:3.13-slim` with the venv, `app/` (including
 `alembic/` and `alembic.ini` (so a SEPARATE one-shot migrate job can run from the same image), no tests, no dev
 dependencies, no compilers, no uv/pip, no `.env`, no `seed_dev`/`reset_test_db`. Runs as uid 10001, **one Uvicorn
 worker** (decision: do not raise it until the deployment rehearsal has measured memory, Argon2 pressure and database
-connections), port 8000. **The web process never migrates**: no startup hook runs Alembic. Container health check
-(interim): the cheap `/health`; D2 replaces it with the readiness check.
+connections), port 8000. **The web process never migrates**: no startup hook runs Alembic. Container health check:
+READINESS (`/health/ready`, since D2; see "Deployment configuration, health and trust (D2 as built)").
 
 **Frontend image** (`frontend/Dockerfile`, context `frontend/`): Node 22, `npm ci`, `next build` with
 `output: "standalone"`, then only `.next/standalone`, `.next/static` and `public` are copied into the runtime stage,
-which runs `node server.js` as the non-root `node` user (uid 1000) on port 3000. `poweredByHeader` is off. Health check
-(interim): a TCP connect (D2 adds `/api/health`). The sans font is Noto Sans bundled in `app/fonts` (SIL OFL, byte-identical
+which runs `node server.js` as the non-root `node` user (uid 1000) on port 3000. `poweredByHeader` is off. Health check:
+LIVENESS only, `GET /api/health` (since D2). The sans font is Noto Sans bundled in `app/fonts` (SIL OFL, byte-identical
 to the PDF renderer's fonts): the build contacts no font service.
 
 **One image for every environment (invariant).** Nothing about the deployment is baked into the frontend image. The
@@ -1190,3 +1190,231 @@ production on an unusable authentication configuration.
 
 **Tests:** `cd backend && uv run pytest ../deploy/tests -q` (needs Docker; builds real images, a few minutes; disposable
 containers only). They are not part of the ordinary backend suite.
+
+## Deployment configuration, health and trust (D2 as built)
+
+Second slice of production-deployment readiness. Still nothing is deployed: CI (D3), backup/restore tooling (D4) and the
+Coolify rehearsal with its runbooks (D5) are later. Everything below is implemented and tested locally; **what only the real
+topology can show (the proxy hop count, container replacement semantics) is left to D5 on purpose.**
+
+### Liveness versus readiness (and what a restart means)
+
+| | endpoint | answers | depends on |
+|---|---|---|---|
+| backend liveness | `GET /health` | `{"status":"ok"}` | nothing (an `async` handler: it never waits for a worker thread) |
+| backend readiness | `GET /health/ready` | `200 {"status":"ready"}` / `503 {"status":"unready"}` | the database and its revision |
+| frontend liveness | `GET /api/health` | `{"status":"ok"}` | nothing |
+| frontend readiness | `GET /api/ready` | `200 {"status":"ready"}` / `503 {"status":"unready"}` | the backend's readiness |
+
+**The one invariant of readiness: the database's Alembic revision == this image's single Alembic head.** `/health/ready` is
+ready only if the database is reachable, `alembic_version` exists, holds EXACTLY ONE row and that row EQUALS the code's single
+head (read once from the image's migration files). Everything else is unready: no table, an old revision, a newer or unknown
+revision (an image older than the database is as unready as a database older than the image: it deliberately does not weaken to
+"a revision this code knows"), several rows, several heads in the code, a malformed table, no database. Readiness never
+migrates. The response is coarse (`ready` / `unready`); the reason is a short code in the server's log (`not_ready` with
+`reason`: `no_revision_table`, `revision_mismatch`, `revision_rows`, `code_heads`, `database_unreachable`, `unexpected_state`,
+`check_timeout`, `check_in_progress`), never a revision, host or exception text. The old detailed `/health/db` is gone.
+
+A probe is bounded (4 s) and single-flight: a database that accepts a connection and never answers (a paused or partitioned
+server) leaves at most ONE stuck readiness thread, further probes answer unready at once (`check_in_progress`), and because
+liveness is `async` it stays instant. **Restart semantics:** nothing in the application exits on an unready answer, and a
+temporary database outage makes the backend unready, not dead. The backend IMAGE's health check is readiness (so a deployment
+gate cannot call a not-yet-migrated container healthy); the FRONTEND image's health check is liveness only (a backend outage must
+not look like the Next process dying). Docker itself does not restart unhealthy containers; **an orchestrator that does must be
+pointed at `/health` and `/api/health` (liveness), never at readiness**, or an outage becomes a restart storm. A deployment gate
+may additionally ask `/api/ready` for the whole chain. (`/api/ready` is public and costs one backend readiness call per request:
+coarse by design; rate limiting it is a proxy concern.) Tests: `backend/tests/test_readiness.py`, and
+`deploy/tests/test_orchestration.py` (a backend that never migrated is unready and recovers without a restart when the job runs;
+a PAUSED database gives bounded unready answers, no restart, instant liveness and recovery on unpause).
+
+### The migration job
+
+`python -m app.scripts.migrate` (in the backend image) is the ONLY place a production schema changes. It runs with its own
+credentials, `MIGRATION_DATABASE_URL` (the schema-owning role), and needs none of the web process's configuration: it has its
+own small settings class, and `alembic/env.py` no longer imports the models or `app.core.config` when the job passes its
+connection (a module package imports its API, which imports the web settings; the migrations themselves never read the models).
+One session does everything:
+
+1. connect; 2. take the fixed PostgreSQL advisory lock (`MIGRATION_LOCK_KEY`) with `pg_try_advisory_lock`, polled: a second job
+waits up to `--lock-timeout` (default 600 s), so concurrent jobs serialize, and the lock belongs to the SESSION so it is released
+when the session ends however the job ends; 3. read the current revision and REFUSE (exit 4, nothing touched) a database at a
+revision this image does not know (a newer release migrated it), a database recording several revisions, or a code base with
+several heads; 4. `alembic upgrade head` ON THE SAME CONNECTION (never a downgrade; a dropped connection fails the migration
+instead of silently dropping the lock); 5. reconcile the runtime role's grants (below); 6. verify the lock was held throughout.
+Exit codes: 0 migrated or already at head, 1 failed, 2 configuration error, 3 lock timeout, 4 refused. Every failure is non-zero
+and nothing is swallowed. Output is one JSON line per event with no credential, URL or bound parameter (SQLAlchemy
+`hide_parameters`, a scrubber on the one message line that is printed, and a malformed URL is a configuration error that does
+not echo it). Production has NO fallback: a missing `MIGRATION_DATABASE_URL` is exit 2, never a silent use of the runtime URL
+(development may use `DATABASE_URL`); `RUNTIME_DB_ROLE` is required in production. Not done, by decision: migrating at FastAPI
+startup, in every worker, automatic downgrades.
+
+**Rehearsal orchestration** (`deploy/compose.rehearsal.yml`, a LOCAL implementation only; `depends_on` is not evidence of how
+Coolify behaves, which is a D5 verification): `postgres (healthy) -> db-bootstrap (one-shot) -> migrate (one-shot, completed
+successfully) -> backend (healthy = ready) -> frontend`. Proved locally (`deploy/tests/test_topology.py`,
+`test_orchestration.py`): success brings the stack to ready in order (by container timestamps); a REFUSED migration (exit 4) and a
+FAILED one (exit 1) leave the backend and frontend never started and nothing answering; the backend never migrates (its logs and
+process list); two real concurrent jobs serialize (`backend/tests/test_migrate_runner.py`).
+
+### Database roles (first deployment)
+
+Two roles with distinct credentials, one database:
+
+* **owner / migration role** (`MIGRATION_DATABASE_URL`): owns the database and its schema, runs the migrations, so it owns every
+  table, sequence and function. Not a superuser, no CREATEDB, no CREATEROLE.
+* **app role** (`DATABASE_URL`, FastAPI at runtime): `SELECT, INSERT, UPDATE, DELETE` on tables and `USAGE, SELECT` on sequences,
+  nothing else: no superuser/CREATEDB/CREATEROLE/REPLICATION/BYPASSRLS, no CREATE on the schema, no ownership, no TRUNCATE,
+  REFERENCES or TRIGGER, no membership of the owner. It cannot create, alter or drop anything, nor create roles. Triggers and
+  `plpgsql` functions run as the caller and functions are executable by default, so ordinary DML needs nothing more (the deferred
+  owner-loss trigger, the immutability triggers and the invoice counters all work as this role).
+
+`python -m app.scripts.bootstrap_roles` (a privileged connection, ONCE per database, idempotent, never part of the web process)
+creates the two roles, makes the owner own the database and the `public` schema, removes PUBLIC's access, grants the app role
+CONNECT and USAGE on the schema, and sets the OWNER's default privileges so objects created by FUTURE migrations are usable by the
+app role without a new grant. The migration job then runs a **reconcile** step after every upgrade (as the owner: grants on
+everything that exists, the same default privileges, and `REVOKE INSERT, UPDATE, DELETE` on `alembic_version`, so a compromised
+app cannot rewrite the revision that readiness trusts). The two mechanisms overlap on purpose (the defaults serve a migration run
+by hand, reconcile repairs a database whose defaults were never set) and each has its own test. `test_db_roles.py` also runs about
+a thousand ordinary application tests connected as the app role (the few that ARRANGE state by disabling triggers need an owner
+and are deselected by name). The production runbook (who runs the bootstrap against the Coolify database, how the two URLs are
+provisioned) is D4/D5 material; the architecture and the tests are here.
+
+### Production configuration (fail closed)
+
+**Backend** (`Settings` refuses to start; the error names the rule, never a value: `hide_input_in_errors` is on, and a malformed
+`DATABASE_URL` is refused without echoing it). `APP_ENV` has no default. Production requires `AUTH_MODE=session`,
+`DATABASE_URL`, `SECURITY_KEY` (>= 32 characters), `PUBLIC_ORIGIN` (https, not localhost, an origin only), `BFF_INTERNAL_SECRET`
+(>= 32 characters, >= 8 distinct, different from `SECURITY_KEY`) and `CORS_ORIGINS=[]` (the browser never calls FastAPI; when
+empty the CORS middleware is not installed at all). It refuses `AUTH_MODE=dev|disabled`, `DEV_USER_EMAIL` (set at all),
+`TEST_DATABASE_URL`, `MIGRATION_DATABASE_URL` (a web process must not hold DDL credentials), a wildcard or localhost CORS origin
+and a missing/http/localhost `PUBLIC_ORIGIN`. Development keeps its conveniences (a localhost origin default, the dev CORS origin,
+no secret).
+
+**Frontend** (`instrumentation-node.ts` exits with status 1 in production, printing only the reasons): explicit
+`APP_ENV=production`, `AUTH_MODE=session`, `PUBLIC_ORIGIN` https, `BACKEND_URL` present and a **private/internal** destination,
+`BFF_INTERNAL_SECRET` (same strength rule) and a valid `TRUSTED_PROXY_HOPS` if set. Production never falls back to
+`http://localhost:8000`. The `BACKEND_URL` rule (defensible, and honest about what it cannot see): `http(s)`, an origin only, no
+credentials, and the host is (a) a private IP literal (10/8, 172.16/12, 192.168/16, fc00::/7; loopback, link-local (cloud
+metadata) and public addresses are refused), or (b) a single-label name (a Docker/Coolify service name resolves only inside the
+network), or (c) a dotted name ending in `.internal`, `.local`, `.lan`, `.localdomain`, `.home.arpa`, `.svc` or `.cluster.local`;
+any other dotted name could be a public DNS name and is refused. It cannot see what a name resolves to: network isolation stays
+mandatory.
+
+### BFF -> FastAPI internal authentication
+
+A shared secret (`BFF_INTERNAL_SECRET`, header `x-bff-secret`) is sent by the BFF on EVERY upstream request (`backendFetch` is the
+only place that talks to FastAPI, and a static test keeps it so) and checked by FastAPI BEFORE routing, sessions or bodies, with
+`hmac.compare_digest`. A request without it, or with a wrong one, gets the same fixed `403
+{"detail":{"code":"internal_auth_failed"}}` plus an `x-internal-auth: rejected` header (which lets the BFF tell "our configuration
+is wrong" from an application 403). **It does not replace private networking**; it makes a request that arrives from elsewhere
+useless. **Decisions:** `/health` and `/health/ready` are exempt (coarse and private, so an orchestrator can probe them without the
+secret); every other HTTP route, including docs/openapi, unknown paths and the pre-auth login/setup/invite routes (a user has no
+session yet, but the BFF authenticates ITSELF), requires it. **Compatibility:** enforcement follows the setting. In production it
+is required on both sides (startup refuses otherwise); in development it is optional on both: when set it is enforced (the session
+Playwright run and the rehearsal exercise the real chain), when unset nothing is checked (the dev run, the backend unit tests).
+Rotation is a redeploy of both services with the new value (no dual-key window yet; a short period of 502s is the cost). The
+secret is never logged, returned, in a URL or a bundle, or `NEXT_PUBLIC_*`; a browser's copy of the header (and of any trust
+header) is dropped because upstream headers are built from scratch.
+
+### Request id
+
+The BFF generates one 128-bit random id per request (32 hex characters); whatever the browser sent is ignored. It is forwarded as
+`x-request-id`, logged by both services and returned to the browser. FastAPI accepts an incoming id only if it matches
+`^[A-Za-z0-9_-]{16,64}$` (anything else is replaced), so no client text, control character or long string reaches a log. It is a
+correlation key, not a secret and not an authority. A server-rendered page's upstream calls get their own id per call.
+
+### Client address and proxy trust (disabled until D5)
+
+`TRUSTED_PROXY_HOPS=0` (frontend) and `TRUST_CLIENT_IP_HEADER=false` (backend) stay the defaults: with trust off the browser's
+address is NOT known, FastAPI throttles by the BFF's address, and the S1 trade-off (per-source budgets shared by all users) still
+applies. The mechanism is implemented and tested so that D5 only sets numbers. With N trusted proxies that each append the address
+they saw to `X-Forwarded-For`, the BFF takes the entry N places from the RIGHT (never anything the client wrote on the left),
+refuses to guess when there are fewer entries than hops or the entry is not an IP (ports, scripts, empty entries and malformed
+values all give nothing), treats separate header lines as one list, and sends ONLY the derived value in `x-client-ip`; the
+browser's own `x-client-ip`, `x-forwarded-*`, `x-real-ip` and `forwarded` are never forwarded. FastAPI believes `x-client-ip` only
+when `TRUST_CLIENT_IP_HEADER=true` AND the request passed the internal-secret check (so that setting also requires the secret), and
+unwraps IPv4-mapped IPv6 addresses (`::ffff:a.b.c.d` is that IPv4 client, not one /64 shared by all of them). **D5 determines the
+real hop count from the real Coolify/Traefik chain; nothing is guessed here.**
+
+### Logging and redaction
+
+One JSON object per line on stdout from both services (`ts`, `level`, `service`, `event`, ...). A request line has exactly the
+request id, method, **path without the query string**, status and duration. Never a header, cookie, body, token, secret or
+exception message: errors are logged by CLASS (a fetch failure's message can name the backend host) and the one message the
+migration job prints is scrubbed. Uvicorn's own access log is disabled (it prints the whole request target, query string included,
+and would duplicate the safe line): `--no-access-log` in the image and a filter in the application; likewise `--no-proxy-headers`
+and `--no-server-header`. SQLAlchemy engines (application and migration) use `hide_parameters=True`, so an exception's text carries
+the SQL but not the bound values. The frontend wraps every API route in `instrument()` (a static test fails an unwrapped route).
+Not built, on purpose: metrics, tracing or log aggregation. A known consequence: probes (`/health` every 15 s) are logged like any
+request.
+
+### Security headers and HSTS
+
+Every response carries `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options:
+DENY` and a conservative `Permissions-Policy` (`next.config.ts`, first in the list so that later rules win); the login, setup and
+invite pages and the auth/invite APIs keep their STRONGER `no-referrer` and `no-store`. `X-Powered-By` is off. **No
+Content-Security-Policy** (tracked: report-only first). The backend's own responses carry `nosniff`, `X-Frame-Options`,
+`Referrer-Policy: no-referrer` and `x-request-id`.
+
+**HSTS decision: option B, emitted by the application** (`proxy.ts`, per request from the runtime configuration, because a static
+header would bake a value into an image that is built once): `Strict-Transport-Security: max-age=31536000` ONLY when
+`APP_ENV=production` and `PUBLIC_ORIGIN` is https; never on development or plain http. **No `includeSubDomains`** (we do not
+control every subdomain of the host) and **no `preload`**. Why not leave it to the proxy (option A): the application knows its own
+canonical origin, and the value is testable here and cannot be forgotten by a proxy setting; the cost is one more thing the proxy
+must not duplicate with a different value (D5 checks the real response). A browser honours HSTS only over TLS.
+
+### The BFF failure contract
+
+When FastAPI cannot answer, the browser gets a FIXED coarse answer with a stable code: a refused connection or DNS failure `502
+{"detail":"Backend unavailable","code":"upstream_unavailable"}`, a timeout or abort `504 ... "upstream_timeout"`, any upstream 5xx
+`502` (a 503 stays a 503 with `Retry-After`), and FastAPI refusing the BFF's own secret a `502` (plus a loud log line for the
+operator: it is OUR misconfiguration). Never a hostname, stack, connection string, driver message or raw fetch error. An ordinary
+application answer (400/403/404/409/412/422/429) is NOT an infrastructure failure and passes through unchanged. A database that
+cannot be reached becomes a fixed `503 service_unavailable` from FastAPI itself.
+
+### Deployment debt carried forward (explicit, not built)
+
+* **Scheduled purge** of security/auth events (`SECURITY_EVENT_RETENTION_DAYS`, `AUTH_RECORD_RETENTION_DAYS`): the purge functions
+  exist; running them on a schedule is a deployment task.
+* **Invitation preview and account-creation throttling by source** needs the verified client address, so it waits for D5. Until
+  then 256-bit tokens make guessing infeasible and Argon2 admission bounds the cost, as in S5.
+* CSP (report-only first); a dual-key rotation window for the internal secret; probe-log noise; a cache in front of `/api/ready`.
+
+### Verification, trade-offs and deviations (D2)
+
+**Verified (all on disposable databases and containers; the development database stayed at `e29c5d7a3b48`, row-for-row):**
+backend `pytest` 2788 passed (6 skipped as before); frontend typecheck and lint clean, Vitest 2241 passed (81 files), production
+build; Playwright dev run 358 passed twice in a row, session run (the BFF secret enforced end to end, plus `session/hardening.spec.ts`)
+282 passed twice in a row; container suite (`deploy/tests`: images, topology, orchestration, D2 images) 59 passed; `alembic check`
+reports no schema drift (D2 adds no migration). **Fault injection:** 77 single-fault mutations (47 backend, 30 frontend; each applied
+to the real source, the targeted tests run, the file restored), every one killed, none survived: readiness accepting an old, newer
+or unknown revision, several rows, or a missing table; migration without the lock, a swallowed failure, an unknown revision not
+refused, the migration imported by the web startup, no grant reconciliation, a leaking scrubber; every unsafe production value;
+internal auth not validated, non-constant-time, the probe exemption widened, a forged client address accepted, the guard not
+installed; the query string, the secret, Authorization or a browser request id logged or trusted (both services); `hide_parameters`
+removed (both engines); the app role given DDL, superuser, membership of the owner, or write access to `alembic_version`; no default
+privileges, or no reconcile; the Uvicorn access log or flags restored; the image health check or command changed; the BFF not sending
+or trusting the secret, forwarding a browser header, an unwrapped route; a leaked hostname, a relayed 5xx, 4xx treated as
+infrastructure; HSTS on development or with `includeSubDomains`/`preload`, weakened secret-page headers, a CSP slipping in. Joint faults
+were used where redundancy is intentional: the CORS default AND its checks (C1), both `AUTH_MODE=dev` checks (C2). The two
+grant mechanisms (bootstrap defaults and the job's reconcile) are separate faults killed by separate tests, because either alone
+keeps a real system working. Every mutation was applied to a baseline that passes (non-vacuous), and a mutation that did not apply
+would have been reported as such (none).
+
+**Trade-offs and deviations to know about:**
+
+* The backend image's health check is readiness and the frontend's is liveness: this deliberately differs from "one health check
+  per image". Docker does not restart unhealthy containers; an orchestrator that does must use liveness.
+* `APP_ENV` has no backend default any more (a process that was not told its environment does not start); the existing tests set it.
+* Production refuses ANY non-empty `CORS_ORIGINS` (stricter than "no wildcard, no localhost"), and `DEV_USER_EMAIL` counts as
+  configured even when empty.
+* The rehearsal backend's `PUBLIC_ORIGIN` is a placeholder https origin (production rules) while its frontend is `APP_ENV=development`
+  over plain http; the rehearsal proves orchestration, not TLS.
+* `BACKEND_URL` is validated by name or address only; what a service name resolves to is network isolation's job.
+* `/api/ready` is public and uncached (one backend readiness call per request); the request log also records every probe.
+* The internal secret has no dual-key rotation window; rotation briefly yields 502s.
+* A database that cannot be reached during an ordinary request is now a fixed 503 from FastAPI (before: an unhandled 500).
+* `alembic/env.py` loads no model metadata for the migration job (autogenerate and `alembic check` still load it in development).
+* The role-restricted test run deselects four tests that arrange state by disabling triggers (they need an owner by nature).
+* A pre-existing thread warning in the concurrency suite (`BrokenBarrierError` in a barrier helper) still appears in some full runs (it was already there in the first full run of this slice, before any
+  D2 concurrency test existed); the barrier helper is older code.
+* HSTS is emitted by the application (option B); D5 must confirm the proxy does not add a second, different value.

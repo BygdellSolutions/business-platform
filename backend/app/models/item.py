@@ -4,7 +4,7 @@ from enum import StrEnum
 from sqlalchemy import Boolean, CheckConstraint, Numeric, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.db import Base
+from app.core.base import Base
 from app.models.mixins import TenantOwned
 
 

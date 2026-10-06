@@ -5,6 +5,8 @@ import { credentialFromRequest, loginPath } from "@/lib/auth/credential";
 import { originProblem, validCsrf } from "@/lib/auth/request";
 import { backendFetch, isRequestKey } from "@/lib/backend";
 import { isSameOrigin } from "@/lib/origin";
+import { instrument } from "@/lib/observability";
+import { infrastructureFailure, isInfrastructureFailure, upstreamUnavailable } from "@/lib/upstream";
 
 /**
  * Organization creation: the one BFF route that is NOT scoped to an organization (there is none yet).
@@ -28,7 +30,7 @@ function failure(status: number, detail: string): NextResponse {
   return NextResponse.json({ detail }, { status, headers: NO_STORE });
 }
 
-export async function POST(request: NextRequest): Promise<NextResponse> {
+export const POST = instrument(async function POST(request: NextRequest): Promise<NextResponse> {
   const mode = authMode();
   if (mode === "none") return failure(503, "Authentication is not configured");
   if (mode === "session" ? originProblem(request) !== null : !isSameOrigin(request)) return failure(403, "Cross-origin requests are not allowed");
@@ -55,14 +57,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   let upstream: Response;
   try {
     upstream = await backendFetch({ credential }, "/api/organizations", { method: "POST", body, csrf, idempotencyKey: keyHeader ?? undefined });
-  } catch {
-    return failure(502, "Backend unavailable");
+  } catch (error) {
+    return upstreamUnavailable(error);
   }
   if (upstream.status >= 300 && upstream.status < 400) return failure(502, "Unexpected response from the backend");
+  if (isInfrastructureFailure(upstream)) return infrastructureFailure(upstream);
   if (upstream.status === 401) return NextResponse.json({ detail: "Not authenticated", login: loginPath() }, { status: 401, headers: NO_STORE });
 
   return new NextResponse(await upstream.text(), {
     status: upstream.status,
     headers: { "content-type": upstream.headers.get("content-type") ?? "application/json", ...NO_STORE },
   });
-}
+});

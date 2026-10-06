@@ -64,7 +64,7 @@ describe("preview (before authentication)", () => {
     const [url, init] = upstream();
     expect(url).toBe("http://backend.test:8000/api/invite/preview");
     expect(JSON.parse(init.body)).toEqual({ token: TOKEN });
-    expect(sentHeaders()).toEqual({ accept: "application/json", "content-type": "application/json" }); // no Authorization, no organization, no pre-auth value
+    expect(sentHeaders()).toEqual({ accept: "application/json", "content-type": "application/json", "x-request-id": expect.stringMatching(/^[0-9a-f]{32}$/) }); // no Authorization, no organization, no pre-auth value
     expect(response.headers.get("cache-control")).toBe("no-store");
   });
 
@@ -104,7 +104,7 @@ describe("accept as a signed-in account", () => {
 
     expect(await response.json()).toEqual({ organization_id: ORG, role: "viewer", joined: true });
     expect(JSON.parse(upstream()[1].body)).toEqual({ token: TOKEN });
-    expect(sentHeaders()).toEqual({ accept: "application/json", "content-type": "application/json", authorization: `Bearer ${SESSION}`, "x-csrf-token": CSRF });
+    expect(sentHeaders()).toEqual({ accept: "application/json", "content-type": "application/json", authorization: `Bearer ${SESSION}`, "x-csrf-token": CSRF, "x-request-id": expect.stringMatching(/^[0-9a-f]{32}$/) });
   });
 
   it("refuses without the session CSRF pair or with a foreign Origin, before FastAPI", async () => {

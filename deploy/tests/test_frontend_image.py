@@ -9,7 +9,8 @@ from conftest import ROOT, container, docker, get, host_port, inspect, wait_http
 
 SESSION_RUNTIME = {"AUTH_MODE": "session", "APP_ENV": "development", "PUBLIC_ORIGIN": "http://localhost:3000", "BACKEND_URL": "http://backend.invalid:8000"}
 DEV_RUNTIME = {"AUTH_MODE": "dev", "APP_ENV": "development", "BACKEND_URL": "http://backend.invalid:8000"}
-PRODUCTION_RUNTIME = {"AUTH_MODE": "session", "APP_ENV": "production", "PUBLIC_ORIGIN": "https://app.example.test", "BACKEND_URL": "http://backend.invalid:8000"}
+# A complete production configuration (D2): https origin, a private (single-label) backend name, the internal secret.
+PRODUCTION_RUNTIME = {"AUTH_MODE": "session", "APP_ENV": "production", "PUBLIC_ORIGIN": "https://app.example.test", "BACKEND_URL": "http://backend:8000", "BFF_INTERNAL_SECRET": "5c1f9a3e7b2d40869e1c7a35b8d20f64a1c7e903d5b6f2a8"}
 
 
 def serve(image, env):

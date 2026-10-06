@@ -43,8 +43,8 @@ describe("invitation secret handling", () => {
     for (const file of ["app/api/invite/preview/route.ts", "app/api/invite/accept/route.ts", "app/api/invite/accept-new/route.ts"]) {
       const source = code(file);
       expect(source, file).not.toMatch(/x-organization-id|orgId|owner|x-role|x-dev-user-email/i);
-      expect(source, file).toMatch(/export async function POST/);
-      expect(source, file).not.toMatch(/export (async )?function (GET|PUT|PATCH|DELETE)/);
+      expect(source, file).toMatch(/export const POST = instrument\(/);
+      expect(source, file).not.toMatch(/export (async )?function (GET|PUT|PATCH|DELETE)|export const (GET|PUT|PATCH|DELETE)/);
     }
   });
 

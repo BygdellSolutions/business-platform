@@ -14,6 +14,16 @@ from app.core.tokens import hash_token, new_token
 from app.models import AuthSession, SecurityEvent, User, UserCredential
 from tests.factories import make_user
 
+BFF_SECRET = "test-bff-secret-9f3c1a7e5b2d8046c1e7a95b3d20f648"
+
+
+def as_bff(headers: dict[str, str] | None = None) -> dict[str, str]:
+    """`headers` plus the BFF internal secret header, when the test run configured one (a test acting as the BFF)."""
+    if settings.bff_internal_secret is None:
+        return dict(headers or {})
+    return {**(headers or {}), settings.bff_internal_header: settings.bff_internal_secret.get_secret_value()}
+
+
 PASSWORD = "correct horse battery staple"
 OTHER_PASSWORD = "another quite long passphrase"
 

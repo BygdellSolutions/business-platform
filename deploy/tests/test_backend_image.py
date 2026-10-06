@@ -32,7 +32,8 @@ def test_it_runs_as_a_non_root_user(backend_image):
 def test_it_starts_with_exactly_one_uvicorn_worker_and_answers_health_without_a_database(backend_image):
     with container(backend_image, BACKEND_ENV) as identifier:
         for _ in range(60):  # the database is unreachable on purpose: the web process must not need it, nor run migrations
-            if "healthy" in docker("inspect", "-f", "{{.State.Health.Status}}", identifier, check=False).stdout:
+            probe = docker("exec", identifier, "python", "-c", "import urllib.request;print(urllib.request.urlopen('http://127.0.0.1:8000/health').status)", check=False)
+            if probe.stdout.strip() == "200":
                 break
             time.sleep(0.5)
         status = docker("exec", identifier, "python", "-c", "import urllib.request;r=urllib.request.urlopen('http://127.0.0.1:8000/health');print(r.status, r.read().decode())").stdout.strip()
@@ -45,7 +46,17 @@ def test_it_starts_with_exactly_one_uvicorn_worker_and_answers_health_without_a_
         assert "--workers 1" in processes[0] and "--port 8000" in processes[0]
         logs = docker("logs", identifier).stdout + docker("logs", identifier).stderr
         assert not re.search(r"alembic|Running upgrade|migrat", logs, re.IGNORECASE)  # the web process migrates nothing
-        assert inspect(identifier)["State"]["Health"]["Status"] in ("healthy", "starting")
+        # liveness answers without a database; READINESS (what the container health check asks) says no, and the process stays up
+        ready_probe = (
+            "import urllib.request, urllib.error\n"
+            "try:\n"
+            "    urllib.request.urlopen('http://127.0.0.1:8000/health/ready'); print('ready')\n"
+            "except urllib.error.HTTPError as e:\n"
+            "    print(e.code, e.read().decode())"
+        )
+        unready = docker("exec", identifier, "python", "-c", ready_probe).stdout.strip()
+        assert unready == '503 {"status":"unready"}', unready
+        assert inspect(identifier)["State"]["Health"]["Status"] in ("starting", "unhealthy") and inspect(identifier)["State"]["Running"]
 
 
 def test_the_bundled_pdf_fonts_are_present_and_match_their_pinned_checksums(backend_image):
@@ -112,7 +123,8 @@ def test_tests_development_files_secrets_and_build_tools_are_absent(backend_imag
     )
     assert absent.strip() == "", absent
     # no test-database configuration, in files or in the image environment
-    assert sh(backend_image, "grep -rIl -e TEST_DATABASE_URL -e POSTGRES_TEST /app --include=*.py --include=*.ini --include=*.txt --include=*.toml 2>/dev/null | head -3").strip() == ""
+    # (the ONE mention is the configuration module's own refusal of that variable in production)
+    assert sh(backend_image, "grep -rIl -e TEST_DATABASE_URL -e POSTGRES_TEST /app --include=*.py --include=*.ini --include=*.txt --include=*.toml 2>/dev/null | head -3").strip() == "/app/app/core/config.py"
     # a non-vacuous control: the same probe does find things that ARE there
     assert "PRESENT:alembic.ini" in sh(backend_image, "cd /app; for p in alembic.ini; do test -e $p && echo PRESENT:$p; done")
     environment = " ".join(inspect(backend_image)["Config"]["Env"])

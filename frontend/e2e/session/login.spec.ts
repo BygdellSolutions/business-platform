@@ -1,6 +1,6 @@
 import { expect, test } from "../fixtures";
 
-import { E2E_PASSWORD, ensureCredential, preAuthToken, signInThroughPage } from "../auth-support";
+import { direct, E2E_PASSWORD, ensureCredential, preAuthToken, signInThroughPage } from "../auth-support";
 import { BACKEND_URL, BASE_URL } from "../env";
 import { FREDRIK, MARIA, ORG_A, ORG_B, createWorld, sql, testRow, type World } from "../support";
 
@@ -175,8 +175,8 @@ test.describe("the cookies", () => {
 
     const fresh = (await cookieOf(context, "bp_session"))!.value;
     expect(fresh).not.toBe(planted);
-    expect((await fetch(`${BACKEND_URL}/api/me/organizations`, { headers: { authorization: `Bearer ${planted}` } })).status).toBe(401);
-    expect((await fetch(`${BACKEND_URL}/api/me/organizations`, { headers: { authorization: `Bearer ${fresh}` } })).status).toBe(200);
+    expect((await direct(`${BACKEND_URL}/api/me/organizations`, { headers: { authorization: `Bearer ${planted}` } })).status).toBe(401);
+    expect((await direct(`${BACKEND_URL}/api/me/organizations`, { headers: { authorization: `Bearer ${fresh}` } })).status).toBe(200);
   });
 });
 

@@ -28,7 +28,7 @@ HEAD = "e63c9a2b8d45"
 
 def _alembic(url: str, *args: str) -> subprocess.CompletedProcess[str]:
     # A separate process: the application in this process is configured for the main test database.
-    env = {**os.environ, "DATABASE_URL": url}
+    env = {**os.environ, "DATABASE_URL": url, "MIGRATION_DATABASE_URL": url}
     return subprocess.run(
         [sys.executable, "-m", "alembic", "-c", str(BACKEND_DIR / "alembic.ini"), *args],
         cwd=BACKEND_DIR, env=env, capture_output=True, text=True, check=False,

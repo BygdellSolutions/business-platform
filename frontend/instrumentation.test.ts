@@ -9,9 +9,17 @@ afterEach(() => {
 });
 
 function env(values: Record<string, string | undefined>) {
-  for (const name of ["AUTH_MODE", "APP_ENV", "PUBLIC_ORIGIN", "NEXT_RUNTIME"]) vi.stubEnv(name, undefined as unknown as string);
+  for (const name of ["AUTH_MODE", "APP_ENV", "PUBLIC_ORIGIN", "NEXT_RUNTIME", "BACKEND_URL", "BFF_INTERNAL_SECRET", "TRUSTED_PROXY_HOPS"]) vi.stubEnv(name, undefined as unknown as string);
   for (const [name, value] of Object.entries(values)) if (value !== undefined) vi.stubEnv(name, value);
 }
+
+const PRODUCTION = {
+  APP_ENV: "production",
+  AUTH_MODE: "session",
+  PUBLIC_ORIGIN: "https://app.example.com",
+  BACKEND_URL: "http://backend:8000",
+  BFF_INTERNAL_SECRET: "9f3c1a7e5b2d8046c1e7a95b3d20f648a1c7e903d5b6f2a8",
+};
 
 describe("the server refuses to start with an unusable authentication configuration (production)", () => {
   it.each([
@@ -31,7 +39,7 @@ describe("the server refuses to start with an unusable authentication configurat
   });
 
   it("starts with a valid production session configuration", async () => {
-    env({ NEXT_RUNTIME: "nodejs", AUTH_MODE: "session", PUBLIC_ORIGIN: "https://app.example.com" });
+    env({ ...PRODUCTION, NEXT_RUNTIME: "nodejs" });
     const exit = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
     await expect(register()).resolves.toBeUndefined();
     expect(exit).not.toHaveBeenCalled();

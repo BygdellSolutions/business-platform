@@ -3,7 +3,7 @@ from enum import StrEnum
 from sqlalchemy import Boolean, CheckConstraint, String, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.db import Base
+from app.core.base import Base
 from app.models.mixins import BusinessProfile, TenantOwned, profile_constraints
 
 

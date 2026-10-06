@@ -93,7 +93,7 @@ describe("If-Match (the version a change is based on) is the one client header t
   it("still forwards no other client header", async () => {
     await call("POST", { path: PATH, headers: { "if-match": '"1"', "if-none-match": "*", "x-forwarded-for": "10.0.0.1", authorization: "Bearer x" } });
     const names = [...sent().headers.keys()].sort();
-    expect(names).toEqual(["accept", "if-match", "x-dev-user-email", "x-organization-id"]);
+    expect(names).toEqual(["accept", "if-match", "x-dev-user-email", "x-organization-id", "x-request-id"]); // the BFF's own correlation id is not a client header
   });
 });
 
@@ -137,7 +137,7 @@ describe("identity and organization are decided by the BFF, never by the client"
       },
     });
 
-    expect([...sent().headers.keys()].sort()).toEqual(["accept", "x-dev-user-email", "x-organization-id"]);
+    expect([...sent().headers.keys()].sort()).toEqual(["accept", "x-dev-user-email", "x-organization-id", "x-request-id"]);
   });
 
   it("takes the organization from the URL even when a different one is in the query string", async () => {
@@ -301,7 +301,7 @@ describe("responses", () => {
 
     const response = await call("GET");
 
-    expect([...response.headers.keys()].sort()).toEqual(["cache-control", "content-type"]);
+    expect([...response.headers.keys()].sort()).toEqual(["cache-control", "content-type", "x-request-id"]); // the id is the BFF's own
   });
 
   it("passes 204 through without a body", async () => {
@@ -322,13 +322,15 @@ describe("responses", () => {
     expect(response.headers.get("location")).toBeNull();
   });
 
-  it("answers 502 when the backend cannot be reached or times out", async () => {
-    fetchMock.mockRejectedValue(new TypeError("fetch failed"));
-    expect((await call("GET")).status).toBe(502);
+  it("answers a fixed 502 when the backend cannot be reached and a fixed 504 when it times out", async () => {
+    fetchMock.mockRejectedValue(Object.assign(new TypeError("fetch failed"), { cause: new Error("connect ECONNREFUSED 10.1.2.3:8000 backend.internal") }));
+    const refused = await call("GET");
+    expect(refused.status).toBe(502);
+    expect(await refused.json()).toEqual({ detail: "Backend unavailable", code: "upstream_unavailable" });
 
     fetchMock.mockRejectedValue(new DOMException("timed out", "TimeoutError"));
     const response = await call("GET");
-    expect(response.status).toBe(502);
-    expect(await response.json()).toEqual({ detail: "Backend unavailable" });
+    expect(response.status).toBe(504);
+    expect(await response.json()).toEqual({ detail: "Backend unavailable", code: "upstream_timeout" });
   });
 });

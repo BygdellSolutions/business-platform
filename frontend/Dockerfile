@@ -39,7 +39,9 @@ COPY --from=build /app/public ./public
 RUN mkdir -p .next/cache && chown -R node:node .next/cache
 USER node
 EXPOSE 3000
-# Interim (D1): a TCP liveness check (the server accepts connections). D2 adds /api/health and the readiness chain.
+# LIVENESS only: GET /api/health depends on nothing, so a backend or database outage never marks THIS process unhealthy
+# (an orchestrator that restarts unhealthy containers would otherwise restart a perfectly good frontend, uselessly).
+# Whether the whole chain can serve is /api/ready, which a deployment gate may ask separately.
 HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=3 \
-  CMD ["node", "-e", "require('net').connect(3000,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"]
+  CMD ["node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.status===200?0:1)).catch(()=>process.exit(1))"]
 CMD ["node", "server.js"]

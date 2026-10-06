@@ -29,7 +29,7 @@ const read = (file: string) => readFileSync(file, "utf8");
 const isClient = (source: string) => /^\s*["']use client["']/.test(source);
 const CLIENT = ALL.filter((file) => isClient(read(file)));
 
-const SERVER_ONLY_AUTH = ["@/lib/auth/credential", "@/lib/auth/request", "@/lib/auth/handlers", "@/lib/auth/session-cookies", "@/lib/auth/server", "@/lib/backend", "@/lib/identity", "@/lib/orgs", "@/lib/server-api"];
+const SERVER_ONLY_AUTH = ["@/lib/auth/credential", "@/lib/auth/request", "@/lib/auth/handlers", "@/lib/auth/session-cookies", "@/lib/auth/server", "@/lib/backend", "@/lib/identity", "@/lib/orgs", "@/lib/server-api", "@/lib/runtime-config", "@/lib/observability", "@/lib/upstream"];
 
 describe("client code and the session", () => {
   it("there is client code to check", () => {
@@ -117,6 +117,7 @@ describe("the authentication mode is decided in one place", () => {
       "lib/auth/credential.ts",
       "lib/auth/handlers.ts",
       "lib/auth/request.ts",
+      "lib/runtime-config.ts",
     ]);
   });
 });

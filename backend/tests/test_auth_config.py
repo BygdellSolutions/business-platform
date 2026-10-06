@@ -5,7 +5,22 @@ from pydantic import SecretStr, ValidationError
 
 from app.core.config import Settings
 
-KEY = "k" * 40
+KEY = "k1" * 20
+BFF = "9f3c1a7e5b2d8046c1e7a95b3d20f648a1c7e903d5b6f2a8"
+ORIGIN = "https://app.example.test"
+# A complete, valid production configuration; tests override single values (see also test_production_config.py).
+PRODUCTION = dict(app_env="production", auth_mode="session", security_key=KEY, bff_internal_secret=BFF, public_origin=ORIGIN)
+
+
+SETTINGS_ENV = ("APP_ENV", "AUTH_MODE", "SECURITY_KEY", "PUBLIC_ORIGIN", "CORS_ORIGINS", "DEV_USER_EMAIL", "BFF_INTERNAL_SECRET",
+                "MIGRATION_DATABASE_URL", "TEST_DATABASE_URL", "TRUST_CLIENT_IP_HEADER")
+
+
+@pytest.fixture(autouse=True)
+def clean_environment(monkeypatch):
+    """`Settings` reads the environment too: the values the test run itself set (or a developer's shell) must not leak in."""
+    for name in SETTINGS_ENV:
+        monkeypatch.delenv(name, raising=False)
 
 
 def build(**values) -> Settings:
@@ -22,16 +37,18 @@ def test_production_refuses_disabled_and_the_default_mode(monkeypatch):
         build(app_env="production", auth_mode="disabled")
     for name in ("APP_ENV", "AUTH_MODE", "SECURITY_KEY"):
         monkeypatch.delenv(name, raising=False)
+    with pytest.raises(ValidationError, match="app_env"):
+        build()  # there is no default environment: a process that was not told what it is does not start
     with pytest.raises(ValidationError, match="requires AUTH_MODE=session"):
-        build()  # the defaults are production + disabled: nothing starts by accident
+        build(app_env="production")  # and production's default mode is disabled: nothing starts by accident
 
 
 def test_production_session_mode_needs_a_real_security_key():
     with pytest.raises(ValidationError, match="SECURITY_KEY"):
-        build(app_env="production", auth_mode="session")
+        build(**{**PRODUCTION, "security_key": None})
     with pytest.raises(ValidationError, match="SECURITY_KEY"):
-        build(app_env="production", auth_mode="session", security_key="short")
-    assert build(app_env="production", auth_mode="session", security_key=KEY).auth_mode == "session"
+        build(**{**PRODUCTION, "security_key": "short"})
+    assert build(**PRODUCTION).auth_mode == "session"
 
 
 def test_development_can_explicitly_choose_dev_or_session_or_disabled():
