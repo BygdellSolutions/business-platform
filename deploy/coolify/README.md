@@ -14,7 +14,7 @@ own resource, with only its own variables:
 |---|---|---|
 | `bootstrap.yml` | database superuser URL, role names and passwords | no; deploy ONCE per database, then delete the resource |
 | `migrate.yml` | `MIGRATION_DATABASE_URL`, `RUNTIME_DB_ROLE` | no |
-| `backend.yml` | `DATABASE_URL`, `SECURITY_KEY`, `BFF_INTERNAL_SECRET`, `PUBLIC_ORIGIN`, `TRUST_CLIENT_IP_HEADER`, `BACKEND_ALIAS` | no |
+| `backend.yml` | `DATABASE_URL`, `SECURITY_KEY`, `BFF_INTERNAL_SECRET`, `PUBLIC_ORIGIN`, `TRUST_CLIENT_IP_HEADER` | no |
 | `frontend.yml` | `PUBLIC_ORIGIN`, `BACKEND_URL`, `BFF_INTERNAL_SECRET`, `TRUSTED_PROXY_HOPS` | yes (the only public service) |
 
 ## Rules observed in Coolify
@@ -36,5 +36,7 @@ own resource, with only its own variables:
 4. `frontend` resource.
 
 Exact-head readiness is the backstop if the order is broken: a backend whose database is not at its head never becomes ready.
-The frontend reaches the backend through the network alias `BACKEND_ALIAS` on Coolify's shared `coolify` network (staging and
-production need different aliases on the same host).
+**Frontend -> backend:** Coolify drops Compose network aliases and its own `custom_network_aliases` for Compose resources, and
+by default names containers with a per-deployment suffix (all observed). The backend resource therefore has "Consistent Container
+Names" enabled, which names the container `backend-<resource uuid>`, and the frontend's `BACKEND_URL` is
+`http://backend-<resource uuid>:8000` (a single-label name, as the BFF requires). Both live on Coolify's shared `coolify` network.
