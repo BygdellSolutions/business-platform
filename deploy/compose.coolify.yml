@@ -14,9 +14,14 @@
 # Every value comes from Coolify's environment configuration for this resource; nothing secret is in this file. `:?` makes a
 # missing value fail the deployment instead of starting with an empty one.
 
+# Paths: Coolify runs Compose with the REPOSITORY ROOT as the project directory (observed in D5), so build contexts are
+# relative to the repository root, not to this file. Locally: `docker compose --project-directory . -f deploy/compose.coolify.yml ...`.
+# Every Coolify variable for this resource must be RUNTIME-only (not "build time"): Coolify otherwise passes each one to the
+# image build as a build argument. The images need no build-time configuration (D1).
+
 x-backend-build: &backend-build
   build:
-    context: ../backend
+    context: ./backend
 
 services:
   migrate:
@@ -46,7 +51,7 @@ services:
 
   frontend:
     build:
-      context: ../frontend
+      context: ./frontend
     environment:
       APP_ENV: production
       AUTH_MODE: session

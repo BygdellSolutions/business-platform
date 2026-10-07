@@ -9,7 +9,7 @@
 services:
   db-bootstrap:
     build:
-      context: ../backend
+      context: ./backend
     command: ["python", "-m", "app.scripts.bootstrap_roles"]
     environment:
       BOOTSTRAP_DATABASE_URL: ${BOOTSTRAP_DATABASE_URL:?set BOOTSTRAP_DATABASE_URL (database superuser, this database)}
