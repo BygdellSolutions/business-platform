@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useSyncExternalStore, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 
 import { useOrgId } from "@/components/shell/org-context";
 import { Button } from "@/components/ui/Button";
@@ -11,29 +11,22 @@ import { ErrorSummary } from "@/components/ui/ErrorSummary";
 import { customerSearch } from "@/features/customers/customer-picker";
 import { apiFetch } from "@/lib/api/client";
 import type { Transaction, TransactionCreate } from "@/lib/api/types";
-import { isDateShape, localToday } from "@/lib/dates";
+import { isDateShape } from "@/lib/dates";
 import { problemsFrom, useMutation } from "@/lib/forms";
 
 const CONTROLS = ["billing_customer_id", "transaction_date"] as const;
-
-// The browser's calendar date, hydration-safe: the server renders without it, the browser fills
-// it in. (The server's own "today" would be the server's time zone, not the user's.)
-const subscribe = () => () => {};
-const browserToday = () => localToday();
-const serverToday = () => "";
 
 /**
  * A new transaction starts as a draft with only a billing customer and a date; lines are added
  * on the transaction's own page. Only active customers can be billed (the picker offers only
  * those, and FastAPI refuses others). The date is a plain YYYY-MM-DD string, prefilled with the
- * user's local date. No customer chosen means the field is left out and FastAPI says it is
+ * organization's own date (`today`, from FastAPI in the organization's time zone), not the browser's. No customer chosen means the field is left out and FastAPI says it is
  * required, on the picker.
  */
-export function TransactionCreateForm() {
+export function TransactionCreateForm({ today }: { today: string }) {
   const orgId = useOrgId();
   const router = useRouter();
   const { pending, error, run } = useMutation();
-  const today = useSyncExternalStore(subscribe, browserToday, serverToday);
   const [customer, setCustomer] = useState<PickerEntity | null>(null);
   const [typedDate, setTypedDate] = useState<string | null>(null);
   const date = typedDate ?? today;

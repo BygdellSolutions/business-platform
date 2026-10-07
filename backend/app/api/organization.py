@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.authz import roles_required
 from app.core.currency import CURRENCY_LOCKED, default_currency_lock_reason
 from app.core.db import get_db
+from app.core.org_time import today_in
 from app.core.query import apply_update
 from app.core.tenant import TenantContext, get_tenant_context
 from app.models import Organization, Role
@@ -27,6 +28,7 @@ def read_organization_profile(db: Session, organization: Organization) -> Organi
         },
         default_currency_locked=reason is not None,
         default_currency_lock_reason=reason,
+        today=today_in(organization.timezone),
     )
 
 

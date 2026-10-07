@@ -1,6 +1,6 @@
 import uuid
 from collections.abc import Sequence
-from datetime import date, datetime, timezone
+from datetime import date
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
@@ -17,6 +17,7 @@ from app.core.lifecycle import (
     REOPEN as EVENT_REOPEN,
     ensure_valid,
 )
+from app.core.org_time import organization_today
 from app.core.query import apply_update, commit_and_refresh
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import (
@@ -161,10 +162,6 @@ def _changes(record, values: dict) -> bool:
     return any(getattr(record, field) != value for field, value in values.items())
 
 
-def _today() -> date:
-    return datetime.now(timezone.utc).date()
-
-
 def _calculate(
     quantity: Decimal, price: Decimal, vat_rate: Decimal, path: tuple[str | int, ...] = ()
 ) -> LineAmounts:
@@ -238,7 +235,7 @@ def create_transaction(
         Transaction,
         billing_customer_id=payload.billing_customer_id,
         currency=currency,
-        transaction_date=payload.transaction_date or _today(),
+        transaction_date=payload.transaction_date or organization_today(db, ctx.organization_id),
     )
     for position, values in enumerate(line_values, start=1):
         create_scoped(db, ctx, TransactionLine, transaction_id=tx.id, position=position, **values)

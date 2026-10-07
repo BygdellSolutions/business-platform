@@ -27,6 +27,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.org_time import organization_today
 from app.core.tenant import TenantContext
 from app.core.tenant_scope import create_scoped, get_scoped, get_scoped_or_404, reference_error, scoped_select
 from app.models import Customer, Organization
@@ -68,10 +69,6 @@ def conflict(code: str, message: str, transaction_ids: Sequence[uuid.UUID] = ())
     if transaction_ids:
         detail["transaction_ids"] = [str(transaction_id) for transaction_id in transaction_ids]
     return HTTPException(status.HTTP_409_CONFLICT, detail=detail)
-
-
-def _today() -> date:
-    return datetime.now(timezone.utc).date()
 
 
 # --- totals --------------------------------------------------------------------------------------------------
@@ -170,7 +167,7 @@ def create_draft(db: Session, ctx: TenantContext, payload: InvoiceCreate) -> uui
     # 5-8. Eligibility, under the locks.
     _check_invoiceable(db, ctx, sources)
 
-    invoice_date = payload.invoice_date or _today()
+    invoice_date = payload.invoice_date or organization_today(db, ctx.organization_id)
     if payload.due_date is not None and payload.due_date < invoice_date:
         reference_error("due_date", "The due date cannot be before the invoice date", "value_error")
 

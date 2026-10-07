@@ -30,6 +30,37 @@ const settings = (orgId: string) => `/o/${orgId}/settings`;
 const orgRow = (orgId: string, columns: string) => testRow(`select ${columns} from organizations where id = ${sql(orgId)}`);
 
 test.describe("owner and admin", () => {
+  test("set the time zone; it persists, and new transactions start on the organization's date", async ({ page, context }) => {
+    world = createWorld({ label: "TimeZone" });
+    await signIn(context, world.email);
+
+    await page.goto(settings(world.orgId));
+    await expect(page.getByText(/Not set: new dates default to today in UTC/)).toBeVisible();
+    await page.getByLabel("Time zone", { exact: true }).fill("Pacific/Kiritimati");
+    await page.getByTestId("submit").click();
+    await expect(page.getByTestId("saved")).toBeVisible();
+    expect(orgRow(world.orgId, "timezone")).toBe("Pacific/Kiritimati");
+
+    await page.reload();
+    await expect(page.getByLabel("Time zone", { exact: true })).toHaveValue("Pacific/Kiritimati");
+
+    // The form's date is the organization's today as FastAPI computes it in that zone (UTC+14), not the browser's.
+    const today = ((await (await context.request.get(bffUrl(world.orgId, "/organization"))).json()) as { today: string }).today;
+    await page.goto(`/o/${world.orgId}/transactions/new`);
+    await expect(page.getByLabel("Date")).toHaveValue(today);
+  });
+
+  test("an unknown time zone is refused next to the box and nothing is stored", async ({ page, context }) => {
+    world = createWorld({ label: "BadZone" });
+    await signIn(context, world.email);
+
+    await page.goto(settings(world.orgId));
+    await page.getByLabel("Time zone", { exact: true }).fill("Mars/Olympus");
+    await page.getByTestId("submit").click();
+    await expect(page.getByText(/must be an IANA time zone name/)).toBeVisible();
+    expect(orgRow(world.orgId, "coalesce(timezone, '-')")).toBe("-");
+  });
+
   test("edit the business profile; it persists in PostgreSQL and survives a reload", async ({ page, context }) => {
     world = createWorld({ label: "Profile" });
     await signIn(context, world.email);

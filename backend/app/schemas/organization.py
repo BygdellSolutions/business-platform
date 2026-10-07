@@ -1,13 +1,25 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated
 
-from pydantic import StringConstraints, field_validator
+from pydantic import AfterValidator, StringConstraints, field_validator
+
+from app.core.org_time import is_known_zone
 
 from app.schemas.profile import CurrencyCode, ProfileIn, ProfileRead, optional_text
 
 Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
 LegalName = optional_text(255)
+
+
+def _known_zone(value: str) -> str:
+    if not is_known_zone(value):
+        raise ValueError("must be an IANA time zone name such as Europe/Stockholm")
+    return value
+
+
+# An IANA time zone name, checked against the zone database the backend ships (tzdata).
+TimeZoneName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64), AfterValidator(_known_zone)]
 
 # There is no organization_id field anywhere: the organization is always the active one.
 
@@ -37,6 +49,8 @@ class OrganizationUpdate(ProfileIn):
     name: Name | None = None
     legal_name: LegalName = None
     default_currency: CurrencyCode | None = None
+    # Null clears it again (dates then default to UTC): nothing stored depends on the zone.
+    timezone: TimeZoneName | None = None
 
     @field_validator("name", "default_currency")
     @classmethod
@@ -55,5 +69,8 @@ class OrganizationRead(ProfileRead):
     # Whether the currency can still be changed, and if not, why (shown next to the field).
     default_currency_locked: bool
     default_currency_lock_reason: str | None
+    timezone: str | None
+    # The organization's current date in its time zone (UTC when none is set): the default for new dates.
+    today: date
     created_at: datetime
     updated_at: datetime

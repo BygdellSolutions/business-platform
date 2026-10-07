@@ -543,6 +543,12 @@ Each line is rounded on its own and the three amounts are **stored** on the line
 
 ---
 
+## Implementation notes: organization time zone
+
+`organizations.timezone` is an IANA name (e.g. `Europe/Stockholm`), nullable and never backfilled: nothing assumes a zone. `app/core/org_time.py` answers "what is today for this organization" (`today_in`, `organization_today`) from the clock seam (`app.core.clock.utcnow`), falling back to UTC when no zone is set (the behavior before zones existed). It is the ONLY source of server-side date defaults: a transaction or invoice created without a date gets it. Stored dates are plain calendar dates and never change when the zone changes; the zone only decides future defaults, so it may be changed or cleared at any time. Validation is the backend's (`zoneinfo` against the bundled `tzdata` package, an explicit dependency because slim images have no system zone database); the database CHECKs the shape only. `GET /api/organization` returns `timezone` and `today`, and the new-transaction page prefills its date with `today` from the server rather than the browser's date (the browser may be on another day). The Settings field offers the browser's zone names as suggestions only.
+
+---
+
 ## Implementation notes: core registry and lifecycle seam
 
 Generic capabilities and modules never import each other. They meet in **core**:

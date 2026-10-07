@@ -26,6 +26,8 @@ function organization(overrides: Partial<Organization> = {}): Organization {
     default_currency: "SEK",
     default_currency_locked: false,
     default_currency_lock_reason: null,
+    timezone: null,
+    today: "2026-10-08",
     created_at: "2026-10-01T10:00:00Z",
     updated_at: "2026-10-01T10:00:00Z",
     ...EMPTY_PROFILE,
@@ -226,6 +228,52 @@ describe("the default currency", () => {
 
     expect(await screen.findByTestId("form-error")).toHaveTextContent("can no longer be changed");
     expect(screen.getByLabelText("Default currency")).toHaveValue("EUR");
+  });
+});
+
+describe("the time zone", () => {
+  it("explains that none is set, that dates default to UTC, and what today is", () => {
+    mount(A, organization());
+    expect(screen.getByLabelText("Time zone")).toHaveValue("");
+    expect(screen.getByText(/Not set: new dates default to today in UTC \(2026-10-08\)/)).toBeInTheDocument();
+  });
+
+  it("offers the browser's zone names as suggestions, never as a rule", () => {
+    mount(A, organization());
+    const input = screen.getByLabelText("Time zone");
+    const list = document.getElementById(input.getAttribute("list") ?? "");
+    expect(list?.tagName).toBe("DATALIST");
+    expect(Array.from(list?.querySelectorAll("option") ?? []).map((o) => o.getAttribute("value"))).toContain("Europe/Stockholm");
+  });
+
+  it("sends only the zone when only the zone changed", async () => {
+    mocked.mockResolvedValueOnce(ok(organization({ timezone: "Europe/Stockholm" })));
+    mount(A, organization());
+    await userEvent.type(screen.getByLabelText("Time zone"), "Europe/Stockholm");
+    await userEvent.click(screen.getByRole("button", { name: "Save settings" }));
+    expect(mocked).toHaveBeenCalledWith(A, "/organization", { method: "PATCH", body: { timezone: "Europe/Stockholm" } });
+  });
+
+  it("clearing the zone sends null", async () => {
+    mocked.mockResolvedValueOnce(ok(organization()));
+    mount(A, organization({ timezone: "Europe/Stockholm" }));
+    await userEvent.clear(screen.getByLabelText("Time zone"));
+    await userEvent.click(screen.getByRole("button", { name: "Save settings" }));
+    expect(mocked).toHaveBeenCalledWith(A, "/organization", { method: "PATCH", body: { timezone: null } });
+  });
+
+  it("shows the backend's refusal of an unknown zone next to the box", async () => {
+    mocked.mockResolvedValueOnce(fail(422, { detail: [{ loc: ["body", "timezone"], msg: "Value error, must be an IANA time zone name such as Europe/Stockholm", type: "value_error" }] }));
+    mount(A, organization());
+    await userEvent.type(screen.getByLabelText("Time zone"), "Mars/Olympus");
+    await userEvent.click(screen.getByRole("button", { name: "Save settings" }));
+    expect(await screen.findByText(/must be an IANA time zone name/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Time zone")).toHaveValue("Mars/Olympus");
+  });
+
+  it("is shown read-only to everyone else", () => {
+    mount(A, organization({ timezone: "Europe/Stockholm" }), false);
+    expect(screen.getByTestId("setting-timezone")).toHaveTextContent("Europe/Stockholm");
   });
 });
 

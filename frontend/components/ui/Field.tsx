@@ -68,6 +68,7 @@ export function TextField({
   onChange,
   inputMode,
   autoComplete,
+  list,
   ...field
 }: FieldProps & {
   value: string;
@@ -75,11 +76,13 @@ export function TextField({
   /** "decimal" shows a numeric keypad on phones; the control stays a text input (see DecimalField). */
   inputMode?: "text" | "decimal" | "email" | "tel";
   autoComplete?: string;
+  /** The id of a <datalist> with suggestions. Suggestions only: what may be saved is the backend's decision. */
+  list?: string;
 }) {
   return (
     <FieldShell {...field}>
       {(a11y) => (
-        <input {...a11y} type="text" value={value} inputMode={inputMode} autoComplete={autoComplete} onChange={(event) => onChange(event.target.value)} className={CONTROL} />
+        <input {...a11y} type="text" value={value} inputMode={inputMode} autoComplete={autoComplete} list={list} onChange={(event) => onChange(event.target.value)} className={CONTROL} />
       )}
     </FieldShell>
   );

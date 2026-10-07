@@ -95,6 +95,10 @@ export interface Organization extends Profile {
   /** True once items or transactions exist: the currency can no longer be changed. */
   default_currency_locked: boolean;
   default_currency_lock_reason: string | null;
+  /** An IANA time zone such as Europe/Stockholm, or null: dates then default to UTC. */
+  timezone: string | null;
+  /** The organization's current date (YYYY-MM-DD) in its time zone: the default for new dates. */
+  today: string;
   created_at: string;
   updated_at: string;
 }
@@ -113,6 +117,7 @@ export type OrganizationUpdate = Partial<Profile> & {
   name?: string;
   legal_name?: string | null;
   default_currency?: string;
+  timezone?: string | null;
 };
 
 /** How many transactions predate currencies (GET /api/transactions/currency-status). */

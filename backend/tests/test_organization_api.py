@@ -52,7 +52,7 @@ def test_the_response_has_no_secrets_or_foreign_ids(client, db_session):
     assert set(body) == {
         "id", "name", "legal_name", "default_currency", "default_currency_locked",
         "default_currency_lock_reason", "address_line1", "address_line2", "postal_code", "city",
-        "country_code", "registration_number", "vat_number", "created_at", "updated_at",
+        "country_code", "registration_number", "vat_number", "timezone", "today", "created_at", "updated_at",
     }
 
 

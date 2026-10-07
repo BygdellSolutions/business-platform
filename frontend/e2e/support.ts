@@ -173,7 +173,12 @@ export async function editLine(context: BrowserContext, orgId: string, txId: str
 }
 
 /** The browser's own idea of today, as YYYY-MM-DD (what the create form prefills). */
-export const browserToday = (page: Page) => page.evaluate(() => new Date().toLocaleDateString("sv-SE"));
+/** The organization's own date (in its time zone) as FastAPI states it: what date fields default to. */
+export async function organizationToday(context: BrowserContext, orgId: string): Promise<string> {
+  const response = await context.request.get(bffUrl(orgId, "/organization"));
+  expect(response.status()).toBe(200);
+  return ((await response.json()) as { today: string }).today;
+}
 
 /** Run `body` while a REQUIRED custom field on transactions exists, and always disable it afterwards. */
 export async function withRequiredTransactionField(context: BrowserContext, orgId: string, body: (label: string) => Promise<void>) {

@@ -4,7 +4,6 @@ import { BACKEND_URL } from "./env";
 import {
   addLine,
   bffUrl,
-  browserToday,
   createCustomer,
   createItem,
   createTransaction,
@@ -14,6 +13,7 @@ import {
   lifecycle,
   openAddLine,
   ORG_A,
+  organizationToday,
   pick,
   picker,
   setActive,
@@ -71,8 +71,8 @@ test.describe("creating a transaction", () => {
     const customer = await createCustomer(context, ORG_A.id, unique("Create Billing"));
 
     await page.goto(`${list}/new`);
-    const today = await browserToday(page);
-    await expect(page.getByLabel("Date")).toHaveValue(today); // the browser's local date, prefilled
+    const today = await organizationToday(context, ORG_A.id);
+    await expect(page.getByLabel("Date")).toHaveValue(today); // the organization's date, prefilled
     await pick(page, "billing_customer_id", customer.name);
     await page.getByTestId("submit").click();
 
