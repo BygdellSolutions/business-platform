@@ -1,0 +1,22 @@
+# ONE-SHOT role bootstrap for a Coolify-managed database (D5 staging). Deploy it ONCE per database, confirm it exited 0, then
+# DELETE the Coolify resource: it is the only place that holds the database superuser credential, and that credential must not
+# remain in any long-lived application's environment.
+#
+# Creates (idempotently) the owner/migration role, the restricted app role and the optional read-only backup role, makes the owner
+# own the database and schema, and sets the default privileges (backend/app/scripts/bootstrap_roles.py). It resets the password of
+# a role that already exists to the value given here.
+
+services:
+  db-bootstrap:
+    build:
+      context: ../backend
+    command: ["python", "-m", "app.scripts.bootstrap_roles"]
+    environment:
+      BOOTSTRAP_DATABASE_URL: ${BOOTSTRAP_DATABASE_URL:?set BOOTSTRAP_DATABASE_URL (database superuser, this database)}
+      OWNER_ROLE: ${OWNER_ROLE:?set OWNER_ROLE}
+      OWNER_PASSWORD: ${OWNER_PASSWORD:?set OWNER_PASSWORD}
+      APP_ROLE: ${APP_ROLE:?set APP_ROLE}
+      APP_PASSWORD: ${APP_PASSWORD:?set APP_PASSWORD}
+      BACKUP_ROLE: ${BACKUP_ROLE:-}
+      BACKUP_PASSWORD: ${BACKUP_PASSWORD:-}
+    restart: "no"
