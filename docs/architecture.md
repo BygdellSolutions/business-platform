@@ -1148,6 +1148,40 @@ The Members page (owner/admin) gains Invitations: a form (owners may pick any ro
 
 ---
 
+## Product changes from staging testing: approved decisions (NOT implemented)
+
+Decided by the owner on 2026-10-08. The slices are listed in `TODO.md`.
+
+### Lifecycle effects (core extension)
+
+The lifecycle seam (`app/core/lifecycle.py`) today lets a registered validator VETO a step. It gains **effects**: a module registers an action for an event (`COMPLETE`, `REOPEN`, `CANCEL`), and Sales runs the effects after the transition, under the same transaction row lock and inside the same database transaction. An effect that fails rolls the whole step back. Sales still imports nothing from the modules that react; Inventory is the first user. Validators still run first, so a vetoed step never reaches an effect.
+
+### Inventory and backorders
+
+- **Scope.** Items get `sku` and `track_stock` (products only; a service never holds stock). Inventory is its own module and talks to Sales only through the registry and lifecycle effects.
+- **Physical stock is a ledger.** An append-only, tenant-owned `stock movements` table: item, quantity change, the before and after quantity, reason (opening count, adjustment, receipt, delivery, return), the related transaction line or goods receipt, who and when. On hand never goes below zero. Everything that changes an item's stock first locks that item's row; several items are locked in id order.
+- **Unmet demand is a backorder, not negative stock.** Per transaction line: ordered, delivered at completion, backordered, and later fulfillments (each with quantity, who and when). States: waiting for stock, partially fulfilled, ready to fulfill, fulfilled, cancelled.
+- **Drafts only warn.** Adding a catalog item shows on hand, available, incoming and the expected shortage; nothing is reserved, and the backend never refuses a line for stock.
+- **Completion decides.** Under the item locks, the available quantity is delivered at once (a delivery movement; this business hands products over at the visit) and the shortage becomes a backorder. Separate deliveries for all sales are not built, but the per-line quantities leave room for them.
+- **Reopen and cancel undo the effect.** Delivered units come back through a return movement, open backorders are cancelled, and a backorder already fulfilled later is returned too. The original movements are never changed or deleted: the history shows the delivery and the later return. Reopen and cancel of an invoiced transaction stay vetoed by Invoicing, so this applies only before invoicing.
+- **Invoicing is separate from fulfillment.** A completed transaction is invoiced in full, backordered units included; the invoice (and later its PDF) may say that units are still backordered. An "invoice only fulfilled items" mode may come later.
+- **Incoming stock and receipt.** Incoming stock is recorded separately: item, quantity, expected date, supplier, reference, who and when. A goods receipt is confirmed by a person and turns incoming into on hand through a receipt movement. A receipt never fulfills a backorder by itself: the backlog proposes an oldest-first allocation, and a person confirms it (who and when are recorded).
+- **Separate states.** Low stock (below a per-item threshold), out of stock, backordered and incoming are different states, and an item can be in several at once.
+
+### Discounts
+
+Discounts are ordered layers applied one after the other, never added together: base catalog price, then the temporary catalog discount, then the customer's permanent discount (a manual line discount, if added, is one more explicit layer). Each layer stays visible and auditable on the line and on the invoice. **Rounding (decided):** each percentage layer produces a unit price rounded half-up to the currency's two decimals (whole öre for SEK) BEFORE the next layer is applied, in exact `Decimal` arithmetic; the printed steps are the values actually used (100.00, -15% = 85.00, -10% = 76.50). The final unit price then goes through the existing line calculation unchanged: per-line half-up net and VAT, totals as sums of stored line amounts. VAT rounding is not changed by the discount work.
+
+### Ownership limit
+
+`max_owned_organizations` counts owner-role memberships; other memberships never count. Every path to ownership is refused beyond the limit by the backend: creating an organization, a transfer, promotion to owner and accepting an owner invitation. The check lives in ONE core function that every ownership-granting path calls under the receiving user's row lock, with a database backstop so a future path that forgets the function is still refused (the same layering as the last-owner rule). The operator `repair owner` command is the documented administrative override and the only path allowed past the backstop. **An owner invitation accepted at the limit** is refused as a whole with a clear reason ("You cannot become an owner of this organization because you have reached your owned-organization limit."): no silent downgrade to another role, no partial acceptance, and the invitation stays pending until the user frees a slot, their entitlement grows, the inviter changes the role, or it expires or is revoked. Invitations that do not grant ownership are unaffected.
+
+### Recent authentication
+
+Leaving, transferring ownership and deleting an organization require recent authentication: a short-lived proof that the user re-authenticated (by password today). Destructive actions are not tied to passwords, so a future SSO or passkey user re-authenticates in their own way. Changing your password is an account (user) setting, not an organization setting.
+
+---
+
 ## Container foundation (D1 as built)
 
 First slice of production-deployment readiness: the two application images and a local, production-LIKE rehearsal.
