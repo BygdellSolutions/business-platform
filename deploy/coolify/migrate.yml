@@ -1,0 +1,21 @@
+# The migration job (D2) as its own Coolify resource: it holds ONLY the owner role's URL and the runtime role's name.
+# See README.md in this directory for why every process is its own resource and why there is a gate.
+services:
+  migrate:
+    build:
+      context: ./backend
+    command: ["python", "-m", "app.scripts.migrate"]
+    environment:
+      APP_ENV: production
+      MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL:?set MIGRATION_DATABASE_URL (owner role)}
+      RUNTIME_DB_ROLE: ${RUNTIME_DB_ROLE:?set RUNTIME_DB_ROLE}
+    restart: "no"
+
+  # Makes `docker compose up` (and so the Coolify deployment) FAIL unless the migration exited 0.
+  migrate-gate:
+    image: busybox:1.37
+    command: ["true"]
+    restart: "no"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully

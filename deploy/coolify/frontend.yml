@@ -1,0 +1,13 @@
+# The Next.js frontend/BFF as its own Coolify resource: the only public service. It holds ONLY what the BFF needs.
+# See README.md in this directory.
+services:
+  frontend:
+    build:
+      context: ./frontend
+    environment:
+      APP_ENV: production
+      AUTH_MODE: session
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?set PUBLIC_ORIGIN}
+      BACKEND_URL: ${BACKEND_URL:?set BACKEND_URL}
+      BFF_INTERNAL_SECRET: ${BFF_INTERNAL_SECRET:?set BFF_INTERNAL_SECRET}
+      TRUSTED_PROXY_HOPS: ${TRUSTED_PROXY_HOPS:-0}
