@@ -5,6 +5,7 @@ from sqlalchemy import and_
 from sqlalchemy.orm import Session, aliased
 
 from app.api.deps import Pagination, pagination
+from app.core.authz import record_writer
 from app.core.db import get_db
 from app.core.query import apply_update, commit_and_refresh, contains_pattern, delete_or_409
 from app.core.tenant import TenantContext, get_tenant_context
@@ -76,7 +77,7 @@ def _read_one(db: Session, ctx: TenantContext, horse_id: uuid.UUID) -> HorseRead
 @router.post("", response_model=HorseRead, status_code=status.HTTP_201_CREATED)
 def create_horse(
     payload: HorseCreate,
-    ctx: TenantContext = Depends(get_tenant_context),
+    ctx: TenantContext = Depends(record_writer),
     db: Session = Depends(get_db),
 ) -> HorseRead:
     for field in REFERENCE_FIELDS:
@@ -126,7 +127,7 @@ def read_horse(
 def update_horse(
     horse_id: uuid.UUID,
     payload: HorseUpdate,
-    ctx: TenantContext = Depends(get_tenant_context),
+    ctx: TenantContext = Depends(record_writer),
     db: Session = Depends(get_db),
 ) -> HorseRead:
     horse = get_scoped_or_404(db, ctx, Horse, horse_id)
@@ -143,7 +144,7 @@ def update_horse(
 @router.delete("/{horse_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_horse(
     horse_id: uuid.UUID,
-    ctx: TenantContext = Depends(get_tenant_context),
+    ctx: TenantContext = Depends(record_writer),
     db: Session = Depends(get_db),
 ) -> Response:
     horse = get_scoped_or_404(db, ctx, Horse, horse_id)

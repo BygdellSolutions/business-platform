@@ -4,8 +4,10 @@ import { DecimalText } from "@/components/ui/DecimalText";
 import { ListFilters } from "@/components/ui/ListFilters";
 import { Pagination } from "@/components/ui/Pagination";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { readActiveRole } from "@/lib/active-role";
 import type { Item } from "@/lib/api/types";
 import { backendQuery, listHref, pageOf, parseListParams } from "@/lib/list-params";
+import { canWriteRecords } from "@/lib/roles";
 import { serverRead } from "@/lib/server-api";
 
 const TYPES = ["service", "product"] as const;
@@ -18,6 +20,7 @@ export default async function CatalogPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { orgId } = await params;
+  const canWrite = canWriteRecords(await readActiveRole(orgId));
   const list = parseListParams(await searchParams, TYPES);
   const { rows: items, hasNext } = pageOf(await serverRead<Item[]>(orgId, "/api/items", backendQuery(list)));
   const base = `/o/${orgId}/catalog`;
@@ -27,9 +30,11 @@ export default async function CatalogPage({
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold">Catalog</h1>
-        <Link href={`${base}/new`} className="underline" data-testid="new-item">
-          New item
-        </Link>
+        {canWrite && (
+          <Link href={`${base}/new`} className="underline" data-testid="new-item">
+            New item
+          </Link>
+        )}
       </div>
 
       <ListFilters action={base} params={list}>

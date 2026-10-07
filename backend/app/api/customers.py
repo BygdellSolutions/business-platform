@@ -5,6 +5,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.api.deps import Pagination, pagination
+from app.core.authz import record_writer
 from app.core.db import get_db
 from app.core.query import apply_update, commit_and_refresh, contains_pattern, delete_or_409
 from app.core.tenant import TenantContext, get_tenant_context
@@ -18,7 +19,7 @@ router = APIRouter(prefix="/api/customers", tags=["customers"])
 @router.post("", response_model=CustomerRead, status_code=status.HTTP_201_CREATED)
 def create_customer(
     payload: CustomerCreate,
-    ctx: TenantContext = Depends(get_tenant_context),
+    ctx: TenantContext = Depends(record_writer),
     db: Session = Depends(get_db),
 ) -> Customer:
     customer = create_scoped(db, ctx, Customer, **payload.model_dump())
@@ -62,7 +63,7 @@ def read_customer(
 def update_customer(
     customer_id: uuid.UUID,
     payload: CustomerUpdate,
-    ctx: TenantContext = Depends(get_tenant_context),
+    ctx: TenantContext = Depends(record_writer),
     db: Session = Depends(get_db),
 ) -> Customer:
     customer = get_scoped_or_404(db, ctx, Customer, customer_id)
@@ -73,7 +74,7 @@ def update_customer(
 @router.delete("/{customer_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_customer(
     customer_id: uuid.UUID,
-    ctx: TenantContext = Depends(get_tenant_context),
+    ctx: TenantContext = Depends(record_writer),
     db: Session = Depends(get_db),
 ) -> Response:
     customer = get_scoped_or_404(db, ctx, Customer, customer_id)

@@ -3,8 +3,10 @@ import Link from "next/link";
 import { ListFilters } from "@/components/ui/ListFilters";
 import { Pagination } from "@/components/ui/Pagination";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { readActiveRole } from "@/lib/active-role";
 import type { Customer } from "@/lib/api/types";
 import { backendQuery, listHref, pageOf, parseListParams } from "@/lib/list-params";
+import { canWriteRecords } from "@/lib/roles";
 import { serverRead } from "@/lib/server-api";
 
 /**
@@ -19,6 +21,7 @@ export default async function CustomersPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { orgId } = await params;
+  const canWrite = canWriteRecords(await readActiveRole(orgId));
   const list = parseListParams(await searchParams);
   const { rows: customers, hasNext } = pageOf(await serverRead<Customer[]>(orgId, "/api/customers", backendQuery(list)));
   const base = `/o/${orgId}/customers`;
@@ -28,9 +31,11 @@ export default async function CustomersPage({
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold">Customers</h1>
-        <Link href={`${base}/new`} className="underline" data-testid="new-customer">
-          New customer
-        </Link>
+        {canWrite && (
+          <Link href={`${base}/new`} className="underline" data-testid="new-customer">
+            New customer
+          </Link>
+        )}
       </div>
 
       <ListFilters action={base} params={list} />

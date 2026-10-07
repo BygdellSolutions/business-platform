@@ -5,8 +5,10 @@ import { ListFilters } from "@/components/ui/ListFilters";
 import { Pagination } from "@/components/ui/Pagination";
 import { CustomerFilter } from "@/features/customers/CustomerFilter";
 import { TransactionStatusBadge } from "@/features/transactions/TransactionStatusBadge";
+import { readActiveRole } from "@/lib/active-role";
 import type { Customer, TransactionSummary } from "@/lib/api/types";
 import { backendQuery, listHref, pageOf, parseListParams, type ExtraSpec } from "@/lib/list-params";
+import { canWriteRecords } from "@/lib/roles";
 import { serverRead, serverReadOrNull } from "@/lib/server-api";
 
 const STATUSES = ["draft", "completed", "cancelled"] as const;
@@ -26,6 +28,7 @@ export default async function TransactionsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { orgId } = await params;
+  const canWrite = canWriteRecords(await readActiveRole(orgId));
   const list = parseListParams(await searchParams, [], ["billing_customer_id"], EXTRAS);
   const customerId = list.refs.billing_customer_id;
   const [rows, filterCustomer] = await Promise.all([
@@ -42,9 +45,11 @@ export default async function TransactionsPage({
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold">Transactions</h1>
-        <Link href={`${base}/new`} className="underline" data-testid="new-transaction">
-          New transaction
-        </Link>
+        {canWrite && (
+          <Link href={`${base}/new`} className="underline" data-testid="new-transaction">
+            New transaction
+          </Link>
+        )}
       </div>
 
       <ListFilters action={base} params={list} search={false} activeStatus={false}>
@@ -71,7 +76,7 @@ export default async function TransactionsPage({
       {transactions.length === 0 ? (
         <p data-testid="empty">
           {filtered ? "No transactions match." : "No transactions yet."}{" "}
-          {!filtered && (
+          {!filtered && canWrite && (
             <Link href={`${base}/new`} className="underline">
               Create the first one.
             </Link>

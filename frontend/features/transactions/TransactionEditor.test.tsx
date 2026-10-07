@@ -138,6 +138,35 @@ describe("what the editor shows", () => {
   });
 });
 
+describe("a role that may only read (viewer)", () => {
+  it("sees a draft in full with no control that changes anything, and is told why", () => {
+    render(<Harness initial={tx()} canEdit={false} />);
+
+    expect(status()).toHaveTextContent("Draft");
+    expect(screen.getByTestId("role-note")).toHaveTextContent(/can view transactions but not change them/);
+    expect(screen.queryByTestId("lifecycle")).toBeNull();
+    for (const id of ["complete", "reopen", "cancel", "edit-header", "add-line", "edit-line", "delete-line"]) expect(screen.queryByTestId(id)).toBeNull();
+    expect(screen.queryAllByRole("textbox")).toHaveLength(0);
+    expect(screen.queryAllByRole("combobox")).toHaveLength(0);
+    expect(screen.getAllByTestId("line-row")).toHaveLength(2);
+  });
+
+  it("is offered no Reopen or Cancel on a completed transaction either", () => {
+    render(<Harness initial={tx({ status: "completed" })} canEdit={false} />);
+
+    expect(screen.queryByTestId("reopen")).toBeNull();
+    expect(screen.queryByTestId("cancel")).toBeNull();
+  });
+
+  it("a writer on the same draft gets the controls (control for the tests above)", () => {
+    render(<Harness initial={tx()} />);
+
+    expect(screen.queryByTestId("role-note")).toBeNull();
+    expect(screen.getByTestId("complete")).toBeEnabled();
+    expect(screen.getByTestId("add-line")).toBeEnabled();
+  });
+});
+
 describe("completed and cancelled transactions are read-only", () => {
   it("a completed one offers Reopen and Cancel and no editing at all", () => {
     render(<Harness initial={tx({ status: "completed" })} />);

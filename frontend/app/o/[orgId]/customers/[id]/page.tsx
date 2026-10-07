@@ -1,6 +1,9 @@
+import { CustomerDetails } from "@/features/customers/CustomerDetails";
 import { CustomerForm } from "@/features/customers/CustomerForm";
 import { Notice } from "@/components/ui/Notice";
+import { readActiveRole } from "@/lib/active-role";
 import type { Customer } from "@/lib/api/types";
+import { canWriteRecords } from "@/lib/roles";
 import { requireUuid, serverRead } from "@/lib/server-api";
 
 /**
@@ -17,7 +20,7 @@ export default async function CustomerPage({
 }) {
   const { orgId, id } = await params;
   const { created } = await searchParams;
-  const customer = await serverRead<Customer>(orgId, `/api/customers/${requireUuid(id)}`);
+  const [customer, role] = await Promise.all([serverRead<Customer>(orgId, `/api/customers/${requireUuid(id)}`), readActiveRole(orgId)]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -25,7 +28,7 @@ export default async function CustomerPage({
         {customer.name}
       </h1>
       {created === "1" && <Notice testId="created">Customer created.</Notice>}
-      <CustomerForm key={customer.id} customer={customer} />
+      {canWriteRecords(role) ? <CustomerForm key={customer.id} customer={customer} /> : <CustomerDetails customer={customer} />}
     </div>
   );
 }

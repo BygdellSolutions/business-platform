@@ -1,6 +1,9 @@
+import { ItemDetails } from "@/features/catalog/ItemDetails";
 import { ItemForm } from "@/features/catalog/ItemForm";
 import { Notice } from "@/components/ui/Notice";
+import { readActiveRole } from "@/lib/active-role";
 import type { Item } from "@/lib/api/types";
+import { canWriteRecords } from "@/lib/roles";
 import { requireUuid, serverRead } from "@/lib/server-api";
 
 /** Same not-found behavior as customers: foreign, random and malformed ids are indistinguishable. */
@@ -13,7 +16,7 @@ export default async function ItemPage({
 }) {
   const { orgId, id } = await params;
   const { created } = await searchParams;
-  const item = await serverRead<Item>(orgId, `/api/items/${requireUuid(id)}`);
+  const [item, role] = await Promise.all([serverRead<Item>(orgId, `/api/items/${requireUuid(id)}`), readActiveRole(orgId)]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -21,7 +24,7 @@ export default async function ItemPage({
         {item.name}
       </h1>
       {created === "1" && <Notice testId="created">Item created.</Notice>}
-      <ItemForm key={item.id} item={item} />
+      {canWriteRecords(role) ? <ItemForm key={item.id} item={item} /> : <ItemDetails item={item} />}
     </div>
   );
 }

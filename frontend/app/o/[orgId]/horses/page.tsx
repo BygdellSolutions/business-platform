@@ -4,8 +4,10 @@ import { ListFilters } from "@/components/ui/ListFilters";
 import { Pagination } from "@/components/ui/Pagination";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { CustomerFilter } from "@/features/customers/CustomerFilter";
+import { readActiveRole } from "@/lib/active-role";
 import type { Customer, CustomerRef, Horse } from "@/lib/api/types";
 import { backendQuery, listHref, pageOf, parseListParams } from "@/lib/list-params";
+import { canWriteRecords } from "@/lib/roles";
 import { serverRead, serverReadOrNull } from "@/lib/server-api";
 
 const REFS = ["owner_customer_id", "stable_customer_id"] as const;
@@ -37,6 +39,7 @@ export default async function HorsesPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { orgId } = await params;
+  const canWrite = canWriteRecords(await readActiveRole(orgId));
   const list = parseListParams(await searchParams, [], REFS);
   const [rows, owner, stable] = await Promise.all([
     serverRead<Horse[]>(orgId, "/api/horses", backendQuery(list)),
@@ -51,9 +54,11 @@ export default async function HorsesPage({
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold">Horses</h1>
-        <Link href={`${base}/new`} className="underline" data-testid="new-horse">
-          New horse
-        </Link>
+        {canWrite && (
+          <Link href={`${base}/new`} className="underline" data-testid="new-horse">
+            New horse
+          </Link>
+        )}
       </div>
 
       <ListFilters action={base} params={list}>

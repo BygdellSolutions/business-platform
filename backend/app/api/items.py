@@ -5,6 +5,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.api.deps import Pagination, pagination
+from app.core.authz import record_writer
 from app.core.currency import share_lock_organization
 from app.core.db import get_db
 from app.core.query import apply_update, commit_and_refresh, contains_pattern, delete_or_409
@@ -19,7 +20,7 @@ router = APIRouter(prefix="/api/items", tags=["items"])
 @router.post("", response_model=ItemRead, status_code=status.HTTP_201_CREATED)
 def create_item(
     payload: ItemCreate,
-    ctx: TenantContext = Depends(get_tenant_context),
+    ctx: TenantContext = Depends(record_writer),
     db: Session = Depends(get_db),
 ) -> Item:
     # A price is only meaningful in the organization's currency, so an item cannot appear while
@@ -68,7 +69,7 @@ def read_item(
 def update_item(
     item_id: uuid.UUID,
     payload: ItemUpdate,
-    ctx: TenantContext = Depends(get_tenant_context),
+    ctx: TenantContext = Depends(record_writer),
     db: Session = Depends(get_db),
 ) -> Item:
     item = get_scoped_or_404(db, ctx, Item, item_id)
@@ -79,7 +80,7 @@ def update_item(
 @router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_item(
     item_id: uuid.UUID,
-    ctx: TenantContext = Depends(get_tenant_context),
+    ctx: TenantContext = Depends(record_writer),
     db: Session = Depends(get_db),
 ) -> Response:
     item = get_scoped_or_404(db, ctx, Item, item_id)

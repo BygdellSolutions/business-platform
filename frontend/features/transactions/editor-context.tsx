@@ -32,7 +32,7 @@ export interface TransactionFields {
 export interface EditorApi {
   /** The authoritative transaction, exactly as the server last sent it. */
   transaction: Transaction;
-  /** The server says it is not a draft: nothing can be edited. Presentation only; FastAPI enforces it. */
+  /** Not a draft, or the user's role may only read: nothing can be edited. Presentation only; FastAPI enforces it. */
   readOnly: boolean;
   /** A change is running, or the page is being refreshed. Nothing else may be changed meanwhile. */
   busy: boolean;

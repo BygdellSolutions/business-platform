@@ -145,7 +145,7 @@ function Gate() {
 
 export const NO_FIELDS: TransactionFields = { transaction: { definitions: [], values: [] }, line: { definitions: [], values: {} } };
 
-export function Harness({ initial, orgId = ORG_A, fields = NO_FIELDS }: { initial: Transaction; orgId?: string; fields?: TransactionFields }) {
+export function Harness({ initial, orgId = ORG_A, fields = NO_FIELDS, canEdit = true }: { initial: Transaction; orgId?: string; fields?: TransactionFields; canEdit?: boolean }) {
   const [current, setCurrent] = useState(initial);
   useEffect(() => {
     server.apply = setCurrent;
@@ -157,7 +157,7 @@ export function Harness({ initial, orgId = ORG_A, fields = NO_FIELDS }: { initia
     <>
       <Gate />
       <OrgScope orgId={orgId}>
-        <TransactionEditor transaction={current} fields={fields} />
+        <TransactionEditor transaction={current} fields={fields} canEdit={canEdit} />
       </OrgScope>
     </>
   );

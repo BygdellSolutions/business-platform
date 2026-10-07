@@ -8,7 +8,7 @@ from sqlalchemy import and_, func, select, update
 from sqlalchemy.orm import Session
 
 from app.api.deps import Pagination, pagination
-from app.core.authz import roles_required
+from app.core.authz import record_writer, roles_required
 from app.core.currency import default_currency_for_new_record
 from app.core.db import get_db
 from app.core.lifecycle import (
@@ -218,7 +218,7 @@ def _new_line_values(
 @router.post("", response_model=TransactionRead, status_code=status.HTTP_201_CREATED)
 def create_transaction(
     payload: TransactionCreate,
-    ctx: TenantContext = Depends(get_tenant_context),
+    ctx: TenantContext = Depends(record_writer),
     db: Session = Depends(get_db),
 ) -> TransactionRead:
     resolve_reference(
@@ -348,7 +348,7 @@ def update_transaction(
     transaction_id: uuid.UUID,
     payload: TransactionUpdate,
     if_match: str | None = Header(default=None),
-    ctx: TenantContext = Depends(get_tenant_context),
+    ctx: TenantContext = Depends(record_writer),
     db: Session = Depends(get_db),
 ) -> TransactionRead:
     tx = _lock(db, ctx, transaction_id)
@@ -369,7 +369,7 @@ def update_transaction(
 def delete_transaction(
     transaction_id: uuid.UUID,
     if_match: str | None = Header(default=None),
-    ctx: TenantContext = Depends(get_tenant_context),
+    ctx: TenantContext = Depends(record_writer),
     db: Session = Depends(get_db),
 ) -> Response:
     tx = _lock(db, ctx, transaction_id)
@@ -431,7 +431,7 @@ def _transition(
 def complete_transaction(
     transaction_id: uuid.UUID,
     if_match: str | None = Header(default=None),
-    ctx: TenantContext = Depends(get_tenant_context),
+    ctx: TenantContext = Depends(record_writer),
     db: Session = Depends(get_db),
 ) -> TransactionRead:
     return _transition(
@@ -443,7 +443,7 @@ def complete_transaction(
 def reopen_transaction(
     transaction_id: uuid.UUID,
     if_match: str | None = Header(default=None),
-    ctx: TenantContext = Depends(get_tenant_context),
+    ctx: TenantContext = Depends(record_writer),
     db: Session = Depends(get_db),
 ) -> TransactionRead:
     return _transition(
@@ -455,7 +455,7 @@ def reopen_transaction(
 def cancel_transaction(
     transaction_id: uuid.UUID,
     if_match: str | None = Header(default=None),
-    ctx: TenantContext = Depends(get_tenant_context),
+    ctx: TenantContext = Depends(record_writer),
     db: Session = Depends(get_db),
 ) -> TransactionRead:
     return _transition(
@@ -486,7 +486,7 @@ def _get_line(
 def add_line(
     transaction_id: uuid.UUID,
     payload: LineCreate,
-    ctx: TenantContext = Depends(get_tenant_context),
+    ctx: TenantContext = Depends(record_writer),
     db: Session = Depends(get_db),
 ) -> TransactionLine:
     tx = _lock(db, ctx, transaction_id)
@@ -512,7 +512,7 @@ def update_line(
     line_id: uuid.UUID,
     payload: LineUpdate,
     if_match: str | None = Header(default=None),
-    ctx: TenantContext = Depends(get_tenant_context),
+    ctx: TenantContext = Depends(record_writer),
     db: Session = Depends(get_db),
 ) -> TransactionLine:
     tx = _lock(db, ctx, transaction_id)
@@ -547,7 +547,7 @@ def delete_line(
     transaction_id: uuid.UUID,
     line_id: uuid.UUID,
     if_match: str | None = Header(default=None),
-    ctx: TenantContext = Depends(get_tenant_context),
+    ctx: TenantContext = Depends(record_writer),
     db: Session = Depends(get_db),
 ) -> Response:
     tx = _lock(db, ctx, transaction_id)

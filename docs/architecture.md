@@ -559,6 +559,8 @@ customers, catalog, sales, domain modules ──► core registry ◄── cust
 
 **Authorization (`app/core/authz.py`).** `require_role(ctx, allowed_roles)` and the dependency factory `roles_required(*roles)`. The role is always the one in the ACTIVE membership, so a user who is an owner in one organization and a viewer in another gets the right answer in each; selecting an organization you do not belong to is still a 404.
 
+**Viewers read, everyone else may write business records.** `RECORD_WRITERS` (owner, admin, accountant, employee) and its dependency `record_writer` guard every create, update, delete and lifecycle step on customers, items, horses, transactions and lines, and custom-field value writes. Narrower rules keep their own role sets (invoicing: owner/admin/accountant; settings and custom-field definitions: owner/admin). Membership administration and invitations decide authority inside the service from freshly locked rows, and leaving is open to every member. `roles_required` marks its dependency with `allowed_roles`, and `tests/test_viewer_read_only.py` walks every tenant-scoped write route: a write with no role dependency, or one that admits viewers, fails the suite unless it is on the short, reasoned exception list. The role is judged before any lookup, so a viewer gets the same 403 for its own record, a foreign one and a random id. The frontend mirrors the rule for presentation only (`lib/roles.ts` `canWriteRecords`, `lib/active-role.ts`): a viewer gets read-only detail views, no create links, a "not allowed" page instead of a create form, and a read-only transaction editor.
+
 **Polymorphic delete guard.** `delete_or_409` also asks registered reference guards, so a record pointed at from somewhere a foreign key cannot express (a custom-field reference) cannot be deleted.
 
 ---
@@ -665,7 +667,7 @@ Implemented in `app/modules/custom_fields/`. It depends on core only and never n
 
 **Delete protection.** The custom-fields reference guard is registered on core. It counts only values of records that still exist, in the record's own organization, so values orphaned by a deleted line never block anything and one organization's data never protects another's records. Raw SQL deletes bypass guards, which is why dangling references render safely.
 
-**Administration.** Creating or changing definitions and options is owner/admin only (via `roles_required`). Reading definitions, listing choices and writing values is open to every member.
+**Administration.** Creating or changing definitions and options is owner/admin only (via `roles_required`). Reading definitions and listing choices is open to every member; writing values is open to every member except a viewer (`record_writer`, see "Authorization" in the core registry notes).
 
 **Not in V1:** filtering lists by custom fields, text search indexes, money/percent types, multiple dependencies per field, operators other than equality, formulas, deleting definitions, and orphan clean-up.
 

@@ -2,8 +2,10 @@ import Link from "next/link";
 
 import { Notice } from "@/components/ui/Notice";
 import { TransactionEditor } from "@/features/transactions/TransactionEditor";
+import { readActiveRole } from "@/lib/active-role";
 import { readEntityFields } from "@/lib/custom-fields/server";
 import type { Transaction } from "@/lib/api/types";
+import { canWriteRecords } from "@/lib/roles";
 import { requireUuid, serverRead } from "@/lib/server-api";
 
 /**
@@ -21,7 +23,7 @@ export default async function TransactionPage({
 }) {
   const { orgId, id } = await params;
   const { created } = await searchParams;
-  const transaction = await serverRead<Transaction>(orgId, `/api/transactions/${requireUuid(id)}`);
+  const [transaction, role] = await Promise.all([serverRead<Transaction>(orgId, `/api/transactions/${requireUuid(id)}`), readActiveRole(orgId)]);
   // The organization's custom-field definitions for transactions and for lines, and the values of
   // this transaction and its lines: read here, on the server, like everything else on the page.
   const [transactionFields, lineFields] = await Promise.all([
@@ -47,6 +49,7 @@ export default async function TransactionPage({
       <TransactionEditor
         key={transaction.id}
         transaction={transaction}
+        canEdit={canWriteRecords(role)}
         fields={{
           transaction: { definitions: transactionFields.definitions, values: transactionFields.values[transaction.id] ?? [] },
           line: { definitions: lineFields.definitions, values: lineFields.values },

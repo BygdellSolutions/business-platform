@@ -32,8 +32,11 @@ import type { Transaction } from "@/lib/api/types";
  * one without changing anything, and an editor with unsaved edits keeps them and lets the user
  * decide. When the tab becomes visible again and nothing is being edited it refreshes by itself;
  * it never refreshes over an open editor.
+ *
+ * `canEdit` is false for a role that may only read (a viewer): the whole transaction is then shown
+ * read-only, without lifecycle or add-line controls. Presentation only; FastAPI refuses the writes.
  */
-export function TransactionEditor({ transaction, fields }: { transaction: Transaction; fields: Fields }) {
+export function TransactionEditor({ transaction, fields, canEdit }: { transaction: Transaction; fields: Fields; canEdit: boolean }) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
   const [mutating, setMutating] = useState(false);
@@ -148,7 +151,7 @@ export function TransactionEditor({ transaction, fields }: { transaction: Transa
   const api = useMemo<EditorApi>(
     () => ({
       transaction,
-      readOnly: transaction.status !== "draft",
+      readOnly: !canEdit || transaction.status !== "draft",
       busy,
       refreshing,
       editorsOpen,
@@ -161,7 +164,7 @@ export function TransactionEditor({ transaction, fields }: { transaction: Transa
       refresh,
       registerEditor,
     }),
-    [transaction, busy, refreshing, editorsOpen, notice, fields, fieldErrors, mutate, report, announce, refresh, registerEditor],
+    [transaction, canEdit, busy, refreshing, editorsOpen, notice, fields, fieldErrors, mutate, report, announce, refresh, registerEditor],
   );
 
   return (
@@ -171,6 +174,7 @@ export function TransactionEditor({ transaction, fields }: { transaction: Transa
           <TransactionStatusBadge status={transaction.status} />
           {transaction.status === "completed" && <span data-testid="status-note">Completed: finalized and read-only. Reopen it to make changes.</span>}
           {transaction.status === "cancelled" && <span data-testid="status-note">Cancelled: final, kept for the record. It cannot be changed.</span>}
+          {!canEdit && <span data-testid="role-note">Your role in this organization can view transactions but not change them.</span>}
         </div>
 
         {notice && (
@@ -194,11 +198,11 @@ export function TransactionEditor({ transaction, fields }: { transaction: Transa
           </Notice>
         )}
 
-        <LifecycleBar />
+        {canEdit && <LifecycleBar />}
         <HeaderEditor />
         <TransactionFields />
         <LinesTable />
-        {transaction.status === "draft" && <AddLineForm />}
+        {canEdit && transaction.status === "draft" && <AddLineForm />}
         <TotalsPanel />
       </div>
     </EditorContext.Provider>
