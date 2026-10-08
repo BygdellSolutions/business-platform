@@ -16,6 +16,7 @@ import { LineFields } from "@/features/transactions/LineFields";
 import { apiFetch } from "@/lib/api/client";
 import type { LineFulfillment, TransactionLine } from "@/lib/api/types";
 import { formatTimestamp } from "@/lib/timestamps";
+import { trimQuantity } from "@/lib/decimal";
 
 /**
  * One line, shown exactly as stored: its own description, unit, quantity, price and VAT (the
@@ -78,20 +79,20 @@ export function LineRow({ line, ordinal }: { line: TransactionLine; ordinal: num
         )}
         {fulfilled && (
           <span className="block text-xs text-zinc-600 dark:text-zinc-400" data-testid="line-fulfillment">
-            Delivered {fulfilled.delivered}
+            Delivered {trimQuantity(fulfilled.delivered)}
             {fulfilled.backordered !== "0.000" && (
               <>
                 {" "}
-                · Backordered {fulfilled.backordered} ({FULFILLMENT_STATES[fulfilled.state]}
-                {fulfilled.fulfilled_later !== "0.000" ? `, ${fulfilled.fulfilled_later} delivered since` : ""})
+                · Backordered {trimQuantity(fulfilled.backordered)} ({FULFILLMENT_STATES[fulfilled.state]}
+                {fulfilled.fulfilled_later !== "0.000" ? `, ${trimQuantity(fulfilled.fulfilled_later)} delivered since` : ""})
               </>
             )}
           </span>
         )}
         {shortage && (
           <span className="block text-xs text-amber-800 dark:text-amber-300" data-testid="stock-warning">
-            Only {shortage.available} of {shortage.requested} {line.unit} available; {shortage.shortage} will be backordered at completion.
-            {shortage.incoming !== "0.000" && ` ${shortage.incoming} on its way.`}
+            Only {trimQuantity(shortage.available)} of {trimQuantity(shortage.requested)} {line.unit} available; {trimQuantity(shortage.shortage)} will be backordered at completion.
+            {shortage.incoming !== "0.000" && ` ${trimQuantity(shortage.incoming)} on its way.`}
           </span>
         )}
       </td>

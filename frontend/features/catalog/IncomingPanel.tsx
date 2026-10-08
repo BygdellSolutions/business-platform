@@ -6,12 +6,12 @@ import { useState, type FormEvent } from "react";
 import { useOrgId } from "@/components/shell/org-context";
 import { Button } from "@/components/ui/Button";
 import { ConfirmButton } from "@/components/ui/ConfirmButton";
-import { DecimalText } from "@/components/ui/DecimalText";
 import { ErrorSummary } from "@/components/ui/ErrorSummary";
 import { DecimalField, TextField } from "@/components/ui/Field";
 import { apiFetch } from "@/lib/api/client";
 import type { Incoming } from "@/lib/api/types";
 import { blankToNull, problemsFrom, useMutation } from "@/lib/forms";
+import { trimQuantity } from "@/lib/decimal";
 
 const CONTROLS = ["quantity", "expected_on", "supplier", "reference"] as const;
 const DATE = "rounded border border-zinc-400 px-2 py-1 font-normal dark:bg-zinc-900";
@@ -91,10 +91,10 @@ export function IncomingPanel({ itemId, unit, incoming, canWrite }: { itemId: st
               <tr key={row.id} data-testid="incoming-row" className="border-b border-zinc-200 align-top dark:border-zinc-800">
                 <td className="py-1 pr-4">{row.expected_on ?? <span className="text-zinc-500">not given</span>}</td>
                 <td className="py-1 pr-4 text-right">
-                  <DecimalText value={row.quantity} /> {unit}
+                  {trimQuantity(row.quantity)} {unit}
                 </td>
                 <td className="py-1 pr-4 text-right">
-                  <DecimalText value={row.received} />
+                  {trimQuantity(row.received)}
                 </td>
                 <td className="py-1 pr-4">{row.supplier}</td>
                 <td className="py-1 pr-4">{row.reference}</td>
@@ -105,7 +105,7 @@ export function IncomingPanel({ itemId, unit, incoming, canWrite }: { itemId: st
                       <input
                         aria-label="Quantity received"
                         inputMode="decimal"
-                        placeholder={row.remaining}
+                        placeholder={trimQuantity(row.remaining)}
                         value={receiving[row.id] ?? ""}
                         onChange={(event) => setReceiving((current) => ({ ...current, [row.id]: event.target.value }))}
                         className="w-24 rounded border border-zinc-400 px-2 py-1 dark:bg-zinc-900"

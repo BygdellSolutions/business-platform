@@ -14,7 +14,7 @@ import { apiFetch } from "@/lib/api/client";
 import type { FieldErrors } from "@/lib/api/errors";
 import { SUBJECT_KINDS } from "@/features/transactions/service-subjects";
 import type { Colleague, ItemAvailability, LineCreate, TransactionLine } from "@/lib/api/types";
-import { parseMoney, parsePercent, parseQuantity } from "@/lib/decimal";
+import { parseMoney, parsePercent, parseQuantity, trimQuantity } from "@/lib/decimal";
 import { NOT_A_DECIMAL, NO_PROBLEMS, problemsFrom, type Problems } from "@/lib/forms";
 
 const CONTROLS = ["item_id", "description", "unit", "quantity", "unit_price_ex_vat", "vat_rate", "subject_id", "performed_by_user_id", "performed_at", "notes"] as const;
@@ -233,7 +233,7 @@ function AddLinePanel({ onClose }: { onClose: () => void }) {
           <EntityPicker label="Item" name="item_id" value={item} onChange={setItem} search={search} error={errorsFor("item_id")} hint="Its name, unit, price and VAT are copied by the server when the line is added." />
           {availability && availability.item_id === item?.id && (
             <p className="text-sm text-zinc-600 dark:text-zinc-400" data-testid="item-availability">
-              In stock: {availability.on_hand}, available: {availability.available}. A shortage is backordered at completion; the line is never refused.
+              In stock: {trimQuantity(availability.on_hand)}, available: {trimQuantity(availability.available)}. A shortage is backordered at completion; the line is never refused.
             </p>
           )}
           <DecimalField label="Quantity" name="quantity" value={fields.quantity} onChange={set("quantity")} error={errorsFor("quantity")} />

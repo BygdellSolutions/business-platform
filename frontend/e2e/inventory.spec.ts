@@ -17,10 +17,10 @@ test("the opening count and later changes are listed and explain the quantity on
 
   await page.goto(`/o/${world.orgId}/catalog/${item.id}`);
   const panel = page.getByTestId("stock-panel");
-  await expect(panel.getByTestId("on-hand")).toHaveText("0.000");
+  await expect(panel.getByTestId("on-hand")).toHaveText("0");
   await panel.getByLabel(/Counted quantity/).fill("10");
   await panel.getByTestId("submit-stock").click();
-  await expect(panel.getByTestId("on-hand")).toHaveText("10.000");
+  await expect(panel.getByTestId("on-hand")).toHaveText("10");
 
   await panel.getByLabel("Change", { exact: true }).selectOption("remove");
   await panel.getByLabel(/Quantity/).fill("12");
@@ -30,7 +30,7 @@ test("the opening count and later changes are listed and explain the quantity on
 
   await panel.getByLabel(/Quantity/).fill("2");
   await panel.getByTestId("submit-stock").click();
-  await expect(panel.getByTestId("on-hand")).toHaveText("8.000");
+  await expect(panel.getByTestId("on-hand")).toHaveText("8");
   await expect(panel.getByTestId("stock-movement")).toHaveCount(2);
   await expect(panel.getByTestId("stock-movement").first()).toContainText("Adjustment");
   await expect(panel.getByTestId("stock-movement").first()).toContainText("Damaged");
@@ -39,7 +39,7 @@ test("the opening count and later changes are listed and explain the quantity on
   await page.goto(`/o/${world.orgId}/catalog`);
   const row = page.getByTestId("item-row").filter({ hasText: "Liniment" });
   await expect(row.getByTestId("item-sku")).toHaveText("LIN-01");
-  await expect(row.getByTestId("item-on-hand")).toHaveText("8.000");
+  await expect(row.getByTestId("item-on-hand")).toHaveText("8");
   await expect(row.getByTestId("item-stock-states")).toHaveText("In stock");
 });
 
@@ -54,12 +54,12 @@ test("a draft that asks for more than is in stock warns, and the line is still a
   await page.goto(`/o/${world.orgId}/transactions/${tx.id}`);
   await openAddLine(page);
   await pick(page, "item_id", "Hoof oil");
-  await expect(page.getByTestId("item-availability")).toContainText("In stock: 5.000, available: 5.000");
+  await expect(page.getByTestId("item-availability")).toContainText("In stock: 5, available: 5");
   await page.getByLabel("Quantity").fill("8");
   await page.getByTestId("submit-line").click();
 
   await expect(page.getByTestId("line-row")).toHaveCount(1);
-  await expect(page.getByTestId("stock-warning")).toHaveText("Only 5.000 of 8.000 pcs available; 3.000 will be backordered at completion.");
+  await expect(page.getByTestId("stock-warning")).toHaveText("Only 5 of 8 pcs available; 3 will be backordered at completion.");
 });
 
 test("completion delivers what is in stock and backorders the rest; a reopen gives it back", async ({ page, context }) => {
@@ -73,14 +73,14 @@ test("completion delivers what is in stock and backorders the rest; a reopen giv
   await lifecycle(context, world.orgId, tx.id, "complete");
 
   await page.goto(`/o/${world.orgId}/transactions/${tx.id}`);
-  await expect(page.getByTestId("line-fulfillment")).toHaveText("Delivered 5.000 · Backordered 3.000 (waiting for stock)");
+  await expect(page.getByTestId("line-fulfillment")).toHaveText("Delivered 5 · Backordered 3 (waiting for stock)");
   await page.goto(`/o/${world.orgId}/catalog/${item.id}`);
-  await expect(page.getByTestId("on-hand")).toHaveText("0.000");
+  await expect(page.getByTestId("on-hand")).toHaveText("0");
   await expect(page.getByTestId("stock-movement").first()).toContainText("Delivered");
 
   await lifecycle(context, world.orgId, tx.id, "reopen");
   await page.reload();
-  await expect(page.getByTestId("on-hand")).toHaveText("5.000");
+  await expect(page.getByTestId("on-hand")).toHaveText("5");
   await expect(page.getByTestId("stock-movement").first()).toContainText("Returned");
   await expect(page.getByTestId("stock-movement").first()).toContainText("Transaction reopened");
 });
@@ -98,20 +98,20 @@ test("a delivery on its way is recorded, received in part, and the rest cancelle
   await incoming.getByLabel("Reference (optional)").fill("PO-17");
   await incoming.getByTestId("submit-incoming").click();
   await expect(incoming.getByTestId("incoming-row")).toContainText("Expected");
-  await expect(page.getByTestId("stock-figures")).toContainText("incoming 10.000");
-  await expect(page.getByTestId("on-hand")).toHaveText("0.000");
+  await expect(page.getByTestId("stock-figures")).toContainText("incoming 10");
+  await expect(page.getByTestId("on-hand")).toHaveText("0");
 
   await incoming.getByLabel("Quantity received").fill("4");
   await incoming.getByTestId("receive-incoming").click();
   await expect(incoming.getByTestId("incoming-row")).toContainText("Partly received");
-  await expect(page.getByTestId("on-hand")).toHaveText("4.000");
+  await expect(page.getByTestId("on-hand")).toHaveText("4");
   await expect(page.getByTestId("stock-movement").first()).toContainText("Goods received");
 
   await incoming.getByTestId("cancel-incoming").click();
   await page.getByRole("button", { name: "Yes, cancel the rest" }).click();
   await expect(incoming.getByTestId("no-incoming")).toBeVisible();
-  await expect(page.getByTestId("on-hand")).toHaveText("4.000");
-  await expect(page.getByTestId("stock-figures")).toContainText("incoming 0.000");
+  await expect(page.getByTestId("on-hand")).toHaveText("4");
+  await expect(page.getByTestId("stock-figures")).toContainText("incoming 0");
 });
 
 test("received stock goes to waiting sales only when a person confirms the oldest-first proposal", async ({ page, context }) => {
@@ -131,22 +131,22 @@ test("received stock goes to waiting sales only when a person confirms the oldes
   await page.goto(`/o/${world.orgId}/inventory`);
   await expect(page.getByTestId("backlog-row")).toHaveCount(2);
   await expect(page.getByTestId("stock-row")).toHaveCount(1); // the product, with what is on hand and what is promised
-  await expect(page.getByTestId("stock-row-on-hand")).toHaveText("4.000 pcs");
+  await expect(page.getByTestId("stock-row-on-hand")).toHaveText("4");
   await expect(page.getByTestId("stock-row")).toContainText("Backordered");
 
   await page.goto(`/o/${world.orgId}/catalog/${item.id}`);
   const panel = page.getByTestId("backorders-panel");
   await expect(panel.getByTestId("backorder-state")).toHaveText(["Ready to fulfill", "Ready to fulfill"]);
   await panel.getByTestId("propose-allocation").click();
-  await expect(panel.getByTestId("allocation-proposed")).toContainText("from 4.000 on hand");
-  await expect(panel.getByTestId("allocation-quantity").first()).toHaveValue("2.000");
-  await expect(panel.getByTestId("allocation-quantity").last()).toHaveValue("2.000");
+  await expect(panel.getByTestId("allocation-proposed")).toContainText("from 4 on hand");
+  await expect(panel.getByTestId("allocation-quantity").first()).toHaveValue("2");
+  await expect(panel.getByTestId("allocation-quantity").last()).toHaveValue("2");
   await panel.getByTestId("confirm-allocation").click();
 
   await expect(panel.getByTestId("backorder-row")).toHaveCount(1); // Anna's sale is fulfilled; Umeå HK still waits for 1
   await expect(panel.getByTestId("backorder-row")).toContainText("Umeå HK");
-  await expect(panel.getByTestId("backorder-row")).toContainText("1.000 pcs");
-  await expect(page.getByTestId("on-hand")).toHaveText("0.000");
+  await expect(panel.getByTestId("backorder-row")).toContainText("1 pcs");
+  await expect(page.getByTestId("on-hand")).toHaveText("0");
 });
 
 test("a new product can be created with what is on hand, and a product without tracking says how to turn it on", async ({ page, context }) => {
@@ -164,7 +164,7 @@ test("a new product can be created with what is on hand, and a product without t
   await page.getByTestId("submit").click();
 
   await expect(page.getByTestId("created")).toBeVisible();
-  await expect(page.getByTestId("on-hand")).toHaveText("12.000");
+  await expect(page.getByTestId("on-hand")).toHaveText("12");
   await expect(page.getByTestId("stock-movement")).toContainText("Opening count");
 
   const plain = await createItem(context, world.orgId, { name: "Plain product", type: "product" });

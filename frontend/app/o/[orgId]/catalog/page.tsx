@@ -10,6 +10,7 @@ import type { Item, ItemAvailability } from "@/lib/api/types";
 import { backendQuery, listHref, pageOf, parseListParams } from "@/lib/list-params";
 import { canWriteRecords } from "@/lib/roles";
 import { serverRead } from "@/lib/server-api";
+import { trimQuantity } from "@/lib/decimal";
 
 const TYPES = ["service", "product"] as const;
 
@@ -19,16 +20,16 @@ function StockCells({ figures }: { figures: ItemAvailability | undefined }) {
   return (
     <>
       <td className="py-1 pr-4 text-right" data-testid="item-on-hand">
-        <DecimalText value={figures.on_hand} />
+        {trimQuantity(figures.on_hand)}
       </td>
       <td className="py-1 pr-4 text-right" data-testid="item-available">
-        <DecimalText value={figures.available} />
+        {trimQuantity(figures.available)}
       </td>
       <td className="py-1 pr-4 text-right">
-        <DecimalText value={figures.committed} />
+        {trimQuantity(figures.committed)}
       </td>
       <td className="py-1 pr-4 text-right">
-        <DecimalText value={figures.incoming} />
+        {trimQuantity(figures.incoming)}
       </td>
       <td className="py-1 pr-4" data-testid="item-stock-states">
         <StockBadges states={figures.states} />

@@ -6,11 +6,11 @@ import { useState } from "react";
 
 import { useOrgId } from "@/components/shell/org-context";
 import { Button } from "@/components/ui/Button";
-import { DecimalText } from "@/components/ui/DecimalText";
 import { ErrorSummary } from "@/components/ui/ErrorSummary";
 import { apiFetch } from "@/lib/api/client";
 import type { AllocationProposal, Backorder } from "@/lib/api/types";
 import { problemsFrom, useMutation } from "@/lib/forms";
+import { trimQuantity } from "@/lib/decimal";
 
 export const BACKORDER_STATES: Record<Backorder["state"], string> = {
   waiting_for_stock: "Waiting for stock",
@@ -36,7 +36,7 @@ export function BackordersPanel({ itemId, unit, backorders, canAllocate }: { ite
     const proposal = await run(() => apiFetch<AllocationProposal>(orgId, `/inventory/items/${itemId}/allocation`));
     if (proposal === null) return;
     setOnHand(proposal.on_hand);
-    setQuantities(Object.fromEntries(proposal.proposals.map((entry) => [entry.fulfillment_id, entry.proposed === "0.000" ? "" : entry.proposed])));
+    setQuantities(Object.fromEntries(proposal.proposals.map((entry) => [entry.fulfillment_id, entry.proposed === "0.000" ? "" : trimQuantity(entry.proposed)])));
   }
 
   async function confirm() {
@@ -75,7 +75,7 @@ export function BackordersPanel({ itemId, unit, backorders, canAllocate }: { ite
               </td>
               <td className="py-1 pr-4">{backorder.customer_name}</td>
               <td className="py-1 pr-4 text-right">
-                <DecimalText value={backorder.remaining} /> {unit}
+                {trimQuantity(backorder.remaining)} {unit}
               </td>
               <td className="py-1 pr-4" data-testid="backorder-state">
                 {BACKORDER_STATES[backorder.state]}
@@ -100,7 +100,7 @@ export function BackordersPanel({ itemId, unit, backorders, canAllocate }: { ite
         <div className="flex flex-col gap-2">
           {onHand !== null && (
             <p className="text-sm text-zinc-600 dark:text-zinc-400" data-testid="allocation-proposed">
-              Proposed oldest first from {onHand} on hand. Change the quantities if needed, then confirm.
+              Proposed oldest first from {trimQuantity(onHand)} on hand. Change the quantities if needed, then confirm.
             </p>
           )}
           <ErrorSummary messages={[...problems.general, ...Object.values(problems.byField).flat()]} />

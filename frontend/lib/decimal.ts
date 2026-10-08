@@ -55,3 +55,14 @@ export function parseCustomNumber(input: string): DecimalString | null {
 export function isDecimalString(value: unknown): value is string {
   return typeof value === "string" && SIGNED_DECIMAL.test(value);
 }
+
+/**
+ * A stored quantity as people read it: the zeros that only pad the fraction dropped ("10.000" -> "10", "2.500" ->
+ * "2.5", "-3.000" -> "-3"). String manipulation only; anything that is not a decimal string is returned unchanged.
+ */
+export function trimQuantity(value: string): string {
+  const found = /^(-?\d+)(?:\.(\d+))?$/.exec(value);
+  if (found === null) return value;
+  const fraction = (found[2] ?? "").replace(/0+$/, "");
+  return fraction === "" ? found[1] : `${found[1]}.${fraction}`;
+}

@@ -1,10 +1,10 @@
 import Link from "next/link";
 
-import { DecimalText } from "@/components/ui/DecimalText";
 import { BACKORDER_STATES } from "@/features/catalog/BackordersPanel";
 import { StockBadges } from "@/features/catalog/StockBadges";
 import type { Backorder, Incoming, StockItem } from "@/lib/api/types";
 import { serverRead } from "@/lib/server-api";
+import { trimQuantity } from "@/lib/decimal";
 
 const STATES = [
   { value: "", label: "All" },
@@ -77,6 +77,7 @@ export default async function InventoryPage({
               <tr className="border-b border-zinc-300 dark:border-zinc-700">
                 <th className="py-1 pr-4">Product</th>
                 <th className="py-1 pr-4">SKU</th>
+                <th className="py-1 pr-4">Unit</th>
                 <th className="py-1 pr-4 text-right">On hand</th>
                 <th className="py-1 pr-4 text-right">Committed</th>
                 <th className="py-1 pr-4 text-right">Available</th>
@@ -94,19 +95,20 @@ export default async function InventoryPage({
                     </Link>
                   </td>
                   <td className="py-1 pr-4">{item.sku}</td>
+                  <td className="py-1 pr-4">{item.unit}</td>
                   <td className="py-1 pr-4 text-right" data-testid="stock-row-on-hand">
-                    <DecimalText value={item.on_hand} /> {item.unit}
+                    {trimQuantity(item.on_hand)}
                   </td>
                   <td className="py-1 pr-4 text-right">
-                    <DecimalText value={item.committed} />
+                    {trimQuantity(item.committed)}
                   </td>
                   <td className="py-1 pr-4 text-right">
-                    <DecimalText value={item.available} />
+                    {trimQuantity(item.available)}
                   </td>
                   <td className="py-1 pr-4 text-right">
-                    <DecimalText value={item.incoming} />
+                    {trimQuantity(item.incoming)}
                   </td>
-                  <td className="py-1 pr-4 text-right">{item.low_stock_threshold ? <DecimalText value={item.low_stock_threshold} /> : null}</td>
+                  <td className="py-1 pr-4 text-right">{item.low_stock_threshold ? trimQuantity(item.low_stock_threshold) : null}</td>
                   <td className="py-1">
                     <StockBadges states={item.states} />
                   </td>
@@ -148,7 +150,7 @@ export default async function InventoryPage({
                     </Link>
                   </td>
                   <td className="py-1 pr-4 text-right">
-                    <DecimalText value={backorder.remaining} /> {backorder.item_unit}
+                    {trimQuantity(backorder.remaining)} {backorder.item_unit}
                   </td>
                   <td className="py-1 pr-4">{BACKORDER_STATES[backorder.state]}</td>
                 </tr>
@@ -184,7 +186,7 @@ export default async function InventoryPage({
                     </Link>
                   </td>
                   <td className="py-1 pr-4 text-right">
-                    <DecimalText value={row.remaining} /> {row.item_unit}
+                    {trimQuantity(row.remaining)} {row.item_unit}
                   </td>
                   <td className="py-1 pr-4">{row.supplier}</td>
                   <td className="py-1 pr-4">{row.reference}</td>

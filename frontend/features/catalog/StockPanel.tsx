@@ -5,7 +5,6 @@ import { useState, type FormEvent } from "react";
 
 import { useOrgId } from "@/components/shell/org-context";
 import { Button } from "@/components/ui/Button";
-import { DecimalText } from "@/components/ui/DecimalText";
 import { ErrorSummary } from "@/components/ui/ErrorSummary";
 import { DecimalField, SelectField, TextField } from "@/components/ui/Field";
 import { apiFetch } from "@/lib/api/client";
@@ -14,6 +13,7 @@ import { blankToNull, problemsFrom, useMutation } from "@/lib/forms";
 import { formatTimestamp } from "@/lib/timestamps";
 
 import { StockBadges } from "./StockBadges";
+import { trimQuantity } from "@/lib/decimal";
 
 const CONTROLS = ["kind", "quantity", "note"] as const;
 
@@ -79,13 +79,13 @@ export function StockPanel({
       <p className="text-sm">
         On hand:{" "}
         <span className="font-semibold" data-testid="on-hand">
-          <DecimalText value={stock.on_hand} />
+          {trimQuantity(stock.on_hand)}
         </span>{" "}
         {unit}
         {figures && (
           <span className="text-zinc-600 dark:text-zinc-400" data-testid="stock-figures">
             {" "}
-            · committed to backorders {figures.committed} · available {figures.available} · incoming {figures.incoming}
+            · committed to backorders {trimQuantity(figures.committed)} · available {trimQuantity(figures.available)} · incoming {trimQuantity(figures.incoming)}
           </span>
         )}
       </p>
@@ -108,10 +108,10 @@ export function StockPanel({
                 <td className="py-1 pr-4">{REASONS[movement.reason]}</td>
                 <td className="py-1 pr-4 text-right">
                   {movement.quantity_change.startsWith("-") ? "" : "+"}
-                  <DecimalText value={movement.quantity_change} />
+                  {trimQuantity(movement.quantity_change)}
                 </td>
                 <td className="py-1 pr-4 text-right">
-                  <DecimalText value={movement.quantity_after} />
+                  {trimQuantity(movement.quantity_after)}
                 </td>
                 <td className="py-1 pr-4">{movement.note}</td>
                 <td className="py-1 pr-4">{movement.created_by_name ?? <span className="text-zinc-500">not recorded</span>}</td>
