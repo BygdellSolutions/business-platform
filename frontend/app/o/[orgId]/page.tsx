@@ -114,7 +114,7 @@ export default async function Dashboard({
 
       <section aria-label="Pending" className="flex flex-col gap-2">
         <h2 className="text-lg font-semibold">Pending</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <SummaryCard
             title="Unpaid invoices"
             count={invoicing.unpaid.count}
@@ -138,14 +138,6 @@ export default async function Dashboard({
             href={`${base}/invoices?payment=partially_paid`}
             note="Some paid; the amount is what is left."
             testId="card-partially-paid"
-          />
-          <SummaryCard
-            title="Ready to invoice"
-            count={invoicing.ready_to_invoice.count}
-            amounts={invoicing.ready_to_invoice.amounts}
-            href={`${base}/invoices/new`}
-            note="Completed sales on no invoice yet."
-            testId="card-pending-ready"
           />
         </div>
       </section>
