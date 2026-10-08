@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import Pagination, pagination
 from app.core.authz import roles_required
 from app.core.db import get_db
-from app.core.org_time import MONTH_PATTERN, month_range, organization_today
+from app.core.org_time import MONTH_PATTERN, month_range, organization_today, year_range
 from app.core.query import contains_pattern
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import scoped_select
@@ -119,6 +119,7 @@ def invoicing_summary(
     month (any member)."""
     today = organization_today(db, ctx.organization_id)
     month_start, month_end = month_range(month, today)
+    year_start, year_end = year_range(month_start, today)
     reserved = exists().where(InvoiceTransaction.organization_id == Transaction.organization_id, InvoiceTransaction.transaction_id == Transaction.id)
     ready = (Transaction.organization_id == ctx.organization_id, Transaction.status == TransactionStatus.COMPLETED, Transaction.currency.is_not(None), ~reserved)
     ready_count = db.scalar(select(func.count()).select_from(Transaction).where(*ready))
@@ -147,6 +148,8 @@ def invoicing_summary(
         not_yet_due=_outstanding(db, ctx, or_(Invoice.due_date.is_(None), Invoice.due_date >= today)),
         partially_paid=_outstanding(db, ctx, payments.paid_sum_expression() > 0),
         paid_this_month=_paid_between(db, ctx, month_start, month_end),
+        issued_this_year=invoices(Invoice.status == InvoiceStatus.ISSUED, Invoice.invoice_date >= year_start, Invoice.invoice_date <= year_end),
+        paid_this_year=_paid_between(db, ctx, year_start, year_end),
     )
 
 

@@ -185,6 +185,39 @@ export default async function Dashboard({
         </div>
       </section>
 
+      <section aria-label="Year" className="flex flex-col gap-2">
+        <h2 className="text-lg font-semibold" data-testid="year-heading">
+          {sales.year_end === sales.today ? "This year" : "Year"} · {sales.year} ({sales.year_start} – {sales.year_end})
+        </h2>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <SummaryCard
+            title="Completed sales"
+            count={sales.completed_this_year.count}
+            amounts={sales.completed_this_year.amounts}
+            href={`${base}/transactions?status=completed&date_from=${sales.year_start}&date_to=${sales.year_end}`}
+            note="Including VAT."
+            testId="card-year-completed"
+          />
+          <SummaryCard title="Services performed" count={sales.services_this_year} testId="card-year-services" />
+          <SummaryCard
+            title="Invoiced"
+            count={invoicing.issued_this_year.count}
+            amounts={invoicing.issued_this_year.amounts}
+            href={`${base}/invoices?status=issued&date_from=${sales.year_start}&date_to=${sales.year_end}`}
+            note="Issued invoices, including VAT."
+            testId="card-year-invoiced"
+          />
+          <SummaryCard
+            title="Paid"
+            count={invoicing.paid_this_year.count}
+            amounts={invoicing.paid_this_year.amounts}
+            href={`${base}/invoices?payment=paid`}
+            note="Payments with a payment date in this year."
+            testId="card-year-paid"
+          />
+        </div>
+      </section>
+
       {inventory.tracked_items > 0 && (
         <section aria-label="Stock" className="flex flex-col gap-2">
           <h2 className="text-lg font-semibold">Stock</h2>

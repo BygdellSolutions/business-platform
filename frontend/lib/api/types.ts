@@ -745,6 +745,12 @@ export interface SalesSummary {
   month: string;
   previous_month: string;
   next_month: string | null;
+  /** The year of the month shown: from 1 January to its end, or to today for the current year. */
+  year: number;
+  year_start: string;
+  year_end: string;
+  completed_this_year: CountAndAmounts;
+  services_this_year: number;
   today: string;
   drafts: number;
   completed_this_month: CountAndAmounts;
@@ -766,6 +772,8 @@ export interface InvoicingSummary {
   past_due: CountAndAmounts;
   /** Payments dated this month (reversals subtracted). */
   paid_this_month: CountAndAmounts;
+  issued_this_year: CountAndAmounts;
+  paid_this_year: CountAndAmounts;
 }
 
 /** GET /api/inventory/summary: active products that track stock. */

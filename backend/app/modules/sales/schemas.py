@@ -269,3 +269,9 @@ class SalesSummary(BaseModel):
     drafts: int
     completed_this_month: CountAndAmounts
     services_this_month: int
+    # The year of the month shown: from 1 January to its last day, or to today for the current year.
+    year: int
+    year_start: date
+    year_end: date
+    completed_this_year: CountAndAmounts
+    services_this_year: int

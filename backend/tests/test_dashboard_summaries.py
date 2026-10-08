@@ -148,3 +148,19 @@ def test_pending_shows_unpaid_not_yet_due_and_partially_paid_with_what_is_outsta
     assert summary["not_yet_due"] == {"count": 1, "amounts": [{"currency": "SEK", "amount": "1000.00"}]}
     assert summary["partially_paid"] == {"count": 1, "amounts": [{"currency": "SEK", "amount": "1000.00"}]}
     assert summary["past_due"]["count"] == 1 and overdue["id"]
+
+
+def test_the_year_counts_from_january_to_today_or_a_past_year_in_full(client: TestClient, db_session: Session):
+    org, owner = _world(db_session)
+    today = today_in(None)
+    _sale(db_session, org, on=today.replace(month=1, day=1))  # this year
+    _sale(db_session, org)  # this year (and month)
+    _sale(db_session, org, on=today.replace(year=today.year - 1, month=12, day=31))  # last year
+
+    current = client.get("/api/transactions/summary", headers=owner).json()
+    december = client.get("/api/transactions/summary", params={"month": f"{today.year - 1}-12"}, headers=owner).json()
+
+    assert (current["year"], current["year_start"], current["year_end"]) == (today.year, f"{today.year}-01-01", str(today))
+    assert current["completed_this_year"]["count"] == 2
+    assert (december["year"], december["year_end"], december["completed_this_year"]["count"]) == (today.year - 1, f"{today.year - 1}-12-31", 1)
+    assert "issued_this_year" in client.get("/api/invoices/summary", headers=owner).json()

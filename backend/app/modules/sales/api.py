@@ -19,7 +19,7 @@ from app.core.lifecycle import (
     ensure_valid,
     run_effects,
 )
-from app.core.org_time import MONTH_PATTERN, as_instant, month_range, organization_today
+from app.core.org_time import MONTH_PATTERN, as_instant, month_range, organization_today, year_range
 from app.core.query import commit_and_refresh
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import (
@@ -456,25 +456,32 @@ def sales_summary(
     drafts = db.scalar(
         select(func.count()).select_from(Transaction).where(Transaction.organization_id == ctx.organization_id, Transaction.status == DRAFT)
     )
-    this_month = (
-        Transaction.organization_id == ctx.organization_id,
-        Transaction.transaction_date >= month_start,
-        Transaction.transaction_date <= month_end,
-    )
-    completed = db.scalar(select(func.count()).select_from(Transaction).where(*this_month, Transaction.status == COMPLETED))
-    amounts = db.execute(
-        select(Transaction.currency, func.sum(TransactionLine.gross_amount))
-        .join(TransactionLine, and_(TransactionLine.organization_id == Transaction.organization_id, TransactionLine.transaction_id == Transaction.id))
-        .where(*this_month, Transaction.status == COMPLETED, Transaction.currency.is_not(None))
-        .group_by(Transaction.currency)
-        .order_by(Transaction.currency)
-    ).all()
-    services = db.scalar(
-        select(func.count())
-        .select_from(TransactionLine)
-        .join(Transaction, and_(Transaction.organization_id == TransactionLine.organization_id, Transaction.id == TransactionLine.transaction_id))
-        .where(*this_month, Transaction.status != CANCELLED, TransactionLine.kind == "service")
-    )
+    def period(first: date, last: date) -> tuple[CountAndAmounts, int]:
+        """Completed sales (count, gross per currency) and service lines in the period."""
+        within = (
+            Transaction.organization_id == ctx.organization_id,
+            Transaction.transaction_date >= first,
+            Transaction.transaction_date <= last,
+        )
+        completed = db.scalar(select(func.count()).select_from(Transaction).where(*within, Transaction.status == COMPLETED))
+        amounts = db.execute(
+            select(Transaction.currency, func.sum(TransactionLine.gross_amount))
+            .join(TransactionLine, and_(TransactionLine.organization_id == Transaction.organization_id, TransactionLine.transaction_id == Transaction.id))
+            .where(*within, Transaction.status == COMPLETED, Transaction.currency.is_not(None))
+            .group_by(Transaction.currency)
+            .order_by(Transaction.currency)
+        ).all()
+        services = db.scalar(
+            select(func.count())
+            .select_from(TransactionLine)
+            .join(Transaction, and_(Transaction.organization_id == TransactionLine.organization_id, Transaction.id == TransactionLine.transaction_id))
+            .where(*within, Transaction.status != CANCELLED, TransactionLine.kind == "service")
+        )
+        return CountAndAmounts(count=completed, amounts=[CurrencyAmount(currency=c, amount=a) for c, a in amounts]), services
+
+    year_start, year_end = year_range(month_start, today)
+    month_sales, month_services = period(month_start, month_end)
+    year_sales, year_services = period(year_start, year_end)
     return SalesSummary(
         month_start=month_start,
         month_end=month_end,
@@ -483,8 +490,13 @@ def sales_summary(
         next_month=None if month_end >= today else (month_end + timedelta(days=1)).strftime("%Y-%m"),
         today=today,
         drafts=drafts,
-        completed_this_month=CountAndAmounts(count=completed, amounts=[CurrencyAmount(currency=c, amount=a) for c, a in amounts]),
-        services_this_month=services,
+        completed_this_month=month_sales,
+        services_this_month=month_services,
+        year=year_start.year,
+        year_start=year_start,
+        year_end=year_end,
+        completed_this_year=year_sales,
+        services_this_year=year_services,
     )
 
 

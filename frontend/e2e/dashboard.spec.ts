@@ -45,6 +45,8 @@ test("the month can be chosen, and pending shows what is not yet paid", async ({
   await expect(page.getByTestId("card-invoiced-count")).toHaveText("1");
   await expect(page.getByTestId("month-heading")).toContainText("This month");
   await expect(page.getByTestId("next-month")).toHaveCount(0);
+  await expect(page.getByTestId("year-heading")).toContainText("This year");
+  await expect(page.getByTestId("card-year-invoiced-count")).toHaveText("1");
 
   await page.getByTestId("previous-month").click();
   await expect(page.getByTestId("month-heading")).toContainText("Month ·");

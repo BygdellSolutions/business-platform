@@ -64,3 +64,8 @@ def month_range(month: str | None, today: date) -> tuple[date, date]:
         )
     following = date(year + 1, 1, 1) if number == 12 else date(year, number + 1, 1)
     return start, min(following - timedelta(days=1), today)
+
+
+def year_range(any_day: date, today: date) -> tuple[date, date]:
+    """The year of `any_day`: from 1 January to 31 December, or to today for the current year."""
+    return date(any_day.year, 1, 1), min(date(any_day.year, 12, 31), today)

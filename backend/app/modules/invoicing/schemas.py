@@ -229,3 +229,6 @@ class InvoicingSummary(BaseModel):
     # The chosen month: issued invoices (gross) and payments dated in it (reversals subtracted).
     issued_this_month: CountAndAmounts
     paid_this_month: CountAndAmounts
+    # The same for the year of the month shown (to today for the current year).
+    issued_this_year: CountAndAmounts
+    paid_this_year: CountAndAmounts
