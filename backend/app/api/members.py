@@ -1,6 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core import clock, memberships, ownership
@@ -11,8 +12,8 @@ from app.core.passwords import AuthBusy
 from app.core.security_events import client_source
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.throttle import Throttled
-from app.models import Role
-from app.schemas.members import LeaveRequest, MemberRead, RoleChange
+from app.models import OrganizationUser, Role, User
+from app.schemas.members import Colleague, LeaveRequest, MemberRead, RoleChange
 
 # Tenant-scoped: the organization is the active one (X-Organization-Id, resolved against the caller's memberships, a
 # non-member gets the usual 404). Reading needs an owner or admin. The MUTATIONS take the tenant context only to
@@ -68,6 +69,18 @@ def run_membership_change(call):
 @router.get("", response_model=list[MemberRead])
 def read_members(ctx: TenantContext = Depends(roles_required(Role.OWNER, Role.ADMIN)), db: Session = Depends(get_db)) -> list[MemberRead]:
     return [MemberRead(**vars(member)) for member in memberships.list_members(db, ctx.organization_id, ctx.user.id)]
+
+
+@router.get("/people", response_model=list[Colleague])
+def read_colleagues(ctx: TenantContext = Depends(get_tenant_context), db: Session = Depends(get_db)) -> list[Colleague]:
+    """Every member's name, for any member (who performed a service). The full list stays owners' and admins'."""
+    rows = db.execute(
+        select(User.id, User.name)
+        .join(OrganizationUser, OrganizationUser.user_id == User.id)
+        .where(OrganizationUser.organization_id == ctx.organization_id)
+        .order_by(User.name, User.id)
+    ).all()
+    return [Colleague(user_id=user_id, name=name) for user_id, name in rows]
 
 
 @router.post("/leave", status_code=status.HTTP_204_NO_CONTENT)

@@ -32,6 +32,8 @@ export interface TransactionFields {
 export interface EditorApi {
   /** The authoritative transaction, exactly as the server last sent it. */
   transaction: Transaction;
+  /** The organization's time zone, for showing service times (null: UTC). */
+  timeZone: string | null;
   /** Not a draft, or the user's role may only read: nothing can be edited. Presentation only; FastAPI enforces it. */
   readOnly: boolean;
   /** A change is running, or the page is being refreshed. Nothing else may be changed meanwhile. */

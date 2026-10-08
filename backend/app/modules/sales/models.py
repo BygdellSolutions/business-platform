@@ -1,16 +1,19 @@
 import uuid
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
 
 from sqlalchemy import (
     CheckConstraint,
     Date,
+    DateTime,
+    ForeignKey,
     ForeignKeyConstraint,
     Index,
     Integer,
     Numeric,
     String,
+    Text,
     UniqueConstraint,
     text,
 )
@@ -151,6 +154,14 @@ class TransactionLine(TenantOwned, Authored, Base):
             "gross_amount = net_amount + vat_amount", name="ck_transaction_lines_gross_amount"
         ),
         *discount_constraints("transaction_lines"),
+        CheckConstraint("kind IN ('standard', 'service')", name="ck_transaction_lines_kind"),
+        # A service is a catalog service performed at a time for a subject; other lines carry none of that.
+        CheckConstraint(
+            "(kind = 'service' AND item_id IS NOT NULL AND performed_at IS NOT NULL AND subject_type IS NOT NULL AND subject_id IS NOT NULL)"
+            " OR (kind = 'standard' AND performed_at IS NULL AND performed_by IS NULL AND subject_type IS NULL AND subject_id IS NULL)",
+            name="ck_transaction_lines_service_fields",
+        ),
+        Index("ix_transaction_lines_subject", "organization_id", "subject_type", "subject_id"),
         Index("ix_transaction_lines_organization_transaction", "organization_id", "transaction_id"),
         Index("ix_transaction_lines_organization_item", "organization_id", "item_id"),
     )
@@ -172,3 +183,12 @@ class TransactionLine(TenantOwned, Authored, Base):
     net_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     vat_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     gross_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    # "standard": a catalog item or an ad-hoc line (told apart by item_id). "service": work performed for a subject
+    # (a person, an animal...), always a catalog service, with when, by whom and for whom.
+    kind: Mapped[str] = mapped_column(String(16), default="standard", server_default=text("'standard'"))
+    performed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    performed_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
+    # The subject as (registry key, id): Sales never knows what it is (see app.core.subjects).
+    subject_type: Mapped[str | None] = mapped_column(String(64))
+    subject_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    notes: Mapped[str | None] = mapped_column(Text)

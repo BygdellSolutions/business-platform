@@ -15,5 +15,6 @@ def register(registry: Registry) -> None:
                 active_column="active",
                 search_columns=("name", "email"),
             ),
+            service_subject=True,  # a service performed for a person
         )
     )

@@ -8,12 +8,14 @@ import { Button } from "@/components/ui/Button";
 import { ConfirmButton } from "@/components/ui/ConfirmButton";
 import { DecimalText } from "@/components/ui/DecimalText";
 import { DiscountSteps } from "@/components/ui/DiscountSteps";
+import { ServiceSummary } from "@/components/ui/ServiceSummary";
 import { useEditor } from "@/features/transactions/editor-context";
 import { classify } from "@/features/transactions/failures";
 import { LineEditor } from "@/features/transactions/LineEditor";
 import { LineFields } from "@/features/transactions/LineFields";
 import { apiFetch } from "@/lib/api/client";
 import type { TransactionLine } from "@/lib/api/types";
+import { formatTimestamp } from "@/lib/timestamps";
 
 /**
  * One line, shown exactly as stored: its own description, unit, quantity, price and VAT (the
@@ -22,7 +24,7 @@ import type { TransactionLine } from "@/lib/api/types";
  */
 export function LineRow({ line, ordinal }: { line: TransactionLine; ordinal: number }) {
   const orgId = useOrgId();
-  const { transaction, readOnly, busy, mutate, report } = useEditor();
+  const { transaction, timeZone, readOnly, busy, mutate, report } = useEditor();
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -58,7 +60,12 @@ export function LineRow({ line, ordinal }: { line: TransactionLine; ordinal: num
     <>
     <tr data-testid="line-row" data-line-id={line.id} data-version={line.version} aria-busy={deleting || undefined} className="border-b border-zinc-200 align-top dark:border-zinc-800">
       <td className="py-1 pr-3">{ordinal}</td>
-      <td className="py-1 pr-3" data-testid="line-description">{line.description}</td>
+      <td className="py-1 pr-3" data-testid="line-description">
+        {line.description}
+        {line.kind === "service" && line.performed_at && (
+          <ServiceSummary subject={line.subject_label} when={formatTimestamp(line.performed_at, timeZone)} by={line.performed_by_name} notes={line.notes} />
+        )}
+      </td>
       <td className="py-1 pr-3" data-testid="line-unit">{line.unit}</td>
       <td className="py-1 pr-3 text-right" data-testid="line-quantity"><DecimalText value={line.quantity} /></td>
       <td className="py-1 pr-3 text-right" data-testid="line-price">

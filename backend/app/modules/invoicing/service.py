@@ -27,11 +27,11 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core import audit
-from app.core.org_time import organization_today
+from app.core import audit, subjects
+from app.core.org_time import organization_today, organization_zone
 from app.core.tenant import TenantContext
 from app.core.tenant_scope import create_scoped, get_scoped, get_scoped_or_404, reference_error, scoped_select
-from app.models import Customer, Organization
+from app.models import Customer, Organization, User
 from app.modules.custom_fields import service as custom_fields
 from app.modules.invoicing import numbering, snapshots
 from app.modules.invoicing.models import (
@@ -246,6 +246,31 @@ def _violated(error: IntegrityError) -> str | None:
     return getattr(diag, "constraint_name", None)
 
 
+def _service_snapshots(db: Session, ctx: TenantContext, lines: list[TransactionLine]) -> dict[uuid.UUID, dict[str, Any]]:
+    """What an invoice shows of each service line, as it reads at invoicing (never resolved again): when, by whom
+    and for whom, in words. The subject's label comes from the registry (Invoicing does not know what it is)."""
+    service_lines = [line for line in lines if line.kind == "service"]
+    if not service_lines:
+        return {}
+    labels = subjects.subject_labels(db, ctx.organization_id, {(line.subject_type, line.subject_id) for line in service_lines})
+    performers = {line.performed_by for line in service_lines if line.performed_by is not None}
+    names = dict(db.execute(select(User.id, User.name).where(User.id.in_(performers))).all()) if performers else {}
+    zone = organization_zone(db, ctx.organization_id)
+    return {
+        line.id: {
+            "schema": 1,
+            "performed_at": line.performed_at.isoformat(),
+            # As a person in the organization reads it, so the document never needs a time zone to be shown.
+            "performed_at_local": line.performed_at.astimezone(zone).strftime("%Y-%m-%d %H:%M"),
+            "performed_by": names.get(line.performed_by),
+            "subject_type": line.subject_type,
+            "subject_label": labels.get((line.subject_type, line.subject_id)),
+            "notes": line.notes,
+        }
+        for line in service_lines
+    }
+
+
 def _insert_children(
     db: Session,
     ctx: TenantContext,
@@ -257,6 +282,7 @@ def _insert_children(
     by_rate: dict[Decimal, list[Decimal]],
 ) -> None:
     """Sources, lines (copied verbatim) and the stored VAT breakdown of a new invoice."""
+    services = _service_snapshots(db, ctx, [line for lines in lines_of.values() for line in lines])
     position = 0
     for index, source in enumerate(ordered, start=1):
         # The unique key on the source is checked here, when the link row is flushed.
@@ -295,6 +321,7 @@ def _insert_children(
                 vat_amount=line.vat_amount,
                 gross_amount=line.gross_amount,
                 fields=snapshots.custom_field_snapshot(line_fields.get(line.id, [])),
+                service=services.get(line.id),
             )
     for rate in sorted(by_rate):
         net, vat = by_rate[rate]

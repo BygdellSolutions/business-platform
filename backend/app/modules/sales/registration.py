@@ -30,6 +30,17 @@ def _transactions_fix_the_currency(db: Session, organization_id: uuid.UUID) -> s
     return "Transactions already exist, and their prices are in the current currency." if exists else None
 
 
+def _service_subjects_are_referenced(db: Session, entity_key: str, organization_id: uuid.UUID, record_id: uuid.UUID) -> bool:
+    """A record that a service line was performed for cannot be deleted (a polymorphic reference has no foreign key)."""
+    return db.scalar(
+        select(TransactionLine.id).where(
+            TransactionLine.organization_id == organization_id,
+            TransactionLine.subject_type == entity_key,
+            TransactionLine.subject_id == record_id,
+        ).limit(1)
+    ) is not None
+
+
 def register(registry: Registry) -> None:
     """Expose transactions and their lines to generic capabilities (custom fields,
     lifecycle validation) without importing any of them."""
@@ -53,3 +64,4 @@ def register(registry: Registry) -> None:
         )
     )
     registry.add_currency_guard(_transactions_fix_the_currency)
+    registry.add_reference_guard(_service_subjects_are_referenced)

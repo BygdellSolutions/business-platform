@@ -43,6 +43,14 @@ export function line(overrides: Partial<TransactionLine> = {}): TransactionLine 
     gross_amount: money("1062.50"),
     created_at: "2026-10-01T10:00:00Z",
     updated_at: "2026-10-01T10:00:00Z",
+    kind: "standard",
+    performed_at: null,
+    performed_by: null,
+    subject_type: null,
+    subject_id: null,
+    notes: null,
+    subject_label: null,
+    performed_by_name: null,
     created_by: null,
     updated_by: null,
     ...overrides,
@@ -158,7 +166,19 @@ function Gate() {
 
 export const NO_FIELDS: TransactionFields = { transaction: { definitions: [], values: [] }, line: { definitions: [], values: {} } };
 
-export function Harness({ initial, orgId = ORG_A, fields = NO_FIELDS, canEdit = true }: { initial: Transaction; orgId?: string; fields?: TransactionFields; canEdit?: boolean }) {
+export function Harness({
+  initial,
+  orgId = ORG_A,
+  fields = NO_FIELDS,
+  canEdit = true,
+  timeZone = null,
+}: {
+  initial: Transaction;
+  orgId?: string;
+  fields?: TransactionFields;
+  canEdit?: boolean;
+  timeZone?: string | null;
+}) {
   const [current, setCurrent] = useState(initial);
   useEffect(() => {
     server.apply = setCurrent;
@@ -170,7 +190,7 @@ export function Harness({ initial, orgId = ORG_A, fields = NO_FIELDS, canEdit = 
     <>
       <Gate />
       <OrgScope orgId={orgId}>
-        <TransactionEditor transaction={current} fields={fields} canEdit={canEdit} />
+        <TransactionEditor transaction={current} fields={fields} canEdit={canEdit} timeZone={timeZone} />
       </OrgScope>
     </>
   );

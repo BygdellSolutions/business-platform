@@ -45,3 +45,11 @@ class OwnershipTransfer(RecentAuthentication):
 class OrganizationDeletion(RecentAuthentication):
     # The organization's name, typed by the person as the last confirmation.
     confirm_name: str = Field(max_length=255)
+
+
+class Colleague(BaseModel):
+    """A member as any other member may see them: who can be named as having performed a service. No email, role or
+    membership id."""
+
+    user_id: uuid.UUID
+    name: str

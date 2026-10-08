@@ -249,6 +249,17 @@ export interface TransactionLine {
   /** Who created it and who changed it last (user ids); null = not recorded (before authors were kept). */
   created_by: string | null;
   updated_by: string | null;
+  /** "standard" (a catalog item or an ad-hoc line) or "service" (work performed for a subject). */
+  kind: "standard" | "service";
+  /** Service lines: when (ISO), by whom (user id), for whom (registry key and id), and notes (any line). */
+  performed_at: string | null;
+  performed_by: string | null;
+  subject_type: string | null;
+  subject_id: string | null;
+  notes: string | null;
+  /** Resolved by FastAPI when read: the subject's current name and the performer's name. */
+  subject_label: string | null;
+  performed_by_name: string | null;
 }
 
 export interface VatBreakdownRow {
@@ -309,6 +320,13 @@ export interface LineCreate {
   quantity: QuantityString;
   unit_price_ex_vat?: MoneyString;
   vat_rate?: PercentString;
+  kind?: "standard" | "service";
+  /** "YYYY-MM-DDTHH:MM" without an offset: the organization's local time. Omitted: now. */
+  performed_at?: string;
+  performed_by_user_id?: string | null;
+  subject_type?: string;
+  subject_id?: string;
+  notes?: string | null;
 }
 
 /** A line edit. There is deliberately no `item_id`: this UI never re-snapshots or detaches a line. */
@@ -381,6 +399,8 @@ export interface InvoiceLine {
   vat_amount: MoneyString;
   gross_amount: MoneyString;
   fields: FieldSnapshot[];
+  /** For a service line: what the invoice keeps of the service (a snapshot; never resolved again). */
+  service: InvoiceService | null;
 }
 
 export interface InvoiceSource {
@@ -490,4 +510,38 @@ export interface ItemDiscount {
   note: string | null;
   created_at: string;
   created_by: string | null;
+}
+
+export interface InvoiceService {
+  performed_at: string;
+  /** The performed time as the organization reads it ("2026-10-03 14:00"). */
+  performed_at_local: string;
+  performed_by: string | null;
+  subject_type: string;
+  subject_label: string | null;
+  notes: string | null;
+}
+
+/** A service performed (GET /api/transactions/services), for a record's page. */
+export interface ServiceRecord {
+  transaction_id: string;
+  transaction_date: string;
+  status: "draft" | "completed" | "cancelled";
+  currency: string | null;
+  line_id: string;
+  description: string;
+  quantity: QuantityString;
+  gross_amount: MoneyString;
+  performed_at: string;
+  performed_by_name: string | null;
+  subject_type: string;
+  subject_id: string;
+  subject_label: string | null;
+  notes: string | null;
+}
+
+/** A member's name as any member may see it (GET /api/members/people). */
+export interface Colleague {
+  user_id: string;
+  name: string;
 }

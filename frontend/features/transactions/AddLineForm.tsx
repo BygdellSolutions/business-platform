@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useOrgId } from "@/components/shell/org-context";
 import { Button } from "@/components/ui/Button";
@@ -12,21 +12,24 @@ import { useEditor, useRegisterEditor } from "@/features/transactions/editor-con
 import { classify } from "@/features/transactions/failures";
 import { apiFetch } from "@/lib/api/client";
 import type { FieldErrors } from "@/lib/api/errors";
-import type { LineCreate, TransactionLine } from "@/lib/api/types";
+import { SUBJECT_KINDS } from "@/features/transactions/service-subjects";
+import type { Colleague, LineCreate, TransactionLine } from "@/lib/api/types";
 import { parseMoney, parsePercent, parseQuantity } from "@/lib/decimal";
 import { NOT_A_DECIMAL, NO_PROBLEMS, problemsFrom, type Problems } from "@/lib/forms";
 
-const CONTROLS = ["item_id", "description", "unit", "quantity", "unit_price_ex_vat", "vat_rate"] as const;
+const CONTROLS = ["item_id", "description", "unit", "quantity", "unit_price_ex_vat", "vat_rate", "subject_id", "performed_by_user_id", "performed_at", "notes"] as const;
 
-type Mode = "item" | "adhoc";
+type Mode = "item" | "service" | "adhoc";
 
 /**
- * Add a line, in one of two ways.
+ * Add a line, in one of three ways (in this order).
  *
  *  - From the catalog: the user picks an item and a quantity, and ONLY `{item_id, quantity}` is
  *    sent. FastAPI copies the item's name, unit, price and VAT (the snapshot) and the line then
  *    appears in the table as stored, where it can be edited. The frontend never reads those
  *    values from the item, so it cannot copy a price that has since changed.
+ *  - Service: work performed for someone or something (a horse, a person): a service from the catalog, for whom,
+ *    by whom (a member), when (empty: now) and notes. Priced like a catalog item, discounts included.
  *  - Ad-hoc: no item; description, unit, quantity, price and VAT are typed (as strings).
  */
 export function AddLineForm() {
@@ -57,6 +60,21 @@ function AddLinePanel({ onClose }: { onClose: () => void }) {
   const [saving, setSaving] = useState(false);
 
   const search = useMemo(() => itemSearch(orgId), [orgId]);
+  const serviceSearch = useMemo(() => itemSearch(orgId, { type: "service" }), [orgId]);
+  const [subjectType, setSubjectType] = useState(SUBJECT_KINDS[0].type);
+  const [subject, setSubject] = useState<PickerEntity | null>(null);
+  const subjectKind = SUBJECT_KINDS.find((kind) => kind.type === subjectType) ?? SUBJECT_KINDS[0];
+  const subjectSearch = useMemo(() => subjectKind.search(orgId), [subjectKind, orgId]);
+  const [service, setService] = useState({ performed_by_user_id: "", performed_at: "", notes: "" });
+  const [colleagues, setColleagues] = useState<Colleague[]>([]);
+  useEffect(() => {
+    if (mode !== "service" || colleagues.length > 0) return;
+    const controller = new AbortController();
+    void apiFetch<Colleague[]>(orgId, "/members/people", { signal: controller.signal }).then((result) => {
+      if (result.ok) setColleagues(result.data);
+    });
+    return () => controller.abort();
+  }, [mode, orgId, colleagues.length]);
   const errorsFor = (name: string) => local[name] ?? problems.byField[name];
   const set = (key: keyof typeof fields) => (value: string) => setFields((current) => ({ ...current, [key]: value }));
 
@@ -64,6 +82,24 @@ function AddLinePanel({ onClose }: { onClose: () => void }) {
     const errors: FieldErrors = {};
     const quantity = parseQuantity(fields.quantity.trim());
     if (quantity === null) errors.quantity = [NOT_A_DECIMAL];
+
+    if (mode === "service") {
+      if (item === null) errors.item_id = ["Choose a service."];
+      if (subject === null) errors.subject_id = ["Choose who or what the service was for."];
+      if (Object.keys(errors).length > 0 || quantity === null || item === null || subject === null) return { errors };
+      return {
+        body: {
+          kind: "service",
+          item_id: item.id,
+          quantity,
+          subject_type: subjectType,
+          subject_id: subject.id,
+          ...(service.performed_at !== "" ? { performed_at: service.performed_at } : {}),
+          performed_by_user_id: service.performed_by_user_id === "" ? null : service.performed_by_user_id,
+          notes: service.notes.trim() === "" ? null : service.notes,
+        },
+      };
+    }
 
     if (mode === "item") {
       if (item === null) errors.item_id = ["Choose an item."];
@@ -115,11 +151,74 @@ function AddLinePanel({ onClose }: { onClose: () => void }) {
           <input type="radio" name="line-kind" checked={mode === "item"} onChange={() => setMode("item")} /> Catalog item
         </label>
         <label className="flex items-center gap-1">
+          <input
+            type="radio"
+            name="line-kind"
+            checked={mode === "service"}
+            onChange={() => {
+              setMode("service");
+              setItem(null); // a product chosen as a catalog item is not a service
+            }}
+          />{" "}
+          Service
+        </label>
+        <label className="flex items-center gap-1">
           <input type="radio" name="line-kind" checked={mode === "adhoc"} onChange={() => setMode("adhoc")} /> Ad-hoc line
         </label>
       </div>
 
-      {mode === "item" ? (
+      {mode === "service" ? (
+        <div className="flex flex-col gap-3" data-testid="service-fields">
+          <EntityPicker label="Service" name="item_id" value={item} onChange={setItem} search={serviceSearch} error={errorsFor("item_id")} hint="From the catalog's services; priced like any catalog line." />
+          <label className="flex flex-col gap-1 text-sm font-medium">
+            Performed for
+            <select
+              name="subject_type"
+              value={subjectType}
+              onChange={(event) => {
+                setSubjectType(event.target.value);
+                setSubject(null);
+              }}
+              className="rounded border border-zinc-400 px-2 py-1 font-normal dark:bg-zinc-900"
+            >
+              {SUBJECT_KINDS.map((kind) => (
+                <option key={kind.type} value={kind.type}>
+                  {kind.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <EntityPicker key={subjectType} label={subjectKind.label} name="subject_id" value={subject} onChange={setSubject} search={subjectSearch} error={errorsFor("subject_id")} />
+          <label className="flex flex-col gap-1 text-sm font-medium">
+            Performed by
+            <select
+              name="performed_by_user_id"
+              value={service.performed_by_user_id}
+              onChange={(event) => setService((current) => ({ ...current, performed_by_user_id: event.target.value }))}
+              className="rounded border border-zinc-400 px-2 py-1 font-normal dark:bg-zinc-900"
+            >
+              <option value="">Not recorded</option>
+              {colleagues.map((colleague) => (
+                <option key={colleague.user_id} value={colleague.user_id}>
+                  {colleague.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm font-medium">
+            Performed at (leave empty for now)
+            <input
+              type="datetime-local"
+              name="performed_at"
+              value={service.performed_at}
+              onChange={(event) => setService((current) => ({ ...current, performed_at: event.target.value }))}
+              className="rounded border border-zinc-400 px-2 py-1 font-normal dark:bg-zinc-900"
+            />
+          </label>
+          <DecimalField label="Quantity" name="quantity" value={fields.quantity} onChange={set("quantity")} error={errorsFor("quantity")} />
+          <TextField label="Notes" name="notes" value={service.notes} onChange={(value) => setService((current) => ({ ...current, notes: value }))} error={errorsFor("notes")} autoComplete="off" />
+        </div>
+      ) : mode === "item" ? (
         <>
           <EntityPicker label="Item" name="item_id" value={item} onChange={setItem} search={search} error={errorsFor("item_id")} hint="Its name, unit, price and VAT are copied by the server when the line is added." />
           <DecimalField label="Quantity" name="quantity" value={fields.quantity} onChange={set("quantity")} error={errorsFor("quantity")} />

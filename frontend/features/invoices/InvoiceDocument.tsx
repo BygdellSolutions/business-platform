@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { DecimalText } from "@/components/ui/DecimalText";
 import { DiscountSteps } from "@/components/ui/DiscountSteps";
+import { ServiceSummary } from "@/components/ui/ServiceSummary";
 import { FieldSnapshots } from "@/components/snapshots/FieldSnapshots";
 import { InvoiceStatusBadge } from "@/features/invoices/InvoiceStatusBadge";
 import type { Invoice, PartySnapshot } from "@/lib/api/types";
@@ -82,6 +83,9 @@ export function InvoiceDocument({ invoice, orgId }: { invoice: Invoice; orgId: s
                     <td className="py-1 pr-3">{line.position}</td>
                     <td className="py-1 pr-3">
                       <div data-testid="line-description">{line.description}</div>
+                      {line.service && (
+                        <ServiceSummary subject={line.service.subject_label} when={line.service.performed_at_local} by={line.service.performed_by} notes={line.service.notes} />
+                      )}
                       <FieldSnapshots fields={line.fields} label={`Fields of line ${line.position}`} testId="line-fields" />
                     </td>
                     <td className="py-1 pr-3">{line.unit}</td>

@@ -10,9 +10,10 @@ export const ITEM_CHOICES = 20;
  * price are shown in the list only as a hint for choosing: the picker's value is the item's id,
  * and nothing shown here is ever copied into a request. FastAPI snapshots the item itself.
  */
-export function itemSearch(orgId: string): PickerSearch {
+export function itemSearch(orgId: string, options: { type?: "service" | "product" } = {}): PickerSearch {
   return async (query, signal) => {
     const params = new URLSearchParams({ active: "true", limit: String(ITEM_CHOICES) });
+    if (options.type) params.set("type", options.type);
     if (query !== "") params.set("q", query);
 
     const result = await apiFetch<Item[]>(orgId, `/items?${params.toString()}`, { signal });

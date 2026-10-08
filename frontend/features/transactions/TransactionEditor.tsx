@@ -36,7 +36,17 @@ import type { Transaction } from "@/lib/api/types";
  * `canEdit` is false for a role that may only read (a viewer): the whole transaction is then shown
  * read-only, without lifecycle or add-line controls. Presentation only; FastAPI refuses the writes.
  */
-export function TransactionEditor({ transaction, fields, canEdit }: { transaction: Transaction; fields: Fields; canEdit: boolean }) {
+export function TransactionEditor({
+  transaction,
+  fields,
+  canEdit,
+  timeZone = null,
+}: {
+  transaction: Transaction;
+  fields: Fields;
+  canEdit: boolean;
+  timeZone?: string | null;
+}) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
   const [mutating, setMutating] = useState(false);
@@ -151,6 +161,7 @@ export function TransactionEditor({ transaction, fields, canEdit }: { transactio
   const api = useMemo<EditorApi>(
     () => ({
       transaction,
+      timeZone,
       readOnly: !canEdit || transaction.status !== "draft",
       busy,
       refreshing,
@@ -164,7 +175,7 @@ export function TransactionEditor({ transaction, fields, canEdit }: { transactio
       refresh,
       registerEditor,
     }),
-    [transaction, canEdit, busy, refreshing, editorsOpen, notice, fields, fieldErrors, mutate, report, announce, refresh, registerEditor],
+    [transaction, timeZone, canEdit, busy, refreshing, editorsOpen, notice, fields, fieldErrors, mutate, report, announce, refresh, registerEditor],
   );
 
   return (

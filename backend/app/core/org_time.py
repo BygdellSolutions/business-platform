@@ -31,3 +31,16 @@ def today_in(zone_name: str | None, now: datetime | None = None) -> date:
 def organization_today(db: Session, organization_id: uuid.UUID) -> date:
     zone = db.scalar(select(Organization.timezone).where(Organization.id == organization_id))
     return today_in(zone)
+
+
+def organization_zone(db: Session, organization_id: uuid.UUID) -> ZoneInfo:
+    zone = db.scalar(select(Organization.timezone).where(Organization.id == organization_id))
+    return ZoneInfo(zone or FALLBACK_ZONE)
+
+
+def as_instant(db: Session, organization_id: uuid.UUID, moment: datetime) -> datetime:
+    """A moment as an aware instant: a time without an offset is read in the organization's zone (a person types
+    "14:00" meaning their own afternoon); a time with an offset is kept."""
+    if moment.tzinfo is not None:
+        return moment
+    return moment.replace(tzinfo=organization_zone(db, organization_id))

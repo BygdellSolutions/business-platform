@@ -1,6 +1,6 @@
 import uuid
 from datetime import date, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import (
     BaseModel,
@@ -38,6 +38,26 @@ class LineCreate(BaseModel):
     quantity: QuantityIn
     unit_price_ex_vat: MoneyIn | None = None
     vat_rate: PercentIn | None = None
+    # A service line (kind "service"): a catalog service performed for a subject (a registered record such as a
+    # customer or a horse), at a time (a time without an offset is the organization's local time; default: now), by a
+    # member of the organization (optional). Notes are allowed on any line.
+    kind: Literal["standard", "service"] = "standard"
+    performed_at: datetime | None = None
+    performed_by_user_id: uuid.UUID | None = None
+    subject_type: Annotated[str, StringConstraints(min_length=1, max_length=64)] | None = None
+    subject_id: uuid.UUID | None = None
+    notes: Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)] | None = None
+
+    @model_validator(mode="after")
+    def service_lines_need_a_service_and_a_subject(self):
+        service_fields = ("performed_at", "performed_by_user_id", "subject_type", "subject_id")
+        if self.kind == "service":
+            missing = [name for name in ("item_id", "subject_type", "subject_id") if getattr(self, name) is None]
+            if missing:
+                raise ValueError(f"a service line needs: {', '.join(missing)}")
+        elif any(getattr(self, name) is not None for name in service_fields):
+            raise ValueError("only a service line has performed_at, performed_by_user_id and a subject")
+        return self
 
     @model_validator(mode="after")
     def ad_hoc_lines_need_every_value(self):
@@ -65,8 +85,20 @@ class LineUpdate(BaseModel):
     quantity: QuantityIn | None = None
     unit_price_ex_vat: MoneyIn | None = None
     vat_rate: PercentIn | None = None
+    # Service details (service lines only; the subject changes as a pair).
+    performed_at: datetime | None = None
+    performed_by_user_id: uuid.UUID | None = None
+    subject_type: Annotated[str, StringConstraints(min_length=1, max_length=64)] | None = None
+    subject_id: uuid.UUID | None = None
+    notes: Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)] | None = None
 
-    @field_validator("description", "unit", "quantity", "unit_price_ex_vat", "vat_rate")
+    @model_validator(mode="after")
+    def subject_changes_as_a_pair(self):
+        if ("subject_type" in self.model_fields_set) != ("subject_id" in self.model_fields_set):
+            raise ValueError("subject_type and subject_id change together")
+        return self
+
+    @field_validator("description", "unit", "quantity", "unit_price_ex_vat", "vat_rate", "performed_at", "subject_type", "subject_id")
     @classmethod
     def not_null(cls, value):
         # Runs only for fields that were sent; these columns are NOT NULL.
@@ -115,6 +147,15 @@ class LineRead(BaseModel):
     list_unit_price: MoneyOut | None
     catalog_discount_percent: PercentOut | None
     customer_discount_percent: PercentOut | None
+    kind: str
+    performed_at: datetime | None
+    performed_by: uuid.UUID | None
+    subject_type: str | None
+    subject_id: uuid.UUID | None
+    notes: str | None
+    # Resolved for display when read (live names; an invoice keeps its own snapshot).
+    subject_label: str | None = None
+    performed_by_name: str | None = None
     vat_rate: PercentOut
     net_amount: MoneyOut
     vat_amount: MoneyOut
@@ -182,3 +223,23 @@ class AssignCurrency(BaseModel):
 class AssignCurrencyResult(BaseModel):
     currency: str
     assigned: int
+
+
+class ServiceRecord(BaseModel):
+    """One service performed (a service line), for a record's history: what, when, for whom, by whom, at what price,
+    and in which transaction."""
+
+    transaction_id: uuid.UUID
+    transaction_date: date
+    status: TransactionStatus
+    currency: str | None
+    line_id: uuid.UUID
+    description: str
+    quantity: QuantityOut
+    gross_amount: MoneyOut
+    performed_at: datetime
+    performed_by_name: str | None
+    subject_type: str
+    subject_id: uuid.UUID
+    subject_label: str | None
+    notes: str | None

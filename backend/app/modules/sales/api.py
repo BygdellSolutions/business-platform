@@ -8,7 +8,7 @@ from sqlalchemy import and_, func, select, update
 from sqlalchemy.orm import Session
 
 from app.api.deps import Pagination, pagination
-from app.core import audit, discounts
+from app.core import audit, clock, discounts, subjects
 from app.core.authz import record_writer, roles_required
 from app.core.currency import default_currency_for_new_record
 from app.core.db import get_db
@@ -18,16 +18,17 @@ from app.core.lifecycle import (
     REOPEN as EVENT_REOPEN,
     ensure_valid,
 )
-from app.core.org_time import organization_today
+from app.core.org_time import as_instant, organization_today
 from app.core.query import commit_and_refresh
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import (
     create_scoped,
     get_scoped_or_404,
+    reference_error,
     resolve_reference,
     scoped_select,
 )
-from app.models import Customer, Item, Organization, Role
+from app.models import Customer, Item, Organization, OrganizationUser, Role, User
 from app.modules.sales.models import Transaction, TransactionLine, TransactionStatus
 from app.modules.sales.pricing import (
     AmountTooLarge,
@@ -38,6 +39,7 @@ from app.modules.sales.pricing import (
     discounted_unit_price,
 )
 from app.modules.sales.schemas import (
+    ServiceRecord,
     AssignCurrency,
     AssignCurrencyResult,
     CurrencyStatus,
@@ -139,8 +141,50 @@ def _read_one(db: Session, ctx: TenantContext, transaction_id: uuid.UUID) -> Tra
     lines = _lines_by_transaction(db, ctx, [tx.id])[tx.id]
     return TransactionRead(
         **_summary_fields(tx, customer, lines),
-        lines=[LineRead.model_validate(line) for line in lines],
+        lines=_line_reads(db, ctx, lines),
     )
+
+
+def _line_reads(db: Session, ctx: TenantContext, lines: list[TransactionLine]) -> list[LineRead]:
+    """Lines as read, with the live label of each service's subject and the name of who performed it."""
+    pairs = {(line.subject_type, line.subject_id) for line in lines if line.subject_type is not None}
+    labels = subjects.subject_labels(db, ctx.organization_id, pairs)
+    performers = {line.performed_by for line in lines if line.performed_by is not None}
+    names = dict(db.execute(select(User.id, User.name).where(User.id.in_(performers))).all()) if performers else {}
+    return [
+        LineRead.model_validate(line).model_copy(
+            update={
+                "subject_label": labels.get((line.subject_type, line.subject_id)) if line.subject_type else None,
+                "performed_by_name": names.get(line.performed_by),
+            }
+        )
+        for line in lines
+    ]
+
+
+def _service_values(
+    db: Session, ctx: TenantContext, path: tuple[str | int, ...], *, performed_at, performed_by_user_id, subject: tuple[str, uuid.UUID] | None
+) -> dict:
+    """Validate the service details that are being set (each one only when given) and return them as columns."""
+    values: dict = {}
+    if subject is not None:
+        subjects.resolve_subject(db, ctx, subject[0], subject[1], field="subject_id")
+        values.update(subject_type=subject[0], subject_id=subject[1])
+    if performed_by_user_id is not None:
+        member = db.scalar(
+            select(OrganizationUser.id).where(OrganizationUser.organization_id == ctx.organization_id, OrganizationUser.user_id == performed_by_user_id)
+        )
+        if member is None:
+            reference_error((*path, "performed_by_user_id"), "Choose a member of this organization", "reference.not_found")
+        values["performed_by"] = performed_by_user_id
+    if performed_at is not None:
+        values["performed_at"] = as_instant(db, ctx.organization_id, performed_at)
+    return values
+
+
+def _require_service_item(item: Item, path: tuple[str | int, ...]) -> None:
+    if item.type != "service":
+        reference_error((*path, "item_id"), "Choose a service from the catalog", "service.not_a_service")
 
 
 # --- rules shared by the mutating endpoints ------------------------------------------------
@@ -220,7 +264,20 @@ def _new_line_values(
         pricing_values = {**NO_DISCOUNTS, "unit_price_ex_vat": line.unit_price_ex_vat}
     vat_rate = pick(line.vat_rate, item.vat_rate if item else None)
     amounts = _calculate(line.quantity, pricing_values["unit_price_ex_vat"], vat_rate, path)
+    service: dict = {"kind": "standard"}
+    if line.kind == "service":
+        _require_service_item(item, path)
+        service = {
+            "kind": "service",
+            "performed_at": clock.utcnow(),  # now, unless the request says when
+            **_service_values(
+                db, ctx, path, performed_at=line.performed_at, performed_by_user_id=line.performed_by_user_id,
+                subject=(line.subject_type, line.subject_id),
+            ),
+        }
     return dict(
+        **service,
+        notes=line.notes,
         item_id=line.item_id,
         description=description,
         unit=unit,
@@ -356,6 +413,41 @@ def assign_currency(
     ).rowcount
     db.commit()
     return AssignCurrencyResult(currency=currency, assigned=assigned)
+
+
+@router.get("/services", response_model=list[ServiceRecord])
+def list_services(
+    subject_type: str | None = Query(default=None, max_length=64),
+    subject_id: uuid.UUID | None = None,
+    billing_customer_id: uuid.UUID | None = None,
+    page: Pagination = Depends(pagination),
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: Session = Depends(get_db),
+) -> list[ServiceRecord]:
+    """Services performed, newest first: for one subject (a horse, a person...) and/or billed to one customer.
+    Records of another organization simply never match."""
+    if (subject_type is None) != (subject_id is None):
+        reference_error(("query", "subject_id"), "subject_type and subject_id go together", "value_error")
+    query = (
+        select(TransactionLine, Transaction)
+        .join(Transaction, and_(Transaction.organization_id == TransactionLine.organization_id, Transaction.id == TransactionLine.transaction_id))
+        .where(TransactionLine.organization_id == ctx.organization_id, TransactionLine.kind == "service", Transaction.status != CANCELLED)
+    )
+    if subject_type is not None:
+        query = query.where(TransactionLine.subject_type == subject_type, TransactionLine.subject_id == subject_id)
+    if billing_customer_id is not None:
+        query = query.where(Transaction.billing_customer_id == billing_customer_id)
+    rows = db.execute(query.order_by(TransactionLine.performed_at.desc(), TransactionLine.id).limit(page.limit).offset(page.offset)).all()
+    reads = {read.id: read for read in _line_reads(db, ctx, [line for line, _ in rows])}
+    return [
+        ServiceRecord(
+            transaction_id=tx.id, transaction_date=tx.transaction_date, status=tx.status, currency=tx.currency, line_id=line.id,
+            description=line.description, quantity=line.quantity, gross_amount=line.gross_amount, performed_at=line.performed_at,
+            performed_by_name=reads[line.id].performed_by_name, subject_type=line.subject_type, subject_id=line.subject_id,
+            subject_label=reads[line.id].subject_label, notes=line.notes,
+        )
+        for line, tx in rows
+    ]
 
 
 @router.get("/{transaction_id}", response_model=TransactionRead)
@@ -547,7 +639,7 @@ def add_line(
     payload: LineCreate,
     ctx: TenantContext = Depends(record_writer),
     db: Session = Depends(get_db),
-) -> TransactionLine:
+) -> LineRead:
     tx = _lock(db, ctx, transaction_id)
     _require_draft(tx)
     values = _new_line_values(db, ctx, payload, customer_id=tx.billing_customer_id, on_date=tx.transaction_date)
@@ -564,7 +656,7 @@ def add_line(
     audit.created(db, ctx, line, "transaction_line", context=("transaction", tx.id))
     audit.stamp(tx, ctx)
     commit_and_refresh(db, line)
-    return line
+    return _line_reads(db, ctx, [line])[0]
 
 
 @router.patch("/{transaction_id}/lines/{line_id}", response_model=LineRead)
@@ -575,18 +667,36 @@ def update_line(
     if_match: str | None = Header(default=None),
     ctx: TenantContext = Depends(record_writer),
     db: Session = Depends(get_db),
-) -> TransactionLine:
+) -> LineRead:
     tx = _lock(db, ctx, transaction_id)
     _require_draft(tx)
     line = _get_line(db, ctx, tx, line_id)
     ensure_current(if_match, line.version, "transaction_line", line.id)
     values = payload.model_dump(exclude_unset=True)
 
+    service_keys = {"performed_at", "performed_by_user_id", "subject_type", "subject_id"}
+    if service_keys & values.keys():
+        if line.kind != "service":
+            reference_error(("performed_at",), "Only a service line has service details", "service.not_a_service_line")
+        subject = (values.pop("subject_type"), values.pop("subject_id")) if "subject_type" in values else None
+        if subject == (line.subject_type, line.subject_id):
+            subject = None  # unchanged: an existing subject stays valid even if it was deactivated since
+        performer = values.pop("performed_by_user_id", None)
+        if "performed_by_user_id" in payload.model_fields_set and performer is None:
+            values["performed_by"] = None  # cleared
+        values.update(
+            _service_values(db, ctx, (), performed_at=values.pop("performed_at", None), performed_by_user_id=performer, subject=subject)
+        )
+    if line.kind == "service" and "item_id" in values:
+        if values["item_id"] is None:
+            reference_error(("item_id",), "A service line keeps its catalog service", "service.needs_item")
     if "unit_price_ex_vat" in values:
         values.update(NO_DISCOUNTS)  # a price typed by a person replaces the catalog's price and its discounts
     if values.get("item_id") is not None and values["item_id"] != line.item_id:
         # A different item: copy its values for everything not overridden in this request.
         item = resolve_reference(db, ctx, Item, values["item_id"], "item_id")
+        if line.kind == "service":
+            _require_service_item(item, ())
         values.setdefault("description", item.name)
         values.setdefault("unit", item.unit)
         values.setdefault("vat_rate", item.vat_rate)
@@ -604,7 +714,7 @@ def update_line(
         tx.version += 1
         audit.stamp(tx, ctx)
     audit.apply_audited_update(db, ctx, line, "transaction_line", values, context=("transaction", tx.id))
-    return line
+    return _line_reads(db, ctx, [line])[0]
 
 
 @router.delete("/{transaction_id}/lines/{line_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -502,3 +502,43 @@ describe("deleting a line", () => {
     await waitFor(() => expect(screen.getAllByTestId("line-row")).toHaveLength(1));
   });
 });
+
+describe("the kinds of line", () => {
+  it("are offered in this order: catalog item, service, ad-hoc", async () => {
+    render(<Harness initial={tx()} />);
+    await userEvent.click(screen.getByTestId("add-line"));
+    const kinds = within(screen.getByRole("group", { name: "Kind of line" })).getAllByRole("radio").map((radio) => radio.parentElement?.textContent?.trim());
+    expect(kinds).toEqual(["Catalog item", "Service", "Ad-hoc line"]);
+  });
+
+  it("a service asks for the service, for whom, by whom, when and notes, and sends nothing without them", async () => {
+    installBackend((call) => (call.path === "/members/people" ? ok([{ user_id: "u1", name: "Tina Therapist" }]) : ok(line())));
+    render(<Harness initial={tx()} />);
+    await userEvent.click(screen.getByTestId("add-line"));
+    await userEvent.click(screen.getByLabelText("Service"));
+    expect(screen.getByTestId("service-fields")).toBeInTheDocument();
+    expect(screen.getByLabelText("Performed for")).toHaveValue("horse");
+    expect(screen.getByLabelText(/Performed at/)).toBeInTheDocument();
+    expect(await within(screen.getByLabelText("Performed by")).findByRole("option", { name: "Tina Therapist" })).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText("Quantity"), "1");
+    await userEvent.click(screen.getByTestId("submit-line"));
+    expect(writes()).toEqual([]);
+    expect(screen.getByText("Choose a service.")).toBeInTheDocument();
+    expect(screen.getByText("Choose who or what the service was for.")).toBeInTheDocument();
+  });
+
+  it("a stored service line shows for whom, when (in the organization's zone), by whom and the notes", () => {
+    const service = line({
+      kind: "service",
+      performed_at: "2026-10-03T12:00:00Z",
+      subject_type: "horse",
+      subject_id: "h1",
+      subject_label: "Kalle",
+      performed_by_name: "Tina Therapist",
+      notes: "Stiff left shoulder",
+    });
+    render(<Harness initial={tx({ lines: [service] })} timeZone="Europe/Stockholm" />);
+    expect(screen.getByTestId("service-summary")).toHaveTextContent("Service for Kalle · 2026-10-03 14:00 · by Tina Therapist");
+    expect(screen.getByTestId("service-notes")).toHaveTextContent("Stiff left shoulder");
+  });
+});

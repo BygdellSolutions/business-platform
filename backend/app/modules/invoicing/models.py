@@ -199,6 +199,7 @@ class InvoiceLine(TenantOwned, Base):
         CheckConstraint("vat_amount = round(net_amount * vat_rate / 100, 2)", name="ck_invoice_lines_vat_amount"),
         CheckConstraint("gross_amount = net_amount + vat_amount", name="ck_invoice_lines_gross_amount"),
         CheckConstraint("jsonb_typeof(fields) = 'array'", name="ck_invoice_lines_fields_array"),
+        CheckConstraint("service IS NULL OR jsonb_typeof(service) = 'object'", name="ck_invoice_lines_service_object"),
         *discount_constraints("invoice_lines"),
     )
 
@@ -220,6 +221,8 @@ class InvoiceLine(TenantOwned, Base):
     vat_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     gross_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     fields: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list, server_default=text("'[]'::jsonb"))
+    # For a service line: when, by whom and for whom, as shown at invoicing (a snapshot, never resolved again).
+    service: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))  # None is SQL NULL, not JSON null
 
 
 class InvoiceVatRow(TenantOwned, Base):

@@ -60,6 +60,7 @@ export default async function TransactionPage({
         key={transaction.id}
         transaction={transaction}
         canEdit={canWriteRecords(role)}
+        timeZone={organization.timezone}
         fields={{
           transaction: { definitions: transactionFields.definitions, values: transactionFields.values[transaction.id] ?? [] },
           line: { definitions: lineFields.definitions, values: lineFields.values },

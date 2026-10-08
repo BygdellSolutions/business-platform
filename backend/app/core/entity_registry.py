@@ -84,6 +84,9 @@ class EntityType:
     reference: ReferenceSpec | None = None
     parent: ParentSpec | None = None
     is_editable: IsEditable | None = None
+    # A service can be performed FOR a record of this type (a person, an animal, a vehicle...). Needs `reference`
+    # (the label shown on lines and invoices comes from it).
+    service_subject: bool = False
 
 
 class Registry:
@@ -112,6 +115,8 @@ class Registry:
                 raise RegistryError(f"{entity.key}: a reference needs at least one search column")
         if entity.parent is not None:
             self._require_columns(entity, [entity.parent.column])
+        if entity.service_subject and entity.reference is None:
+            raise RegistryError(f"{entity.key}: a service subject must be referenceable")
         self._entities[entity.key] = entity
 
     @staticmethod
@@ -139,6 +144,9 @@ class Registry:
 
     def all(self) -> list[EntityType]:
         return list(self._entities.values())
+
+    def service_subjects(self) -> list[EntityType]:
+        return [e for e in self._entities.values() if e.service_subject]
 
     def custom_field_types(self) -> list[EntityType]:
         return [e for e in self._entities.values() if e.custom_fields]

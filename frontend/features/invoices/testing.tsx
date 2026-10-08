@@ -59,6 +59,7 @@ export function line(overrides: Partial<InvoiceLine> = {}): InvoiceLine {
     net_amount: money("850.00"),
     vat_amount: money("212.50"),
     gross_amount: money("1062.50"),
+    service: null,
     fields: [],
     ...overrides,
   };
