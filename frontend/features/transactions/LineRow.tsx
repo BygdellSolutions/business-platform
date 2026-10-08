@@ -14,7 +14,7 @@ import { classify } from "@/features/transactions/failures";
 import { LineEditor } from "@/features/transactions/LineEditor";
 import { LineFields } from "@/features/transactions/LineFields";
 import { apiFetch } from "@/lib/api/client";
-import type { TransactionLine } from "@/lib/api/types";
+import type { LineFulfillment, TransactionLine } from "@/lib/api/types";
 import { formatTimestamp } from "@/lib/timestamps";
 
 /**
@@ -22,9 +22,18 @@ import { formatTimestamp } from "@/lib/timestamps";
  * snapshot taken when it was added or last edited) and the amounts FastAPI calculated. Nothing
  * here looks up the catalog item; `item_id` is only a link.
  */
+const FULFILLMENT_STATES: Record<LineFulfillment["state"], string> = {
+  waiting_for_stock: "waiting for stock",
+  partially_fulfilled: "partially fulfilled",
+  ready_to_fulfill: "ready to fulfill",
+  fulfilled: "fulfilled",
+  cancelled: "cancelled",
+};
+
 export function LineRow({ line, ordinal }: { line: TransactionLine; ordinal: number }) {
   const orgId = useOrgId();
-  const { transaction, timeZone, stock, readOnly, busy, mutate, report } = useEditor();
+  const { transaction, timeZone, stock, fulfillment, readOnly, busy, mutate, report } = useEditor();
+  const fulfilled = transaction.status === "completed" ? fulfillment.find((entry) => entry.transaction_line_id === line.id) : undefined;
   const demand = line.item_id && transaction.status === "draft" ? stock.find((entry) => entry.item_id === line.item_id) : undefined;
   const shortage = demand && demand.shortage !== "0.000" ? demand : undefined;
   const [editing, setEditing] = useState(false);
@@ -66,6 +75,18 @@ export function LineRow({ line, ordinal }: { line: TransactionLine; ordinal: num
         {line.description}
         {line.kind === "service" && line.performed_at && (
           <ServiceSummary subject={line.subject_label} when={formatTimestamp(line.performed_at, timeZone)} by={line.performed_by_name} notes={line.notes} />
+        )}
+        {fulfilled && (
+          <span className="block text-xs text-zinc-600 dark:text-zinc-400" data-testid="line-fulfillment">
+            Delivered {fulfilled.delivered}
+            {fulfilled.backordered !== "0.000" && (
+              <>
+                {" "}
+                · Backordered {fulfilled.backordered} ({FULFILLMENT_STATES[fulfilled.state]}
+                {fulfilled.fulfilled_later !== "0.000" ? `, ${fulfilled.fulfilled_later} delivered since` : ""})
+              </>
+            )}
+          </span>
         )}
         {shortage && (
           <span className="block text-xs text-amber-800 dark:text-amber-300" data-testid="stock-warning">

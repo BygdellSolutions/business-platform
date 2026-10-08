@@ -6,7 +6,7 @@ import type { TransactionFields } from "@/features/transactions/editor-context";
 import { TransactionEditor } from "@/features/transactions/TransactionEditor";
 import { apiFetch } from "@/lib/api/client";
 import { normalizeError, type ApiResult } from "@/lib/api/errors";
-import type { Customer, Item, StockDemand, Transaction, TransactionLine } from "@/lib/api/types";
+import type { Customer, Item, LineFulfillment, StockDemand, Transaction, TransactionLine } from "@/lib/api/types";
 import type { MoneyString, PercentString, QuantityString } from "@/lib/decimal";
 import { EMPTY_PROFILE } from "@/lib/profile";
 
@@ -175,6 +175,7 @@ export function Harness({
   canEdit = true,
   timeZone = null,
   stock = [],
+  fulfillment = [],
 }: {
   initial: Transaction;
   orgId?: string;
@@ -182,6 +183,7 @@ export function Harness({
   canEdit?: boolean;
   timeZone?: string | null;
   stock?: StockDemand[];
+  fulfillment?: LineFulfillment[];
 }) {
   const [current, setCurrent] = useState(initial);
   useEffect(() => {
@@ -194,7 +196,7 @@ export function Harness({
     <>
       <Gate />
       <OrgScope orgId={orgId}>
-        <TransactionEditor transaction={current} fields={fields} canEdit={canEdit} timeZone={timeZone} stock={stock} />
+        <TransactionEditor transaction={current} fields={fields} canEdit={canEdit} timeZone={timeZone} stock={stock} fulfillment={fulfillment} />
       </OrgScope>
     </>
   );

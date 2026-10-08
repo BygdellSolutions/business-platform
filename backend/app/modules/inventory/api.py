@@ -11,8 +11,15 @@ from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import get_scoped_or_404, reference_error
 from app.models import Item, User
 from app.modules.inventory import service
-from app.modules.inventory.models import MovementReason, StockMovement
-from app.modules.inventory.schemas import ItemAvailability, StockAdjustment, StockMovementRead, StockRead, TransactionDemand
+from app.modules.inventory.models import LineFulfillment, MovementReason, StockMovement
+from app.modules.inventory.schemas import (
+    ItemAvailability,
+    LineFulfillmentRead,
+    StockAdjustment,
+    StockMovementRead,
+    StockRead,
+    TransactionDemand,
+)
 from app.modules.sales.models import Transaction, TransactionLine
 
 router = APIRouter(prefix="/api/items", tags=["inventory"])
@@ -92,6 +99,37 @@ def read_transaction_demand(
             shortage=max(Decimal(0), requested[i] - figures[i][1]),
         )
         for i in sorted(ids)
+    ]
+
+
+@availability_router.get("/transactions/{transaction_id}/fulfillment", response_model=list[LineFulfillmentRead])
+def read_transaction_fulfillment(
+    transaction_id: uuid.UUID, ctx: TenantContext = Depends(get_tenant_context), db: Session = Depends(get_db)
+) -> list[LineFulfillmentRead]:
+    """Per stock-tracking line of a completed transaction: delivered at completion, backordered, fulfilled since."""
+    get_scoped_or_404(db, ctx, Transaction, transaction_id)
+    rows = list(
+        db.scalars(
+            select(LineFulfillment).where(
+                LineFulfillment.organization_id == ctx.organization_id,
+                LineFulfillment.transaction_id == transaction_id,
+                LineFulfillment.cancelled_at.is_(None),
+            )
+        )
+    )
+    stock = service.on_hand(db, ctx.organization_id, [row.item_id for row in rows])
+    return [
+        LineFulfillmentRead(
+            transaction_line_id=row.transaction_line_id,
+            item_id=row.item_id,
+            ordered=row.ordered,
+            delivered=row.delivered,
+            backordered=row.backordered,
+            fulfilled_later=row.fulfilled_later,
+            remaining=row.backordered - row.fulfilled_later,
+            state=service.fulfillment_state(row, stock[row.item_id]),
+        )
+        for row in rows
     ]
 
 

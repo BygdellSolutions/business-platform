@@ -63,6 +63,20 @@ class TransactionDemand(BaseModel):
     shortage: QuantityOut
 
 
+class LineFulfillmentRead(BaseModel):
+    """What completion did with one stock-tracking line (the active record; a cancelled one is history)."""
+
+    transaction_line_id: uuid.UUID
+    item_id: uuid.UUID
+    ordered: QuantityOut
+    delivered: QuantityOut
+    backordered: QuantityOut
+    fulfilled_later: QuantityOut
+    # Backordered units still waiting.
+    remaining: QuantityOut
+    state: Literal["waiting_for_stock", "partially_fulfilled", "ready_to_fulfill", "fulfilled", "cancelled"]
+
+
 class StockRead(BaseModel):
     item_id: uuid.UUID
     track_stock: bool

@@ -1,6 +1,6 @@
 import { expect, test } from "./fixtures";
 
-import { bffUrl, createCustomer, createItem, createTransaction, createWorld, openAddLine, pick, signIn, type World } from "./support";
+import { bffUrl, createCustomer, createItem, createTransaction, createWorld, lifecycle, openAddLine, pick, signIn, type World } from "./support";
 
 /**
  * Inventory I1: a product that tracks stock gets a Stock panel. The first count is the opening stock; every later
@@ -54,4 +54,27 @@ test("a draft that asks for more than is in stock warns, and the line is still a
 
   await expect(page.getByTestId("line-row")).toHaveCount(1);
   await expect(page.getByTestId("stock-warning")).toHaveText("Only 5.000 of 8.000 pcs available; 3.000 will be backordered at completion.");
+});
+
+test("completion delivers what is in stock and backorders the rest; a reopen gives it back", async ({ page, context }) => {
+  world = createWorld({ label: "Fulfillment" });
+  await signIn(context, world.email);
+  const item = await createItem(context, world.orgId, { name: "Hoof oil", type: "product", unit: "pcs", price_ex_vat: "90.00", track_stock: true });
+  expect((await context.request.post(bffUrl(world.orgId, `/items/${item.id}/stock`), { data: { kind: "count", quantity: "5" } })).status()).toBe(201);
+  const customer = await createCustomer(context, world.orgId, "Anna Andersson");
+  const tx = await createTransaction(context, world.orgId, { billing_customer_id: customer.id });
+  expect((await context.request.post(bffUrl(world.orgId, `/transactions/${tx.id}/lines`), { data: { item_id: item.id, quantity: "8" } })).status()).toBe(201);
+  await lifecycle(context, world.orgId, tx.id, "complete");
+
+  await page.goto(`/o/${world.orgId}/transactions/${tx.id}`);
+  await expect(page.getByTestId("line-fulfillment")).toHaveText("Delivered 5.000 · Backordered 3.000 (waiting for stock)");
+  await page.goto(`/o/${world.orgId}/catalog/${item.id}`);
+  await expect(page.getByTestId("on-hand")).toHaveText("0.000");
+  await expect(page.getByTestId("stock-movement").first()).toContainText("Delivered");
+
+  await lifecycle(context, world.orgId, tx.id, "reopen");
+  await page.reload();
+  await expect(page.getByTestId("on-hand")).toHaveText("5.000");
+  await expect(page.getByTestId("stock-movement").first()).toContainText("Returned");
+  await expect(page.getByTestId("stock-movement").first()).toContainText("Transaction reopened");
 });

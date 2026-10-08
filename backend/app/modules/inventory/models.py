@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.base import Base
+from app.models.mixins import TenantOwned
 
 
 class MovementReason(StrEnum):
@@ -59,3 +60,53 @@ class StockMovement(Base):
     transaction_line_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class LineFulfillment(TenantOwned, Base):
+    """What became of one stock-tracking line when its transaction was completed.
+
+    `ordered` = `delivered` (handed over at completion, a delivery movement) + `backordered` (the shortage, waiting
+    for stock). `fulfilled_later` grows as backordered units are delivered afterwards (I5); the backorder is open
+    while it is below `backordered`. A reopen or a cancel never deletes the row: it is CANCELLED (when, by whom,
+    why) after everything delivered for it has come back through return movements, and a later completion writes a
+    new row. Only one row per line is active (not cancelled) at a time.
+
+    Open backorders are units already promised: "available" stock is on hand minus what they still wait for.
+    """
+
+    __tablename__ = "line_fulfillments"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "item_id"], ["items.organization_id", "items.id"], ondelete="RESTRICT", name="fk_line_fulfillments_item"
+        ),
+        CheckConstraint("ordered > 0 AND delivered >= 0 AND backordered >= 0", name="ck_line_fulfillments_quantities"),
+        CheckConstraint("ordered = delivered + backordered", name="ck_line_fulfillments_split"),
+        CheckConstraint("fulfilled_later >= 0 AND fulfilled_later <= backordered", name="ck_line_fulfillments_fulfilled_later"),
+        CheckConstraint(
+            "(cancelled_at IS NULL AND cancel_reason IS NULL) OR (cancelled_at IS NOT NULL AND cancel_reason IN ('reopen', 'cancel'))",
+            name="ck_line_fulfillments_cancellation",
+        ),
+        Index(
+            "uq_line_fulfillments_active_line", "organization_id", "transaction_line_id", unique=True, postgresql_where=text("cancelled_at IS NULL")
+        ),
+        Index("ix_line_fulfillments_transaction", "organization_id", "transaction_id"),
+        Index(
+            "ix_line_fulfillments_open_item",
+            "organization_id",
+            "item_id",
+            "created_at",
+            postgresql_where=text("cancelled_at IS NULL AND fulfilled_later < backordered"),
+        ),
+    )
+
+    transaction_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    transaction_line_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    ordered: Mapped[Decimal] = mapped_column(Numeric(12, 3))
+    delivered: Mapped[Decimal] = mapped_column(Numeric(12, 3))
+    backordered: Mapped[Decimal] = mapped_column(Numeric(12, 3))
+    fulfilled_later: Mapped[Decimal] = mapped_column(Numeric(12, 3), default=Decimal("0"), server_default=text("0"))
+    created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelled_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
+    cancel_reason: Mapped[str | None] = mapped_column(String(16))

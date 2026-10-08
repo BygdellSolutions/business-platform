@@ -565,3 +565,16 @@ describe("stock on a draft (a warning, never a refusal)", () => {
     expect(screen.queryByTestId("stock-warning")).toBeNull();
   });
 });
+
+describe("stock on a completed transaction", () => {
+  it("shows what was delivered and what is backordered, with the backorder's state", () => {
+    const fulfillment = [
+      { transaction_line_id: "l1", item_id: "i1", ordered: "4.000", delivered: "1.000", backordered: "3.000", fulfilled_later: "0.000", remaining: "3.000", state: "waiting_for_stock" as const },
+      { transaction_line_id: "l2", item_id: "i1", ordered: "2.000", delivered: "2.000", backordered: "0.000", fulfilled_later: "0.000", remaining: "0.000", state: "fulfilled" as const },
+    ].map((entry) => ({ ...entry, ordered: entry.ordered as QuantityString, delivered: entry.delivered as QuantityString, backordered: entry.backordered as QuantityString, fulfilled_later: entry.fulfilled_later as QuantityString, remaining: entry.remaining as QuantityString }));
+    render(<Harness initial={tx({ status: "completed", lines: [line({ id: "l1", item_id: "i1" }), line({ id: "l2", item_id: "i1", position: 2 })] })} fulfillment={fulfillment} />);
+
+    const shown = screen.getAllByTestId("line-fulfillment").map((element) => element.textContent);
+    expect(shown).toEqual(["Delivered 1.000 · Backordered 3.000 (waiting for stock)", "Delivered 2.000"]);
+  });
+});

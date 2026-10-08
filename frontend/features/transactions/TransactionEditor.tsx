@@ -14,7 +14,7 @@ import { LinesTable } from "@/features/transactions/LinesTable";
 import { TotalsPanel } from "@/features/transactions/TotalsPanel";
 import { TransactionStatusBadge } from "@/features/transactions/TransactionStatusBadge";
 import type { ApiResult, Problem } from "@/lib/api/errors";
-import type { StockDemand, Transaction } from "@/lib/api/types";
+import type { LineFulfillment, StockDemand, Transaction } from "@/lib/api/types";
 
 /**
  * The transaction page's interactive part.
@@ -37,6 +37,7 @@ import type { StockDemand, Transaction } from "@/lib/api/types";
  * read-only, without lifecycle or add-line controls. Presentation only; FastAPI refuses the writes.
  */
 const NO_STOCK: StockDemand[] = [];
+const NO_FULFILLMENT: LineFulfillment[] = [];
 
 export function TransactionEditor({
   transaction,
@@ -44,12 +45,14 @@ export function TransactionEditor({
   canEdit,
   timeZone = null,
   stock = NO_STOCK,
+  fulfillment = NO_FULFILLMENT,
 }: {
   transaction: Transaction;
   fields: Fields;
   canEdit: boolean;
   timeZone?: string | null;
   stock?: StockDemand[];
+  fulfillment?: LineFulfillment[];
 }) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
@@ -167,6 +170,7 @@ export function TransactionEditor({
       transaction,
       timeZone,
       stock,
+      fulfillment,
       readOnly: !canEdit || transaction.status !== "draft",
       busy,
       refreshing,
@@ -180,7 +184,7 @@ export function TransactionEditor({
       refresh,
       registerEditor,
     }),
-    [transaction, timeZone, stock, canEdit, busy, refreshing, editorsOpen, notice, fields, fieldErrors, mutate, report, announce, refresh, registerEditor],
+    [transaction, timeZone, stock, fulfillment, canEdit, busy, refreshing, editorsOpen, notice, fields, fieldErrors, mutate, report, announce, refresh, registerEditor],
   );
 
   return (

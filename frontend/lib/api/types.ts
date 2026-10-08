@@ -208,6 +208,18 @@ export interface StockDemand {
   shortage: QuantityString;
 }
 
+/** What completion did with one stock-tracking line (GET /api/inventory/transactions/{id}/fulfillment). */
+export interface LineFulfillment {
+  transaction_line_id: string;
+  item_id: string;
+  ordered: QuantityString;
+  delivered: QuantityString;
+  backordered: QuantityString;
+  fulfilled_later: QuantityString;
+  remaining: QuantityString;
+  state: "waiting_for_stock" | "partially_fulfilled" | "ready_to_fulfill" | "fulfilled" | "cancelled";
+}
+
 export interface Stock {
   item_id: string;
   track_stock: boolean;

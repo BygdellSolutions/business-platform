@@ -349,6 +349,7 @@ export function createWorld(options: { currency?: string | null; label?: string 
         "transaction_lines",
         "transactions",
         "horses",
+        "line_fulfillments",
         "stock_movements",
         "item_discounts",
         "items",
