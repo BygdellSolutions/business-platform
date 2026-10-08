@@ -23,6 +23,9 @@ test("notes are taken on a horse, edited and deleted, and the history keeps ever
   await notes.getByLabel("New note").fill("Better after massage.");
   await notes.getByTestId("add-note").click();
   await expect(notes.getByTestId("horse-note")).toHaveCount(2);
+  await expect(notes.getByTestId("horse-note").first()).toBeHidden(); // collapsed: the page does not grow
+  await expect(notes.getByLabel("New note")).toBeVisible(); // the new-note box is not part of the toggle
+  await notes.getByTestId("notes-toggle").getByText("Show notes (2)").click();
   await expect(notes.getByTestId("horse-note-body").first()).toHaveText("Better after massage."); // newest first
 
   await notes.getByTestId("edit-note").first().click();

@@ -68,7 +68,10 @@ export function HorseNotes({ horseId, notes, canWrite, timeZone }: { horseId: st
           No notes yet.
         </p>
       ) : (
-        <ul className="flex flex-col gap-2">
+        // Collapsed until asked for, so a long log never pushes the page down; adding a note above stays open.
+        <details data-testid="notes-toggle">
+          <summary className="cursor-pointer select-none text-sm text-zinc-700 underline dark:text-zinc-300">Show notes ({notes.length})</summary>
+        <ul className="mt-2 flex flex-col gap-2">
           {notes.map((note) => (
             <li key={note.id} data-testid="horse-note" className="rounded border border-zinc-200 p-3 dark:border-zinc-800">
               <div className="mb-1 text-xs text-zinc-500">
@@ -107,6 +110,7 @@ export function HorseNotes({ horseId, notes, canWrite, timeZone }: { horseId: st
             </li>
           ))}
         </ul>
+        </details>
       )}
     </section>
   );
