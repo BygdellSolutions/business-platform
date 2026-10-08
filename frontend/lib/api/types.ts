@@ -785,3 +785,16 @@ export interface InventorySummary {
   backordered_items: number;
   incoming_deliveries: number;
 }
+
+/** A note on a horse (GET /api/horses/{id}/notes), newest first. */
+export interface HorseNote {
+  id: string;
+  horse_id: string;
+  body: string;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+  created_by_name: string | null;
+  updated_by_name: string | null;
+}

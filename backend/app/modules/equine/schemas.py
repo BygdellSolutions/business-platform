@@ -76,3 +76,27 @@ class HorseRead(BaseModel):
     # Who created it and who changed it last (null: not recorded, e.g. before authors were kept).
     created_by: uuid.UUID | None
     updated_by: uuid.UUID | None
+
+
+NoteBody = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=5000)]
+
+
+class HorseNoteWrite(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    body: NoteBody
+
+
+class HorseNoteRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    horse_id: uuid.UUID
+    body: str
+    created_at: datetime
+    updated_at: datetime
+    created_by: uuid.UUID | None
+    updated_by: uuid.UUID | None
+    # Names as they are now (null: not recorded).
+    created_by_name: str | None = None
+    updated_by_name: str | None = None

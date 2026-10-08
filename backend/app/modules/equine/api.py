@@ -1,7 +1,7 @@
 import uuid
 
-from fastapi import APIRouter, Depends, Query, Response, status
-from sqlalchemy import and_
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from sqlalchemy import and_, select
 from sqlalchemy.orm import Session, aliased
 
 from app.api.deps import Pagination, pagination
@@ -16,9 +16,9 @@ from app.core.tenant_scope import (
     resolve_reference,
     scoped_select,
 )
-from app.models import Customer
-from app.modules.equine.models import Horse
-from app.modules.equine.schemas import HorseCreate, HorseRead, HorseUpdate
+from app.models import Customer, User
+from app.modules.equine.models import Horse, HorseNote
+from app.modules.equine.schemas import HorseCreate, HorseNoteRead, HorseNoteWrite, HorseRead, HorseUpdate
 from app.schemas.customer import CustomerRef
 
 router = APIRouter(prefix="/api/horses", tags=["horses"])
@@ -153,4 +153,66 @@ def delete_horse(
 ) -> Response:
     horse = get_scoped_or_404(db, ctx, Horse, horse_id)
     delete_or_409(db, horse, "Horse is referenced by other records", after_delete=audit.deletion(db, ctx, horse, "horse"))
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+
+# --- notes: any member reads them, record writers add, change and delete them ------------------------------------
+
+NOTES_SHOWN = 500
+
+
+def _note_reads(db: Session, notes: list[HorseNote]) -> list[HorseNoteRead]:
+    people = {note.created_by for note in notes} | {note.updated_by for note in notes}
+    people.discard(None)
+    names = dict(db.execute(select(User.id, User.name).where(User.id.in_(people))).all()) if people else {}
+    return [
+        HorseNoteRead.model_validate(note).model_copy(update={"created_by_name": names.get(note.created_by), "updated_by_name": names.get(note.updated_by)})
+        for note in notes
+    ]
+
+
+def _note_or_404(db: Session, ctx: TenantContext, horse_id: uuid.UUID, note_id: uuid.UUID) -> HorseNote:
+    note = db.scalar(scoped_select(HorseNote, ctx).where(HorseNote.horse_id == horse_id, HorseNote.id == note_id))
+    if note is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Not found")
+    return note
+
+
+@router.get("/{horse_id}/notes", response_model=list[HorseNoteRead])
+def list_horse_notes(horse_id: uuid.UUID, ctx: TenantContext = Depends(get_tenant_context), db: Session = Depends(get_db)) -> list[HorseNoteRead]:
+    """The horse's notes, newest first."""
+    get_scoped_or_404(db, ctx, Horse, horse_id)
+    notes = list(
+        db.scalars(scoped_select(HorseNote, ctx).where(HorseNote.horse_id == horse_id).order_by(HorseNote.created_at.desc(), HorseNote.id).limit(NOTES_SHOWN))
+    )
+    return _note_reads(db, notes)
+
+
+@router.post("/{horse_id}/notes", response_model=HorseNoteRead, status_code=status.HTTP_201_CREATED)
+def add_horse_note(
+    horse_id: uuid.UUID, payload: HorseNoteWrite, ctx: TenantContext = Depends(record_writer), db: Session = Depends(get_db)
+) -> HorseNoteRead:
+    get_scoped_or_404(db, ctx, Horse, horse_id)
+    note = create_scoped(db, ctx, HorseNote, horse_id=horse_id, body=payload.body)
+    audit.created(db, ctx, note, "horse_note", context=("horse", horse_id))
+    commit_and_refresh(db, note)
+    return _note_reads(db, [note])[0]
+
+
+@router.patch("/{horse_id}/notes/{note_id}", response_model=HorseNoteRead)
+def update_horse_note(
+    horse_id: uuid.UUID, note_id: uuid.UUID, payload: HorseNoteWrite, ctx: TenantContext = Depends(record_writer), db: Session = Depends(get_db)
+) -> HorseNoteRead:
+    note = _note_or_404(db, ctx, horse_id, note_id)
+    audit.apply_audited_update(db, ctx, note, "horse_note", {"body": payload.body}, context=("horse", horse_id))
+    return _note_reads(db, [note])[0]
+
+
+@router.delete("/{horse_id}/notes/{note_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_horse_note(horse_id: uuid.UUID, note_id: uuid.UUID, ctx: TenantContext = Depends(record_writer), db: Session = Depends(get_db)) -> Response:
+    note = _note_or_404(db, ctx, horse_id, note_id)
+    audit.deleted(db, ctx, note, "horse_note", context=("horse", horse_id))
+    db.delete(note)
+    db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
