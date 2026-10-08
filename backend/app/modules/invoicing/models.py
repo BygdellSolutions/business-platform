@@ -217,6 +217,7 @@ class InvoiceLine(TenantOwned, Base):
     list_unit_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     catalog_discount_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
     customer_discount_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    line_discount_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
     vat_rate: Mapped[Decimal] = mapped_column(Numeric(5, 2))
     net_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     vat_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))

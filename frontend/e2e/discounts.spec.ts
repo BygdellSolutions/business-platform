@@ -1,6 +1,6 @@
 import { expect, test } from "./fixtures";
 
-import { addLine, bffUrl, createCustomer, createItem, createTransaction, createWorld, signIn, type World } from "./support";
+import { addLine, bffUrl, createCustomer, createItem, createTransaction, createWorld, openAddLine, signIn, type World } from "./support";
 
 /**
  * Discounts as a person meets them: a campaign on an item, a customer's permanent discount, and a transaction line
@@ -50,4 +50,25 @@ test("an employee sees a customer's discount but cannot change it", async ({ pag
   await expect(page.getByLabel("Default discount %")).toHaveCount(0);
   const forged = await context.request.patch(bffUrl(world.orgId, `/customers/${customer.id}`), { data: { default_discount_percent: "50" } });
   expect(forged.status()).toBe(403);
+});
+
+test("a discount typed on an ad-hoc line applies to that line only and shows as a step", async ({ page, context }) => {
+  world = createWorld({ label: "LineDiscount" });
+  await signIn(context, world.email);
+  const customer = await createCustomer(context, world.orgId, "Anna Andersson");
+  const tx = await createTransaction(context, world.orgId, { billing_customer_id: customer.id });
+
+  await page.goto(`/o/${world.orgId}/transactions/${tx.id}`);
+  await openAddLine(page);
+  await page.getByLabel("Ad-hoc line").check();
+  await page.getByLabel("Description").fill("Special treatment");
+  await page.getByLabel("Unit", { exact: true }).fill("st");
+  await page.getByLabel("Quantity").fill("1");
+  await page.getByLabel("Unit price excluding VAT").fill("500");
+  await page.getByLabel("VAT rate (%)").fill("25");
+  await page.getByLabel("Discount % (optional)").fill("20");
+  await page.getByTestId("submit-line").click();
+
+  await expect(page.getByTestId("line-price")).toContainText("400.00");
+  await expect(page.getByTestId("discount-steps")).toHaveText("List 500.00 · −20.00% discount");
 });

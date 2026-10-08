@@ -17,7 +17,7 @@ import type { Colleague, ItemAvailability, LineCreate, TransactionLine } from "@
 import { parseMoney, parsePercent, parseQuantity, trimQuantity } from "@/lib/decimal";
 import { NOT_A_DECIMAL, NO_PROBLEMS, problemsFrom, type Problems } from "@/lib/forms";
 
-const CONTROLS = ["item_id", "description", "unit", "quantity", "unit_price_ex_vat", "vat_rate", "subject_id", "performed_by_user_id", "performed_at", "notes"] as const;
+const CONTROLS = ["item_id", "description", "unit", "quantity", "unit_price_ex_vat", "vat_rate", "subject_id", "performed_by_user_id", "performed_at", "notes", "line_discount_percent"] as const;
 
 type Mode = "item" | "service" | "adhoc";
 
@@ -54,7 +54,7 @@ function AddLinePanel({ onClose }: { onClose: () => void }) {
   const { transaction, busy, mutate, report } = useEditor();
   const [mode, setMode] = useState<Mode>("item");
   const [item, setItem] = useState<PickerEntity | null>(null);
-  const [fields, setFields] = useState({ quantity: "", description: "", unit: "", unit_price_ex_vat: "", vat_rate: "" });
+  const [fields, setFields] = useState({ quantity: "", description: "", unit: "", unit_price_ex_vat: "", vat_rate: "", line_discount_percent: "" });
   const [local, setLocal] = useState<FieldErrors>({});
   const [problems, setProblems] = useState<Problems>(NO_PROBLEMS);
   const [saving, setSaving] = useState(false);
@@ -92,6 +92,11 @@ function AddLinePanel({ onClose }: { onClose: () => void }) {
     const errors: FieldErrors = {};
     const quantity = parseQuantity(fields.quantity.trim());
     if (quantity === null) errors.quantity = [NOT_A_DECIMAL];
+    // The line's own discount, optional in every mode: empty means none.
+    const discountText = fields.line_discount_percent.trim();
+    const discount = discountText === "" ? null : parsePercent(discountText);
+    if (discountText !== "" && discount === null) errors.line_discount_percent = [NOT_A_DECIMAL];
+    const withDiscount = discount === null ? {} : { line_discount_percent: discount };
 
     if (mode === "service") {
       if (item === null) errors.item_id = ["Choose a service."];
@@ -107,6 +112,7 @@ function AddLinePanel({ onClose }: { onClose: () => void }) {
           ...(service.performed_at !== "" ? { performed_at: service.performed_at } : {}),
           performed_by_user_id: service.performed_by_user_id === "" ? null : service.performed_by_user_id,
           notes: service.notes.trim() === "" ? null : service.notes,
+          ...withDiscount,
         },
       };
     }
@@ -114,7 +120,7 @@ function AddLinePanel({ onClose }: { onClose: () => void }) {
     if (mode === "item") {
       if (item === null) errors.item_id = ["Choose an item."];
       if (Object.keys(errors).length > 0 || quantity === null || item === null) return { errors };
-      return { body: { item_id: item.id, quantity } }; // nothing else: FastAPI takes the rest from the item
+      return { body: { item_id: item.id, quantity, ...withDiscount } }; // nothing else: FastAPI takes the rest from the item
     }
 
     const price = parseMoney(fields.unit_price_ex_vat.trim());
@@ -122,7 +128,7 @@ function AddLinePanel({ onClose }: { onClose: () => void }) {
     if (price === null) errors.unit_price_ex_vat = [NOT_A_DECIMAL];
     if (vat === null) errors.vat_rate = [NOT_A_DECIMAL];
     if (Object.keys(errors).length > 0 || quantity === null || price === null || vat === null) return { errors };
-    return { body: { description: fields.description, unit: fields.unit, quantity, unit_price_ex_vat: price, vat_rate: vat } };
+    return { body: { description: fields.description, unit: fields.unit, quantity, unit_price_ex_vat: price, vat_rate: vat, ...withDiscount } };
   }
 
   async function submit() {
@@ -226,6 +232,7 @@ function AddLinePanel({ onClose }: { onClose: () => void }) {
             />
           </label>
           <DecimalField label="Quantity" name="quantity" value={fields.quantity} onChange={set("quantity")} error={errorsFor("quantity")} />
+          <DecimalField label="Discount % (optional)" name="line_discount_percent" value={fields.line_discount_percent} onChange={set("line_discount_percent")} error={errorsFor("line_discount_percent")} hint="On this line only, after any campaign and customer discount." />
           <TextField label="Notes" name="notes" value={service.notes} onChange={(value) => setService((current) => ({ ...current, notes: value }))} error={errorsFor("notes")} autoComplete="off" />
         </div>
       ) : mode === "item" ? (
@@ -238,6 +245,7 @@ function AddLinePanel({ onClose }: { onClose: () => void }) {
             </p>
           )}
           <DecimalField label="Quantity" name="quantity" value={fields.quantity} onChange={set("quantity")} error={errorsFor("quantity")} />
+          <DecimalField label="Discount % (optional)" name="line_discount_percent" value={fields.line_discount_percent} onChange={set("line_discount_percent")} error={errorsFor("line_discount_percent")} hint="On this line only, after any campaign and customer discount." />
         </>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
@@ -246,6 +254,7 @@ function AddLinePanel({ onClose }: { onClose: () => void }) {
           <DecimalField label="Quantity" name="quantity" value={fields.quantity} onChange={set("quantity")} error={errorsFor("quantity")} />
           <DecimalField label="Unit price excluding VAT" name="unit_price_ex_vat" value={fields.unit_price_ex_vat} onChange={set("unit_price_ex_vat")} error={errorsFor("unit_price_ex_vat")} />
           <DecimalField label="VAT rate (%)" name="vat_rate" value={fields.vat_rate} onChange={set("vat_rate")} error={errorsFor("vat_rate")} />
+          <DecimalField label="Discount % (optional)" name="line_discount_percent" value={fields.line_discount_percent} onChange={set("line_discount_percent")} error={errorsFor("line_discount_percent")} hint="On this line only, after any campaign and customer discount." />
         </div>
       )}
 

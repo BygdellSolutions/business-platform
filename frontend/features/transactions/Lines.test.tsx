@@ -24,7 +24,7 @@ import {
   tx,
   writes,
 } from "@/features/transactions/testing";
-import type { MoneyString, QuantityString } from "@/lib/decimal";
+import type { MoneyString, PercentString, QuantityString } from "@/lib/decimal";
 
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
 vi.mock("@/lib/api/client", () => ({ apiFetch: vi.fn() }));
@@ -578,5 +578,47 @@ describe("stock on a completed transaction", () => {
 
     const shown = screen.getAllByTestId("line-fulfillment").map((element) => element.textContent);
     expect(shown).toEqual(["Delivered 1 · Backordered 3 (waiting for stock)", "Delivered 2"]);
+  });
+});
+
+describe("a discount on the line", () => {
+  it("is sent with a catalog line and with an ad-hoc line, and left out when empty", async () => {
+    installBackend(() => ok(line()));
+    render(<Harness initial={tx()} />);
+    await openAdd();
+    await chooseItem(/Saddle fitting/);
+    await userEvent.type(screen.getByLabelText("Quantity"), "1");
+    await userEvent.type(screen.getByLabelText("Discount % (optional)"), "10");
+    await userEvent.click(screen.getByTestId("submit-line"));
+    await waitFor(() => expect(writes()).toHaveLength(1));
+    expect(writes()[0].body).toEqual({ item_id: SADDLE, quantity: "1", line_discount_percent: "10" });
+  });
+
+  it("is offered in all three kinds of line", async () => {
+    installBackend((call) => (call.path === "/members/people" ? ok([]) : ok(line())));
+    render(<Harness initial={tx()} />);
+    await openAdd();
+    for (const kind of ["Catalog item", "Service", "Ad-hoc line"]) {
+      await userEvent.click(screen.getByLabelText(kind, { exact: true }));
+      expect(screen.getByLabelText("Discount % (optional)")).toBeInTheDocument();
+    }
+  });
+
+  it("is edited next to the price it applies to, and emptying it removes it", async () => {
+    installBackend(() => ok(line()));
+    const discounted = line({
+      id: LINE_1,
+      unit_price_ex_vat: "765.00" as MoneyString,
+      list_unit_price: "850.00" as MoneyString,
+      line_discount_percent: "10.00" as PercentString,
+      price_before_line_discount: "850.00" as MoneyString,
+    });
+    render(<Harness initial={tx({ lines: [discounted] })} />);
+    const editor = await openEditor();
+    expect(editor.getByLabelText("Unit price excluding VAT (before the line discount)")).toHaveValue("850.00");
+    await userEvent.clear(screen.getByLabelText("Discount % (optional)", { exact: true }));
+    await userEvent.click(editor.getByTestId("save-line"));
+    await waitFor(() => expect(writes()).toHaveLength(1));
+    expect(writes()[0].body).toEqual({ line_discount_percent: null });
   });
 });

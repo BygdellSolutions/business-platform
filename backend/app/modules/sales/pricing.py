@@ -93,15 +93,18 @@ def calculate_totals(lines: Iterable[StoredLine]) -> Totals:
     return Totals(net_amount=net, vat_amount=vat, gross_amount=gross, vat_breakdown=breakdown)
 
 
-def discounted_unit_price(list_price: Decimal, catalog_percent: Decimal | None, customer_percent: Decimal | None) -> Decimal:
+def discounted_unit_price(
+    list_price: Decimal, catalog_percent: Decimal | None, customer_percent: Decimal | None, line_percent: Decimal | None = None
+) -> Decimal:
     """The unit price after the ordered discount layers (decided 2026-10-08): first the catalog's temporary discount,
     then the customer's permanent one, each rounded half-up to two decimals BEFORE the next is applied, so every
     printed step is the value actually used (100.00, -15% = 85.00, -10% = 76.50). Never additive (20% + 10% is 28%,
-    not 30%). The database CHECK on the line repeats exactly this rule."""
+    not 30%). The line's own discount, when a person gives one, is the last layer. The database CHECK on the line
+    repeats exactly this rule."""
     price = list_price
     with localcontext() as context:
         context.prec = 60
-        for percent in (catalog_percent, customer_percent):
+        for percent in (catalog_percent, customer_percent, line_percent):
             if percent:
                 price = (price * (HUNDRED - percent) / HUNDRED).quantize(CENT, rounding=ROUND_HALF_UP)
     return price

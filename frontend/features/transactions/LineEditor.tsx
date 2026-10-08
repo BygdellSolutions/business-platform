@@ -16,7 +16,7 @@ import type { LineUpdate, TransactionLine } from "@/lib/api/types";
 import { parseMoney, parsePercent, parseQuantity } from "@/lib/decimal";
 import { NOT_A_DECIMAL, NO_PROBLEMS, problemsFrom, type Problems } from "@/lib/forms";
 
-const CONTROLS = ["description", "unit", "quantity", "unit_price_ex_vat", "vat_rate"] as const;
+const CONTROLS = ["description", "unit", "quantity", "unit_price_ex_vat", "vat_rate", "line_discount_percent"] as const;
 
 /**
  * Edits ONE line's own snapshot values. The edit is based on the line as it was when the
@@ -34,8 +34,10 @@ export function LineEditor({ line, ordinal, onClose }: { line: TransactionLine; 
     description: line.description,
     unit: line.unit,
     quantity: line.quantity as string,
-    unit_price_ex_vat: line.unit_price_ex_vat as string,
+    // The price the line's own discount applies to, so saving the price never applies the discount twice.
+    unit_price_ex_vat: (line.price_before_line_discount ?? line.unit_price_ex_vat) as string,
     vat_rate: line.vat_rate as string,
+    line_discount_percent: (line.line_discount_percent ?? "") as string,
     version: line.version,
   }));
   const [draft, setDraft] = useState({
@@ -44,6 +46,7 @@ export function LineEditor({ line, ordinal, onClose }: { line: TransactionLine; 
     quantity: base.quantity,
     unit_price_ex_vat: base.unit_price_ex_vat,
     vat_rate: base.vat_rate,
+    line_discount_percent: base.line_discount_percent,
   });
   const [local, setLocal] = useState<FieldErrors>({});
   const [problems, setProblems] = useState<Problems>(NO_PROBLEMS);
@@ -80,6 +83,12 @@ export function LineEditor({ line, ordinal, onClose }: { line: TransactionLine; 
       const parsed = parsePercent(vat);
       if (parsed === null) shapeErrors.vat_rate = [NOT_A_DECIMAL];
       else body.vat_rate = parsed;
+    }
+    const discount = draft.line_discount_percent.trim();
+    if (discount !== base.line_discount_percent) {
+      const parsed = discount === "" ? null : parsePercent(discount);
+      if (discount !== "" && parsed === null) shapeErrors.line_discount_percent = [NOT_A_DECIMAL];
+      else body.line_discount_percent = parsed;
     }
     if (Object.keys(shapeErrors).length > 0) {
       setLocal(shapeErrors);
@@ -146,8 +155,15 @@ export function LineEditor({ line, ordinal, onClose }: { line: TransactionLine; 
         <TextField label="Description" name="description" value={draft.description} onChange={set("description")} error={errorsFor("description")} autoComplete="off" />
         <TextField label="Unit" name="unit" value={draft.unit} onChange={set("unit")} error={errorsFor("unit")} autoComplete="off" />
         <DecimalField label="Quantity" name="quantity" value={draft.quantity} onChange={set("quantity")} error={errorsFor("quantity")} />
-        <DecimalField label="Unit price excluding VAT" name="unit_price_ex_vat" value={draft.unit_price_ex_vat} onChange={set("unit_price_ex_vat")} error={errorsFor("unit_price_ex_vat")} />
+        <DecimalField
+          label={line.line_discount_percent ? "Unit price excluding VAT (before the line discount)" : "Unit price excluding VAT"}
+          name="unit_price_ex_vat"
+          value={draft.unit_price_ex_vat}
+          onChange={set("unit_price_ex_vat")}
+          error={errorsFor("unit_price_ex_vat")}
+        />
         <DecimalField label="VAT rate (%)" name="vat_rate" value={draft.vat_rate} onChange={set("vat_rate")} error={errorsFor("vat_rate")} />
+        <DecimalField label="Discount % (optional)" name="line_discount_percent" value={draft.line_discount_percent} onChange={set("line_discount_percent")} error={errorsFor("line_discount_percent")} hint="Empty removes the discount." />
       </div>
       <ErrorSummary messages={problems.general} />
       <div className="flex items-center gap-3">

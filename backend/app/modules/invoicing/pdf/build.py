@@ -86,6 +86,8 @@ def _notes(line: dict[str, Any], words: dict[str, str], separator: str) -> tuple
             steps.append(f"−{trimmed(str(line['catalog_discount_percent']), separator)} % {words['catalog_discount']}")
         if line.get("customer_discount_percent") is not None:
             steps.append(f"−{trimmed(str(line['customer_discount_percent']), separator)} % {words['customer_discount']}")
+        if line.get("line_discount_percent") is not None:
+            steps.append(f"−{trimmed(str(line['line_discount_percent']), separator)} % {words['line_discount']}")
         if len(steps) > 1:
             notes.append(" ".join(steps))
     service = line.get("service")

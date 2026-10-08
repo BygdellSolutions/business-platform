@@ -148,6 +148,15 @@ def _read_one(db: Session, ctx: TenantContext, transaction_id: uuid.UUID) -> Tra
     )
 
 
+def _price_before_line_discount(line: TransactionLine) -> Decimal:
+    """The unit price the line's own discount applies to: what a person edits next to the discount."""
+    if line.line_discount_percent is None:
+        return line.unit_price_ex_vat
+    if line.priced_by_hand:
+        return line.list_unit_price
+    return discounted_unit_price(line.list_unit_price, line.catalog_discount_percent, line.customer_discount_percent)
+
+
 def _line_reads(db: Session, ctx: TenantContext, lines: list[TransactionLine]) -> list[LineRead]:
     """Lines as read, with the live label of each service's subject and the name of who performed it."""
     pairs = {(line.subject_type, line.subject_id) for line in lines if line.subject_type is not None}
@@ -159,6 +168,7 @@ def _line_reads(db: Session, ctx: TenantContext, lines: list[TransactionLine]) -
             update={
                 "subject_label": labels.get((line.subject_type, line.subject_id)) if line.subject_type else None,
                 "performed_by_name": names.get(line.performed_by),
+                "price_before_line_discount": _price_before_line_discount(line),
             }
         )
         for line in lines
@@ -231,19 +241,35 @@ def _calculate(
         )
 
 
-NO_DISCOUNTS = dict(list_unit_price=None, catalog_discount_percent=None, customer_discount_percent=None)
-
-
-def _catalog_price(db: Session, ctx: TenantContext, item: Item, customer_id: uuid.UUID, on_date: date) -> dict:
+def _catalog_price(
+    db: Session, ctx: TenantContext, item: Item, customer_id: uuid.UUID, on_date: date, line_percent: Decimal | None = None
+) -> dict:
     """The price of a catalog line: the item's price, then the temporary catalog discount active on the sale's date,
-    then the billing customer's permanent discount (each layer rounded before the next). All four are stored."""
+    then the billing customer's permanent discount, then the line's own discount (each layer rounded before the next).
+    All of them are stored."""
     catalog = discounts.catalog_percent(db, ctx.organization_id, item.id, on_date)
     customer = discounts.customer_percent(db, ctx.organization_id, customer_id)
     return dict(
         list_unit_price=item.price_ex_vat,
         catalog_discount_percent=catalog,
         customer_discount_percent=customer,
-        unit_price_ex_vat=discounted_unit_price(item.price_ex_vat, catalog, customer),
+        line_discount_percent=line_percent,
+        priced_by_hand=False,
+        unit_price_ex_vat=discounted_unit_price(item.price_ex_vat, catalog, customer, line_percent),
+    )
+
+
+def _hand_price(price: Decimal | None, line_percent: Decimal | None) -> dict:
+    """A price typed by a person: no catalog or customer layer. With a line discount the typed price is the list price
+    it applies to (so the step stays visible); without one there are no layers at all."""
+    if line_percent is None or price is None:
+        return dict(
+            list_unit_price=None, catalog_discount_percent=None, customer_discount_percent=None, line_discount_percent=None,
+            priced_by_hand=True, unit_price_ex_vat=price,
+        )
+    return dict(
+        list_unit_price=price, catalog_discount_percent=None, customer_discount_percent=None, line_discount_percent=line_percent,
+        priced_by_hand=True, unit_price_ex_vat=discounted_unit_price(price, None, None, line_percent),
     )
 
 
@@ -262,9 +288,9 @@ def _new_line_values(
     description = pick(line.description, item.name if item else None)
     unit = pick(line.unit, item.unit if item else None)
     if item is not None and line.unit_price_ex_vat is None:
-        pricing_values = _catalog_price(db, ctx, item, customer_id, on_date)
+        pricing_values = _catalog_price(db, ctx, item, customer_id, on_date, line.line_discount_percent)
     else:
-        pricing_values = {**NO_DISCOUNTS, "unit_price_ex_vat": line.unit_price_ex_vat}
+        pricing_values = _hand_price(line.unit_price_ex_vat, line.line_discount_percent)
     vat_rate = pick(line.vat_rate, item.vat_rate if item else None)
     amounts = _calculate(line.quantity, pricing_values["unit_price_ex_vat"], vat_rate, path)
     service: dict = {"kind": "standard"}
@@ -533,12 +559,13 @@ def _reprice_catalog_lines(db: Session, ctx: TenantContext, tx: Transaction) -> 
             TransactionLine.transaction_id == tx.id,
             TransactionLine.item_id.is_not(None),
             TransactionLine.list_unit_price.is_not(None),
+            TransactionLine.priced_by_hand.is_(False),
         )
     ).all()
     for line in lines:
         catalog = discounts.catalog_percent(db, ctx.organization_id, line.item_id, tx.transaction_date)
         customer = discounts.customer_percent(db, ctx.organization_id, tx.billing_customer_id)
-        price = discounted_unit_price(line.list_unit_price, catalog, customer)
+        price = discounted_unit_price(line.list_unit_price, catalog, customer, line.line_discount_percent)
         if (catalog, customer, price) == (line.catalog_discount_percent, line.customer_discount_percent, line.unit_price_ex_vat):
             continue
         amounts = _calculate(line.quantity, price, line.vat_rate)
@@ -733,8 +760,19 @@ def update_line(
     if line.kind == "service" and "item_id" in values:
         if values["item_id"] is None:
             reference_error(("item_id",), "A service line keeps its catalog service", "service.needs_item")
+    line_percent = values.pop("line_discount_percent") if "line_discount_percent" in values else line.line_discount_percent
     if "unit_price_ex_vat" in values:
-        values.update(NO_DISCOUNTS)  # a price typed by a person replaces the catalog's price and its discounts
+        # A price typed by a person replaces the catalog's price and its layers; the line's discount applies to it.
+        values.update(_hand_price(values.pop("unit_price_ex_vat"), line_percent))
+    elif "line_discount_percent" in payload.model_fields_set and not (values.get("item_id") is not None and values["item_id"] != line.item_id):
+        if line.priced_by_hand or line.list_unit_price is None:
+            base = line.list_unit_price if line.list_unit_price is not None else line.unit_price_ex_vat
+            values.update(_hand_price(base, line_percent))
+        else:
+            values.update(
+                line_discount_percent=line_percent,
+                unit_price_ex_vat=discounted_unit_price(line.list_unit_price, line.catalog_discount_percent, line.customer_discount_percent, line_percent),
+            )
     if values.get("item_id") is not None and values["item_id"] != line.item_id:
         # A different item: copy its values for everything not overridden in this request.
         item = resolve_reference(db, ctx, Item, values["item_id"], "item_id")
@@ -743,8 +781,8 @@ def update_line(
         values.setdefault("description", item.name)
         values.setdefault("unit", item.unit)
         values.setdefault("vat_rate", item.vat_rate)
-        if "unit_price_ex_vat" not in values:
-            values.update(_catalog_price(db, ctx, item, tx.billing_customer_id, tx.transaction_date))
+        if "priced_by_hand" not in values:  # no typed price in this request: the new item's catalog price
+            values.update(_catalog_price(db, ctx, item, tx.billing_customer_id, tx.transaction_date, line_percent))
 
     amounts = _calculate(
         values.get("quantity", line.quantity),

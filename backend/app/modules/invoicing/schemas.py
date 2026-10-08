@@ -81,6 +81,7 @@ class InvoiceLineRead(BaseModel):
     list_unit_price: MoneyOut | None
     catalog_discount_percent: PercentOut | None
     customer_discount_percent: PercentOut | None
+    line_discount_percent: PercentOut | None
     # For a service line: {performed_at, performed_by, subject_type, subject_label, notes} as shown at invoicing.
     service: dict[str, Any] | None = None
     vat_rate: PercentOut

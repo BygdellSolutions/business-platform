@@ -14,7 +14,7 @@ from pydantic import (
 from app.modules.sales.models import TransactionStatus
 from app.schemas.customer import CustomerRef
 from app.schemas.profile import CurrencyCode
-from app.schemas.money import CountAndAmounts, MoneyIn, MoneyOut, PercentIn, PercentOut, QuantityIn, QuantityOut
+from app.schemas.money import CountAndAmounts, DiscountPercentIn, MoneyIn, MoneyOut, PercentIn, PercentOut, QuantityIn, QuantityOut
 
 Description = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
 Unit = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=32)]
@@ -38,6 +38,8 @@ class LineCreate(BaseModel):
     quantity: QuantityIn
     unit_price_ex_vat: MoneyIn | None = None
     vat_rate: PercentIn | None = None
+    # The line's own discount (the last layer, after the catalog's and the customer's).
+    line_discount_percent: DiscountPercentIn | None = None
     # A service line (kind "service"): a catalog service performed for a subject (a registered record such as a
     # customer or a horse), at a time (a time without an offset is the organization's local time; default: now), by a
     # member of the organization (optional). Notes are allowed on any line.
@@ -85,6 +87,8 @@ class LineUpdate(BaseModel):
     quantity: QuantityIn | None = None
     unit_price_ex_vat: MoneyIn | None = None
     vat_rate: PercentIn | None = None
+    # null removes the line's discount.
+    line_discount_percent: DiscountPercentIn | None = None
     # Service details (service lines only; the subject changes as a pair).
     performed_at: datetime | None = None
     performed_by_user_id: uuid.UUID | None = None
@@ -147,6 +151,11 @@ class LineRead(BaseModel):
     list_unit_price: MoneyOut | None
     catalog_discount_percent: PercentOut | None
     customer_discount_percent: PercentOut | None
+    line_discount_percent: PercentOut | None
+    # The price was typed by a person (no catalog or customer layers; the list price is the typed one).
+    priced_by_hand: bool
+    # The unit price the line's own discount applies to (equal to the unit price without a line discount).
+    price_before_line_discount: MoneyOut | None = None
     kind: str
     performed_at: datetime | None
     performed_by: uuid.UUID | None

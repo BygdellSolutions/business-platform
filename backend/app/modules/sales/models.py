@@ -4,6 +4,7 @@ from decimal import Decimal
 from enum import StrEnum
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -28,15 +29,16 @@ from app.models.mixins import Authored, TenantOwned
 def discount_constraints(table: str) -> tuple[CheckConstraint, ...]:
     """The discount layers of a line, as the database enforces them (the same rule as
     `pricing.discounted_unit_price`): a line either has no list price and no discounts (ad-hoc or a manually set
-    price), or its unit price is the list price after the catalog layer, rounded, then the customer layer, rounded."""
+    price without a discount), or its unit price is the list price after the catalog layer, rounded, then the customer
+    layer, rounded, then the line's own discount, rounded."""
     percent = "{0} IS NULL OR ({0} > 0 AND {0} < 100)"
     return (
         CheckConstraint(percent.format("catalog_discount_percent"), name=f"ck_{table}_catalog_discount_range"),
         CheckConstraint(percent.format("customer_discount_percent"), name=f"ck_{table}_customer_discount_range"),
+        CheckConstraint(percent.format("line_discount_percent"), name=f"ck_{table}_line_discount_range"),
         CheckConstraint(
-            "(list_unit_price IS NULL AND catalog_discount_percent IS NULL AND customer_discount_percent IS NULL)"
-            " OR (list_unit_price IS NOT NULL AND unit_price_ex_vat = round(round(list_unit_price"
-            " * (100 - coalesce(catalog_discount_percent, 0)) / 100, 2) * (100 - coalesce(customer_discount_percent, 0)) / 100, 2))",
+            "(list_unit_price IS NULL AND catalog_discount_percent IS NULL AND customer_discount_percent IS NULL AND line_discount_percent IS NULL)"
+            " OR (list_unit_price IS NOT NULL AND unit_price_ex_vat = round(round(round(list_unit_price * (100 - coalesce(catalog_discount_percent, 0)) / 100, 2) * (100 - coalesce(customer_discount_percent, 0)) / 100, 2) * (100 - coalesce(line_discount_percent, 0)) / 100, 2))",
             name=f"ck_{table}_discount_layers",
         ),
     )
@@ -154,6 +156,10 @@ class TransactionLine(TenantOwned, Authored, Base):
             "gross_amount = net_amount + vat_amount", name="ck_transaction_lines_gross_amount"
         ),
         *discount_constraints("transaction_lines"),
+        CheckConstraint(
+            "NOT priced_by_hand OR (catalog_discount_percent IS NULL AND customer_discount_percent IS NULL)",
+            name="ck_transaction_lines_hand_price_layers",
+        ),
         CheckConstraint("kind IN ('standard', 'service')", name="ck_transaction_lines_kind"),
         # A service is a catalog service performed at a time for a subject; other lines carry none of that.
         CheckConstraint(
@@ -179,6 +185,12 @@ class TransactionLine(TenantOwned, Authored, Base):
     list_unit_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     catalog_discount_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
     customer_discount_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    # The line's own discount, set by a person on this line (the last layer). On a line priced by hand the typed price
+    # is the list price it applies to.
+    line_discount_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    # The price was typed by a person (an ad-hoc line or an overridden price): the catalog and customer layers never
+    # apply, and a new billing customer or date does not reprice it.
+    priced_by_hand: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     vat_rate: Mapped[Decimal] = mapped_column(Numeric(5, 2))
     net_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     vat_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))

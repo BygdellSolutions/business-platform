@@ -101,7 +101,7 @@ export function LineRow({ line, ordinal }: { line: TransactionLine; ordinal: num
       <td className="py-1 pr-3 text-right" data-testid="line-quantity"><DecimalText value={line.quantity} /></td>
       <td className="py-1 pr-3 text-right" data-testid="line-price">
         <DecimalText value={line.unit_price_ex_vat} />
-        <DiscountSteps list={line.list_unit_price} catalog={line.catalog_discount_percent} customer={line.customer_discount_percent} />
+        <DiscountSteps list={line.list_unit_price} catalog={line.catalog_discount_percent} customer={line.customer_discount_percent} line={line.line_discount_percent} />
       </td>
       <td className="py-1 pr-3 text-right" data-testid="line-vat-rate"><DecimalText value={line.vat_rate} /></td>
       <td className="py-1 pr-3 text-right" data-testid="line-net"><DecimalText value={line.net_amount} /></td>

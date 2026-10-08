@@ -86,3 +86,9 @@ def test_nothing_prints_n_a_or_an_empty_label():
     text = pdf_text(render_pdf(document_from_invoice(_swedish(email=None, phone=None, website=None, bic=None, payment_terms_days=None))))
     assert "N/A" not in text and "None" not in text
     assert "Betalningsvillkor" not in text and "BIC" not in text
+
+
+def test_a_line_discount_is_printed_as_the_last_step():
+    data = _swedish()
+    data["lines"][0].update(list_unit_price="500.00", line_discount_percent="20.00", unit_price_ex_vat="400.00")
+    assert document_from_invoice(data).lines[0].notes == ("Listpris 500,00 −20 % rabatt",)

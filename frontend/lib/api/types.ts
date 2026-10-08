@@ -389,6 +389,12 @@ export interface TransactionLine {
   list_unit_price: MoneyString | null;
   catalog_discount_percent: PercentString | null;
   customer_discount_percent: PercentString | null;
+  /** The line's own discount (the last layer). */
+  line_discount_percent: PercentString | null;
+  /** The price was typed by a person (no catalog or customer layer). */
+  priced_by_hand: boolean;
+  /** The unit price the line's own discount applies to: what is edited next to the discount. */
+  price_before_line_discount: MoneyString | null;
   vat_rate: PercentString;
   net_amount: MoneyString;
   vat_amount: MoneyString;
@@ -469,6 +475,8 @@ export interface LineCreate {
   quantity: QuantityString;
   unit_price_ex_vat?: MoneyString;
   vat_rate?: PercentString;
+  /** The line's own discount in percent (optional; the last discount layer). */
+  line_discount_percent?: PercentString | null;
   kind?: "standard" | "service";
   /** "YYYY-MM-DDTHH:MM" without an offset: the organization's local time. Omitted: now. */
   performed_at?: string;
@@ -479,7 +487,7 @@ export interface LineCreate {
 }
 
 /** A line edit. There is deliberately no `item_id`: this UI never re-snapshots or detaches a line. */
-export type LineUpdate = Partial<Pick<LineCreate, "description" | "unit" | "quantity" | "unit_price_ex_vat" | "vat_rate">>;
+export type LineUpdate = Partial<Pick<LineCreate, "description" | "unit" | "quantity" | "unit_price_ex_vat" | "vat_rate" | "line_discount_percent">>;
 
 // --- Invoicing ------------------------------------------------------------------------------------------------------------
 //
@@ -561,6 +569,7 @@ export interface InvoiceLine {
   list_unit_price: MoneyString | null;
   catalog_discount_percent: PercentString | null;
   customer_discount_percent: PercentString | null;
+  line_discount_percent: PercentString | null;
   vat_rate: PercentString;
   net_amount: MoneyString;
   vat_amount: MoneyString;
