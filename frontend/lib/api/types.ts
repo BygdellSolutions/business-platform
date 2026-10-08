@@ -33,7 +33,13 @@ export interface Invitation {
   role: Role;
   created_at: string;
   expires_at: string;
-  state: "pending" | "expired";
+  state: "pending" | "expired" | "accepted" | "revoked";
+  /** Who invited (names as they are now; null: not recorded) and how the invitation ended. */
+  invited_by?: string | null;
+  invited_by_name?: string | null;
+  accepted_at?: string | null;
+  accepted_by_name?: string | null;
+  revoked_at?: string | null;
 }
 
 /** The response to creating or regenerating an invitation: the ONLY place the secret appears, once. */

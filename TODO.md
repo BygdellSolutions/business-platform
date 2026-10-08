@@ -31,7 +31,7 @@ Found while testing staging (2026-10-08). Small reviewed slices, each validated 
 - [x] Slice 10: seller and payment profile (phone, email, website, bankgiro, plusgiro, IBAN, BIC, payment terms, F-skatt) and the document language setting; issuer snapshot schema 2
 - [x] Slice 11: invoice PDF template v2 (professional layout, verified against Swedish invoice requirements, ML 2023:200 ch. 17; frozen v1 PDFs stay as they are)
 - [ ] Invoice PDF follow-ups found in the Swedish requirements check (ML 2023:200 ch. 17): the VAT amount in SEK when an invoice is in another currency; a reason text for 0 % VAT (exemption, reverse charge) on the line or invoice; the registered office (säte) of a limited company; a check digit (OCR) payment reference instead of the invoice number. Backordered units are not printed: the PDF is built from the stored invoice alone, so it would need an invoice-time snapshot first.
-- [ ] Slice 12: invitation audit in the Members UI (invited by, invited at, state)
+- [x] Slice 12: invitation audit in the Members UI (invited by, invited at, state)
 - [ ] Slice 13: dashboard redesign for the organization owner
 - [ ] Later (email, paused): email infrastructure, **self-service password recovery** (the first email to build: today a locked-out user depends on an operator), invitation email, invoice email with delivery state and resend
 

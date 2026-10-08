@@ -92,12 +92,12 @@ def test_an_owner_invites_any_role_and_the_secret_is_returned_once(api, db_sessi
 
     assert created.status_code == 201, created.text
     body = created.json()
-    assert set(body) == {"id", "email", "role", "created_at", "expires_at", "state", "token"}
+    assert set(body) == {"id", "email", "role", "created_at", "expires_at", "state", "token", "invited_by", "invited_by_name", "accepted_at", "accepted_by_name", "revoked_at"}
     assert body["email"] == to and body["role"] == role and body["state"] == "pending"
     assert re.fullmatch(r"[A-Za-z0-9_-]{43}", body["token"])  # 256 random bits, url-safe
     listed = listing(api, team, "owner").json()
     assert [row["id"] for row in listed] == [body["id"]]
-    assert set(listed[0]) == {"id", "email", "role", "created_at", "expires_at", "state"}  # never the token or its hash
+    assert set(listed[0]) == {"id", "email", "role", "created_at", "expires_at", "state", "invited_by", "invited_by_name", "accepted_at", "accepted_by_name", "revoked_at"}  # never the token or its hash
 
 
 @pytest.mark.parametrize("role", ["accountant", "employee", "viewer"])
@@ -605,3 +605,49 @@ def test_ordinary_session_csrf_binds_the_authenticated_acceptance(db_session, se
     assert session_client.post("/api/invite/accept", json={"token": token}, headers={**handle.read_headers, "X-CSRF-Token": "x" * 43}).status_code == 403
     assert role_in(db_session, team.org, person) is None
     assert session_client.post("/api/invite/accept", json={"token": token}, headers=handle.headers).status_code == 200
+
+
+# --- the audit of invitations (slice 12) ----------------------------------------------------------------------------------
+
+
+def test_an_open_invitation_says_who_invited_and_when(api, db_session):
+    team = Team(db_session)
+    invite(api, team, "admin", role="viewer")
+
+    [row] = listing(api, team, "owner").json()
+
+    assert (row["invited_by"], row["invited_by_name"], row["state"]) == (str(team.users["admin"].id), "Admin Person", "pending")
+    assert row["created_at"] and row["accepted_at"] is None and row["revoked_at"] is None
+
+
+def test_accepted_and_revoked_invitations_are_kept_and_listed_with_how_they_ended(api, db_session):
+    team = Team(db_session)
+    joiner = make_user(db_session, name="Joiner Person")
+    accepted_token = invite(api, team, "owner", to=joiner.email, role="employee").json()["token"]
+    assert accept(api, joiner, accepted_token).status_code == 200
+    revoked = invite(api, team, "admin", role="viewer").json()
+    assert api.client.delete(f"{INVITE}/{revoked['id']}", headers=api.h(team.users["owner"], team.org)).status_code == 204
+
+    closed = api.client.get(INVITE, params={"closed": "true"}, headers=api.h(team.users["owner"], team.org)).json()
+
+    by_state = {row["state"]: row for row in closed}
+    assert set(by_state) == {"accepted", "revoked"}
+    assert (by_state["accepted"]["invited_by_name"], by_state["accepted"]["accepted_by_name"]) == ("Owner Person", "Joiner Person")
+    assert by_state["accepted"]["accepted_at"] is not None
+    assert (by_state["revoked"]["invited_by_name"], by_state["revoked"]["revoked_at"] is not None) == ("Admin Person", True)
+    assert listing(api, team, "owner").json() == []  # nothing open any more
+
+
+@pytest.mark.parametrize("actor", ["accountant", "employee", "viewer"])
+def test_only_owners_and_admins_see_the_invitation_audit(api, db_session, actor):
+    team = Team(db_session)
+    response = api.client.get(INVITE, params={"closed": "true"}, headers=api.h(team.users[actor], team.org))
+    assert response.status_code == 403
+
+
+def test_another_organizations_invitations_never_appear_in_the_audit(api, db_session):
+    team, other = Team(db_session), Team(db_session, name="Other Team")
+    revoked = invite(api, other, "owner").json()
+    api.client.delete(f"{INVITE}/{revoked['id']}", headers=api.h(other.users["owner"], other.org))
+
+    assert api.client.get(INVITE, params={"closed": "true"}, headers=api.h(team.users["owner"], team.org)).json() == []

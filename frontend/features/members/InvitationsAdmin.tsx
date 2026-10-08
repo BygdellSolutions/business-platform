@@ -167,6 +167,7 @@ export function InvitationsAdmin({ invitations, actorRole }: { invitations: Invi
             <tr className="border-b border-zinc-300 dark:border-zinc-700">
               <th className="py-2 pr-4 font-medium">Email</th>
               <th className="py-2 pr-4 font-medium">Role</th>
+              <th className="py-2 pr-4 font-medium">Invited by</th>
               <th className="py-2 pr-4 font-medium">Expires</th>
               <th className="py-2 font-medium">
                 <span className="sr-only">Actions</span>
@@ -178,6 +179,10 @@ export function InvitationsAdmin({ invitations, actorRole }: { invitations: Invi
               <tr key={invitation.id} data-testid="invitation-row" data-email={invitation.email} className="border-b border-zinc-200 dark:border-zinc-800">
                 <td className="py-2 pr-4">{invitation.email}</td>
                 <td className="py-2 pr-4">{ROLE_LABELS[invitation.role]}</td>
+                <td className="py-2 pr-4" data-testid="invitation-invited">
+                  {invitation.invited_by_name ?? <span className="text-zinc-500">not recorded</span>}
+                  <span className="block text-xs text-zinc-500">{new Date(invitation.created_at).toLocaleDateString("sv-SE")}</span>
+                </td>
                 <td className="py-2 pr-4" data-testid="invitation-state">
                   {invitation.state === "expired" ? "Expired" : new Date(invitation.expires_at).toLocaleDateString("sv-SE")}
                 </td>
