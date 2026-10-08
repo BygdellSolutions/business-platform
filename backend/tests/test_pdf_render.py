@@ -481,3 +481,17 @@ def test_the_font_layer_refuses_unsupported_characters_by_itself_not_only_throug
     collected: dict[str, str] = {}
     assert font_layer.runs("aمb", "regular", fonts, found=collected) == [("NotoSans", "ab")]  # collected, not drawn
     assert list(collected) == ["م"]
+
+
+# The layout code as of TEMPLATE_VERSION. A download serves the stored PDF of the CURRENT template version, so a
+# change to what is printed without a new version would leave earlier downloads looking old. When this fails: bump
+# TEMPLATE_VERSION in render.py, then update both values here.
+PINNED_TEMPLATE = (4, "9d7c3dced3f2d644c4a9c826415b15f92f1127dbb46b5448a2621dbf82a96b96")
+
+
+def test_a_change_to_the_printed_layout_comes_with_a_new_template_version():
+    import hashlib
+
+    names = ("build.py", "document.py", "format.py", "labels.py", "render.py")
+    source = b"".join((BACKEND / "app/modules/invoicing/pdf" / name).read_bytes().replace(b"\r\n", b"\n") for name in names)
+    assert (TEMPLATE_VERSION, hashlib.sha256(source).hexdigest()) == PINNED_TEMPLATE, "the PDF layout changed: bump TEMPLATE_VERSION and re-pin"

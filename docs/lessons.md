@@ -129,3 +129,10 @@ import is a client reference, not the object, so every lookup was `undefined` an
 type check or unit test noticed. Rule: values shared by server and client code (labels, option lists) live in plain
 modules; a server file imports only components and types from a client module. `lib/server-client-imports.test.ts`
 enforces it.
+
+## A change to the printed invoice needs a new template version (2026-10-08)
+
+Downloads serve the stored PDF of the current template version. A layout change shipped without bumping
+`TEMPLATE_VERSION` leaves every PDF downloaded since the last bump looking old, with no error anywhere (it happened once
+between two deploys). `tests/test_pdf_render.py` pins the layout code's hash next to the version, so such a change fails
+until the version is bumped.
