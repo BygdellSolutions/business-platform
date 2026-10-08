@@ -24,6 +24,8 @@ function item(overrides: Partial<Item>): Item {
     active: true,
     created_at: "",
     updated_at: "",
+    created_by: null,
+    updated_by: null,
     ...overrides,
   };
 }

@@ -549,6 +549,20 @@ Each line is rounded on its own and the three amounts are **stored** on the line
 
 ---
 
+## Implementation notes: history (audit events)
+
+**What is recorded.** `audit_events` (tenant-owned, append-only) holds one row per change: organization, time, actor (the user of the active membership), `entity_type` / `entity_id` (registry keys such as `customer`, `transaction_line`), an optional `context_type` / `context_id` (the record it belongs to: a line's transaction), an `action` (`created`, `updated`, `deleted`, lifecycle verbs such as `completed`, `issued`, and `fields_updated` for custom-field values) and `changes` (`{field: {from, to}}`, JSON-safe; decimals as the stored strings, ids as strings; custom-field changes carry the field's `label` and the display text a person saw). Technical columns (ids, organization, timestamps, authors, versions, positions) are never part of a change. Invoices record only their header fields; the frozen snapshots are documents, not history.
+
+**How it is written.** Explicitly, by each write path, through `app/core/audit.py` (`created`, `apply_audited_update`, `updated`, `deletion`/`deleted`, `stamp`), in the SAME database transaction as the change. After-values are read back from the database after the flush, so `900` is recorded as the stored `900.00`. A write that changes nothing records nothing. A deletion that may be refused (`delete_or_409`) records its event only after the row is really gone (`after_delete=`). `created_by` / `updated_by` (the `Authored` mixin) are stamped at the same time; a change to a line or a custom-field value also stamps its transaction's `updated_by`.
+
+**Append-only.** A trigger refuses UPDATE and DELETE. The single exception is a DELETE of an organization's own events while `app.deleting_organization` is set to that organization's id in the deleting transaction (for the organization deletion slice).
+
+**Reading.** `GET /api/history?entity_type&entity_id` for any member: events of the record and of records whose context it is, newest first (at most 500), with the actor's name and the list of people named. A record of another organization simply has no history here. The frontend shows ids of customers and items as their names (looked up in the same organization; a deleted one says so) and timestamps in the organization's time zone.
+
+**Not recorded (yet).** Organization settings, memberships and invitations (security events cover those today), and changes made before this existed (`created_by` NULL = "not recorded").
+
+---
+
 ## Implementation notes: core registry and lifecycle seam
 
 Generic capabilities and modules never import each other. They meet in **core**:

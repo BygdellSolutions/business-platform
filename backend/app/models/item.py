@@ -5,7 +5,7 @@ from sqlalchemy import Boolean, CheckConstraint, Numeric, String, Text, UniqueCo
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.base import Base
-from app.models.mixins import TenantOwned
+from app.models.mixins import Authored, TenantOwned
 
 
 class ItemType(StrEnum):
@@ -13,7 +13,7 @@ class ItemType(StrEnum):
     PRODUCT = "product"
 
 
-class Item(TenantOwned, Base):
+class Item(TenantOwned, Authored, Base):
     """Something an organization sells: a service or a product (industry-neutral).
 
     An Item holds the *current* catalog state. Transactions will copy name, price

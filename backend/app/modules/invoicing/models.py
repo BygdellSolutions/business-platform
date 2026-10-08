@@ -38,7 +38,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.base import Base
-from app.models.mixins import TenantOwned
+from app.models.mixins import Authored, TenantOwned
 
 DEFAULT_SERIES = "default"
 SNAPSHOT_SCHEMA = 1  # version of the customer/issuer snapshot structure
@@ -49,7 +49,7 @@ class InvoiceStatus(StrEnum):
     ISSUED = "issued"  # numbered and frozen
 
 
-class Invoice(TenantOwned, Base):
+class Invoice(TenantOwned, Authored, Base):
     __tablename__ = "invoices"
     __table_args__ = (
         UniqueConstraint("organization_id", "id", name="uq_invoices_organization_id_id"),

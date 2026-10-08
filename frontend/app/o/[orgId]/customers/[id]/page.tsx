@@ -1,8 +1,11 @@
+import { RecordHistory } from "@/components/history/RecordHistory";
+import { RecordMeta } from "@/components/history/RecordMeta";
 import { CustomerDetails } from "@/features/customers/CustomerDetails";
 import { CustomerForm } from "@/features/customers/CustomerForm";
 import { Notice } from "@/components/ui/Notice";
 import { readActiveRole } from "@/lib/active-role";
-import type { Customer } from "@/lib/api/types";
+import type { Customer, Organization } from "@/lib/api/types";
+import { readRecordHistory } from "@/lib/history-server";
 import { canWriteRecords } from "@/lib/roles";
 import { requireUuid, serverRead } from "@/lib/server-api";
 
@@ -20,7 +23,13 @@ export default async function CustomerPage({
 }) {
   const { orgId, id } = await params;
   const { created } = await searchParams;
-  const [customer, role] = await Promise.all([serverRead<Customer>(orgId, `/api/customers/${requireUuid(id)}`), readActiveRole(orgId)]);
+  const recordId = requireUuid(id);
+  const [customer, role, organization, history] = await Promise.all([
+    serverRead<Customer>(orgId, `/api/customers/${recordId}`),
+    readActiveRole(orgId),
+    serverRead<Organization>(orgId, "/api/organization"),
+    readRecordHistory(orgId, "customer", recordId),
+  ]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -28,7 +37,9 @@ export default async function CustomerPage({
         {customer.name}
       </h1>
       {created === "1" && <Notice testId="created">Customer created.</Notice>}
+      <RecordMeta record={customer} people={history.history.people} timeZone={organization.timezone} />
       {canWriteRecords(role) ? <CustomerForm key={customer.id} customer={customer} /> : <CustomerDetails customer={customer} />}
+      <RecordHistory data={history} entityType="customer" timeZone={organization.timezone} />
     </div>
   );
 }

@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import InterfaceError, OperationalError
 
 from app import registrations
-from app.api import auth, customers, health, invitations, items, me, members, organization, organizations
+from app.api import auth, customers, health, history, invitations, items, me, members, organization, organizations
 from app.core.config import settings
 from app.core.entity_registry import registry
 from app.core.internal_auth import InternalAuthMiddleware
@@ -55,6 +55,7 @@ app.include_router(auth.router)
 app.include_router(me.router)
 app.include_router(customers.router)
 app.include_router(items.router)
+app.include_router(history.router)
 app.include_router(organization.router)
 app.include_router(organizations.router)
 app.include_router(members.router)

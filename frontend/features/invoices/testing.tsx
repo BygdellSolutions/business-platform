@@ -83,6 +83,8 @@ export function invoice(overrides: Partial<Invoice> = {}): Invoice {
     issued_at: null,
     created_at: "2026-10-01T10:00:00Z",
     updated_at: "2026-10-01T10:00:00Z",
+    created_by: null,
+    updated_by: null,
     issued_by: null,
     customer_snapshot: party(),
     issuer_snapshot: party({ name: "Fredrik Horse Therapy", legal_name: "Fredrik Horse Therapy AB", address_line1: "Storgatan 1", city: "Umeå", postal_code: "903 26", registration_number: "556000-0001", vat_number: "SE556000000101" }),

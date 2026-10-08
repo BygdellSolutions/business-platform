@@ -1,5 +1,6 @@
 """Small query/persistence helpers shared by resource routers (not tenant logic)."""
 
+from collections.abc import Callable
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -27,7 +28,7 @@ def commit_and_refresh(db: Session, record: Any) -> None:
     db.commit()
 
 
-def delete_or_409(db: Session, record: Any, detail: str) -> None:
+def delete_or_409(db: Session, record: Any, detail: str, *, after_delete: Callable[[], None] | None = None) -> None:
     """Delete `record`, or answer 409 if other records still reference it.
 
     The message stays generic on purpose: the module that owns the delete must not
@@ -45,6 +46,8 @@ def delete_or_409(db: Session, record: Any, detail: str) -> None:
         if getattr(exc.orig, "sqlstate", None) == FOREIGN_KEY_VIOLATION:
             raise HTTPException(status.HTTP_409_CONFLICT, detail=detail)
         raise
+    if after_delete is not None:
+        after_delete()  # e.g. the history event: written only for a deletion that really happened
     db.commit()
 
 

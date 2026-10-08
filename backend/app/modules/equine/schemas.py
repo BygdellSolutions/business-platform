@@ -73,3 +73,6 @@ class HorseRead(BaseModel):
     active: bool
     created_at: datetime
     updated_at: datetime
+    # Who created it and who changed it last (null: not recorded, e.g. before authors were kept).
+    created_by: uuid.UUID | None
+    updated_by: uuid.UUID | None

@@ -40,6 +40,8 @@ export function line(overrides: Partial<TransactionLine> = {}): TransactionLine 
     gross_amount: money("1062.50"),
     created_at: "2026-10-01T10:00:00Z",
     updated_at: "2026-10-01T10:00:00Z",
+    created_by: null,
+    updated_by: null,
     ...overrides,
   };
 }
@@ -83,13 +85,15 @@ export function tx(overrides: Partial<Transaction> = {}): Transaction {
     },
     created_at: "2026-10-01T10:00:00Z",
     updated_at: "2026-10-01T10:00:00Z",
+    created_by: null,
+    updated_by: null,
     lines: [line(), second()],
     ...overrides,
   };
 }
 
 export function customer(id: string, name: string, active = true): Customer {
-  return { id, customer_type: "person", name, email: null, phone: null, active, created_at: "", updated_at: "", ...EMPTY_PROFILE };
+  return { id, customer_type: "person", name, email: null, phone: null, active, created_at: "", updated_at: "", created_by: null, updated_by: null, ...EMPTY_PROFILE };
 }
 
 export function item(id: string, name: string, overrides: Partial<Item> = {}): Item {
@@ -104,6 +108,8 @@ export function item(id: string, name: string, overrides: Partial<Item> = {}): I
     active: true,
     created_at: "",
     updated_at: "",
+    created_by: null,
+    updated_by: null,
     ...overrides,
   };
 }

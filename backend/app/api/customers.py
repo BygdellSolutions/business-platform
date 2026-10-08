@@ -5,9 +5,10 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.api.deps import Pagination, pagination
+from app.core import audit
 from app.core.authz import record_writer
 from app.core.db import get_db
-from app.core.query import apply_update, commit_and_refresh, contains_pattern, delete_or_409
+from app.core.query import commit_and_refresh, contains_pattern, delete_or_409
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import create_scoped, get_scoped_or_404, scoped_select
 from app.models import Customer
@@ -23,6 +24,7 @@ def create_customer(
     db: Session = Depends(get_db),
 ) -> Customer:
     customer = create_scoped(db, ctx, Customer, **payload.model_dump())
+    audit.created(db, ctx, customer, "customer")
     commit_and_refresh(db, customer)
     return customer
 
@@ -67,7 +69,7 @@ def update_customer(
     db: Session = Depends(get_db),
 ) -> Customer:
     customer = get_scoped_or_404(db, ctx, Customer, customer_id)
-    apply_update(db, customer, payload.model_dump(exclude_unset=True))
+    audit.apply_audited_update(db, ctx, customer, "customer", payload.model_dump(exclude_unset=True))
     return customer
 
 
@@ -78,5 +80,5 @@ def delete_customer(
     db: Session = Depends(get_db),
 ) -> Response:
     customer = get_scoped_or_404(db, ctx, Customer, customer_id)
-    delete_or_409(db, customer, "Customer is referenced by other records")
+    delete_or_409(db, customer, "Customer is referenced by other records", after_delete=audit.deletion(db, ctx, customer, "customer"))
     return Response(status_code=status.HTTP_204_NO_CONTENT)

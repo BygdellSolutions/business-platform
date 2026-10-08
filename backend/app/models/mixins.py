@@ -42,6 +42,17 @@ def _forbid_organization_change(mapper, connection, target) -> None:
         raise ValueError("organization_id of a tenant-owned record cannot be changed")
 
 
+class Authored:
+    """Who created a record and who changed it last (the user of the active membership at the time).
+
+    NULL for records that existed before authors were recorded: shown as "not recorded", never guessed. The full
+    history, with old and new values, is in `audit_events`.
+    """
+
+    created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
+    updated_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
+
+
 class BusinessProfile:
     """Optional postal address and business identifiers, shared by Organization (the seller
     on a future invoice) and Customer (the buyer).

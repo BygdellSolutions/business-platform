@@ -14,7 +14,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.base import Base
-from app.models.mixins import TenantOwned
+from app.models.mixins import Authored, TenantOwned
 
 # Sanity bounds enforced by the database; the API additionally rejects future years.
 MIN_BIRTH_YEAR = 1900
@@ -27,7 +27,7 @@ class HorseSex(StrEnum):
     GELDING = "gelding"
 
 
-class Horse(TenantOwned, Base):
+class Horse(TenantOwned, Authored, Base):
     """A horse. Not a customer.
 
     Owner and stable are two separate references to Customers of the SAME

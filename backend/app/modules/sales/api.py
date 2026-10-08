@@ -8,6 +8,7 @@ from sqlalchemy import and_, func, select, update
 from sqlalchemy.orm import Session
 
 from app.api.deps import Pagination, pagination
+from app.core import audit
 from app.core.authz import record_writer, roles_required
 from app.core.currency import default_currency_for_new_record
 from app.core.db import get_db
@@ -18,7 +19,7 @@ from app.core.lifecycle import (
     ensure_valid,
 )
 from app.core.org_time import organization_today
-from app.core.query import apply_update, commit_and_refresh
+from app.core.query import commit_and_refresh
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import (
     create_scoped,
@@ -124,6 +125,8 @@ def _summary_fields(tx: Transaction, customer: Customer, lines: Sequence[Transac
         totals=_totals_read(calculate_totals(lines)),
         created_at=tx.created_at,
         updated_at=tx.updated_at,
+        created_by=tx.created_by,
+        updated_by=tx.updated_by,
     )
 
 
@@ -237,8 +240,10 @@ def create_transaction(
         currency=currency,
         transaction_date=payload.transaction_date or organization_today(db, ctx.organization_id),
     )
+    audit.created(db, ctx, tx, "transaction")
     for position, values in enumerate(line_values, start=1):
-        create_scoped(db, ctx, TransactionLine, transaction_id=tx.id, position=position, **values)
+        line = create_scoped(db, ctx, TransactionLine, transaction_id=tx.id, position=position, **values)
+        audit.created(db, ctx, line, "transaction_line", context=("transaction", tx.id))
     db.commit()
     return _read_one(db, ctx, tx.id)
 
@@ -358,7 +363,7 @@ def update_transaction(
         )
     if _changes(tx, values):
         values.update(header_version=tx.header_version + 1, version=tx.version + 1)
-    apply_update(db, tx, values)
+    audit.apply_audited_update(db, ctx, tx, "transaction", values)
     return _read_one(db, ctx, transaction_id)
 
 
@@ -372,6 +377,7 @@ def delete_transaction(
     tx = _lock(db, ctx, transaction_id)
     _require_draft(tx, "deleted; cancel it instead" if tx.status == COMPLETED else "deleted")
     ensure_current(if_match, tx.version, "transaction", tx.id)
+    audit.deleted(db, ctx, tx, "transaction")
     db.delete(tx)  # its lines go with it (ON DELETE CASCADE)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -418,8 +424,10 @@ def _transition(
     # cancel. The row is locked, so what the validators see cannot change underneath us before
     # the status is written.
     ensure_valid(db, ctx, event, "transaction", tx.id)
+    before = audit.snapshot(tx)
     tx.status = to
     tx.version += 1
+    audit.updated(db, ctx, tx, "transaction", before, action=verb)
     commit_and_refresh(db, tx)
     return _read_one(db, ctx, transaction_id)
 
@@ -499,6 +507,8 @@ def add_line(
     line = create_scoped(
         db, ctx, TransactionLine, transaction_id=tx.id, position=last_position + 1, **values
     )
+    audit.created(db, ctx, line, "transaction_line", context=("transaction", tx.id))
+    audit.stamp(tx, ctx)
     commit_and_refresh(db, line)
     return line
 
@@ -535,7 +545,8 @@ def update_line(
     if _changes(line, values):
         values["version"] = line.version + 1
         tx.version += 1
-    apply_update(db, line, values)
+        audit.stamp(tx, ctx)
+    audit.apply_audited_update(db, ctx, line, "transaction_line", values, context=("transaction", tx.id))
     return line
 
 
@@ -552,6 +563,8 @@ def delete_line(
     line = _get_line(db, ctx, tx, line_id)
     ensure_current(if_match, line.version, "transaction_line", line.id)
     tx.version += 1
+    audit.stamp(tx, ctx)
+    audit.deleted(db, ctx, line, "transaction_line", context=("transaction", tx.id))
     db.delete(line)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

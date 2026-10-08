@@ -27,6 +27,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core import audit
 from app.core.org_time import organization_today
 from app.core.tenant import TenantContext
 from app.core.tenant_scope import create_scoped, get_scoped, get_scoped_or_404, reference_error, scoped_select
@@ -62,6 +63,13 @@ ZERO = Decimal("0.00")
 
 # --- structured refusals -------------------------------------------------------------------------------------
 
+
+# What an invoice's history records: the header a person sees and decides on. The frozen customer/issuer
+# snapshots and the lines are documents of their own, kept unchanged in the invoice itself.
+AUDITED_FIELDS = (
+    "status", "number_text", "customer_name", "currency", "invoice_date", "due_date", "description",
+    "net_amount", "vat_amount", "gross_amount", "issued_at",
+)
 
 def conflict(code: str, message: str, transaction_ids: Sequence[uuid.UUID] = ()) -> HTTPException:
     """A 409 with a machine-readable code and, where relevant, the (own) transactions concerned."""
@@ -217,6 +225,7 @@ def create_draft(db: Session, ctx: TenantContext, payload: InvoiceCreate) -> uui
                 gross_amount=gross,
             )
             _insert_children(db, ctx, invoice, ordered, lines_of, transaction_fields, line_fields, by_rate)
+            audit.created(db, ctx, invoice, "invoice", fields=AUDITED_FIELDS)
     except IntegrityError as error:
         # 10. UNIQUE (organization_id, transaction_id) is the last guard: whoever loses a race
         # for a transaction gets the same answer as the ordinary "already reserved" check.
@@ -313,6 +322,8 @@ def read_invoice(db: Session, ctx: TenantContext, invoice_id: uuid.UUID) -> Invo
     return InvoiceRead(
         **summary_fields(invoice, len(transactions)),
         issued_by=invoice.issued_by,
+        created_by=invoice.created_by,
+        updated_by=invoice.updated_by,
         customer_snapshot=invoice.customer_snapshot,
         issuer_snapshot=invoice.issuer_snapshot,
         transactions=[InvoiceTransactionRead.model_validate(row) for row in transactions],
@@ -373,9 +384,11 @@ def update_draft(db: Session, ctx: TenantContext, invoice_id: uuid.UUID, values:
     if final_due is not None and final_due < final_date:
         reference_error("due_date", "The due date cannot be before the invoice date", "value_error")
     if any(getattr(invoice, field) != value for field, value in values.items()):  # a no-op moves no version
+        before = audit.snapshot(invoice, AUDITED_FIELDS)
         for field, value in values.items():
             setattr(invoice, field, value)
         invoice.version += 1
+        audit.updated(db, ctx, invoice, "invoice", before, fields=AUDITED_FIELDS)
     db.commit()
 
 
@@ -384,6 +397,7 @@ def delete_draft(db: Session, ctx: TenantContext, invoice_id: uuid.UUID, if_matc
     invoice = get_scoped_or_404(db, ctx, Invoice, invoice_id, for_update=True)
     require_draft(invoice, "deleted")
     ensure_current(if_match, invoice.version, "invoice", invoice.id)
+    audit.deleted(db, ctx, invoice, "invoice", fields=AUDITED_FIELDS)
     db.delete(invoice)
     db.commit()
 
@@ -495,11 +509,13 @@ def issue(db: Session, ctx: TenantContext, invoice_id: uuid.UUID, if_match: str 
 
         # 6-9. The number is allocated last, after everything that can fail, in this transaction.
         number = numbering.allocate_number(db, ctx.organization_id, invoice.series)
+        before = audit.snapshot(invoice, AUDITED_FIELDS)
         invoice.number = number
         invoice.number_text = numbering.format_number(number)
         invoice.issued_at = datetime.now(timezone.utc)
         invoice.issued_by = ctx.user.id
         invoice.status = InvoiceStatus.ISSUED
         invoice.version += 1
+        audit.updated(db, ctx, invoice, "invoice", before, action="issued", fields=AUDITED_FIELDS)
         db.flush()
     db.commit()  # 10

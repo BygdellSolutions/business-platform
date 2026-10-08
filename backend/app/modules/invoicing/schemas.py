@@ -122,6 +122,8 @@ class InvoiceRead(InvoiceSummary):
     """The whole stored document. Every field of it comes from the invoicing tables."""
 
     issued_by: uuid.UUID | None
+    created_by: uuid.UUID | None
+    updated_by: uuid.UUID | None
     customer_snapshot: dict[str, Any]
     issuer_snapshot: dict[str, Any]
     transactions: list[InvoiceTransactionRead]

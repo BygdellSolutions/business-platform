@@ -4,7 +4,7 @@ from sqlalchemy import Boolean, CheckConstraint, String, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.base import Base
-from app.models.mixins import BusinessProfile, TenantOwned, profile_constraints
+from app.models.mixins import Authored, BusinessProfile, TenantOwned, profile_constraints
 
 
 class CustomerType(StrEnum):
@@ -12,7 +12,7 @@ class CustomerType(StrEnum):
     COMPANY = "company"  # not "organization": that word means the tenant
 
 
-class Customer(TenantOwned, BusinessProfile, Base):
+class Customer(TenantOwned, Authored, BusinessProfile, Base):
     """A person or company that an organization does business with."""
 
     __tablename__ = "customers"

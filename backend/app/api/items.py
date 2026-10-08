@@ -5,10 +5,11 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.api.deps import Pagination, pagination
+from app.core import audit
 from app.core.authz import record_writer
 from app.core.currency import share_lock_organization
 from app.core.db import get_db
-from app.core.query import apply_update, commit_and_refresh, contains_pattern, delete_or_409
+from app.core.query import commit_and_refresh, contains_pattern, delete_or_409
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import create_scoped, get_scoped_or_404, scoped_select
 from app.models import Item, ItemType
@@ -29,6 +30,7 @@ def create_item(
     # intent explicitly instead of relying on how foreign-key locking happens to work.
     share_lock_organization(db, ctx.organization_id)
     item = create_scoped(db, ctx, Item, **payload.model_dump())
+    audit.created(db, ctx, item, "item")
     commit_and_refresh(db, item)
     return item
 
@@ -73,7 +75,7 @@ def update_item(
     db: Session = Depends(get_db),
 ) -> Item:
     item = get_scoped_or_404(db, ctx, Item, item_id)
-    apply_update(db, item, payload.model_dump(exclude_unset=True))
+    audit.apply_audited_update(db, ctx, item, "item", payload.model_dump(exclude_unset=True))
     return item
 
 
@@ -84,5 +86,5 @@ def delete_item(
     db: Session = Depends(get_db),
 ) -> Response:
     item = get_scoped_or_404(db, ctx, Item, item_id)
-    delete_or_409(db, item, "Item is referenced by other records")
+    delete_or_409(db, item, "Item is referenced by other records", after_delete=audit.deletion(db, ctx, item, "item"))
     return Response(status_code=status.HTTP_204_NO_CONTENT)

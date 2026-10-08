@@ -69,6 +69,9 @@ export interface Customer extends Profile {
   active: boolean;
   created_at: string;
   updated_at: string;
+  /** Who created it and who changed it last (user ids); null = not recorded (before authors were kept). */
+  created_by: string | null;
+  updated_by: string | null;
 }
 
 /** What the create form sends. There is no organization_id: the backend takes it from the tenant context. */
@@ -146,6 +149,9 @@ export interface Item {
   active: boolean;
   created_at: string;
   updated_at: string;
+  /** Who created it and who changed it last (user ids); null = not recorded (before authors were kept). */
+  created_by: string | null;
+  updated_by: string | null;
 }
 
 export interface ItemCreate {
@@ -183,6 +189,9 @@ export interface Horse {
   active: boolean;
   created_at: string;
   updated_at: string;
+  /** Who created it and who changed it last (user ids); null = not recorded (before authors were kept). */
+  created_by: string | null;
+  updated_by: string | null;
 }
 
 /**
@@ -228,6 +237,9 @@ export interface TransactionLine {
   gross_amount: MoneyString;
   created_at: string;
   updated_at: string;
+  /** Who created it and who changed it last (user ids); null = not recorded (before authors were kept). */
+  created_by: string | null;
+  updated_by: string | null;
 }
 
 export interface VatBreakdownRow {
@@ -260,6 +272,9 @@ export interface TransactionSummary {
   totals: Totals;
   created_at: string;
   updated_at: string;
+  /** Who created it and who changed it last (user ids); null = not recorded (before authors were kept). */
+  created_by: string | null;
+  updated_by: string | null;
 }
 
 export interface Transaction extends TransactionSummary {
@@ -388,6 +403,8 @@ export interface PartySnapshot {
 
 export interface Invoice extends InvoiceSummary {
   issued_by: string | null;
+  created_by: string | null;
+  updated_by: string | null;
   customer_snapshot: PartySnapshot;
   issuer_snapshot: PartySnapshot;
   transactions: InvoiceSource[];
@@ -420,4 +437,32 @@ export interface InvoiceUpdate {
   invoice_date?: string;
   due_date?: string | null;
   description?: string | null;
+}
+
+/** One change to a record (GET /api/history). Values are the backend's strings, shown as received. */
+export interface HistoryChange {
+  from: string | number | boolean | null;
+  to: string | number | boolean | null;
+  /** Present for custom fields: the field's label at the time of the change. */
+  label?: string;
+}
+
+export interface Person {
+  id: string;
+  name: string;
+}
+
+export interface HistoryEvent {
+  id: number;
+  occurred_at: string;
+  actor: Person | null;
+  entity_type: string;
+  entity_id: string;
+  action: string;
+  changes: Record<string, HistoryChange>;
+}
+
+export interface History {
+  events: HistoryEvent[];
+  people: Person[];
 }

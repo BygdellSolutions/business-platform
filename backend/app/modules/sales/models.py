@@ -18,7 +18,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.base import Base
-from app.models.mixins import TenantOwned
+from app.models.mixins import Authored, TenantOwned
 
 
 class TransactionStatus(StrEnum):
@@ -37,7 +37,7 @@ class TransactionStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
-class Transaction(TenantOwned, Base):
+class Transaction(TenantOwned, Authored, Base):
     """The header of a sale: who is billed, and when. Industry-neutral.
 
     Anything specific to an industry (an animal, a project, a vehicle, a property...) is
@@ -89,7 +89,7 @@ class Transaction(TenantOwned, Base):
     currency: Mapped[str | None] = mapped_column(String(3))
 
 
-class TransactionLine(TenantOwned, Base):
+class TransactionLine(TenantOwned, Authored, Base):
     """One billable line. Item values are SNAPSHOTS copied at creation.
 
     `item_id` only links back to the catalog; editing the Item later never changes

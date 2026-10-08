@@ -5,9 +5,10 @@ from sqlalchemy import and_
 from sqlalchemy.orm import Session, aliased
 
 from app.api.deps import Pagination, pagination
+from app.core import audit
 from app.core.authz import record_writer
 from app.core.db import get_db
-from app.core.query import apply_update, commit_and_refresh, contains_pattern, delete_or_409
+from app.core.query import commit_and_refresh, contains_pattern, delete_or_409
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import (
     create_scoped,
@@ -65,6 +66,8 @@ def _to_read(horse: Horse, owner: Customer, stable: Customer | None) -> HorseRea
         active=horse.active,
         created_at=horse.created_at,
         updated_at=horse.updated_at,
+        created_by=horse.created_by,
+        updated_by=horse.updated_by,
     )
 
 
@@ -85,6 +88,7 @@ def create_horse(
         if value is not None:
             resolve_reference(db, ctx, Customer, value, field)
     horse = create_scoped(db, ctx, Horse, **payload.model_dump())
+    audit.created(db, ctx, horse, "horse")
     commit_and_refresh(db, horse)
     return _read_one(db, ctx, horse.id)
 
@@ -137,7 +141,7 @@ def update_horse(
         # valid even if its customer was deactivated since.
         if values.get(field) is not None and values[field] != getattr(horse, field):
             resolve_reference(db, ctx, Customer, values[field], field)
-    apply_update(db, horse, values)
+    audit.apply_audited_update(db, ctx, horse, "horse", values)
     return _read_one(db, ctx, horse_id)
 
 
@@ -148,5 +152,5 @@ def delete_horse(
     db: Session = Depends(get_db),
 ) -> Response:
     horse = get_scoped_or_404(db, ctx, Horse, horse_id)
-    delete_or_409(db, horse, "Horse is referenced by other records")
+    delete_or_409(db, horse, "Horse is referenced by other records", after_delete=audit.deletion(db, ctx, horse, "horse"))
     return Response(status_code=status.HTTP_204_NO_CONTENT)

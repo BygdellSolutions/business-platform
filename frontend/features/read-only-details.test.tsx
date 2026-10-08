@@ -22,6 +22,8 @@ const customer: Customer = {
   active: false,
   created_at: "2026-10-01T00:00:00Z",
   updated_at: "2026-10-01T00:00:00Z",
+  created_by: null,
+  updated_by: null,
 };
 
 const item: Item = {
@@ -35,6 +37,8 @@ const item: Item = {
   active: true,
   created_at: "2026-10-01T00:00:00Z",
   updated_at: "2026-10-01T00:00:00Z",
+  created_by: null,
+  updated_by: null,
 };
 
 const horse: Horse = {
@@ -50,6 +54,8 @@ const horse: Horse = {
   active: true,
   created_at: "2026-10-01T00:00:00Z",
   updated_at: "2026-10-01T00:00:00Z",
+  created_by: null,
+  updated_by: null,
 };
 
 function valueOf(label: string): HTMLElement {

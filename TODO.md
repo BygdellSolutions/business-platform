@@ -11,9 +11,9 @@ Found while testing staging (2026-10-08). Small reviewed slices, each validated 
 
 - [x] **Slice 0: viewers are read-only** for customers, items, horses, transactions/lines and custom-field values (backend `record_writer` + route inventory test; read-only detail views, no create links and a read-only transaction editor in the frontend)
 - [x] Slice 0b: organization time zone setting and "today in the organization" (transaction and invoice date defaults; needed by date-limited discounts and service dates)
-- [ ] Slice 1: audit core (append-only, tenant-owned change log: who, when, record, action, changed fields with old/new values; `created_by`/`updated_by`; old rows "not recorded")
-- [ ] Slice 2: Customer, Horse and Item history (log writes + history UI)
-- [ ] Slice 3: transaction and invoice audit metadata
+- [x] Slice 1: audit core (append-only, tenant-owned change log: who, when, record, action, changed fields with old/new values; `created_by`/`updated_by`; old rows "not recorded")
+- [x] Slice 2: Customer, Horse and Item history (log writes + history UI)
+- [x] Slice 3: transaction and invoice audit metadata
 - [ ] Slice 4: "recent authentication required" (a short-lived re-authentication, today by password; future SSO/passkey users use their own method) for leave, transfer and delete; Danger Zone at the bottom of Organization Settings: leave, ownership transfer, sole-owner rules, hard delete of the organization with strong confirmation; remove the header Leave button. Plus an **Account security** page under the USER (not the organization): change password (current, new, confirm; normal policy; other sessions revoked, the current one kept, as `change_password` does today)
 - [ ] Slice 5: owned-organization limit (`max_owned_organizations`, replacing `can_create_organizations`) on every path to ownership (create, transfer, promote, owner invitation) in the backend; "Owned 1 / 1" in the UI; one core check under the user-row lock plus a database backstop; an owner invitation accepted at the limit is refused whole and stays pending
 - [ ] Slice 6: line discount foundation (ordered discount layers with the base and final unit price on transaction and invoice lines, CHECKs, invoices copy them verbatim)
