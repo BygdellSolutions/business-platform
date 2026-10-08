@@ -110,6 +110,26 @@ describe("transferring ownership", () => {
   });
 });
 
+describe("after the transfer the page refreshes as an admin", () => {
+  it("keeps the confirmation although the transfer section is gone", async () => {
+    fetchMock.mockImplementation(() => reply(204));
+    const members = [member("Olle", "owner", true), member("Erik", "employee")];
+    const { rerender } = mount("owner", members);
+    await userEvent.selectOptions(screen.getByLabelText("New owner"), "id-Erik");
+    await userEvent.click(screen.getByTestId("transfer-ownership"));
+    expect(await screen.findByTestId("transferred")).toBeInTheDocument();
+
+    // What router.refresh() brings: the same component, now for an admin (the server says so).
+    rerender(
+      <OrgScope orgId={ORG}>
+        <DangerZone organizationName="Umeå Häst & Rehab" role="admin" members={[member("Olle", "admin", true), member("Erik", "owner")]} passwordChecked />
+      </OrgScope>,
+    );
+    expect(screen.queryByTestId("transfer-ownership")).toBeNull();
+    expect(screen.getByTestId("transferred")).toBeInTheDocument();
+  });
+});
+
 describe("deleting the organization", () => {
   it("warns that everything is deleted for good, including issued invoices, and mentions the retention rules", () => {
     mount("owner", [member("Olle", "owner", true)]);

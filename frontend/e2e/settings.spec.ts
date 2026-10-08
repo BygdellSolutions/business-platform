@@ -150,7 +150,11 @@ test.describe("every other role", () => {
       await expect(page.getByTestId("setting-legal_name")).toHaveText("Seen AB");
       await expect(page.getByTestId("setting-default_currency")).toHaveText("SEK");
       await expect(page.getByTestId("submit")).toHaveCount(0);
-      await expect(page.getByRole("textbox")).toHaveCount(0);
+      // No settings control at all; the danger zone (below) offers every member only "Leave", with its password.
+      await expect(page.getByRole("textbox").and(page.locator(":not([data-testid='danger-zone'] *)"))).toHaveCount(0);
+      await expect(page.getByTestId("danger-zone").getByTestId("leave-organization")).toBeVisible();
+      await expect(page.getByTestId("transfer-ownership")).toHaveCount(0);
+      await expect(page.getByTestId("delete-organization")).toHaveCount(0);
 
       // Hiding the form is a convenience; the server decides.
       const attempt = await context.request.patch(bffUrl(world.orgId, "/organization"), { data: { city: "Hacked" } });

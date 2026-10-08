@@ -27,14 +27,18 @@ export function DangerZone({
   /** False in the development sign-in, which has no passwords (the field is then not checked). */
   passwordChecked: boolean;
 }) {
+  // Kept here, above the sections: after a transfer the page refreshes and the transfer section itself is gone
+  // (the person is no longer an owner), but the confirmation must stay.
+  const [transferred, setTransferred] = useState(false);
   const isOwner = role === "owner";
   const owners = members.filter((member) => member.role === "owner").length;
   const soleOwner = isOwner && owners <= 1;
   return (
     <section aria-label="Danger zone" data-testid="danger-zone" className="flex max-w-xl flex-col gap-5 rounded border-2 border-red-600 p-4">
       <h2 className="text-lg font-semibold text-red-700 dark:text-red-400">Danger zone</h2>
+      {transferred && <Notice testId="transferred">Ownership transferred. You are now an admin.</Notice>}
       <LeaveSection soleOwner={soleOwner} passwordChecked={passwordChecked} />
-      {isOwner && <TransferSection members={members.filter((member) => !member.is_you && member.role !== "owner")} passwordChecked={passwordChecked} />}
+      {isOwner && <TransferSection members={members.filter((member) => !member.is_you && member.role !== "owner")} passwordChecked={passwordChecked} onTransferred={() => setTransferred(true)} />}
       {isOwner && <DeleteSection organizationName={organizationName} passwordChecked={passwordChecked} />}
     </section>
   );
@@ -133,18 +137,16 @@ function LeaveSection({ soleOwner, passwordChecked }: { soleOwner: boolean; pass
   );
 }
 
-function TransferSection({ members, passwordChecked }: { members: Member[]; passwordChecked: boolean }) {
+function TransferSection({ members, passwordChecked, onTransferred }: { members: Member[]; passwordChecked: boolean; onTransferred: () => void }) {
   const router = useRouter();
   const { pending, error, run } = useAction();
   const [target, setTarget] = useState("");
   const [password, setPassword] = useState("");
-  const [done, setDone] = useState(false);
   async function submit(event: FormEvent) {
     event.preventDefault();
-    setDone(false);
     if (await run("/organization/transfer-ownership", { membership_id: target, password }, explainCommon)) {
-      setDone(true);
       setPassword("");
+      onTransferred();
       router.refresh();
     }
   }
@@ -170,7 +172,6 @@ function TransferSection({ members, passwordChecked }: { members: Member[]; pass
           </label>
           <PasswordField value={password} onChange={setPassword} checked={passwordChecked} name="transfer_password" />
           {error && <Notice tone="error" testId="transfer-error">{error}</Notice>}
-          {done && <Notice testId="transferred">Ownership transferred. You are now an admin.</Notice>}
           <div>
             <Button type="submit" disabled={pending || target === ""} data-testid="transfer-ownership">
               {pending ? "Transferring…" : "Transfer ownership"}
