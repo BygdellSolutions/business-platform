@@ -33,6 +33,8 @@ Found while testing staging (2026-10-08). Small reviewed slices, each validated 
 - [ ] Invoice PDF follow-ups found in the Swedish requirements check (ML 2023:200 ch. 17): the VAT amount in SEK when an invoice is in another currency; a reason text for 0 % VAT (exemption, reverse charge) on the line or invoice; the registered office (säte) of a limited company; a check digit (OCR) payment reference instead of the invoice number. Backordered units are not printed: the PDF is built from the stored invoice alone, so it would need an invoice-time snapshot first.
 - [x] Slice 12: invitation audit in the Members UI (invited by, invited at, state)
 - [x] Slice 13: dashboard redesign for the organization owner
+- [x] Payments recorded by hand (record, reverse, paid/outstanding, list filter, dashboard) — 2026-10-08
+- [ ] Payments later: bank file import and automatic matching (bankgiro/OCR), Swish integration, reminders, credit notes
 - [ ] Later (email, paused): email infrastructure, **self-service password recovery** (the first email to build: today a locked-out user depends on an operator), invitation email, invoice email with delivery state and resend
 
 ## Now
@@ -128,6 +130,7 @@ Found while testing staging (2026-10-08). Small reviewed slices, each validated 
 ## Bugs / technical debt
 - Vitest: `features/transactions/CustomFields.test.tsx` "the errors go away when the user saves values..." failed once in a full parallel run on 2026-10-08 and passed on every rerun (3 alone, 1 full); likely a timing assumption under load. Investigate if it recurs.
 - Playwright: `e2e/customers-catalog-isolation.spec.ts` "an item saved in one tab..." failed once in a full local run on 2026-10-08 (the New item form in a second tab was submitted before hydration: empty fields after a native submit) and passed 10 of 10 alone. The hydration wait for pages opened with `context.newPage()` may not cover this; investigate if it recurs.
+- Playwright: `e2e/horses.spec.ts` "the filter pickers also find a customer that has been deactivated..." failed once in a full local session run on 2026-10-08 (picker options) and passed 8 of 8 alone.
 - The frontend uses hand-written API types; generate them from FastAPI's OpenAPI document later.
 - Dev identity (`/dev-login`, cookie) is development only; replace `lib/identity.ts` and `lib/backend.ts` with real authentication later. Behind a reverse proxy the same-origin check needs the original `Host` header forwarded.
 - Frontend client: no data library yet; revisit (SWR/TanStack Query) if shared client caches or optimistic updates become real needs.

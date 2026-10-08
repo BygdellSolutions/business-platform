@@ -307,3 +307,45 @@ def _frozen_artifact(mapper, connection, target) -> None:
     """Application-level guard (the database trigger is the one that cannot be bypassed): the ORM
     never changes or removes a stored PDF, so no code path can do it by accident."""
     raise ValueError("an invoice PDF is a frozen artifact and cannot be changed or deleted")
+
+
+PAYMENT_METHODS = ("bankgiro", "plusgiro", "bank_transfer", "swish", "card", "cash", "other")
+
+
+class InvoicePayment(TenantOwned, Base):
+    """A payment received for an ISSUED invoice, recorded by a person (no bank import yet).
+
+    Append-only (a trigger refuses UPDATE and DELETE, except while the organization is being deleted): a payment
+    recorded by mistake is cancelled by a REVERSAL, a row with the negative amount that names the payment it reverses
+    (each payment can be reversed once). What is paid is the sum of an invoice's rows; it never exceeds the invoice's
+    gross amount (checked under the invoice's row lock). Amounts are in the invoice's currency.
+    """
+
+    __tablename__ = "invoice_payments"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "id", name="uq_invoice_payments_organization_id_id"),
+        ForeignKeyConstraint(
+            ["organization_id", "invoice_id"], ["invoices.organization_id", "invoices.id"], ondelete="RESTRICT", name="fk_invoice_payments_invoice"
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "reverses_payment_id"],
+            ["invoice_payments.organization_id", "invoice_payments.id"],
+            ondelete="RESTRICT",
+            name="fk_invoice_payments_reverses",
+        ),
+        CheckConstraint(
+            "(reverses_payment_id IS NULL AND amount > 0) OR (reverses_payment_id IS NOT NULL AND amount < 0)", name="ck_invoice_payments_amount_sign"
+        ),
+        CheckConstraint("method IN ('" + "', '".join(PAYMENT_METHODS) + "')", name="ck_invoice_payments_method"),
+        Index("uq_invoice_payments_reversed_once", "organization_id", "reverses_payment_id", unique=True, postgresql_where=text("reverses_payment_id IS NOT NULL")),
+        Index("ix_invoice_payments_invoice", "organization_id", "invoice_id"),
+    )
+
+    invoice_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    paid_on: Mapped[date] = mapped_column(Date)
+    method: Mapped[str] = mapped_column(String(16))
+    reference: Mapped[str | None] = mapped_column(String(255))
+    note: Mapped[str | None] = mapped_column(String(500))
+    reverses_payment_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))

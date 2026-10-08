@@ -513,6 +513,24 @@ export interface InvoiceSummary {
   issued_at: string | null;
   created_at: string;
   updated_at: string;
+  /** Issued invoices only (null for a draft): the sum of recorded payments, what is left, and the state. */
+  paid_amount: MoneyString | null;
+  outstanding_amount: MoneyString | null;
+  payment_status: "unpaid" | "partially_paid" | "paid" | null;
+}
+
+/** A payment recorded by hand, or a reversal (negative, naming the payment it cancels). */
+export interface InvoicePayment {
+  id: string;
+  amount: MoneyString;
+  paid_on: string;
+  method: string;
+  reference: string | null;
+  note: string | null;
+  reverses_payment_id: string | null;
+  reversed: boolean;
+  created_at: string;
+  created_by_name: string | null;
 }
 
 /** One stored custom-field value of an invoice (generic: nothing says what the field is for). */
@@ -584,6 +602,7 @@ export interface PartySnapshot {
 }
 
 export interface Invoice extends InvoiceSummary {
+  payments: InvoicePayment[];
   issued_by: string | null;
   created_by: string | null;
   updated_by: string | null;
@@ -720,7 +739,10 @@ export interface InvoicingSummary {
   ready_to_invoice: CountAndAmounts;
   draft_invoices: number;
   issued_this_month: CountAndAmounts;
+  /** Issued, past the due date and not fully paid (the amounts are what is outstanding). */
   past_due: CountAndAmounts;
+  /** Payments dated this month (reversals subtracted). */
+  paid_this_month: CountAndAmounts;
 }
 
 /** GET /api/inventory/summary: active products that track stock. */

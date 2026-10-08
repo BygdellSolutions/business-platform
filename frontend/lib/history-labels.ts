@@ -22,6 +22,8 @@ export const FIELD_LABELS: Record<string, Record<string, string>> = {
     transaction_id: "Transaction",
   },
   invoice: {
+    payment: "Payment",
+    outstanding: "Outstanding",
     status: "Status",
     number_text: "Number",
     customer_name: "Customer",
@@ -54,6 +56,8 @@ const ACTIONS: Record<string, string> = {
   cancelled: "Cancelled",
   issued: "Issued",
   fields_updated: "Custom fields changed",
+  payment_recorded: "Payment recorded",
+  payment_reversed: "Payment reversed",
 };
 
 export function actionLabel(action: string): string {

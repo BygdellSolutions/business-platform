@@ -283,7 +283,7 @@ def test_invoicing_needs_no_item_horse_or_custom_field_records_to_exist(world):
         )
     ).all()
     referenced = {target for _, target in rows}
-    assert referenced <= {"organizations", "customers", "transactions", "transaction_lines", "users", "invoices", "invoice_transactions"}
+    assert referenced <= {"organizations", "customers", "transactions", "transaction_lines", "users", "invoices", "invoice_transactions", "invoice_payments"}
     assert not referenced & {"items", "horses", "custom_field_definitions", "custom_field_options", "custom_field_values"}
 
 
@@ -317,7 +317,7 @@ def test_only_invoice_tables_have_invoice_triggers_and_the_functions_know_only_i
     on = db.execute(
         text("select distinct c.relname from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_proc p on p.oid = t.tgfoid where p.proname like 'invoice%' and not t.tgisinternal")
     ).scalars().all()
-    assert sorted(on) == ["invoice_lines", "invoice_pdfs", "invoice_transactions", "invoice_vat_rows", "invoices"]
+    assert sorted(on) == ["invoice_lines", "invoice_payments", "invoice_pdfs", "invoice_transactions", "invoice_vat_rows", "invoices"]
     bodies = db.execute(text("select proname, prosrc from pg_proc where proname in ('invoices_immutability', 'invoice_children_immutability', 'invoice_pdfs_guard')")).all()
     assert len(bodies) == 3
     for name, source in bodies:

@@ -34,6 +34,7 @@ from app.core.tenant_scope import create_scoped, get_scoped, get_scoped_or_404, 
 from app.models import Customer, Organization, User
 from app.modules.custom_fields import service as custom_fields
 from app.modules.invoicing import numbering, snapshots
+from app.modules.invoicing import payments
 from app.modules.invoicing.models import (
     Invoice,
     InvoiceLine,
@@ -352,8 +353,10 @@ def read_invoice(db: Session, ctx: TenantContext, invoice_id: uuid.UUID) -> Invo
             scoped_select(InvoiceVatRow, ctx).where(InvoiceVatRow.invoice_id == invoice.id).order_by(InvoiceVatRow.vat_rate)
         )
     )
+    paid = payments.paid_amounts(db, ctx.organization_id, [invoice.id]).get(invoice.id, Decimal("0.00"))
     return InvoiceRead(
-        **summary_fields(invoice, len(transactions)),
+        **summary_fields(invoice, len(transactions), paid),
+        payments=payments.list_payments(db, ctx, invoice.id),
         issued_by=invoice.issued_by,
         created_by=invoice.created_by,
         updated_by=invoice.updated_by,
@@ -365,8 +368,9 @@ def read_invoice(db: Session, ctx: TenantContext, invoice_id: uuid.UUID) -> Invo
     )
 
 
-def summary_fields(invoice: Invoice, transaction_count: int) -> dict[str, Any]:
+def summary_fields(invoice: Invoice, transaction_count: int, paid: Decimal = Decimal("0.00")) -> dict[str, Any]:
     return dict(
+        **payments.payment_fields(invoice, paid),
         id=invoice.id,
         status=invoice.status,
         version=invoice.version,

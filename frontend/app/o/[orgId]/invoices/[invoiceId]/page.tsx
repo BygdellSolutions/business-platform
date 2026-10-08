@@ -4,6 +4,7 @@ import { RecordHistory } from "@/components/history/RecordHistory";
 import { RecordMeta } from "@/components/history/RecordMeta";
 import { Notice } from "@/components/ui/Notice";
 import { InvoiceView } from "@/features/invoices/InvoiceView";
+import { PaymentsPanel } from "@/features/invoices/PaymentsPanel";
 import type { Invoice, Organization } from "@/lib/api/types";
 import { requireCredential } from "@/lib/auth/credential";
 import { readRecordHistory } from "@/lib/history-server";
@@ -57,6 +58,7 @@ export default async function InvoicePage({
         </p>
       )}
       <InvoiceView key={invoice.id} invoice={invoice} canMutate={canMutateInvoices(role)} />
+      <PaymentsPanel key={`payments-${invoice.id}-${invoice.payments.length}`} invoice={invoice} canRecord={canMutateInvoices(role)} today={organization.today} timeZone={organization.timezone} />
       <RecordHistory data={history} entityType="invoice" timeZone={organization.timezone} />
     </div>
   );

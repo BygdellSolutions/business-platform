@@ -72,8 +72,8 @@ export default async function Dashboard({ params }: { params: Promise<{ orgId: s
             title="Past due date"
             count={invoicing.past_due.count}
             amounts={invoicing.past_due.amounts}
-            href={`${base}/invoices?status=issued`}
-            note="Issued invoices past their due date. Payments are not recorded yet, so paid ones are counted too."
+            href={`${base}/invoices?payment=open`}
+            note="Issued, past the due date and not fully paid: what is still outstanding."
             testId="card-past-due"
             tone="attention"
           />
@@ -82,7 +82,7 @@ export default async function Dashboard({ params }: { params: Promise<{ orgId: s
 
       <section aria-label="This month" className="flex flex-col gap-2">
         <h2 className="text-lg font-semibold">This month (from {sales.month_start})</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <SummaryCard
             title="Completed sales"
             count={sales.completed_this_month.count}
@@ -99,6 +99,14 @@ export default async function Dashboard({ params }: { params: Promise<{ orgId: s
             href={`${base}/invoices?status=issued&date_from=${sales.month_start}`}
             note="Issued invoices, including VAT."
             testId="card-invoiced"
+          />
+          <SummaryCard
+            title="Paid"
+            count={invoicing.paid_this_month.count}
+            amounts={invoicing.paid_this_month.amounts}
+            href={`${base}/invoices?payment=paid`}
+            note="Payments recorded with a payment date this month."
+            testId="card-paid"
           />
         </div>
       </section>

@@ -7,18 +7,12 @@ import { useState } from "react";
 import { useOrgId } from "@/components/shell/org-context";
 import { Button } from "@/components/ui/Button";
 import { ErrorSummary } from "@/components/ui/ErrorSummary";
+import { BACKORDER_STATES } from "@/features/catalog/backorder-labels";
 import { apiFetch } from "@/lib/api/client";
 import type { AllocationProposal, Backorder } from "@/lib/api/types";
 import { problemsFrom, useMutation } from "@/lib/forms";
 import { trimQuantity } from "@/lib/decimal";
 
-export const BACKORDER_STATES: Record<Backorder["state"], string> = {
-  waiting_for_stock: "Waiting for stock",
-  partially_fulfilled: "Partially fulfilled",
-  ready_to_fulfill: "Ready to fulfill",
-  fulfilled: "Fulfilled",
-  cancelled: "Cancelled",
-};
 
 /**
  * The open backorders of one product, oldest first. When stock is on hand, "Propose" asks the backend how it would be

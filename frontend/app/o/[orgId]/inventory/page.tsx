@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { BACKORDER_STATES } from "@/features/catalog/BackordersPanel";
+import { BACKORDER_STATES } from "@/features/catalog/backorder-labels";
 import { StockBadges } from "@/features/catalog/StockBadges";
 import type { Backorder, Incoming, StockItem } from "@/lib/api/types";
 import { serverRead } from "@/lib/server-api";

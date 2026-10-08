@@ -1,6 +1,8 @@
 import uuid
 from collections.abc import Sequence
 from datetime import date
+from decimal import Decimal
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from sqlalchemy import and_, exists, func, or_, select
@@ -14,10 +16,10 @@ from app.core.query import contains_pattern
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import scoped_select
 from app.models import Customer, Role
-from app.modules.invoicing import service
+from app.modules.invoicing import payments, service
 from app.modules.invoicing.pdf import service as pdf_service
 from app.modules.invoicing.pdf.filename import content_disposition
-from app.modules.invoicing.models import Invoice, InvoiceStatus, InvoiceTransaction
+from app.modules.invoicing.models import Invoice, InvoicePayment, InvoiceStatus, InvoiceTransaction
 from app.modules.invoicing.schemas import (
     MAX_TRANSACTIONS_PER_INVOICE,
     InvoiceableTotals,
@@ -28,6 +30,8 @@ from app.modules.invoicing.schemas import (
     InvoiceSummary,
     InvoiceUpdate,
     InvoicingSummary,
+    PaymentCreate,
+    PaymentReversal,
 )
 from app.modules.sales.models import Transaction, TransactionLine, TransactionStatus
 from app.modules.sales.pricing import calculate_totals
@@ -131,8 +135,39 @@ def invoicing_summary(ctx: TenantContext = Depends(get_tenant_context), db: Sess
         ready_to_invoice=CountAndAmounts(count=ready_count, amounts=[CurrencyAmount(currency=c, amount=a) for c, a in ready_amounts]),
         draft_invoices=db.scalar(select(func.count()).select_from(Invoice).where(Invoice.organization_id == ctx.organization_id, Invoice.status == InvoiceStatus.DRAFT)),
         issued_this_month=invoices(Invoice.status == InvoiceStatus.ISSUED, Invoice.invoice_date >= month_start, Invoice.invoice_date <= today),
-        past_due=invoices(Invoice.status == InvoiceStatus.ISSUED, Invoice.due_date.is_not(None), Invoice.due_date < today),
+        past_due=_past_due(db, ctx, today),
+        paid_this_month=_paid_between(db, ctx, month_start, today),
     )
+
+
+def _past_due(db: Session, ctx: TenantContext, today: date) -> CountAndAmounts:
+    """Issued, past the due date and not fully paid; the amounts are what is still outstanding."""
+    paid = payments.paid_sum_expression()
+    where = (
+        Invoice.organization_id == ctx.organization_id,
+        Invoice.status == InvoiceStatus.ISSUED,
+        Invoice.due_date.is_not(None),
+        Invoice.due_date < today,
+        paid < Invoice.gross_amount,
+    )
+    count = db.scalar(select(func.count()).select_from(Invoice).where(*where))
+    amounts = db.execute(select(Invoice.currency, func.sum(Invoice.gross_amount - paid)).where(*where).group_by(Invoice.currency).order_by(Invoice.currency)).all()
+    return CountAndAmounts(count=count, amounts=[CurrencyAmount(currency=c, amount=a) for c, a in amounts])
+
+
+def _paid_between(db: Session, ctx: TenantContext, start: date, end: date) -> CountAndAmounts:
+    """Payments dated in the period, per currency (reversals subtracted); the count is of payments, not reversals."""
+    where = (
+        InvoicePayment.organization_id == ctx.organization_id,
+        InvoicePayment.paid_on >= start,
+        InvoicePayment.paid_on <= end,
+    )
+    joined = and_(Invoice.organization_id == InvoicePayment.organization_id, Invoice.id == InvoicePayment.invoice_id)
+    count = db.scalar(select(func.count()).select_from(InvoicePayment).where(*where, InvoicePayment.reverses_payment_id.is_(None)))
+    amounts = db.execute(
+        select(Invoice.currency, func.sum(InvoicePayment.amount)).join(Invoice, joined).where(*where).group_by(Invoice.currency).order_by(Invoice.currency)
+    ).all()
+    return CountAndAmounts(count=count, amounts=[CurrencyAmount(currency=c, amount=a) for c, a in amounts if a != 0])
 
 
 @router.get("/by-transaction", response_model=list[InvoiceStateRead])
@@ -190,11 +225,25 @@ def list_invoices(
     date_from: date | None = None,
     date_to: date | None = None,
     q: str | None = Query(default=None, max_length=255, description="Customer name or invoice number contains"),
+    payment: Literal["unpaid", "partially_paid", "paid", "open"] | None = Query(
+        default=None, description="Issued invoices by payment state; 'open' is anything not fully paid"
+    ),
     page: Pagination = Depends(pagination),
     ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
 ) -> list[InvoiceSummary]:
     query = scoped_select(Invoice, ctx)
+    if payment is not None:
+        paid = payments.paid_sum_expression()
+        query = query.where(Invoice.status == InvoiceStatus.ISSUED)
+        if payment == "unpaid":
+            query = query.where(paid <= 0)
+        elif payment == "partially_paid":
+            query = query.where(paid > 0, paid < Invoice.gross_amount)
+        elif payment == "paid":
+            query = query.where(paid >= Invoice.gross_amount)
+        else:
+            query = query.where(paid < Invoice.gross_amount)
     if status_filter is not None:
         query = query.where(Invoice.status == status_filter)
     if customer_id is not None:
@@ -212,7 +261,29 @@ def list_invoices(
         )
     )
     counts = service.transaction_counts(db, ctx, [invoice.id for invoice in invoices])
-    return [InvoiceSummary(**service.summary_fields(invoice, counts.get(invoice.id, 0))) for invoice in invoices]
+    paid = payments.paid_amounts(db, ctx.organization_id, [invoice.id for invoice in invoices])
+    return [
+        InvoiceSummary(**service.summary_fields(invoice, counts.get(invoice.id, 0), paid.get(invoice.id, Decimal("0.00")))) for invoice in invoices
+    ]
+
+
+# --- payments (recorded by hand; issued invoices only) -----------------------------------------------------------
+
+
+@router.post("/{invoice_id}/payments", response_model=InvoiceRead, status_code=status.HTTP_201_CREATED)
+def record_payment(invoice_id: uuid.UUID, payload: PaymentCreate, ctx: TenantContext = Depends(mutators), db: Session = Depends(get_db)) -> InvoiceRead:
+    """Record a payment received. Never more than is outstanding; never dated in the future."""
+    payments.record_payment(db, ctx, invoice_id, payload)
+    return service.read_invoice(db, ctx, invoice_id)
+
+
+@router.post("/{invoice_id}/payments/{payment_id}/reverse", response_model=InvoiceRead, status_code=status.HTTP_201_CREATED)
+def reverse_payment(
+    invoice_id: uuid.UUID, payment_id: uuid.UUID, payload: PaymentReversal, ctx: TenantContext = Depends(mutators), db: Session = Depends(get_db)
+) -> InvoiceRead:
+    """Undo a payment recorded by mistake: a reversal row cancels it (nothing is deleted)."""
+    payments.reverse_payment(db, ctx, invoice_id, payment_id, payload.note)
+    return service.read_invoice(db, ctx, invoice_id)
 
 
 @router.get("/{invoice_id}", response_model=InvoiceRead)

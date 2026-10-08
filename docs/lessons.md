@@ -121,3 +121,11 @@ Rules learned from corrections by the project owner. Review at session start; ad
 - **A server component must not import a module that imports React hooks, even for a constant.** `lib/profile.ts` (labels) imports `lib/forms.ts` (hooks), so a server-rendered details view that only wanted the labels broke the dev server and the build; `tsc` and lint were green. Run the build (or a Playwright spec) after adding a server component.
 - **A limit on an entitlement must close every path to it, not only the one being discussed.** I recommended letting a transfer exceed the owned-organization limit; the owner refused, because transfer would then be a loophole. The same holds for promotion to owner and for owner invitations. List every way to gain the counted thing before designing the check.
 - **A new database invariant breaks every test that builds data around it, not only the tests of the feature.** The owned-organization trigger made five e2e specs fail that insert a second owner by SQL, and a session-run test pinned the old event names; my targeted runs of the "related" specs missed them and hosted CI caught them. After adding a trigger or CHECK, grep the tests (all suites, all modes) for raw writes to that table, and run both full Playwright suites before pushing.
+
+## A server page reads only components from a "use client" module (2026-10-08)
+
+The Inventory page imported a label table (`BACKORDER_STATES`) from a client component file. In a server component that
+import is a client reference, not the object, so every lookup was `undefined` and the State column rendered empty; no
+type check or unit test noticed. Rule: values shared by server and client code (labels, option lists) live in plain
+modules; a server file imports only components and types from a client module. `lib/server-client-imports.test.ts`
+enforces it.

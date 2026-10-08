@@ -1,12 +1,12 @@
 import uuid
 from datetime import date, datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
 from app.modules.invoicing.models import InvoiceStatus
 from app.schemas.customer import CustomerRef
-from app.schemas.money import CountAndAmounts, MoneyOut, PercentOut, QuantityOut
+from app.schemas.money import CountAndAmounts, MoneyIn, MoneyOut, PercentOut, QuantityOut
 from app.schemas.profile import optional_text
 
 MAX_TRANSACTIONS_PER_INVOICE = 200
@@ -122,6 +122,52 @@ class InvoiceSummary(BaseModel):
     issued_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    # Payments (issued invoices only; null for a draft): the sum of recorded payments, what is left, and the state.
+    paid_amount: MoneyOut | None = None
+    outstanding_amount: MoneyOut | None = None
+    payment_status: Literal["unpaid", "partially_paid", "paid"] | None = None
+
+
+class InvoicePaymentRead(BaseModel):
+    id: uuid.UUID
+    amount: MoneyOut
+    paid_on: date
+    method: str
+    reference: str | None
+    note: str | None
+    # A reversal names the payment it cancels; a payment that was reversed says so.
+    reverses_payment_id: uuid.UUID | None
+    reversed: bool
+    created_at: datetime
+    created_by_name: str | None
+
+
+PaymentMethod = Literal["bankgiro", "plusgiro", "bank_transfer", "swish", "card", "cash", "other"]
+
+
+class PaymentCreate(BaseModel):
+    """A payment a person records for an issued invoice."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    amount: MoneyIn
+    paid_on: date
+    method: PaymentMethod
+    reference: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)] | None = None
+    note: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)] | None = None
+
+    @field_validator("amount")
+    @classmethod
+    def positive(cls, value):
+        if value <= 0:
+            raise ValueError("must be greater than zero")
+        return value
+
+
+class PaymentReversal(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    note: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)] | None = None
 
 
 class InvoiceRead(InvoiceSummary):
@@ -135,6 +181,7 @@ class InvoiceRead(InvoiceSummary):
     transactions: list[InvoiceTransactionRead]
     lines: list[InvoiceLineRead]
     vat_breakdown: list[VatRowRead]
+    payments: list[InvoicePaymentRead] = []
 
 
 class InvoiceableTotals(BaseModel):
@@ -171,4 +218,7 @@ class InvoicingSummary(BaseModel):
     ready_to_invoice: CountAndAmounts
     draft_invoices: int
     issued_this_month: CountAndAmounts
+    # Issued, past the due date and not fully paid: what is still outstanding.
     past_due: CountAndAmounts
+    # Payments recorded with a payment date this month (reversals subtracted).
+    paid_this_month: CountAndAmounts
