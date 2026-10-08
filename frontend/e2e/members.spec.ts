@@ -136,7 +136,7 @@ test("leaving returns to the organization selection; the person stays signed in 
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByTestId("no-organizations")).toBeVisible();
   await expect(page.getByTestId("user-email")).toHaveText(me); // still signed in
-  await expect(page.getByTestId("create-organization-link")).toHaveCount(0); // this account may not create organizations
+  await expect(page.getByTestId("create-organization-link")).toBeVisible(); // Owned 0 / 1: a default account may own one
   expect(roleOf(me, w.orgId)).toBe("");
   expect(testRow(`select count(*) from security_events where organization_id = ${sql(w.orgId)} and event_type = 'member_left'`)).toBe("1");
 });

@@ -40,7 +40,7 @@ def test_bootstrap_creates_a_user_without_any_credential_and_a_single_use_link(d
     token = bootstrap(db_session, " Owner@Example.TEST ")
 
     user = db_session.scalar(select(User).where(User.email == "owner@example.test"))
-    assert user is not None and user.is_active and user.can_create_organizations and user.name == "Ada Owner"
+    assert user is not None and user.is_active and user.max_owned_organizations == 1 and user.name == "Ada Owner"
     assert db_session.scalar(select(UserCredential).where(UserCredential.user_id == user.id)) is None  # no password exists
     assert active_sessions(db_session, user) == []
     row = db_session.execute(text("select token_hash, purpose, created_at, expires_at, used_at, revoked_at from user_setup_tokens where user_id = :u"), {"u": user.id}).one()
@@ -81,7 +81,7 @@ def test_bootstrap_refuses_duplicates_bad_emails_and_blank_names(db_session):
 
 def test_organization_creation_can_be_left_out(db_session):
     bootstrap(db_session, can_create_organizations=False)
-    assert db_session.scalar(select(User.can_create_organizations).where(User.email == "owner@example.test")) is False
+    assert db_session.scalar(select(User.max_owned_organizations).where(User.email == "owner@example.test")) == 0
 
 
 def test_the_cli_has_no_way_to_provide_or_read_a_password():

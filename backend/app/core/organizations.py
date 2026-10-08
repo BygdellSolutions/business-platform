@@ -3,8 +3,8 @@
 This is the one business operation that is NOT tenant-scoped (there is no organization yet), so it has its own
 rules, all enforced here and not at the edge:
 
-  * Who may create: the authenticated user, and only if `users.can_create_organizations` is true. The flag is a
-    property of the ACCOUNT (set by an operator); no membership role implies it.
+  * Who may create: the authenticated user, and only while the account owns fewer organizations than its
+    `users.max_owned_organizations` (an account entitlement, default 1; see app.core.ownership).
   * The owner is the authenticated user. Nothing in the request names an owner, a role or an organization id.
   * One transaction: the organization row, the owner membership, the retry record and the security event are
     inserted inside one savepoint and committed once. If anything fails nothing remains; a bare organization
@@ -27,7 +27,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core import auth_service
+from app.core import auth_service, ownership
 from app.models import Organization, OrganizationUser, Role, SecurityEvent, User
 from app.models.organization_request import OrganizationCreationRequest
 
@@ -72,9 +72,6 @@ def create_organization(
     locked = auth_service.lock_user(db, user.id)  # fresh read of the row, and the lock
     if locked is None or not locked.is_active:
         raise UserNotActive()
-    if not locked.can_create_organizations:
-        raise CreationNotAllowed()
-
     digest = request_hash(values)
     if request_key is not None:
         previous = db.get(OrganizationCreationRequest, (locked.id, request_key))
@@ -91,6 +88,12 @@ def create_organization(
             if organization is None:
                 raise RequestKeyConflict()
             return Created(organization, replayed=True)
+
+    # The account's entitlement, judged under the user-row lock taken above: creating makes the user an owner. After
+    # the replay check on purpose: a retry of a creation that already committed gets its organization back, although
+    # that first creation is what used up the allowance.
+    if ownership.owned_count(db, locked.id) >= locked.max_owned_organizations:
+        raise CreationNotAllowed()
 
     with db.begin_nested():
         organization = Organization(**values)

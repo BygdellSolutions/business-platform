@@ -25,7 +25,10 @@ class MyUser(BaseModel):
     id: uuid.UUID
     email: str
     name: str
+    # Computed: whether this account owns fewer organizations than it may ("Owned 1 / 1" cannot create).
     can_create_organizations: bool
+    owned_organizations: int
+    max_owned_organizations: int
 
 
 class MeOrganization(BaseModel):

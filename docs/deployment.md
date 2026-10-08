@@ -134,7 +134,7 @@ python -m app.scripts.admin bootstrap-user --email owner@example.com --name "Ada
   terminal/exec session, not as a scheduled or logged job, and do not paste it into tickets or chat. Whether the platform's terminal or job
   runner persists a command's output is a **D5 item**.
 * Lost or expired: `python -m app.scripts.admin reissue-setup-link --email owner@example.com` (earlier links stop working).
-* Other operator commands: `disable-user`, `enable-user`, `grant-org-creation`, `revoke-org-creation`, and `purge` (expired sessions,
+* Other operator commands: `disable-user`, `enable-user`, `set-owned-limit`, `grant-org-creation`, `revoke-org-creation`, and `purge` (expired sessions,
   used or expired setup tokens, old security events; **scheduling it is a deployment task, not yet done**).
 * The first owner then creates the organization in the application.
 

@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
-from app.core import clock, memberships
+from app.core import clock, memberships, ownership
 from app.core.reauth import RecentAuthenticationFailed, confirm_recent_authentication
 from app.core.authz import roles_required
 from app.core.db import get_db
@@ -53,6 +53,11 @@ def run_membership_change(call):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Member not found")
     except memberships.NotAllowed as error:
         raise _forbidden(error)
+    except ownership.OwnershipLimitReached:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={"code": "ownership_limit_reached", "message": "That member has reached their owned-organization limit and cannot become an owner here."},
+        )
     except memberships.LastOwner:
         raise HTTPException(
             status.HTTP_409_CONFLICT,

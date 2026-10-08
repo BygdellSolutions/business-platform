@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, String, func, text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Integer, String, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -31,9 +31,9 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(320), unique=True)
     name: Mapped[str] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
-    # Platform-level permission to create an organization (and thereby become its owner). Independent of any
-    # membership: it says nothing about what the user may do in an organization.
-    can_create_organizations: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    # How many organizations this account may OWN (an account entitlement, default 1: "Owned 1 / 1"). Only owner
+    # memberships count; membership in any number of organizations costs nothing. See app.core.ownership.
+    max_owned_organizations: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

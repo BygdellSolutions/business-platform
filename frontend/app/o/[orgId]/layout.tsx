@@ -51,7 +51,7 @@ export default async function OrgLayout({
             {(mode === "dev" || mode === "session") && <SignOut mode={mode} />}
           </div>
         </div>
-        <OrgSwitcher organizations={result.memberships} currentId={orgId} canCreate={current.user.can_create_organizations} />
+        <OrgSwitcher organizations={result.memberships} currentId={orgId} canCreate={current.user.can_create_organizations} owned={{ count: current.user.owned_organizations, max: current.user.max_owned_organizations }} />
         <nav aria-label="Main" className="flex flex-wrap gap-4 text-sm">
           {NAV.filter((item) => item.roles === undefined || item.roles.includes(organization.role)).map((item) =>
             item.enabled ? (

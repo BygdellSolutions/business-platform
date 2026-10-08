@@ -6,9 +6,9 @@ import { loginPath, requireCredential } from "@/lib/auth/credential";
 import { getCurrentUser } from "@/lib/orgs";
 
 /**
- * Create an organization. Not under `/o/{id}`: there is no organization yet. Authentication identifies the user;
- * `can_create_organizations` (an account property set by an operator) decides whether the form is shown. Hiding
- * the form is a convenience: FastAPI refuses the request for any other account.
+ * Create an organization. Not under `/o/{id}`: there is no organization yet. Authentication identifies the user; the
+ * account's owned-organization limit ("Owned 1 / 1") decides whether the form is shown. Hiding the form is a
+ * convenience: FastAPI refuses the request when the limit is reached.
  */
 export default async function NewOrganizationPage() {
   const credential = await requireCredential();
@@ -25,7 +25,10 @@ export default async function NewOrganizationPage() {
           <CreateOrganizationForm />
         </>
       ) : (
-        <Notice testId="creation-not-allowed">This account is not allowed to create organizations. Ask the person who runs this service.</Notice>
+        <Notice testId="creation-not-allowed">
+          You own {current.user.owned_organizations} of the {current.user.max_owned_organizations} organization(s) this account may own. Owning another
+          one needs a larger allowance: ask the person who runs this service.
+        </Notice>
       )}
       {/* A plain anchor: leaving this page is a full navigation, like every organization switch. */}
       {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}

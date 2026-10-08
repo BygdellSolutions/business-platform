@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.auth import _busy, _issued, session_mode_only
-from app.core import clock, invitations, memberships, passwords
+from app.core import clock, invitations, memberships, ownership, passwords
 from app.core.auth import get_current_user
 from app.core.db import get_db
 from app.core.passwords import AuthBusy, admission
@@ -126,6 +126,14 @@ def accept_invitation(payload: TokenBody, request: Request, user: User = Depends
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail={"code": "invitation_wrong_account", "message": "This invitation was made for a different account."})
     except invitations.InvitationNotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=UNUSABLE)
+    except ownership.OwnershipLimitReached:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ownership_limit_reached",
+                "message": "You cannot become an owner of this organization because you have reached your owned-organization limit.",
+            },
+        )
     return AcceptedResponse(organization_id=accepted.organization_id, role=accepted.role, joined=accepted.joined)
 
 
@@ -159,5 +167,5 @@ def accept_invitation_as_new_account(payload: AcceptNewBody, request: Request, d
         raise HTTPException(status.HTTP_409_CONFLICT, detail={"code": "account_exists", "message": "An account with this email already exists. Sign in to accept the invitation."})
     except AuthBusy:
         raise _busy()
-    base = _issued(issued)
+    base = _issued(db, issued)
     return AcceptedSession(**base.model_dump(), organization_id=accepted.organization_id, role=accepted.role)

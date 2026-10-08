@@ -29,7 +29,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core import auth_service, memberships, sessions
+from app.core import auth_service, memberships, ownership, sessions
 from app.core.config import settings
 from app.core.security_events import normalize_email
 from app.core.tokens import hash_token, looks_like_token, new_token
@@ -293,6 +293,10 @@ def accept_existing(db: Session, *, user: User, token: str, now: datetime, sourc
         raise WrongAccount()  # nothing is consumed
 
     joined = False  # an existing membership is NEVER changed by an invitation: its role stays whatever it is
+    if member is None and invitation.role == Role.OWNER:
+        # Becoming an owner counts against the account's limit. Refused WHOLE: no other role instead, nothing
+        # consumed; the invitation stays pending (until a slot frees, the limit grows, or it is changed/revoked).
+        ownership.ensure_can_own_another(db, user.id)
     if member is None:
         try:
             with db.begin_nested():

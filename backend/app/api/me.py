@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core import ownership
 from app.core.auth import get_current_user
 from app.core.db import get_db
 from app.core.tenant import TenantContext, get_tenant_context
@@ -12,9 +13,13 @@ router = APIRouter(prefix="/api", tags=["me"])
 
 
 @router.get("/me/user", response_model=MyUser)
-def read_my_user(user: User = Depends(get_current_user)) -> MyUser:
+def read_my_user(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> MyUser:
     """Who the session is: the user's own identity, with no organization context. Needs authentication only."""
-    return MyUser(id=user.id, email=user.email, name=user.name, can_create_organizations=user.can_create_organizations)
+    owned = ownership.owned_count(db, user.id)
+    return MyUser(
+        id=user.id, email=user.email, name=user.name, can_create_organizations=owned < user.max_owned_organizations,
+        owned_organizations=owned, max_owned_organizations=user.max_owned_organizations,
+    )
 
 
 @router.get("/me/organizations", response_model=list[MyOrganization])

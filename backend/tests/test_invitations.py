@@ -513,7 +513,7 @@ def test_a_new_account_is_created_with_the_invited_email_a_membership_and_a_sess
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["user"]["email"] == "brand.new@invitees.invalid" and body["user"]["name"] == "Nina New" and body["user"]["can_create_organizations"] is False
+    assert body["user"]["email"] == "brand.new@invitees.invalid" and body["user"]["name"] == "Nina New" and body["user"]["can_create_organizations"] is True  # the default account may own one
     assert body["organization_id"] == str(session_team.team.org.id) and body["role"] == "accountant"
     user = db_session.scalar(select(User).where(User.email == "brand.new@invitees.invalid"))
     assert count(db_session, UserCredential, UserCredential.user_id == user.id) == 1

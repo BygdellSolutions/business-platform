@@ -248,16 +248,17 @@ def set_user_active(db: Session, user: User, active: bool, now: datetime) -> int
     return revoked
 
 
-def set_creation_capability(db: Session, user: User, allowed: bool, now: datetime) -> bool:
-    """Grant or revoke the account-level right to create organizations (operator action).
+def set_owned_limit(db: Session, user: User, limit: int, now: datetime) -> bool:
+    """Set how many organizations the account may own (operator action; an entitlement, not a role).
 
-    The same user-row lock that organization creation takes, so a revoke either waits for a creation in flight
-    (which then completes under the old right) or happens first (and the creation is refused). Memberships and
-    roles are never touched: this right is a property of the account, not of any membership. Returns whether
-    the value changed.
+    The same user-row lock that every path to ownership takes, so a lowered limit either waits for a grant in flight
+    or happens first and refuses it. Lowering it below what the account owns now removes nothing: it only stops the
+    account from gaining more. Returns whether the value changed.
     """
+    if limit < 0:
+        raise ValueError("the limit cannot be negative")
     locked = lock_user(db, user.id)
-    changed = locked.can_create_organizations != allowed
-    locked.can_create_organizations = allowed
-    security_events.record(db, "capability_changed", now, actor_user_id=locked.id, detail=("org_creation_granted" if allowed else "org_creation_revoked") + (":cli" if changed else ":cli:unchanged"))
+    changed = locked.max_owned_organizations != limit
+    locked.max_owned_organizations = limit
+    security_events.record(db, "capability_changed", now, actor_user_id=locked.id, detail=f"owned_limit:{limit}:cli" + ("" if changed else ":unchanged"))
     return changed
