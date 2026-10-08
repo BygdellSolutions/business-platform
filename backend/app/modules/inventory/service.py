@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from app.core import clock
 from app.core.tenant import TenantContext
 from app.models import Item, ItemType
-from app.modules.inventory.models import LineFulfillment, MovementReason, StockMovement
+from app.modules.inventory.models import IncomingStock, LineFulfillment, MovementReason, StockMovement
 from app.modules.sales.models import TransactionLine
 
 ZERO = Decimal("0.000")
@@ -71,6 +71,27 @@ def committed(db: Session, organization_id: uuid.UUID, item_ids: Iterable[uuid.U
     return result
 
 
+def incoming(db: Session, organization_id: uuid.UUID, item_ids: Iterable[uuid.UUID]) -> dict[uuid.UUID, Decimal]:
+    """Units on their way per item: what open incoming deliveries have not brought yet."""
+    ids = list(set(item_ids))
+    result = {item_id: ZERO for item_id in ids}
+    if not ids:
+        return result
+    rows = db.execute(
+        select(IncomingStock.item_id, func.sum(IncomingStock.quantity - IncomingStock.received))
+        .where(
+            IncomingStock.organization_id == organization_id,
+            IncomingStock.item_id.in_(ids),
+            IncomingStock.cancelled_at.is_(None),
+            IncomingStock.received < IncomingStock.quantity,
+        )
+        .group_by(IncomingStock.item_id)
+    )
+    for item_id, quantity in rows:
+        result[item_id] = quantity
+    return result
+
+
 def available(db: Session, organization_id: uuid.UUID, item_ids: Iterable[uuid.UUID]) -> dict[uuid.UUID, tuple[Decimal, Decimal]]:
     """(on hand, available) per item. Nothing is set aside for a draft; units promised to open backorders are not
     available to anyone else (they go to the oldest waiting sale first, I5)."""
@@ -118,6 +139,7 @@ def record_movement(
     note: str | None = None,
     transaction_id: uuid.UUID | None = None,
     transaction_line_id: uuid.UUID | None = None,
+    incoming_stock_id: uuid.UUID | None = None,
 ) -> StockMovement:
     """Append one movement. The caller holds `item`'s row lock; stock never goes below zero (422 `stock.negative`)."""
     before = on_hand(db, ctx.organization_id, [item.id])[item.id]
@@ -137,6 +159,7 @@ def record_movement(
         note=note,
         transaction_id=transaction_id,
         transaction_line_id=transaction_line_id,
+        incoming_stock_id=incoming_stock_id,
         created_by=ctx.user.id,
     )
     db.add(movement)

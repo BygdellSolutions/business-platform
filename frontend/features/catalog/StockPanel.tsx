@@ -9,7 +9,7 @@ import { DecimalText } from "@/components/ui/DecimalText";
 import { ErrorSummary } from "@/components/ui/ErrorSummary";
 import { DecimalField, SelectField, TextField } from "@/components/ui/Field";
 import { apiFetch } from "@/lib/api/client";
-import type { Stock, StockMovement } from "@/lib/api/types";
+import type { ItemAvailability, Stock, StockMovement } from "@/lib/api/types";
 import { blankToNull, problemsFrom, useMutation } from "@/lib/forms";
 import { formatTimestamp } from "@/lib/timestamps";
 
@@ -38,12 +38,15 @@ export function StockPanel({
   itemId,
   unit,
   stock,
+  figures,
   canAdjust,
   timeZone,
 }: {
   itemId: string;
   unit: string;
   stock: Stock;
+  /** Committed, available and incoming next to on hand (null: not read). */
+  figures: ItemAvailability | null;
   canAdjust: boolean;
   timeZone: string | null;
 }) {
@@ -75,6 +78,12 @@ export function StockPanel({
           <DecimalText value={stock.on_hand} />
         </span>{" "}
         {unit}
+        {figures && (
+          <span className="text-zinc-600 dark:text-zinc-400" data-testid="stock-figures">
+            {" "}
+            · committed to backorders {figures.committed} · available {figures.available} · incoming {figures.incoming}
+          </span>
+        )}
       </p>
       {stock.movements.length > 0 && (
         <table className="text-left text-sm">

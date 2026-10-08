@@ -76,7 +76,7 @@ REQUIRED_FUNCTIONS = {
 }
 TENANT_TABLES = {
     "audit_events", "custom_field_definitions", "custom_field_options", "custom_field_values", "customers", "horses", "invoice_counters", "invoice_lines",
-    "invoice_pdfs", "invoice_transactions", "invoice_vat_rows", "invoices", "item_discounts", "items", "line_fulfillments", "organization_creation_requests",
+    "invoice_pdfs", "invoice_transactions", "invoice_vat_rows", "invoices", "item_discounts", "incoming_stock", "items", "line_fulfillments", "organization_creation_requests",
     "organization_invitations", "organization_users", "stock_movements", "transaction_lines", "transactions",
 }  # `security_events.organization_id` is deliberately nullable (an event may be about no organization)
 CORE_TABLES = ("organizations", "users", "organization_users")

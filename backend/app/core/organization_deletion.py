@@ -33,6 +33,7 @@ TABLES_IN_DELETE_ORDER = (
     "transaction_lines",
     "transactions",
     "horses",
+    "incoming_stock",
     "line_fulfillments",
     "stock_movements",
     "item_discounts",

@@ -1,9 +1,9 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
 
-from sqlalchemy import BigInteger, CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint, Identity, Index, Numeric, String, func, text
+from sqlalchemy import BigInteger, CheckConstraint, Date, DateTime, ForeignKey, ForeignKeyConstraint, Identity, Index, Numeric, String, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -43,6 +43,8 @@ class StockMovement(Base):
         CheckConstraint("quantity_after = quantity_before + quantity_change", name="ck_stock_movements_arithmetic"),
         CheckConstraint("reason IN ('" + "', '".join(MovementReason) + "')", name="ck_stock_movements_reason"),
         CheckConstraint("reason <> 'adjustment' OR note IS NOT NULL", name="ck_stock_movements_adjustment_note"),
+        # Goods come in only through a recorded incoming delivery that a person received.
+        CheckConstraint("(reason = 'receipt') = (incoming_stock_id IS NOT NULL)", name="ck_stock_movements_receipt_source"),
         Index("ix_stock_movements_item_sequence", "organization_id", "item_id", "sequence"),
         Index("ix_stock_movements_transaction", "organization_id", "transaction_id", postgresql_where=text("transaction_id IS NOT NULL")),
     )
@@ -58,6 +60,8 @@ class StockMovement(Base):
     note: Mapped[str | None] = mapped_column(String(255))
     transaction_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     transaction_line_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    # For a receipt: the incoming delivery it received (a plain id, like the transaction ids).
+    incoming_stock_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -110,3 +114,33 @@ class LineFulfillment(TenantOwned, Base):
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cancelled_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
     cancel_reason: Mapped[str | None] = mapped_column(String(16))
+
+
+class IncomingStock(TenantOwned, Base):
+    """Stock on its way: ordered from a supplier, not yet on the shelf.
+
+    Incoming is never on hand. A person receives it (all or part; `received` grows), and each receipt is a
+    `receipt` movement in the ledger. What is left can be cancelled (the delivery will not come); units already
+    received stay. A receipt never fulfills a backorder by itself: it makes waiting backorders "ready to fulfill",
+    and a person confirms who gets what (I5).
+    """
+
+    __tablename__ = "incoming_stock"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "item_id"], ["items.organization_id", "items.id"], ondelete="RESTRICT", name="fk_incoming_stock_item"
+        ),
+        CheckConstraint("quantity > 0 AND received >= 0 AND received <= quantity", name="ck_incoming_stock_quantities"),
+        CheckConstraint("(cancelled_at IS NULL) = (cancelled_by IS NULL)", name="ck_incoming_stock_cancellation"),
+        Index("ix_incoming_stock_open_item", "organization_id", "item_id", postgresql_where=text("cancelled_at IS NULL AND received < quantity")),
+    )
+
+    item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    quantity: Mapped[Decimal] = mapped_column(Numeric(12, 3))
+    received: Mapped[Decimal] = mapped_column(Numeric(12, 3), default=Decimal("0"), server_default=text("0"))
+    expected_on: Mapped[date | None] = mapped_column(Date)
+    supplier: Mapped[str | None] = mapped_column(String(255))
+    reference: Mapped[str | None] = mapped_column(String(255))
+    created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelled_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))

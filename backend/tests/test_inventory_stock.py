@@ -263,7 +263,7 @@ def test_availability_lists_only_this_organizations_stock_tracking_items(client:
 
     response = client.get("/api/inventory/availability", params={"item_id": [str(tracked.id), str(untracked.id), str(foreign.id)]}, headers=owner)
 
-    assert response.json() == [{"item_id": str(tracked.id), "on_hand": "5.000", "available": "5.000"}]
+    assert response.json() == [{"item_id": str(tracked.id), "on_hand": "5.000", "committed": "0.000", "available": "5.000", "incoming": "0.000"}]
 
 
 def test_a_draft_shows_the_shortage_over_all_its_lines_and_lines_are_never_refused_for_stock(client: TestClient, db_session: Session):
@@ -277,7 +277,7 @@ def test_a_draft_shows_the_shortage_over_all_its_lines_and_lines_are_never_refus
 
     assert added.status_code == 201  # 8 asked, 5 on hand: allowed; the shortage is only a warning
     demand = client.get(f"/api/inventory/transactions/{tx.id}", headers=owner).json()
-    assert demand == [{"item_id": str(item.id), "requested": "8.000", "on_hand": "5.000", "available": "5.000", "shortage": "3.000"}]
+    assert demand == [{"item_id": str(item.id), "requested": "8.000", "on_hand": "5.000", "available": "5.000", "incoming": "0.000", "shortage": "3.000"}]
 
 
 def test_another_organizations_transaction_demand_is_not_found(client: TestClient, db_session: Session):

@@ -1,10 +1,10 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
 
-from app.schemas.money import CountIn, QuantityOut
+from app.schemas.money import CountIn, QuantityIn, QuantityOut
 
 Note = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
 
@@ -47,7 +47,12 @@ class StockMovementRead(BaseModel):
 class ItemAvailability(BaseModel):
     item_id: uuid.UUID
     on_hand: QuantityOut
+    # Promised to open backorders.
+    committed: QuantityOut
+    # On hand minus committed (never below zero).
     available: QuantityOut
+    # On its way: open incoming deliveries not received yet.
+    incoming: QuantityOut
 
 
 class TransactionDemand(BaseModel):
@@ -60,6 +65,7 @@ class TransactionDemand(BaseModel):
     requested: QuantityOut
     on_hand: QuantityOut
     available: QuantityOut
+    incoming: QuantityOut
     shortage: QuantityOut
 
 
@@ -75,6 +81,45 @@ class LineFulfillmentRead(BaseModel):
     # Backordered units still waiting.
     remaining: QuantityOut
     state: Literal["waiting_for_stock", "partially_fulfilled", "ready_to_fulfill", "fulfilled", "cancelled"]
+
+
+Text255 = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
+
+
+class IncomingCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    item_id: uuid.UUID
+    quantity: QuantityIn
+    expected_on: date | None = None
+    supplier: Text255 | None = None
+    reference: Text255 | None = None
+
+
+class Receipt(BaseModel):
+    """A person receives goods: `quantity` of them (empty: everything still expected)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    quantity: QuantityIn | None = None
+    note: Note | None = None
+
+
+class IncomingRead(BaseModel):
+    id: uuid.UUID
+    item_id: uuid.UUID
+    item_name: str
+    item_unit: str
+    quantity: QuantityOut
+    received: QuantityOut
+    remaining: QuantityOut
+    expected_on: date | None
+    supplier: str | None
+    reference: str | None
+    state: Literal["expected", "partially_received", "received", "cancelled"]
+    created_at: datetime
+    created_by_name: str | None
+    cancelled_at: datetime | None
 
 
 class StockRead(BaseModel):

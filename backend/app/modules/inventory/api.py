@@ -1,19 +1,23 @@
 import uuid
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core import clock
 from app.core.authz import record_writer
 from app.core.db import get_db
 from app.core.tenant import TenantContext, get_tenant_context
-from app.core.tenant_scope import get_scoped_or_404, reference_error
+from app.core.tenant_scope import get_scoped, get_scoped_or_404, reference_error
 from app.models import Item, User
 from app.modules.inventory import service
-from app.modules.inventory.models import LineFulfillment, MovementReason, StockMovement
+from app.modules.inventory.models import IncomingStock, LineFulfillment, MovementReason, StockMovement
 from app.modules.inventory.schemas import (
+    IncomingCreate,
+    IncomingRead,
     ItemAvailability,
+    Receipt,
     LineFulfillmentRead,
     StockAdjustment,
     StockMovementRead,
@@ -68,7 +72,11 @@ def read_availability(
     """On hand and available for the asked items that track stock in this organization (others are left out)."""
     ids = service.tracked_ids(db, ctx.organization_id, item_id)
     figures = service.available(db, ctx.organization_id, ids)
-    return [ItemAvailability(item_id=i, on_hand=figures[i][0], available=figures[i][1]) for i in sorted(ids)]
+    promised = service.committed(db, ctx.organization_id, ids)
+    coming = service.incoming(db, ctx.organization_id, ids)
+    return [
+        ItemAvailability(item_id=i, on_hand=figures[i][0], committed=promised[i], available=figures[i][1], incoming=coming[i]) for i in sorted(ids)
+    ]
 
 
 @availability_router.get("/transactions/{transaction_id}", response_model=list[TransactionDemand])
@@ -90,12 +98,14 @@ def read_transaction_demand(
     )
     ids = service.tracked_ids(db, ctx.organization_id, requested)
     figures = service.available(db, ctx.organization_id, ids)
+    coming = service.incoming(db, ctx.organization_id, ids)
     return [
         TransactionDemand(
             item_id=i,
             requested=requested[i],
             on_hand=figures[i][0],
             available=figures[i][1],
+            incoming=coming[i],
             shortage=max(Decimal(0), requested[i] - figures[i][1]),
         )
         for i in sorted(ids)
@@ -131,6 +141,105 @@ def read_transaction_fulfillment(
         )
         for row in rows
     ]
+
+
+# --- incoming stock and goods receipt -------------------------------------------------------------------------------
+
+
+@availability_router.get("/incoming", response_model=list[IncomingRead])
+def list_incoming(
+    item_id: uuid.UUID | None = None,
+    open_only: bool = True,
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: Session = Depends(get_db),
+) -> list[IncomingRead]:
+    """Incoming deliveries, the earliest expected first (any member). `open_only`: still expected, not cancelled."""
+    query = (
+        select(IncomingStock, Item.name, Item.unit, User.name)
+        .join(Item, (Item.organization_id == IncomingStock.organization_id) & (Item.id == IncomingStock.item_id))
+        .outerjoin(User, User.id == IncomingStock.created_by)
+        .where(IncomingStock.organization_id == ctx.organization_id)
+    )
+    if item_id is not None:
+        query = query.where(IncomingStock.item_id == item_id)
+    if open_only:
+        query = query.where(IncomingStock.cancelled_at.is_(None), IncomingStock.received < IncomingStock.quantity)
+    query = query.order_by(IncomingStock.expected_on.asc().nulls_last(), IncomingStock.created_at).limit(MOVEMENTS_SHOWN)
+    return [_incoming_read(row, name, unit, author) for row, name, unit, author in db.execute(query)]
+
+
+@availability_router.post("/incoming", response_model=IncomingRead, status_code=status.HTTP_201_CREATED)
+def create_incoming(payload: IncomingCreate, ctx: TenantContext = Depends(record_writer), db: Session = Depends(get_db)) -> IncomingRead:
+    """Record stock on its way (ordered from a supplier). It is not on hand until a person receives it."""
+    item = get_scoped(db, ctx, Item, payload.item_id)
+    if item is None:
+        reference_error("item_id", "Item not found", "reference.not_found")
+    service.ensure_tracked(item)
+    row = IncomingStock(organization_id=ctx.organization_id, created_by=ctx.user.id, **payload.model_dump())
+    db.add(row)
+    db.commit()
+    return _incoming_read(row, item.name, item.unit, ctx.user.name)
+
+
+@availability_router.post("/incoming/{incoming_id}/receive", response_model=IncomingRead)
+def receive_incoming(
+    incoming_id: uuid.UUID, payload: Receipt, ctx: TenantContext = Depends(record_writer), db: Session = Depends(get_db)
+) -> IncomingRead:
+    """A person confirms that goods arrived: they become on hand through a receipt movement (all or part)."""
+    row = get_scoped_or_404(db, ctx, IncomingStock, incoming_id, for_update=True)
+    if row.cancelled_at is not None or row.received >= row.quantity:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="This delivery is no longer expected")
+    remaining = row.quantity - row.received
+    quantity = payload.quantity if payload.quantity is not None else remaining
+    if quantity > remaining:
+        reference_error("quantity", f"Only {remaining.normalize():f} are still expected on this delivery", "incoming.too_much")
+    item = service.lock_items(db, ctx, [row.item_id])[row.item_id]
+    service.record_movement(db, ctx, item, quantity, MovementReason.RECEIPT, note=payload.note, incoming_stock_id=row.id)
+    row.received = row.received + quantity
+    db.commit()
+    return _incoming_read(row, item.name, item.unit, _author(db, row.created_by))
+
+
+@availability_router.post("/incoming/{incoming_id}/cancel", response_model=IncomingRead)
+def cancel_incoming(incoming_id: uuid.UUID, ctx: TenantContext = Depends(record_writer), db: Session = Depends(get_db)) -> IncomingRead:
+    """What is still expected will not come. Units already received stay on hand."""
+    row = get_scoped_or_404(db, ctx, IncomingStock, incoming_id, for_update=True)
+    if row.cancelled_at is not None or row.received >= row.quantity:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="This delivery is no longer expected")
+    row.cancelled_at = clock.utcnow()
+    row.cancelled_by = ctx.user.id
+    db.commit()
+    item = db.get(Item, row.item_id)
+    return _incoming_read(row, item.name, item.unit, _author(db, row.created_by))
+
+
+def _author(db: Session, user_id: uuid.UUID | None) -> str | None:
+    return db.scalar(select(User.name).where(User.id == user_id)) if user_id else None
+
+
+def _incoming_read(row: IncomingStock, item_name: str, item_unit: str, author: str | None) -> IncomingRead:
+    if row.cancelled_at is not None:
+        state = "cancelled"
+    elif row.received >= row.quantity:
+        state = "received"
+    else:
+        state = "partially_received" if row.received > 0 else "expected"
+    return IncomingRead(
+        id=row.id,
+        item_id=row.item_id,
+        item_name=item_name,
+        item_unit=item_unit,
+        quantity=row.quantity,
+        received=row.received,
+        remaining=row.quantity - row.received if row.cancelled_at is None else Decimal(0),
+        expected_on=row.expected_on,
+        supplier=row.supplier,
+        reference=row.reference,
+        state=state,
+        created_at=row.created_at,
+        created_by_name=author,
+        cancelled_at=row.cancelled_at,
+    )
 
 
 def _stock_read(db: Session, ctx: TenantContext, item: Item) -> StockRead:

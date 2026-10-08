@@ -1,0 +1,117 @@
+"""Inventory I4: incoming stock and goods receipt.
+
+Incoming is never on hand: a person receives it (all or part), and each receipt is a movement naming the delivery.
+What is left can be cancelled; received units stay. A receipt fulfills no backorder by itself: waiting backorders
+become "ready to fulfill" for a person to allocate (I5).
+"""
+
+from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+
+from app.models import ItemType, Role
+from tests.factories import add_member, make_customer, make_item, make_line, make_org, make_transaction, make_user
+
+
+def _world(db: Session, role: Role = Role.OWNER):
+    org = make_org(db)
+    user = make_user(db)
+    add_member(db, org, user, role)
+    return org, {"X-Dev-User-Email": user.email}
+
+
+def _product(db: Session, org):
+    return make_item(db, org, name="Liniment", type=ItemType.PRODUCT, unit="pcs", price_ex_vat="120.00", track_stock=True)
+
+
+def _availability(client: TestClient, item, headers):
+    return client.get("/api/inventory/availability", params={"item_id": str(item.id)}, headers=headers).json()[0]
+
+
+def test_incoming_stock_is_on_its_way_until_a_person_receives_it(client: TestClient, db_session: Session):
+    org, owner = _world(db_session)
+    item = _product(db_session, org)
+
+    created = client.post(
+        "/api/inventory/incoming",
+        json={"item_id": str(item.id), "quantity": "10", "expected_on": "2026-10-20", "supplier": "Horse Supplies AB", "reference": "PO-17"},
+        headers=owner,
+    )
+    assert created.status_code == 201 and created.json()["state"] == "expected" and created.json()["created_by_name"]
+    figures = _availability(client, item, owner)
+    assert (figures["on_hand"], figures["available"], figures["incoming"]) == ("0.000", "0.000", "10.000")
+
+    incoming_id = created.json()["id"]
+    part = client.post(f"/api/inventory/incoming/{incoming_id}/receive", json={"quantity": "4", "note": "First pallet"}, headers=owner)
+    too_much = client.post(f"/api/inventory/incoming/{incoming_id}/receive", json={"quantity": "7"}, headers=owner)
+    rest = client.post(f"/api/inventory/incoming/{incoming_id}/receive", json={}, headers=owner)
+
+    assert part.json()["state"] == "partially_received" and part.json()["remaining"] == "6.000"
+    assert too_much.status_code == 422 and too_much.json()["detail"][0]["type"] == "incoming.too_much"
+    assert rest.json()["state"] == "received" and rest.json()["remaining"] == "0.000"
+    assert client.post(f"/api/inventory/incoming/{incoming_id}/receive", json={}, headers=owner).status_code == 409
+    figures = _availability(client, item, owner)
+    assert (figures["on_hand"], figures["incoming"]) == ("10.000", "0.000")
+    movements = client.get(f"/api/items/{item.id}/stock", headers=owner).json()["movements"]
+    assert [(m["reason"], m["quantity_change"], m["note"]) for m in movements] == [("receipt", "6.000", None), ("receipt", "4.000", "First pallet")]
+    assert client.get("/api/inventory/incoming", headers=owner).json() == []  # nothing open any more
+    assert len(client.get("/api/inventory/incoming", params={"open_only": "false"}, headers=owner).json()) == 1
+
+
+def test_cancelling_keeps_what_was_received(client: TestClient, db_session: Session):
+    org, owner = _world(db_session)
+    item = _product(db_session, org)
+    incoming_id = client.post("/api/inventory/incoming", json={"item_id": str(item.id), "quantity": "5"}, headers=owner).json()["id"]
+    client.post(f"/api/inventory/incoming/{incoming_id}/receive", json={"quantity": "2"}, headers=owner)
+
+    cancelled = client.post(f"/api/inventory/incoming/{incoming_id}/cancel", headers=owner)
+
+    assert cancelled.json()["state"] == "cancelled" and cancelled.json()["remaining"] == "0.000"
+    figures = _availability(client, item, owner)
+    assert (figures["on_hand"], figures["incoming"]) == ("2.000", "0.000")
+    assert client.post(f"/api/inventory/incoming/{incoming_id}/receive", json={}, headers=owner).status_code == 409
+
+
+def test_a_receipt_makes_backorders_ready_but_fulfills_nothing_by_itself(client: TestClient, db_session: Session):
+    org, owner = _world(db_session)
+    item = _product(db_session, org)
+    tx = make_transaction(db_session, org, billing_customer=make_customer(db_session, org))
+    make_line(db_session, org, tx, item=item, description="Liniment", unit="pcs", quantity="3", unit_price_ex_vat="120.00")
+    client.post(f"/api/transactions/{tx.id}/complete", headers=owner)  # nothing on hand: 3 backordered
+    incoming_id = client.post("/api/inventory/incoming", json={"item_id": str(item.id), "quantity": "3"}, headers=owner).json()["id"]
+
+    client.post(f"/api/inventory/incoming/{incoming_id}/receive", json={}, headers=owner)
+
+    [row] = client.get(f"/api/inventory/transactions/{tx.id}/fulfillment", headers=owner).json()
+    assert (row["state"], row["fulfilled_later"], row["remaining"]) == ("ready_to_fulfill", "0.000", "3.000")
+    assert _availability(client, item, owner)["available"] == "0.000"  # promised to the waiting sale
+
+
+def test_only_stock_tracking_items_of_this_organization_can_be_expected(client: TestClient, db_session: Session):
+    org, owner = _world(db_session)
+    other_org, other_owner = _world(db_session)
+    untracked = make_item(db_session, org, name="Plain", type=ItemType.PRODUCT)
+    foreign = _product(db_session, other_org)
+    foreign_incoming = client.post("/api/inventory/incoming", json={"item_id": str(foreign.id), "quantity": "1"}, headers=other_owner).json()["id"]
+
+    untracked_answer = client.post("/api/inventory/incoming", json={"item_id": str(untracked.id), "quantity": "1"}, headers=owner)
+    foreign_answer = client.post("/api/inventory/incoming", json={"item_id": str(foreign.id), "quantity": "1"}, headers=owner)
+
+    assert untracked_answer.json()["detail"][0]["type"] == "stock.not_tracked"
+    assert foreign_answer.json()["detail"][0]["type"] == "reference.not_found"
+    assert client.post(f"/api/inventory/incoming/{foreign_incoming}/receive", json={}, headers=owner).status_code == 404
+    assert client.post(f"/api/inventory/incoming/{foreign_incoming}/cancel", headers=owner).status_code == 404
+    assert client.get("/api/inventory/incoming", headers=owner).json() == []
+
+
+def test_a_viewer_sees_incoming_stock_but_cannot_record_or_receive_it(client: TestClient, db_session: Session):
+    org, owner = _world(db_session)
+    viewer = make_user(db_session)
+    add_member(db_session, org, viewer, Role.VIEWER)
+    headers = {"X-Dev-User-Email": viewer.email}
+    item = _product(db_session, org)
+    incoming_id = client.post("/api/inventory/incoming", json={"item_id": str(item.id), "quantity": "5"}, headers=owner).json()["id"]
+
+    assert len(client.get("/api/inventory/incoming", headers=headers).json()) == 1
+    assert client.post("/api/inventory/incoming", json={"item_id": str(item.id), "quantity": "1"}, headers=headers).status_code == 403
+    assert client.post(f"/api/inventory/incoming/{incoming_id}/receive", json={}, headers=headers).status_code == 403
+    assert client.post(f"/api/inventory/incoming/{incoming_id}/cancel", headers=headers).status_code == 403

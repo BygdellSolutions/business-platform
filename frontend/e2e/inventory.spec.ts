@@ -78,3 +78,32 @@ test("completion delivers what is in stock and backorders the rest; a reopen giv
   await expect(page.getByTestId("stock-movement").first()).toContainText("Returned");
   await expect(page.getByTestId("stock-movement").first()).toContainText("Transaction reopened");
 });
+
+test("a delivery on its way is recorded, received in part, and the rest cancelled", async ({ page, context }) => {
+  world = createWorld({ label: "Incoming" });
+  await signIn(context, world.email);
+  const item = await createItem(context, world.orgId, { name: "Fly spray", type: "product", unit: "pcs", price_ex_vat: "150.00", track_stock: true });
+
+  await page.goto(`/o/${world.orgId}/catalog/${item.id}`);
+  const incoming = page.getByTestId("incoming-panel");
+  await expect(incoming.getByTestId("no-incoming")).toBeVisible();
+  await incoming.getByLabel(/^Quantity/).fill("10");
+  await incoming.getByLabel("Supplier (optional)").fill("Horse Supplies AB");
+  await incoming.getByLabel("Reference (optional)").fill("PO-17");
+  await incoming.getByTestId("submit-incoming").click();
+  await expect(incoming.getByTestId("incoming-row")).toContainText("Expected");
+  await expect(page.getByTestId("stock-figures")).toContainText("incoming 10.000");
+  await expect(page.getByTestId("on-hand")).toHaveText("0.000");
+
+  await incoming.getByLabel("Quantity received").fill("4");
+  await incoming.getByTestId("receive-incoming").click();
+  await expect(incoming.getByTestId("incoming-row")).toContainText("Partly received");
+  await expect(page.getByTestId("on-hand")).toHaveText("4.000");
+  await expect(page.getByTestId("stock-movement").first()).toContainText("Goods received");
+
+  await incoming.getByTestId("cancel-incoming").click();
+  await page.getByRole("button", { name: "Yes, cancel the rest" }).click();
+  await expect(incoming.getByTestId("no-incoming")).toBeVisible();
+  await expect(page.getByTestId("on-hand")).toHaveText("4.000");
+  await expect(page.getByTestId("stock-figures")).toContainText("incoming 0.000");
+});

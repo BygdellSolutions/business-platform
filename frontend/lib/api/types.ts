@@ -195,7 +195,12 @@ export interface StockMovement {
 export interface ItemAvailability {
   item_id: string;
   on_hand: QuantityString;
+  /** Promised to open backorders. */
+  committed: QuantityString;
+  /** On hand minus committed, never below zero. */
   available: QuantityString;
+  /** On its way: open incoming deliveries not received yet. */
+  incoming: QuantityString;
 }
 
 /** What a transaction asks of one stock-tracking item, summed over its lines (GET /api/inventory/transactions/{id}). */
@@ -204,6 +209,7 @@ export interface StockDemand {
   requested: QuantityString;
   on_hand: QuantityString;
   available: QuantityString;
+  incoming: QuantityString;
   /** "0.000" when there is enough; otherwise what completion would backorder. */
   shortage: QuantityString;
 }
@@ -218,6 +224,24 @@ export interface LineFulfillment {
   fulfilled_later: QuantityString;
   remaining: QuantityString;
   state: "waiting_for_stock" | "partially_fulfilled" | "ready_to_fulfill" | "fulfilled" | "cancelled";
+}
+
+/** A delivery on its way (GET /api/inventory/incoming). */
+export interface Incoming {
+  id: string;
+  item_id: string;
+  item_name: string;
+  item_unit: string;
+  quantity: QuantityString;
+  received: QuantityString;
+  remaining: QuantityString;
+  expected_on: string | null;
+  supplier: string | null;
+  reference: string | null;
+  state: "expected" | "partially_received" | "received" | "cancelled";
+  created_at: string;
+  created_by_name: string | null;
+  cancelled_at: string | null;
 }
 
 export interface Stock {

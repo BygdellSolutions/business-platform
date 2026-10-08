@@ -549,6 +549,7 @@ describe("stock on a draft (a warning, never a refusal)", () => {
     requested: "8.000" as QuantityString,
     on_hand: "5.000" as QuantityString,
     available: "5.000" as QuantityString,
+    incoming: "0.000" as QuantityString,
     shortage: shortage as QuantityString,
   });
 

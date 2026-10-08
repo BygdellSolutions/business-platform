@@ -91,6 +91,7 @@ export function LineRow({ line, ordinal }: { line: TransactionLine; ordinal: num
         {shortage && (
           <span className="block text-xs text-amber-800 dark:text-amber-300" data-testid="stock-warning">
             Only {shortage.available} of {shortage.requested} {line.unit} available; {shortage.shortage} will be backordered at completion.
+            {shortage.incoming !== "0.000" && ` ${shortage.incoming} on its way.`}
           </span>
         )}
       </td>
