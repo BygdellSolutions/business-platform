@@ -31,6 +31,16 @@ function organization(overrides: Partial<Organization> = {}): Organization {
     created_at: "2026-10-01T10:00:00Z",
     updated_at: "2026-10-01T10:00:00Z",
     ...EMPTY_PROFILE,
+    phone: null,
+    email: null,
+    website: null,
+    bankgiro: null,
+    plusgiro: null,
+    iban: null,
+    bic: null,
+    payment_terms_days: null,
+    approved_for_f_tax: null,
+    document_language: null,
     ...overrides,
   };
 }
@@ -386,5 +396,27 @@ describe("transactions without a currency", () => {
     await userEvent.click(screen.getByTestId("assign-currency"));
     await userEvent.click(screen.getByTestId("assign-currency-confirm"));
     expect(await screen.findByTestId("assigned")).toHaveTextContent("1 transaction now has the currency SEK");
+  });
+});
+
+describe("contact, payment and documents", () => {
+  it("sends only what changed, with days as a number and F-tax and language as chosen", async () => {
+    mocked.mockResolvedValue(ok(organization({ bankgiro: "123-4567", payment_terms_days: 30, approved_for_f_tax: true, document_language: "sv" })));
+    mount(A, organization());
+
+    await userEvent.type(screen.getByLabelText("Bankgiro"), "123-4567");
+    await userEvent.type(screen.getByLabelText("Payment terms (days)"), "30");
+    await userEvent.selectOptions(screen.getByLabelText("Approved for F-tax (F-skatt)"), "yes");
+    await userEvent.selectOptions(screen.getByLabelText("Document language"), "sv");
+    await userEvent.click(screen.getByTestId("submit"));
+
+    expect(mocked.mock.calls[0][2]?.body).toEqual({ bankgiro: "123-4567", payment_terms_days: 30, approved_for_f_tax: true, document_language: "sv" });
+  });
+
+  it("shows the values read-only to someone who may not change them", () => {
+    mount(A, organization({ iban: "SE4550000000058398257466", approved_for_f_tax: false, document_language: "sv" }), false);
+    expect(screen.getByTestId("setting-iban")).toHaveTextContent("SE4550000000058398257466");
+    expect(screen.getByTestId("setting-approved_for_f_tax")).toHaveTextContent("No");
+    expect(screen.getByTestId("setting-document_language")).toHaveTextContent("Swedish");
   });
 });

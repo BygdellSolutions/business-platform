@@ -14,7 +14,9 @@ import type { Organization, OrganizationUpdate, ProfileField } from "@/lib/api/t
 import { blankToNull, problemsFrom, useMutation } from "@/lib/forms";
 import { PROFILE_FIELDS, PROFILE_LABELS, profileChanges, profileState, type ProfileState } from "@/lib/profile";
 
-const CONTROLS = ["name", "legal_name", "default_currency", "timezone", ...PROFILE_CONTROLS] as const;
+import { SELLER_CONTROLS, SellerFields, sellerChanges, sellerRows, sellerState, type SellerState } from "./SellerFields";
+
+const CONTROLS = ["name", "legal_name", "default_currency", "timezone", ...PROFILE_CONTROLS, ...SELLER_CONTROLS] as const;
 
 // Zone names the browser knows, offered as suggestions (the backend decides what is valid). Read only in the
 // browser: the server renders none, so the lists can never differ between the server's and the browser's render.
@@ -39,6 +41,7 @@ function ReadOnlySettings({ organization }: { organization: Organization }) {
     ["default_currency", "Default currency", organization.default_currency],
     ["timezone", "Time zone", organization.timezone],
     ...PROFILE_FIELDS.map((field): [string, string, string | null] => [field, PROFILE_LABELS[field], organization[field]]),
+    ...sellerRows(organization),
   ];
   return (
     <div className="flex max-w-xl flex-col gap-4">
@@ -61,6 +64,7 @@ interface FormState {
   default_currency: string;
   timezone: string;
   profile: ProfileState;
+  seller: SellerState;
 }
 
 function toState(organization: Organization): FormState {
@@ -70,6 +74,7 @@ function toState(organization: Organization): FormState {
     default_currency: organization.default_currency ?? "",
     timezone: organization.timezone ?? "",
     profile: profileState(organization),
+    seller: sellerState(organization),
   };
 }
 
@@ -108,7 +113,7 @@ function SettingsForm({ organization }: { organization: Organization }) {
     if (blankToNull(state.legal_name) !== record.legal_name) body.legal_name = blankToNull(state.legal_name);
     if (state.default_currency.trim() !== (record.default_currency ?? "")) body.default_currency = state.default_currency.trim();
     if (blankToNull(state.timezone.trim()) !== record.timezone) body.timezone = blankToNull(state.timezone.trim());
-    Object.assign(body, profileChanges(state.profile, record));
+    Object.assign(body, profileChanges(state.profile, record), sellerChanges(state.seller, record));
     if (Object.keys(body).length === 0) {
       setNotice("unchanged");
       return;
@@ -160,6 +165,7 @@ function SettingsForm({ organization }: { organization: Organization }) {
         <legend className="pb-1 text-sm font-medium">Business profile</legend>
         <ProfileFields state={state.profile} onChange={setProfile} errors={problems.byField} />
       </fieldset>
+      <SellerFields state={state.seller} onChange={(seller) => set("seller", seller)} errors={problems.byField} />
       <ErrorSummary messages={problems.general} />
       {notice === "saved" && <Notice testId="saved">Saved.</Notice>}
       {notice === "unchanged" && <Notice testId="unchanged">No changes to save.</Notice>}

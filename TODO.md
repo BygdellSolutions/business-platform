@@ -28,7 +28,7 @@ Found while testing staging (2026-10-08). Small reviewed slices, each validated 
   - [x] I5: backorder backlog view and allocation (oldest first, proposed and then confirmed by a person; states Waiting for stock / Partially fulfilled / Ready to fulfill / Fulfilled / Cancelled).
   - [x] I6: catalog/warehouse columns (SKU, on hand, committed, available, incoming, backordered, low-stock threshold, status; low stock, out of stock, backordered and incoming are separate states that can hold at the same time); dashboard figures come with slice 13.
   - Decided: stock is set aside at COMPLETION (drafts only warn); available units are delivered at completion and only the shortage waits; the whole transaction is invoiced at once, backordered units included (fulfillment and invoicing stay separate; an "invoice only fulfilled items" mode may come later); receipt never fulfills by itself, a person confirms the oldest-first proposal.
-- [ ] Slice 10: seller and payment profile (phone, email, website, bankgiro, plusgiro, IBAN, BIC, payment terms, F-skatt) and the document language setting; issuer snapshot schema 2
+- [x] Slice 10: seller and payment profile (phone, email, website, bankgiro, plusgiro, IBAN, BIC, payment terms, F-skatt) and the document language setting; issuer snapshot schema 2
 - [ ] Slice 11: invoice PDF template v2 (professional layout, verified against Swedish invoice requirements, ML 2023:200 ch. 17; frozen v1 PDFs stay as they are)
 - [ ] Slice 12: invitation audit in the Members UI (invited by, invited at, state)
 - [ ] Slice 13: dashboard redesign for the organization owner

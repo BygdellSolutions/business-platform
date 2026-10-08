@@ -18,7 +18,7 @@ draft and refuses; creation first, so the validator sees the link and refuses th
 import uuid
 from collections import defaultdict
 from collections.abc import Sequence
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -178,6 +178,9 @@ def create_draft(db: Session, ctx: TenantContext, payload: InvoiceCreate) -> uui
     invoice_date = payload.invoice_date or organization_today(db, ctx.organization_id)
     if payload.due_date is not None and payload.due_date < invoice_date:
         reference_error("due_date", "The due date cannot be before the invoice date", "value_error")
+    terms = db.scalar(select(Organization.payment_terms_days).where(Organization.id == ctx.organization_id))
+    # Without a due date, the organization's payment terms decide it (none set: no due date, as before).
+    due_date = payload.due_date if payload.due_date is not None or terms is None else invoice_date + timedelta(days=terms)
 
     # 9. Everything that is read, is read while the transaction locks are held. Nothing a Sales
     # writer can touch (lines, header, status, custom values) can change underneath us.
@@ -218,7 +221,7 @@ def create_draft(db: Session, ctx: TenantContext, payload: InvoiceCreate) -> uui
                 issuer_snapshot=snapshots.issuer_snapshot(organization),
                 customer_name=customer.name,
                 invoice_date=invoice_date,
-                due_date=payload.due_date,
+                due_date=due_date,
                 description=payload.description,
                 net_amount=net,
                 vat_amount=vat,

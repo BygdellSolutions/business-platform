@@ -1,8 +1,8 @@
 import uuid
 from datetime import date, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
-from pydantic import AfterValidator, StringConstraints, field_validator
+from pydantic import AfterValidator, BeforeValidator, Field, StringConstraints, field_validator
 
 from app.core.org_time import is_known_zone
 
@@ -20,6 +20,25 @@ def _known_zone(value: str) -> str:
 
 # An IANA time zone name, checked against the zone database the backend ships (tzdata).
 TimeZoneName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64), AfterValidator(_known_zone)]
+
+
+
+def _compact_upper(value):
+    # "se45 5000 0000 0583 9825 7466" is accepted as "SE4550000000058398257466": people type IBANs in groups.
+    if isinstance(value, str):
+        value = "".join(value.split()).upper()
+        return value or None
+    return value
+
+
+Phone = optional_text(64)
+Email = optional_text(255)
+Website = optional_text(255)
+GiroNumber = optional_text(32)
+Iban = Annotated[Annotated[str, StringConstraints(pattern=r"^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$")] | None, BeforeValidator(_compact_upper)]
+Bic = Annotated[Annotated[str, StringConstraints(pattern=r"^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$")] | None, BeforeValidator(_compact_upper)]
+PaymentTermsDays = Annotated[int, Field(ge=0, le=365)]
+DocumentLanguage = Literal["sv", "en"]
 
 # There is no organization_id field anywhere: the organization is always the active one.
 
@@ -51,6 +70,17 @@ class OrganizationUpdate(ProfileIn):
     default_currency: CurrencyCode | None = None
     # Null clears it again (dates then default to UTC): nothing stored depends on the zone.
     timezone: TimeZoneName | None = None
+    # Contact and payment details for documents; null (or blank) clears one.
+    phone: Phone = None
+    email: Email = None
+    website: Website = None
+    bankgiro: GiroNumber = None
+    plusgiro: GiroNumber = None
+    iban: Iban = None
+    bic: Bic = None
+    payment_terms_days: PaymentTermsDays | None = None
+    approved_for_f_tax: bool | None = None
+    document_language: DocumentLanguage | None = None
 
     @field_validator("name", "default_currency")
     @classmethod
@@ -70,6 +100,16 @@ class OrganizationRead(ProfileRead):
     default_currency_locked: bool
     default_currency_lock_reason: str | None
     timezone: str | None
+    phone: str | None
+    email: str | None
+    website: str | None
+    bankgiro: str | None
+    plusgiro: str | None
+    iban: str | None
+    bic: str | None
+    payment_terms_days: int | None
+    approved_for_f_tax: bool | None
+    document_language: str | None
     # The organization's current date in its time zone (UTC when none is set): the default for new dates.
     today: date
     created_at: datetime

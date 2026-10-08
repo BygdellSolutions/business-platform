@@ -42,7 +42,8 @@ from app.models.mixins import Authored, TenantOwned
 from app.modules.sales.models import discount_constraints
 
 DEFAULT_SERIES = "default"
-SNAPSHOT_SCHEMA = 1  # version of the customer/issuer snapshot structure
+SNAPSHOT_SCHEMA = 1  # version of the customer snapshot structure
+ISSUER_SNAPSHOT_SCHEMA = 2  # version of the issuer snapshot: 2 added contact, payment, F-tax and document language
 
 
 class InvoiceStatus(StrEnum):

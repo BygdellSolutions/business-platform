@@ -53,6 +53,8 @@ def test_the_response_has_no_secrets_or_foreign_ids(client, db_session):
         "id", "name", "legal_name", "default_currency", "default_currency_locked",
         "default_currency_lock_reason", "address_line1", "address_line2", "postal_code", "city",
         "country_code", "registration_number", "vat_number", "timezone", "today", "created_at", "updated_at",
+        # The seller's contact and payment details (shown on documents; no secret among them).
+        "phone", "email", "website", "bankgiro", "plusgiro", "iban", "bic", "payment_terms_days", "approved_for_f_tax", "document_language",
     }
 
 

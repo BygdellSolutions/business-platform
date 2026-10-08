@@ -105,9 +105,26 @@ export interface Organization extends Profile {
   timezone: string | null;
   /** The organization's current date (YYYY-MM-DD) in its time zone: the default for new dates. */
   today: string;
+  /** Contact and payment details for documents (all optional; IBAN and BIC as the backend normalized them). */
+  phone: string | null;
+  email: string | null;
+  website: string | null;
+  bankgiro: string | null;
+  plusgiro: string | null;
+  iban: string | null;
+  bic: string | null;
+  /** Days from the invoice date to the due date, used when an invoice is created without one. */
+  payment_terms_days: number | null;
+  /** Approved for F-tax (F-skatt); null: not stated. */
+  approved_for_f_tax: boolean | null;
+  /** The language of documents (invoice PDFs); null: English. */
+  document_language: DocumentLanguage | null;
   created_at: string;
   updated_at: string;
 }
+
+export type DocumentLanguage = "sv" | "en";
+export type SellerTextField = "phone" | "email" | "website" | "bankgiro" | "plusgiro" | "iban" | "bic";
 
 /**
  * The body of organization creation. There is deliberately no owner, user, role or id: the backend makes the
@@ -124,7 +141,10 @@ export type OrganizationUpdate = Partial<Profile> & {
   legal_name?: string | null;
   default_currency?: string;
   timezone?: string | null;
-};
+  payment_terms_days?: number | null;
+  approved_for_f_tax?: boolean | null;
+  document_language?: DocumentLanguage | null;
+} & Partial<Record<SellerTextField, string | null>>;
 
 /** How many transactions predate currencies (GET /api/transactions/currency-status). */
 export interface CurrencyStatus {
