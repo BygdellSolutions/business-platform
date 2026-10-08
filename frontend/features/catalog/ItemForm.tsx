@@ -16,7 +16,7 @@ import type { Item, ItemCreate, ItemType, ItemUpdate } from "@/lib/api/types";
 import { parseMoney, parsePercent, type QuantityString } from "@/lib/decimal";
 import { NOT_A_DECIMAL, blankToNull, problemsFrom, useMutation } from "@/lib/forms";
 
-const CONTROLS = ["type", "name", "description", "unit", "price_ex_vat", "vat_rate", "active", "sku", "track_stock", "low_stock_threshold"] as const;
+const CONTROLS = ["type", "name", "description", "unit", "price_ex_vat", "vat_rate", "active", "sku", "track_stock", "low_stock_threshold", "opening_stock"] as const;
 
 const TYPES = [
   { value: "service", label: "Service" },
@@ -40,6 +40,8 @@ interface FormState {
   sku: string;
   track_stock: boolean;
   low_stock_threshold: string;
+  /** New items only: what is on the shelf now (recorded as the opening count once the item exists). */
+  opening_stock: string;
 }
 
 function toState(item?: Item): FormState {
@@ -54,6 +56,7 @@ function toState(item?: Item): FormState {
     sku: item?.sku ?? "",
     track_stock: item?.track_stock ?? false,
     low_stock_threshold: item?.low_stock_threshold ?? "",
+    opening_stock: "",
   };
 }
 
@@ -103,7 +106,15 @@ export function ItemForm({ item }: { item?: Item }) {
     };
     const created = await run(() => apiFetch<Item>(orgId, "/items", { method: "POST", body }));
     if (created === null) return;
-    router.push(`/o/${orgId}/catalog/${created.id}?created=1`);
+    // The stock ledger belongs to Inventory, so the opening count is its own request once the item exists. If it is
+    // refused, the item still exists: its page says so and offers the stock form.
+    const opening = state.opening_stock.trim();
+    let stockFailed = false;
+    if (created.track_stock && opening !== "") {
+      const counted = await apiFetch(orgId, `/items/${created.id}/stock`, { method: "POST", body: { kind: "count", quantity: opening, note: "Opening stock" } });
+      stockFailed = !counted.ok;
+    }
+    router.push(`/o/${orgId}/catalog/${created.id}?created=1${stockFailed ? "&stock=failed" : ""}`);
     router.refresh(); // drop cached pages (the list visited before) so Back does not show them without the new record
   }
 
@@ -174,6 +185,16 @@ export function ItemForm({ item }: { item?: Item }) {
             onChange={(value) => set("low_stock_threshold", value)}
             error={errorsFor("low_stock_threshold")}
             hint="Below this quantity on hand the product is shown as low stock."
+          />
+        )}
+        {!record && state.type === "product" && state.track_stock && (
+          <DecimalField
+            label="On hand now (optional)"
+            name="opening_stock"
+            value={state.opening_stock}
+            onChange={(value) => set("opening_stock", value)}
+            error={errorsFor("opening_stock")}
+            hint="Recorded as the opening stock. Later changes are made in the item's Stock section."
           />
         )}
         {!record && <CheckboxField label="Active" name="active" checked={state.active} onChange={(checked) => set("active", checked)} error={errorsFor("active")} />}

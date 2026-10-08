@@ -22,7 +22,7 @@ export default async function ItemPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { orgId, id } = await params;
-  const { created } = await searchParams;
+  const { created, stock: stockResult } = await searchParams;
   const recordId = requireUuid(id);
   const [item, role, organization, history, discounts, stock, availability, incoming, backorders] = await Promise.all([
     serverRead<Item>(orgId, `/api/items/${recordId}`),
@@ -42,8 +42,12 @@ export default async function ItemPage({
         {item.name}
       </h1>
       {created === "1" && <Notice testId="created">Item created.</Notice>}
+      {stockResult === "failed" && <Notice testId="stock-failed">The opening stock was not recorded. Record it in the Stock section below.</Notice>}
       <RecordMeta record={item} people={history.history.people} timeZone={organization.timezone} />
       {canWriteRecords(role) ? <ItemForm key={item.id} item={item} /> : <ItemDetails item={item} />}
+      {item.type === "product" && !item.track_stock && canWriteRecords(role) && (
+        <Notice testId="stock-off">This product does not track stock. Tick “Track stock” above and save to record what is on hand.</Notice>
+      )}
       {item.track_stock && (
         <>
           <StockPanel itemId={item.id} unit={item.unit} stock={stock} figures={availability[0] ?? null} canAdjust={canWriteRecords(role)} timeZone={organization.timezone} />

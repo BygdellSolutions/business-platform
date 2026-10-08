@@ -145,3 +145,29 @@ test("received stock goes to waiting sales only when a person confirms the oldes
   await expect(panel.getByTestId("backorder-row")).toContainText("1.000 pcs");
   await expect(page.getByTestId("on-hand")).toHaveText("0.000");
 });
+
+test("a new product can be created with what is on hand, and a product without tracking says how to turn it on", async ({ page, context }) => {
+  world = createWorld({ label: "OpeningStock" });
+  await signIn(context, world.email);
+
+  await page.goto(`/o/${world.orgId}/catalog/new`);
+  await page.getByLabel("Type").selectOption("product");
+  await page.getByLabel("Name", { exact: true }).fill("Hoof oil");
+  await page.getByLabel("Unit", { exact: true }).fill("pcs");
+  await page.getByLabel("Price excluding VAT").fill("90");
+  await page.getByLabel("VAT rate (%)").fill("25");
+  await page.getByLabel("Track stock").check();
+  await page.getByLabel("On hand now (optional)").fill("12");
+  await page.getByTestId("submit").click();
+
+  await expect(page.getByTestId("created")).toBeVisible();
+  await expect(page.getByTestId("on-hand")).toHaveText("12.000");
+  await expect(page.getByTestId("stock-movement")).toContainText("Opening count");
+
+  const plain = await createItem(context, world.orgId, { name: "Plain product", type: "product" });
+  await page.goto(`/o/${world.orgId}/catalog/${plain.id}`);
+  await expect(page.getByTestId("stock-off")).toContainText("Track stock");
+  await page.getByLabel("Track stock").check();
+  await page.getByTestId("submit").click();
+  await expect(page.getByTestId("stock-panel")).toBeVisible();
+});

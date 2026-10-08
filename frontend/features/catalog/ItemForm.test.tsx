@@ -296,3 +296,33 @@ describe("article number and stock tracking", () => {
     expect(mocked.mock.calls[0][2]?.body).toEqual({ type: "service", sku: null, track_stock: false });
   });
 });
+
+describe("stock on hand when a product is created", () => {
+  it("records what is on hand as the opening count right after creating the item", async () => {
+    mocked.mockResolvedValueOnce(ok(item({ id: "new-item", type: "product", track_stock: true }), 201)).mockResolvedValueOnce(ok({}, 201));
+    mount(A);
+    await userEvent.selectOptions(screen.getByLabelText("Type"), "product");
+    await userEvent.click(screen.getByLabelText("Track stock"));
+    await userEvent.type(screen.getByLabelText("On hand now (optional)"), "12");
+    await fillNew("120", "25");
+    await userEvent.click(screen.getByRole("button", { name: "Create item" }));
+
+    await waitFor(() => expect(mocked).toHaveBeenCalledTimes(2));
+    expect(mocked.mock.calls[0][2]?.body).not.toHaveProperty("opening_stock");
+    expect(mocked.mock.calls[1][1]).toBe("/items/new-item/stock");
+    expect(mocked.mock.calls[1][2]?.body).toEqual({ kind: "count", quantity: "12", note: "Opening stock" });
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith(`/o/${A}/catalog/new-item?created=1`));
+  });
+
+  it("still opens the new item when the count is refused, and says so", async () => {
+    mocked.mockResolvedValueOnce(ok(item({ id: "new-item", type: "product", track_stock: true }), 201)).mockResolvedValueOnce(fail(422, { detail: [] }));
+    mount(A);
+    await userEvent.selectOptions(screen.getByLabelText("Type"), "product");
+    await userEvent.click(screen.getByLabelText("Track stock"));
+    await userEvent.type(screen.getByLabelText("On hand now (optional)"), "12");
+    await fillNew("120", "25");
+    await userEvent.click(screen.getByRole("button", { name: "Create item" }));
+
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith(`/o/${A}/catalog/new-item?created=1&stock=failed`));
+  });
+});
