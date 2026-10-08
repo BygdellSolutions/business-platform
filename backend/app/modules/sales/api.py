@@ -273,6 +273,21 @@ def _hand_price(price: Decimal | None, line_percent: Decimal | None) -> dict:
     )
 
 
+# What a catalog (or service) line takes from its item and a person cannot type: the same rule when adding a line as
+# when changing it. The line's price is changed through its discount.
+CATALOG_VALUES = ("description", "unit", "unit_price_ex_vat", "vat_rate")
+
+
+def _refuse_catalog_values(values: dict | set, path: tuple[str | int, ...] = ()) -> None:
+    for field in CATALOG_VALUES:
+        if field in values:
+            reference_error(
+                (*path, field),
+                "A catalog line takes its description, unit, price and VAT from the item; change the discount instead",
+                "line.catalog_value",
+            )
+
+
 def _new_line_values(
     db: Session, ctx: TenantContext, line: LineCreate, path: tuple[str | int, ...] = (), *, customer_id: uuid.UUID, on_date: date
 ) -> dict:
@@ -280,6 +295,7 @@ def _new_line_values(
     typed is priced with the discount layers; a typed price (or an ad-hoc line) carries no discounts."""
     item = None
     if line.item_id is not None:
+        _refuse_catalog_values({field for field in CATALOG_VALUES if getattr(line, field) is not None}, path)
         item = resolve_reference(db, ctx, Item, line.item_id, (*path, "item_id"))
 
     def pick(requested, from_item):
@@ -763,6 +779,15 @@ def update_line(
     line = _get_line(db, ctx, tx, line_id)
     ensure_current(if_match, line.version, "transaction_line", line.id)
     values = payload.model_dump(exclude_unset=True)
+
+    # The same rules as when the line was added: a catalog or service line keeps its catalog values (another item of
+    # the same kind may be chosen), an ad-hoc line keeps having none; a line never changes kind.
+    if line.item_id is not None:
+        _refuse_catalog_values(values)
+        if "item_id" in values and values["item_id"] is None:
+            reference_error(("item_id",), "A catalog line stays a catalog line; add an ad-hoc line instead", "line.kind_change")
+    elif values.get("item_id") is not None:
+        reference_error(("item_id",), "An ad-hoc line cannot become a catalog line; add a catalog line instead", "line.kind_change")
 
     service_keys = {"performed_at", "performed_by_user_id", "subject_type", "subject_id"}
     if service_keys & values.keys():

@@ -186,6 +186,8 @@ export default async function InventoryPage({
                 <th className="py-1 pr-4">Expected</th>
                 <th className="py-1 pr-4">Product</th>
                 <th className="py-1 pr-4">Unit</th>
+                <th className="py-1 pr-4 text-right">Ordered</th>
+                <th className="py-1 pr-4 text-right">Received</th>
                 <th className="py-1 pr-4 text-right">Still expected</th>
                 <th className="py-1 pr-4">Supplier</th>
                 <th className="py-1 pr-4">Reference</th>
@@ -201,6 +203,12 @@ export default async function InventoryPage({
                     </Link>
                   </td>
                   <td className="py-1 pr-4">{row.item_unit}</td>
+                  <td className="py-1 pr-4 text-right" data-testid="incoming-overview-ordered">
+                    {trimQuantity(row.quantity)}
+                  </td>
+                  <td className="py-1 pr-4 text-right" data-testid="incoming-overview-received">
+                    {trimQuantity(row.received)}
+                  </td>
                   <td className="py-1 pr-4 text-right" data-testid="incoming-overview-remaining">
                     {trimQuantity(row.remaining)}
                   </td>

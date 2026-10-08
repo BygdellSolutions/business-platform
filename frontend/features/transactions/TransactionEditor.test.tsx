@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   Harness,
   LINE_1,
+  ITEM_ID,
   LINE_2,
   ORG_A,
   ORG_B,
@@ -109,7 +110,7 @@ describe("what the editor shows", () => {
   });
 
   it("shows only a link for the catalog item and never asks the backend about it", () => {
-    render(<Harness initial={tx()} />);
+    render(<Harness initial={tx({ lines: [line({ item_id: ITEM_ID }), second()] })} />);
 
     const [catalogLine, adHocLine] = screen.getAllByTestId("line-row");
     expect(within(catalogLine).getByRole("link", { name: "Catalog item" })).toHaveAttribute("href", expect.stringMatching(new RegExp(`^/o/${ORG_A}/catalog/`)));

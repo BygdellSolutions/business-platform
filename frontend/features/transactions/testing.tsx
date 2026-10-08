@@ -27,7 +27,7 @@ export function line(overrides: Partial<TransactionLine> = {}): TransactionLine 
   return {
     id: LINE_1,
     transaction_id: TX_ID,
-    item_id: ITEM_ID,
+    item_id: null, // an ad-hoc line: every value is its own (catalog and service lines are built with overrides)
     position: 1,
     version: 1,
     description: "Horse massage",

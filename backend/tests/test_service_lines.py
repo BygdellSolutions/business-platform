@@ -119,7 +119,7 @@ def test_service_details_can_be_edited_and_a_service_keeps_its_catalog_service(c
     assert (edited.json()["notes"], edited.json()["performed_at"], edited.json()["subject_label"]) == ("Better", "2026-10-03T13:30:00Z", "Anna Andersson")
 
     h2 = {**world.h, "If-Match": f'"{edited.json()["version"]}"'}
-    assert client.patch(url, json={"item_id": None}, headers=h2).json()["detail"][0]["type"] == "service.needs_item"
+    assert client.patch(url, json={"item_id": None}, headers=h2).json()["detail"][0]["type"] == "line.kind_change"
     assert client.patch(url, json={"item_id": str(world.liniment.id)}, headers=h2).json()["detail"][0]["type"] == "service.not_a_service"
 
 

@@ -109,6 +109,12 @@ test("a delivery on its way is recorded, received in part, and the rest cancelle
   await incoming.getByLabel("Quantity received").fill("4");
   await incoming.getByTestId("receive-incoming").click();
   await expect(incoming.getByTestId("incoming-row")).toContainText("Partly received");
+  await expect(incoming.getByTestId("incoming-remaining")).toHaveText("6");
+  await page.goto(`/o/${world.orgId}/inventory`);
+  await expect(page.getByTestId("incoming-overview-ordered")).toHaveText("10");
+  await expect(page.getByTestId("incoming-overview-received")).toHaveText("4");
+  await expect(page.getByTestId("incoming-overview-remaining")).toHaveText("6");
+  await page.goto(`/o/${world.orgId}/catalog/${item.id}`);
   await expect(page.getByTestId("on-hand")).toHaveText("4");
   await expect(page.getByTestId("stock-movement").first()).toContainText("Goods received");
 

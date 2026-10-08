@@ -426,7 +426,7 @@ test.describe("totals belong to the server", () => {
 });
 
 test.describe("editing lines", () => {
-  test("an override changes the line only: the catalog item is untouched, and no item id is sent", async ({ page, context }) => {
+  test("a catalog line is edited like it is added: its catalog values stay, its discount changes, the item is untouched", async ({ page, context }) => {
     const { url } = await newDraft(context);
     const item = await createItem(context, ORG_A.id, { name: unique("Override Item"), unit: "hour", price_ex_vat: "100.00", vat_rate: "25", description: "Catalog text" });
     const itemBefore = testRow(`select name || '|' || unit || '|' || price_ex_vat::text || '|' || vat_rate::text || '|' || description || '|' || updated_at::text from items where id = ${sql(item.id)}`);
@@ -434,20 +434,18 @@ test.describe("editing lines", () => {
     await addCatalogLine(page, item.name, "1");
 
     await rows(page).first().getByTestId("edit-line").click();
-    await page.getByLabel("Description", { exact: true }).fill("Custom wording");
-    await page.getByLabel("Unit price excluding VAT", { exact: true }).fill("150.00");
-    await page.getByLabel("VAT rate (%)", { exact: true }).fill("6");
+    for (const label of ["Description", "Unit price excluding VAT", "VAT rate (%)"]) {
+      await expect(page.getByTestId("line-editor").getByLabel(label, { exact: true })).toHaveCount(0); // taken from the catalog
+    }
+    await page.getByLabel("Discount % (optional)").fill("10");
     const request = page.waitForRequest((r) => r.method() === "PATCH" && r.url().includes("/lines/"));
     await page.getByTestId("save-line").click();
 
     const sent = JSON.parse((await request).postData() ?? "");
-    expect(sent).toEqual({ description: "Custom wording", unit_price_ex_vat: "150.00", vat_rate: "6" });
-    expect("item_id" in sent).toBe(false);
+    expect(sent).toEqual({ line_discount_percent: "10" });
     const row = rows(page).first();
-    await expect(cell(row, "line-description")).toHaveText("Custom wording");
-    await expect(cell(row, "line-price")).toHaveText("150.00");
-    await expect(cell(row, "line-net")).toHaveText("150.00");
-    await expect(cell(row, "line-vat")).toHaveText("9.00");
+    await expect(cell(row, "line-price")).toContainText("90.00");
+    await expect(cell(row, "line-net")).toHaveText("90.00");
     expect(testRow(`select name || '|' || unit || '|' || price_ex_vat::text || '|' || vat_rate::text || '|' || description || '|' || updated_at::text from items where id = ${sql(item.id)}`)).toBe(itemBefore);
     await expect(row.getByRole("link", { name: "Catalog item" })).toBeVisible(); // still linked to its item
   });

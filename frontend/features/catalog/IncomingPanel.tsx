@@ -81,6 +81,7 @@ export function IncomingPanel({ itemId, unit, incoming, canWrite }: { itemId: st
               <th className="py-1 pr-4">Unit</th>
               <th className="py-1 pr-4 text-right">Ordered</th>
               <th className="py-1 pr-4 text-right">Received</th>
+              <th className="py-1 pr-4 text-right">Still expected</th>
               <th className="py-1 pr-4">Supplier</th>
               <th className="py-1 pr-4">Reference</th>
               <th className="py-1 pr-4">State</th>
@@ -97,6 +98,9 @@ export function IncomingPanel({ itemId, unit, incoming, canWrite }: { itemId: st
                 </td>
                 <td className="py-1 pr-4 text-right">
                   {trimQuantity(row.received)}
+                </td>
+                <td className="py-1 pr-4 text-right" data-testid="incoming-remaining">
+                  {trimQuantity(row.remaining)}
                 </td>
                 <td className="py-1 pr-4">{row.supplier}</td>
                 <td className="py-1 pr-4">{row.reference}</td>

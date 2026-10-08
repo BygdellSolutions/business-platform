@@ -487,7 +487,9 @@ export interface LineCreate {
 }
 
 /** A line edit. There is deliberately no `item_id`: this UI never re-snapshots or detaches a line. */
-export type LineUpdate = Partial<Pick<LineCreate, "description" | "unit" | "quantity" | "unit_price_ex_vat" | "vat_rate" | "line_discount_percent">>;
+export type LineUpdate = Partial<
+  Pick<LineCreate, "item_id" | "description" | "unit" | "quantity" | "unit_price_ex_vat" | "vat_rate" | "line_discount_percent" | "performed_at" | "performed_by_user_id" | "subject_type" | "subject_id" | "notes">
+>;
 
 // --- Invoicing ------------------------------------------------------------------------------------------------------------
 //

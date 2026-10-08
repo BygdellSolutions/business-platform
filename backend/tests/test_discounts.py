@@ -179,26 +179,25 @@ def test_the_catalog_discount_applies_only_inside_its_period(client: TestClient,
         assert line["unit_price_ex_vat"] == ("800.00" if expected else "1000.00")
 
 
-def test_ad_hoc_and_typed_prices_carry_no_discounts(client: TestClient, db_session: Session):
+def test_ad_hoc_lines_carry_no_discounts_and_a_catalog_lines_price_cannot_be_typed(client: TestClient, db_session: Session):
     org, owner, item, customer, _ = _discounted_world(db_session, client)
     tx = client.post("/api/transactions", json={"billing_customer_id": str(customer.id), "transaction_date": "2026-10-03"}, headers=owner).json()
 
     adhoc = _add(client, owner, tx["id"], description="Special", unit="st", unit_price_ex_vat="100.00", vat_rate="25")
-    typed = _add(client, owner, tx["id"], item_id=str(item.id), unit_price_ex_vat="950.00")
+    typed = client.post(f"/api/transactions/{tx['id']}/lines", json={"quantity": "1", "item_id": str(item.id), "unit_price_ex_vat": "950.00"}, headers=owner)
 
-    for line in (adhoc, typed):
-        assert (line["list_unit_price"], line["catalog_discount_percent"], line["customer_discount_percent"]) == (None, None, None)
-    assert typed["unit_price_ex_vat"] == "950.00"
+    assert (adhoc["list_unit_price"], adhoc["catalog_discount_percent"], adhoc["customer_discount_percent"]) == (None, None, None)
+    assert typed.status_code == 422 and typed.json()["detail"][0]["type"] == "line.catalog_value"
 
 
-def test_typing_a_price_on_a_discounted_line_replaces_the_discounts(client: TestClient, db_session: Session):
+def test_a_discounted_catalog_lines_price_cannot_be_typed_over(client: TestClient, db_session: Session):
     org, owner, item, customer, _ = _discounted_world(db_session, client)
     tx = client.post("/api/transactions", json={"billing_customer_id": str(customer.id), "transaction_date": "2026-10-03"}, headers=owner).json()
     line = _add(client, owner, tx["id"], item_id=str(item.id))
 
-    edited = client.patch(f"/api/transactions/{tx['id']}/lines/{line['id']}", json={"unit_price_ex_vat": "700.00"}, headers={**owner, "If-Match": f'"{line["version"]}"'}).json()
+    edited = client.patch(f"/api/transactions/{tx['id']}/lines/{line['id']}", json={"unit_price_ex_vat": "700.00"}, headers={**owner, "If-Match": f'"{line["version"]}"'})
 
-    assert (edited["unit_price_ex_vat"], edited["list_unit_price"], edited["customer_discount_percent"]) == ("700.00", None, None)
+    assert edited.status_code == 422 and edited.json()["detail"][0]["type"] == "line.catalog_value"
 
 
 def test_a_new_billing_customer_or_date_reprices_catalog_lines_and_records_it(client: TestClient, db_session: Session):
@@ -284,16 +283,14 @@ def test_a_line_discount_is_the_last_layer_after_campaign_and_customer(client: T
     assert line["price_before_line_discount"] == "720.00"  # what the line's discount applies to
 
 
-def test_an_ad_hoc_or_typed_price_gets_its_line_discount_with_the_typed_price_as_list_price(client: TestClient, db_session: Session):
+def test_an_ad_hoc_line_gets_its_line_discount_with_the_typed_price_as_list_price(client: TestClient, db_session: Session):
     org, owner, item, customer, _ = _discounted_world(db_session, client)
     tx = client.post("/api/transactions", json={"billing_customer_id": str(customer.id), "transaction_date": "2026-10-03"}, headers=owner).json()
 
     adhoc = _add(client, owner, tx["id"], description="Special", unit="st", unit_price_ex_vat="500.00", vat_rate="25", line_discount_percent="20")
-    typed = _add(client, owner, tx["id"], item_id=str(item.id), unit_price_ex_vat="950.00", line_discount_percent="10")
 
     assert (adhoc["list_unit_price"], adhoc["line_discount_percent"], adhoc["unit_price_ex_vat"], adhoc["priced_by_hand"]) == ("500.00", "20.00", "400.00", True)
-    assert (typed["list_unit_price"], typed["customer_discount_percent"], typed["unit_price_ex_vat"]) == ("950.00", None, "855.00")
-    assert typed["price_before_line_discount"] == "950.00"
+    assert adhoc["price_before_line_discount"] == "500.00"
 
 
 def test_a_service_line_takes_a_line_discount_too(client: TestClient, db_session: Session):
@@ -330,7 +327,7 @@ def test_a_new_customer_reprices_catalog_lines_with_their_line_discount_but_neve
     org, owner, item, customer, plain = _discounted_world(db_session, client)
     tx = client.post("/api/transactions", json={"billing_customer_id": str(plain.id), "transaction_date": "2026-10-03"}, headers=owner).json()
     catalog = _add(client, owner, tx["id"], item_id=str(item.id), line_discount_percent="5")  # 1000 -20 % -5 % = 760.00
-    hand = _add(client, owner, tx["id"], item_id=str(item.id), unit_price_ex_vat="500.00", line_discount_percent="10")  # 450.00
+    hand = _add(client, owner, tx["id"], description="Special", unit="st", unit_price_ex_vat="500.00", vat_rate="25", line_discount_percent="10")  # 450.00
 
     current = client.get(f"/api/transactions/{tx['id']}", headers=owner).json()
     client.patch(f"/api/transactions/{tx['id']}", json={"billing_customer_id": str(customer.id)}, headers={**owner, "If-Match": f'"{current["header_version"]}"'})

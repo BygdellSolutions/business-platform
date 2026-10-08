@@ -622,3 +622,46 @@ describe("a discount on the line", () => {
     expect(writes()[0].body).toEqual({ line_discount_percent: null });
   });
 });
+
+describe("editing follows the rules of adding", () => {
+  it("a catalog line offers its item, the quantity and the discount, never description, unit, price or VAT", async () => {
+    installBackend(() => ok(line()));
+    render(<Harness initial={tx({ lines: [line({ item_id: SADDLE, description: "Saddle fitting" }), second()] })} />);
+    await openEditor();
+
+    expect(screen.getByTestId("edit-item-fields")).toBeInTheDocument();
+    expect(within(screen.getByTestId("picker-item_id")).getByRole("combobox")).toHaveValue("Saddle fitting");
+    for (const label of ["Description", "Unit", "Unit price excluding VAT", "VAT rate (%)"]) expect(screen.queryByLabelText(label)).toBeNull();
+    await replace("Discount % (optional)", "10");
+    await userEvent.click(screen.getByTestId("save-line"));
+
+    await waitFor(() => expect(writes()).toHaveLength(1));
+    expect(writes()[0].body).toEqual({ line_discount_percent: "10" });
+  });
+
+  it("a service line offers the service, for whom, by whom, when, quantity, notes and the discount", async () => {
+    installBackend((call) => (call.path === "/members/people" ? ok([{ user_id: "u1", name: "Tina Therapist" }]) : ok(line())));
+    const service = line({
+      item_id: SADDLE,
+      kind: "service",
+      description: "Massage",
+      performed_at: "2026-10-03T12:00:00Z",
+      subject_type: "horse",
+      subject_id: "h1",
+      subject_label: "Kalle",
+      notes: "Stiff",
+    });
+    render(<Harness initial={tx({ lines: [service, second()] })} timeZone="Europe/Stockholm" />);
+    await openEditor();
+
+    expect(screen.getByTestId("edit-service-fields")).toBeInTheDocument();
+    expect(screen.getByLabelText("Performed at")).toHaveValue("2026-10-03T14:00"); // the organization's local time
+    expect(within(screen.getByTestId("picker-subject_id")).getByRole("combobox")).toHaveValue("Kalle");
+    expect(screen.queryByLabelText("Unit price excluding VAT")).toBeNull();
+    await replace("Notes", "Better");
+    await userEvent.click(screen.getByTestId("save-line"));
+
+    await waitFor(() => expect(writes()).toHaveLength(1));
+    expect(writes()[0].body).toEqual({ notes: "Better" });
+  });
+});

@@ -296,8 +296,8 @@ test.describe("references to other organizations' customers and items", () => {
 test.describe("switching organizations while editing", () => {
   test("open editors and drafts do not follow the user to the other organization", async ({ page }) => {
     await page.goto(txUrl(ORG_A.id, ids.a.tx));
-    await rows(page).first().getByTestId("edit-line").click();
-    await page.getByLabel("Description", { exact: true }).fill("Draft typed in A");
+    await rows(page).first().getByTestId("edit-line").click(); // a catalog line: the discount is what can be typed
+    await page.getByLabel("Discount % (optional)").fill("37.5");
     await page.getByTestId("edit-header").click();
     await page.getByLabel("Date").fill("2040-04-04");
 
@@ -308,7 +308,7 @@ test.describe("switching organizations while editing", () => {
     await expect(page.getByTestId("org-name")).toHaveText(ORG_B.name);
     await expect(page.getByTestId("line-editor")).toHaveCount(0);
     await expect(page.getByTestId("save-header")).toHaveCount(0);
-    expect(await page.content()).not.toContain("Draft typed in A");
+    expect(await page.content()).not.toContain("37.5");
     expect(await page.content()).not.toContain("2040-04-04");
     await expect(page.getByTestId("complete")).toBeEnabled(); // no leftover "editor open" state
   });
