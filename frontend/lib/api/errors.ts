@@ -120,9 +120,11 @@ function toProblems(value: unknown): Problem[] {
 export function normalizeError(status: number, body: unknown): ApiError {
   const detail = detailOf(body);
   const text = typeof detail === "string" ? detail : undefined;
+  // A structured refusal ({"code", "message"}) carries its own human message; show it rather than a generic one.
+  const structured = isRecord(detail) && typeof detail.message === "string" ? detail.message : undefined;
 
   if (status === 401) return { kind: "unauthorized", status: 401, message: text ?? GENERIC[401] };
-  if (status === 403) return { kind: "forbidden", status: 403, message: text ?? GENERIC[403] };
+  if (status === 403) return { kind: "forbidden", status: 403, message: text ?? structured ?? GENERIC[403] };
   if (status === 404) return { kind: "not_found", status: 404, message: text ?? GENERIC[404] };
   if (status === 409) {
     if (isRecord(detail)) {

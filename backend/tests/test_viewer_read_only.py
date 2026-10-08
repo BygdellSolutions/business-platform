@@ -40,6 +40,9 @@ DECIDED_UNDER_LOCK = {
     ("POST", "/api/invitations"),
     ("POST", "/api/invitations/{invitation_id}/regenerate"),
     ("DELETE", "/api/invitations/{invitation_id}"),
+    # Owner-only, decided from fresh locked memberships (tests/test_danger_zone.py covers non-owners).
+    ("POST", "/api/organization/transfer-ownership"),
+    ("POST", "/api/organization/delete"),
 }
 
 

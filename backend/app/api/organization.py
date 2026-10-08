@@ -1,14 +1,19 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.api.members import require_recent_authentication, run_membership_change
+from app.core import clock, memberships
 from app.core.authz import roles_required
 from app.core.currency import CURRENCY_LOCKED, default_currency_lock_reason
 from app.core.db import get_db
 from app.core.org_time import today_in
+from app.core.organization_deletion import ConfirmationMismatch, delete_organization
 from app.core.query import apply_update
+from app.core.security_events import client_source
 from app.core.tenant import TenantContext, get_tenant_context
 from app.models import Organization, Role
+from app.schemas.members import OrganizationDeletion, OwnershipTransfer
 from app.schemas.organization import OrganizationRead, OrganizationUpdate
 
 router = APIRouter(prefix="/api/organization", tags=["organization"])
@@ -75,3 +80,42 @@ def update_organization(
             )
     apply_update(db, organization, values)
     return read_organization_profile(db, organization)
+
+
+# --- the danger zone: decided from fresh, locked membership rows, never from the request's role --------------------
+
+
+@router.post("/transfer-ownership", status_code=status.HTTP_204_NO_CONTENT)
+def transfer_ownership(
+    payload: OwnershipTransfer, request: Request, ctx: TenantContext = Depends(get_tenant_context), db: Session = Depends(get_db)
+) -> Response:
+    """An owner makes another member the owner and becomes an admin. Requires recent authentication."""
+    require_recent_authentication(db, ctx, payload.password, request)
+    run_membership_change(
+        lambda: memberships.transfer_ownership(
+            db, organization_id=ctx.organization_id, actor_user_id=ctx.user.id, membership_id=payload.membership_id,
+            now=clock.utcnow(), source=client_source(request),
+        )
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/delete", status_code=status.HTTP_204_NO_CONTENT)
+def delete_this_organization(
+    payload: OrganizationDeletion, request: Request, ctx: TenantContext = Depends(get_tenant_context), db: Session = Depends(get_db)
+) -> Response:
+    """Delete the organization and ALL its data for good (owner only, recent authentication, the name typed)."""
+    require_recent_authentication(db, ctx, payload.password, request)
+    try:
+        run_membership_change(
+            lambda: delete_organization(
+                db, organization_id=ctx.organization_id, actor_user_id=ctx.user.id, confirm_name=payload.confirm_name,
+                now=clock.utcnow(), source=client_source(request),
+            )
+        )
+    except ConfirmationMismatch:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=[{"loc": ["body", "confirm_name"], "msg": "Type the organization's name exactly as shown", "type": "confirmation_mismatch"}],
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

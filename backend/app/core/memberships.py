@@ -231,3 +231,34 @@ def repair_owner(db: Session, *, organization_id: uuid.UUID, user_id: uuid.UUID,
     db.flush()
     db.add(SecurityEvent(occurred_at=now, event_type="owner_repaired", actor_user_id=user_id, organization_id=organization_id, detail=f"cli {previous}>owner"))
     _commit(db)
+
+
+def transfer_ownership(
+    db: Session, *, organization_id: uuid.UUID, actor_user_id: uuid.UUID, membership_id: uuid.UUID, now: datetime, source: str | None
+) -> None:
+    """An owner hands ownership to another member: the target becomes an owner and the actor an admin (so they can
+    leave afterwards, or stay). Decided from fresh, locked rows like every membership change; the owner count can
+    never drop, because the target becomes an owner in the same transaction."""
+    rows = _lock_members(db, organization_id)
+    actor = _actor(rows, actor_user_id)
+    if Role(actor.role) != Role.OWNER:
+        raise NotAllowed("not_owner", "Only an owner can transfer ownership.")
+    target = _target(rows, membership_id)
+    if target.id == actor.id:
+        raise NotAllowed("self_transfer", "Choose another member to transfer ownership to.")
+    if Role(target.role) == Role.OWNER:
+        raise NotAllowed("already_owner", "That member is already an owner.")
+    previous = Role(target.role)
+    target.role = Role.OWNER
+    actor.role = Role.ADMIN
+    db.flush()
+    _event(db, "ownership_transferred", now, actor, f"{target.user_id} {previous}>owner", source)
+    _commit(db)
+
+
+def lock_as_owner(db: Session, *, organization_id: uuid.UUID, actor_user_id: uuid.UUID) -> list[OrganizationUser]:
+    """Lock the organization's memberships (the usual order) and require the actor to be an owner NOW."""
+    rows = _lock_members(db, organization_id)
+    if Role(_actor(rows, actor_user_id).role) != Role.OWNER:
+        raise NotAllowed("not_owner", "Only an owner can do this.")
+    return rows

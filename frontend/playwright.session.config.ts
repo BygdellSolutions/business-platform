@@ -37,6 +37,7 @@ export default defineConfig({
     "**/invoices.spec.ts",
     "**/onboarding.spec.ts",
     "**/members.spec.ts",
+    "**/danger-zone.spec.ts",
   ],
   // Left to the dev run because they exercise the DEV identity itself: forged X-Dev-User-Email headers (the session
   // run has its own specs for forged identity, organization and authorization headers) and checks that read FastAPI

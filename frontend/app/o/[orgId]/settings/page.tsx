@@ -1,7 +1,9 @@
 
+import { DangerZone } from "@/features/settings/DangerZone";
 import { EarlierTransactions } from "@/features/settings/EarlierTransactions";
 import { OrganizationSettings } from "@/features/settings/OrganizationSettings";
-import type { CurrencyStatus, Organization, Role } from "@/lib/api/types";
+import type { CurrencyStatus, Member, Organization, Role } from "@/lib/api/types";
+import { authMode } from "@/lib/auth/config";
 import { requireCredential } from "@/lib/auth/credential";
 import { getMemberships } from "@/lib/orgs";
 import { serverRead } from "@/lib/server-api";
@@ -21,12 +23,15 @@ export default async function SettingsPage({ params }: { params: Promise<{ orgId
   ]);
   const role = memberships.status === "ok" ? memberships.memberships.find((membership) => membership.id === orgId)?.role : undefined;
   const canEdit = role !== undefined && SETTINGS_ROLES.includes(role);
+  // Owners and admins may read the member list (for the ownership transfer and the sole-owner rule).
+  const members = canEdit ? await serverRead<Member[]>(orgId, "/api/members") : [];
 
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold">Settings</h1>
       <OrganizationSettings key={organization.id} organization={organization} canEdit={canEdit} />
       <EarlierTransactions status={status} canEdit={canEdit} />
+      <DangerZone organizationName={organization.name} role={role} members={members} passwordChecked={authMode() === "session"} />
     </div>
   );
 }

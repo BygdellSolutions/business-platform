@@ -14,7 +14,7 @@ Found while testing staging (2026-10-08). Small reviewed slices, each validated 
 - [x] Slice 1: audit core (append-only, tenant-owned change log: who, when, record, action, changed fields with old/new values; `created_by`/`updated_by`; old rows "not recorded")
 - [x] Slice 2: Customer, Horse and Item history (log writes + history UI)
 - [x] Slice 3: transaction and invoice audit metadata
-- [ ] Slice 4: "recent authentication required" (a short-lived re-authentication, today by password; future SSO/passkey users use their own method) for leave, transfer and delete; Danger Zone at the bottom of Organization Settings: leave, ownership transfer, sole-owner rules, hard delete of the organization with strong confirmation; remove the header Leave button. Plus an **Account security** page under the USER (not the organization): change password (current, new, confirm; normal policy; other sessions revoked, the current one kept, as `change_password` does today)
+- [x] Slice 4: "recent authentication required" (a short-lived re-authentication, today by password; future SSO/passkey users use their own method) for leave, transfer and delete; Danger Zone at the bottom of Organization Settings: leave, ownership transfer, sole-owner rules, hard delete of the organization with strong confirmation; remove the header Leave button. Plus an **Account security** page under the USER (not the organization): change password (current, new, confirm; normal policy; other sessions revoked, the current one kept, as `change_password` does today)
 - [ ] Slice 5: owned-organization limit (`max_owned_organizations`, replacing `can_create_organizations`) on every path to ownership (create, transfer, promote, owner invitation) in the backend; "Owned 1 / 1" in the UI; one core check under the user-row lock plus a database backstop; an owner invitation accepted at the limit is refused whole and stays pending
 - [ ] Slice 6: line discount foundation (ordered discount layers with the base and final unit price on transaction and invoice lines, CHECKs, invoices copy them verbatim)
 - [ ] Slice 7: customer permanent discount (owner/admin, history, applied when a line is added)
@@ -83,7 +83,7 @@ Found while testing staging (2026-10-08). Small reviewed slices, each validated 
 - `organization_creation_requests` rows are kept (one small row per keyed creation). A retention rule (purge after the retry window) is not needed yet.
 
 ## Membership follow-ups (S4)
-- Ownership transfer is just promote-then-step-down (no dedicated workflow, by decision). Invitations (S5) will be the only way to add a member.
+- Ownership transfer has a dedicated, password-confirmed workflow in the Danger Zone (slice 4); promote-then-step-down through the role select still works. Invitations (S5) are the only way to add a member.
 - A members list with many hundreds of rows is not paginated (organizations are small); the lock statement also covers the whole set.
 - The role control has no "undo" and a changed role takes effect immediately; a confirmation for demotions could be added if users ask.
 

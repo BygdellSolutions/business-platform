@@ -1,5 +1,6 @@
 import { expect, test } from "./fixtures";
 
+import { E2E_PASSWORD } from "./auth-support";
 import { BASE_URL } from "./env";
 import { bffUrl, createWorld, signIn, sql, testRow, type World } from "./support";
 
@@ -126,10 +127,11 @@ test("leaving returns to the organization selection; the person stays signed in 
   const w = world();
   const me = w.addMember("employee");
   await signIn(context, me);
-  await page.goto(`/o/${w.orgId}`);
+  await page.goto(`/o/${w.orgId}/settings`);
 
-  await page.getByTestId("leave-organization").click();
-  await page.getByRole("button", { name: "Leave", exact: true }).click();
+  // Recent authentication: checked in the session run, ignored by the development sign-in.
+  await page.getByTestId("danger-zone").getByLabel("Your password").fill(E2E_PASSWORD);
+  await page.getByTestId("danger-zone").getByTestId("leave-organization").click();
 
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByTestId("no-organizations")).toBeVisible();
@@ -142,12 +144,14 @@ test("leaving returns to the organization selection; the person stays signed in 
 test("the last owner cannot leave or step down: the server refuses and nothing changes", async ({ page, context }) => {
   const w = world();
   await signIn(context, w.email);
-  await page.goto(`/o/${w.orgId}`);
+  await page.goto(`/o/${w.orgId}/settings`);
 
-  await page.getByTestId("leave-organization").click();
-  await page.getByRole("button", { name: "Leave", exact: true }).click();
-  await expect(page.getByTestId("leave-message")).toContainText("last owner");
-  await expect(page).toHaveURL(new RegExp(`/o/${w.orgId}$`));
+  // The sole owner is told to transfer or delete, and is offered no leave at all...
+  await expect(page.getByTestId("sole-owner")).toContainText("You are the only owner of this organization.");
+  await expect(page.getByTestId("leave-organization")).toHaveCount(0);
+  // ...and the server refuses a forged leave too.
+  const forged = await context.request.post(bffUrl(w.orgId, "/members/leave"), { data: {} });
+  expect(forged.status()).toBe(409);
 
   const myId = testRow(`select ou.id from organization_users ou join users u on u.id = ou.user_id where u.email = ${sql(w.email)}`);
   const stepDown = await context.request.patch(bffUrl(w.orgId, `/members/${myId}`), { data: { role: "admin" } });
