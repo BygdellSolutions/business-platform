@@ -4,6 +4,9 @@ All notable changes to `business-platform` will be documented in this file.
 
 ## [Unreleased]
 
+### Removed
+- The "Customers (loaded in the browser)" preview on the dashboard (a development check, not useful to the organization). The organization-isolation tests that used it now read through the page's own BFF route and use the transaction form's customer picker for client state.
+
 ### Added
 - **"Our reference" on invoices.** Under the seller's name the invoice (PDF and page) shows "Vår referens" / "Our reference": the person who issued it, by name as it was at that moment (who created the draft until it is issued). Stored in the issuer snapshot (schema 3); invoices issued before this have none, and the line is left out. PDF template 5.
 - **Invoice PDF template 3, used at all times.** One layout for every invoice in every language (no more English printed like template 1): an accent header with the seller and the invoice details, the customer beside an "Amount due" box (total, due date, payment reference), a coloured table head, the amount due emphasised in the totals, a payment section on every invoice (reference and due date always; bankgiro, plusgiro, IBAN, BIC and terms when stored) and a standard footer on every page with the seller's details in four columns (company and address; phone, email, website; org.nr, VAT no. and F-skatt; bankgiro, plusgiro, IBAN, BIC). The sender block is labelled "From" / "Från". What is not stored is left out, never invented. Downloads always serve the current template: an invoice whose stored PDF was made with an older template gets a new PDF made with the current one (same invoice content); the older PDF stays stored, unchanged, as history. Stored PDFs are now unique per invoice and template version (migration `b5d7f9a1c346`).

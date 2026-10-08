@@ -39,10 +39,21 @@ export async function createCustomer(context: BrowserContext, orgId: string, nam
   return (await response.json()) as { id: string; name: string };
 }
 
-/** The names the dashboard preview shows right now. */
+/**
+ * The names of the first customers ("000..." first) that the page can read for the organization in its address, asked
+ * from inside the page through the application's own BFF route, exactly as the page's own code would. Does not
+ * navigate, so browser history and the page's state stay as they are.
+ */
 export async function previewNames(page: Page): Promise<string[]> {
-  await expect(page.getByTestId("customer-preview")).toBeVisible();
-  return page.getByTestId("customer-preview-item").allTextContents();
+  const orgId = /\/o\/([0-9a-f-]{36})/.exec(page.url())?.[1];
+  expect(orgId, "the page is in an organization").toBeTruthy();
+  const names = await page.evaluate(async (id) => {
+    const response = await fetch(`/api/o/${id}/customers?q=000&limit=50`);
+    if (!response.ok) return null;
+    return ((await response.json()) as { name: string }[]).map((customer) => customer.name);
+  }, orgId);
+  expect(names, "the page could read its organization's customers").not.toBeNull();
+  return names ?? [];
 }
 
 export async function expectOrganization(page: Page, org: { name: string }): Promise<void> {

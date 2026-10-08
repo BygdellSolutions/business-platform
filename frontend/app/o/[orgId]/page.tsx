@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { CustomerPreview } from "@/features/dashboard/CustomerPreview";
 import { SummaryCard } from "@/features/dashboard/SummaryCard";
 import type { InventorySummary, InvoicingSummary, SalesSummary } from "@/lib/api/types";
 import { getCredential } from "@/lib/auth/credential";
@@ -130,7 +129,6 @@ export default async function Dashboard({ params }: { params: Promise<{ orgId: s
         </section>
       )}
 
-      <CustomerPreview />
     </div>
   );
 }

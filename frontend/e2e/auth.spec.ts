@@ -88,7 +88,7 @@ test.describe("development sign-in", () => {
   test("a tab that loses its identity is sent to sign in when it next calls the backend", async ({ page, context }) => {
     await signIn(context, FREDRIK);
     await page.goto(`/o/${ORG_A.id}`);
-    await expect(page.getByTestId("customer-preview")).toBeVisible();
+    await expect(page.getByTestId("dashboard-org")).toBeVisible();
 
     await context.clearCookies();
     await page.reload();
