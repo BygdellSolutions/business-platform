@@ -136,3 +136,10 @@ Downloads serve the stored PDF of the current template version. A layout change 
 `TEMPLATE_VERSION` leaves every PDF downloaded since the last bump looking old, with no error anywhere (it happened once
 between two deploys). `tests/test_pdf_render.py` pins the layout code's hash next to the version, so such a change fails
 until the version is bumped.
+
+## Units are free text: never print one right after a number (2026-10-08)
+
+The owner found "10 1", "0 of 1 1" and "1 1" in four places one after another: a unit typed as "1" reads as part of the
+quantity. Fixing them one by one missed the rest. Rule: a unit gets its own column or is named ("unit: pcs");
+`lib/no-unit-after-quantity.test.ts` scans the UI for the adjacent form. When the owner reports one instance of a
+display problem, search for every instance before answering.

@@ -54,6 +54,7 @@ export function BackordersPanel({ itemId, unit, backorders, canAllocate }: { ite
           <tr className="border-b border-zinc-300 dark:border-zinc-700">
             <th className="py-1 pr-4">Completed</th>
             <th className="py-1 pr-4">Customer</th>
+            <th className="py-1 pr-4">Unit</th>
             <th className="py-1 pr-4 text-right">Waiting</th>
             <th className="py-1 pr-4">State</th>
             {canAllocate && <th className="py-1">Deliver now</th>}
@@ -68,8 +69,9 @@ export function BackordersPanel({ itemId, unit, backorders, canAllocate }: { ite
                 </Link>
               </td>
               <td className="py-1 pr-4">{backorder.customer_name}</td>
-              <td className="py-1 pr-4 text-right">
-                {trimQuantity(backorder.remaining)} {unit}
+              <td className="py-1 pr-4">{unit}</td>
+              <td className="py-1 pr-4 text-right" data-testid="backorder-waiting">
+                {trimQuantity(backorder.remaining)}
               </td>
               <td className="py-1 pr-4" data-testid="backorder-state">
                 {BACKORDER_STATES[backorder.state]}

@@ -151,7 +151,7 @@ test("received stock goes to waiting sales only when a person confirms the oldes
 
   await expect(panel.getByTestId("backorder-row")).toHaveCount(1); // Anna's sale is fulfilled; Umeå HK still waits for 1
   await expect(panel.getByTestId("backorder-row")).toContainText("Umeå HK");
-  await expect(panel.getByTestId("backorder-row")).toContainText("1 pcs");
+  await expect(panel.getByTestId("backorder-waiting")).toHaveText("1");
   await expect(page.getByTestId("on-hand")).toHaveText("0");
 });
 

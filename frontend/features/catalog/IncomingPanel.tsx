@@ -78,6 +78,7 @@ export function IncomingPanel({ itemId, unit, incoming, canWrite }: { itemId: st
           <thead>
             <tr className="border-b border-zinc-300 dark:border-zinc-700">
               <th className="py-1 pr-4">Expected</th>
+              <th className="py-1 pr-4">Unit</th>
               <th className="py-1 pr-4 text-right">Ordered</th>
               <th className="py-1 pr-4 text-right">Received</th>
               <th className="py-1 pr-4">Supplier</th>
@@ -90,8 +91,9 @@ export function IncomingPanel({ itemId, unit, incoming, canWrite }: { itemId: st
             {incoming.map((row) => (
               <tr key={row.id} data-testid="incoming-row" className="border-b border-zinc-200 align-top dark:border-zinc-800">
                 <td className="py-1 pr-4">{row.expected_on ?? <span className="text-zinc-500">not given</span>}</td>
-                <td className="py-1 pr-4 text-right">
-                  {trimQuantity(row.quantity)} {unit}
+                <td className="py-1 pr-4">{unit}</td>
+                <td className="py-1 pr-4 text-right" data-testid="incoming-ordered">
+                  {trimQuantity(row.quantity)}
                 </td>
                 <td className="py-1 pr-4 text-right">
                   {trimQuantity(row.received)}
@@ -132,7 +134,7 @@ export function IncomingPanel({ itemId, unit, incoming, canWrite }: { itemId: st
       {canWrite && (
         <form onSubmit={create} noValidate aria-label="Record incoming stock" className="flex flex-col gap-3">
           <h3 className="font-medium">Record a delivery on its way</h3>
-          <DecimalField label={`Quantity (${unit})`} name="quantity" value={form.quantity} onChange={set("quantity")} error={problems.byField.quantity} />
+          <DecimalField label={`Quantity (unit: ${unit})`} name="quantity" value={form.quantity} onChange={set("quantity")} error={problems.byField.quantity} />
           <label className="flex flex-col gap-1 text-sm font-medium">
             Expected on (optional)
             <input type="date" name="expected_on" value={form.expected_on} onChange={(event) => set("expected_on")(event.target.value)} className={DATE} />

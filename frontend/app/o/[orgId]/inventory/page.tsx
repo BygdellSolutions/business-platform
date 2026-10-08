@@ -143,6 +143,7 @@ export default async function InventoryPage({
                 <th className="py-1 pr-4">Completed</th>
                 <th className="py-1 pr-4">Customer</th>
                 <th className="py-1 pr-4">Product</th>
+                <th className="py-1 pr-4">Unit</th>
                 <th className="py-1 pr-4 text-right">Waiting</th>
                 <th className="py-1 pr-4">State</th>
               </tr>
@@ -161,8 +162,9 @@ export default async function InventoryPage({
                       {backorder.item_name}
                     </Link>
                   </td>
-                  <td className="py-1 pr-4 text-right">
-                    {trimQuantity(backorder.remaining)} {backorder.item_unit}
+                  <td className="py-1 pr-4">{backorder.item_unit}</td>
+                  <td className="py-1 pr-4 text-right" data-testid="backlog-waiting">
+                    {trimQuantity(backorder.remaining)}
                   </td>
                   <td className="py-1 pr-4">{BACKORDER_STATES[backorder.state]}</td>
                 </tr>
@@ -183,6 +185,7 @@ export default async function InventoryPage({
               <tr className="border-b border-zinc-300 dark:border-zinc-700">
                 <th className="py-1 pr-4">Expected</th>
                 <th className="py-1 pr-4">Product</th>
+                <th className="py-1 pr-4">Unit</th>
                 <th className="py-1 pr-4 text-right">Still expected</th>
                 <th className="py-1 pr-4">Supplier</th>
                 <th className="py-1 pr-4">Reference</th>
@@ -197,8 +200,9 @@ export default async function InventoryPage({
                       {row.item_name}
                     </Link>
                   </td>
-                  <td className="py-1 pr-4 text-right">
-                    {trimQuantity(row.remaining)} {row.item_unit}
+                  <td className="py-1 pr-4">{row.item_unit}</td>
+                  <td className="py-1 pr-4 text-right" data-testid="incoming-overview-remaining">
+                    {trimQuantity(row.remaining)}
                   </td>
                   <td className="py-1 pr-4">{row.supplier}</td>
                   <td className="py-1 pr-4">{row.reference}</td>

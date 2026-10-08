@@ -81,7 +81,7 @@ export function StockPanel({
         <span className="font-semibold" data-testid="on-hand">
           {trimQuantity(stock.on_hand)}
         </span>{" "}
-        {unit}
+        <span className="text-zinc-600 dark:text-zinc-400">· unit: {unit}</span>
         {figures && (
           <span className="text-zinc-600 dark:text-zinc-400" data-testid="stock-figures">
             {" "}
@@ -128,7 +128,7 @@ export function StockPanel({
         <form onSubmit={adjust} noValidate aria-label="Change stock" className="flex flex-col gap-3">
           <h3 className="font-medium">{opening ? "Record the opening stock" : "Change the stock"}</h3>
           {!opening && <SelectField label="Change" name="kind" value={kind} onChange={setKind} options={KINDS} error={problems.byField.kind} />}
-          <DecimalField label={opening ? `Counted quantity (${unit})` : `Quantity (${unit})`} name="quantity" value={quantity} onChange={setQuantity} error={problems.byField.quantity} />
+          <DecimalField label={opening ? `Counted quantity (unit: ${unit})` : `Quantity (unit: ${unit})`} name="quantity" value={quantity} onChange={setQuantity} error={problems.byField.quantity} />
           <TextField
             label={opening ? "Note (optional)" : "Why (for example: counted, damaged, lost)"}
             name="note"

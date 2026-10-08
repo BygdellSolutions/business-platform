@@ -135,7 +135,8 @@ export function LineEditor({ line, ordinal, onClose }: { line: TransactionLine; 
           <p>{TEXT.lineChanged}</p>
           {line.version !== base.version && (
             <p className="mt-1">
-              Now on the server: {line.description} · <DecimalText value={line.quantity} /> {line.unit} × <DecimalText value={line.unit_price_ex_vat} /> at <DecimalText value={line.vat_rate} /> % VAT.
+              Now on the server: {line.description} · quantity <DecimalText value={line.quantity} />, unit {line.unit} × <DecimalText value={line.unit_price_ex_vat} /> at{" "}
+              <DecimalText value={line.vat_rate} /> % VAT.
             </p>
           )}
           <Button
