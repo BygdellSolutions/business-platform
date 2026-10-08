@@ -1,0 +1,108 @@
+"""The words an invoice PDF prints, per document language (the organization's setting, frozen in the issuer snapshot).
+
+English is the default and prints exactly what template 1 printed. Swedish follows the usual Swedish invoice terms
+(fakturanummer, förfallodatum, momsregistreringsnummer, Godkänd för F-skatt). A language that is not listed falls back
+to English rather than failing: an issued invoice always gets a PDF.
+"""
+
+LABELS: dict[str, dict[str, str]] = {
+    "en": {
+        "invoice": "Invoice",
+        "invoice_no": "Invoice no.",
+        "invoice_date": "Invoice date",
+        "due_date": "Due date",
+        "currency": "Currency",
+        "delivery_date": "Delivery date",
+        "billed_to": "Billed to",
+        "description": "Description",
+        "reference_information": "Reference information",
+        "transaction_of": "Transaction of {date}",
+        "qty": "Qty",
+        "unit": "Unit",
+        "unit_price": "Unit price",
+        "vat_pct": "VAT %",
+        "net": "Net",
+        "vat": "VAT",
+        "gross": "Gross",
+        "no_lines": "This invoice has no lines.",
+        "vat_rate_pct": "VAT rate (%)",
+        "net_total": "Net total ({currency})",
+        "vat_total": "VAT total ({currency})",
+        "gross_total": "Gross total ({currency})",
+        "page": "Invoice {number} · Page {page} of {total}",
+        "payment": "Payment",
+        "bankgiro": "Bankgiro",
+        "plusgiro": "Plusgiro",
+        "iban": "IBAN",
+        "bic": "BIC",
+        "reference": "Payment reference",
+        "terms": "Payment terms",
+        "terms_days": "{days} days",
+        "f_tax": "Approved for F-tax",
+        "registration": "Registration no.",
+        "vat_no": "VAT no.",
+        "email": "Email",
+        "phone": "Phone",
+        "website": "Website",
+        "list_price": "List price",
+        "catalog_discount": "campaign",
+        "customer_discount": "customer discount",
+        "service_for": "Service for {subject}",
+        "service_gone": "a record that no longer existed",
+        "by": "by {name}",
+    },
+    "sv": {
+        "invoice": "Faktura",
+        "invoice_no": "Fakturanummer",
+        "invoice_date": "Fakturadatum",
+        "due_date": "Förfallodatum",
+        "currency": "Valuta",
+        "delivery_date": "Leveransdatum",
+        "billed_to": "Faktureras till",
+        "description": "Beskrivning",
+        "reference_information": "Referensinformation",
+        "transaction_of": "Transaktion {date}",
+        "qty": "Antal",
+        "unit": "Enhet",
+        "unit_price": "À-pris",
+        "vat_pct": "Moms %",
+        "net": "Netto",
+        "vat": "Moms",
+        "gross": "Brutto",
+        "no_lines": "Fakturan har inga rader.",
+        "vat_rate_pct": "Momssats (%)",
+        "net_total": "Summa exkl. moms ({currency})",
+        "vat_total": "Moms ({currency})",
+        "gross_total": "Att betala ({currency})",
+        "page": "Faktura {number} · Sida {page} av {total}",
+        "payment": "Betalning",
+        "bankgiro": "Bankgiro",
+        "plusgiro": "Plusgiro",
+        "iban": "IBAN",
+        "bic": "BIC",
+        "reference": "Betalningsreferens",
+        "terms": "Betalningsvillkor",
+        "terms_days": "{days} dagar",
+        "f_tax": "Godkänd för F-skatt",
+        "registration": "Org.nr",
+        "vat_no": "Momsreg.nr",
+        "email": "E-post",
+        "phone": "Telefon",
+        "website": "Webbplats",
+        "list_price": "Listpris",
+        "catalog_discount": "kampanj",
+        "customer_discount": "kundrabatt",
+        "service_for": "Tjänst för {subject}",
+        "service_gone": "en post som inte längre fanns",
+        "by": "utförd av {name}",
+    },
+}
+
+
+def labels(language: str) -> dict[str, str]:
+    return LABELS.get(language, LABELS["en"])
+
+
+def decimal_separator(language: str) -> str:
+    """Swedish writes 1 062,50; English 1 062.50 (both group digits with a no-break space)."""
+    return "," if language == "sv" else "."

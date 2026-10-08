@@ -68,6 +68,9 @@ class PdfLine(Frozen):
     vat: str
     gross: str
     fields: tuple[PdfField, ...]
+    # Printed under the description, already in the document's language: the discount steps and the service details
+    # the invoice line stores (template 2).
+    notes: tuple[str, ...] = ()
 
 
 class PdfVatRow(Frozen):
@@ -79,6 +82,17 @@ class PdfVatRow(Frozen):
 class PdfSource(Frozen):
     date: str  # the date the invoice recorded for this source transaction
     fields: tuple[PdfField, ...]
+
+
+class PdfPayment(Frozen):
+    """How to pay, as the issuer snapshot stores it (template 2). Only stored values; nothing is derived."""
+
+    bankgiro: str | None = None
+    plusgiro: str | None = None
+    iban: str | None = None
+    bic: str | None = None
+    terms_days: str | None = None
+    reference: str  # the invoice number
 
 
 class PdfDocument(Frozen):
@@ -95,6 +109,13 @@ class PdfDocument(Frozen):
     net: str
     vat: str
     gross: str
+    # Template 2. The defaults print exactly what template 1 printed.
+    language: str = "en"
+    delivery_dates: tuple[str, ...] = ()
+    payment: PdfPayment | None = None
+    approved_for_f_tax: bool = False
+    # The seller's identifiers and contact lines for the footer, already labelled in the document's language.
+    issuer_footer: tuple[str, ...] = ()
 
 
 # --- text -------------------------------------------------------------------------------------------------------------------
@@ -145,6 +166,11 @@ def source_sha256(document: PdfDocument) -> str:
 def iter_strings(document: PdfDocument):
     yield from (document.number_text, document.invoice_date, document.currency, document.net, document.vat, document.gross)
     yield from (value for value in (document.due_date, document.description) if value is not None)
+    yield from document.delivery_dates
+    yield from document.issuer_footer
+    if document.payment is not None:
+        payment = document.payment
+        yield from (value for value in (payment.bankgiro, payment.plusgiro, payment.iban, payment.bic, payment.terms_days, payment.reference) if value is not None)
     for party in (document.issuer, document.customer):
         yield party.name
         yield from party.lines
@@ -155,6 +181,7 @@ def iter_strings(document: PdfDocument):
             yield field.text
     for line in document.lines:
         yield from (line.position, line.description, line.unit, line.quantity, line.unit_price, line.vat_rate, line.net, line.vat, line.gross)
+        yield from line.notes
         for field in line.fields:
             yield field.label
             yield field.text

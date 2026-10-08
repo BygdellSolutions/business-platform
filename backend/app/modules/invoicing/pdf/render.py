@@ -33,8 +33,11 @@ from reportlab.platypus import KeepTogether, LongTable, Paragraph, SimpleDocTemp
 from app.modules.invoicing.pdf import fonts as font_layer
 from app.modules.invoicing.pdf.document import DocumentTooLarge, PdfDocument, PdfField, PdfParty, check_bounds, iter_strings
 from app.modules.invoicing.pdf.format import money, trimmed
+from app.modules.invoicing.pdf.labels import decimal_separator, labels
 
-TEMPLATE_VERSION = 1
+# 2: the document's language (English prints what template 1 printed), payment details, F-tax, delivery dates, the
+# seller's identifiers on every page, and the discount steps and service details under a line.
+TEMPLATE_VERSION = 2
 MIN_DESCRIPTION_WIDTH = 90  # points
 MAX_OUTPUT_BYTES = 64 * 1024 * 1024  # defensive: a rendering that large is a bug, not an invoice
 
@@ -164,10 +167,14 @@ def _build(document: PdfDocument, fonts: font_layer.Registered) -> bytes:
     width = A4[0] - 2 * margin
     buffer = io.BytesIO()
 
+    words = labels(document.language)
+    sep = decimal_separator(document.language)
+
     def footer(page: canvas.Canvas, number: int, total: int) -> None:
-        text = printer.p(f"Invoice {document.number_text} · Page {number} of {total}", "foot")
+        lines = [*document.issuer_footer, words["page"].format(number=document.number_text, page=number, total=total)]
+        text = printer.p("\n".join(lines), "foot")
         text.wrap(width, 20 * mm)
-        text.drawOn(page, margin, 10 * mm)
+        text.drawOn(page, margin, 8 * mm)
 
     doc = SimpleDocTemplate(
         buffer,
@@ -175,48 +182,59 @@ def _build(document: PdfDocument, fonts: font_layer.Registered) -> bytes:
         leftMargin=margin,
         rightMargin=margin,
         topMargin=margin,
-        bottomMargin=20 * mm,
+        bottomMargin=(20 + 4 * len(document.issuer_footer)) * mm,
         invariant=1,
         pageCompression=1,
-        title=f"Invoice {document.number_text}",
+        title=f"{words['invoice']} {document.number_text}",
         author=document.issuer.name,
-        subject=f"Invoice {document.number_text} for {document.customer.name}",
+        subject=f"{words['invoice']} {document.number_text} · {document.customer.name}",
         creator="business-platform",
     )
 
     story: list = []
 
     # Header: the issuer on the left, the invoice title and details on the right.
-    details = [("Invoice no.", document.number_text), ("Invoice date", document.invoice_date)]
+    details = [(words["invoice_no"], document.number_text), (words["invoice_date"], document.invoice_date)]
     if document.due_date is not None:
-        details.append(("Due date", document.due_date))
-    details.append(("Currency", document.currency))
-    detail_table = Table([[printer.p(label, "label"), printer.p(value, "body")] for label, value in details], colWidths=[24 * mm, 36 * mm], hAlign="RIGHT")
+        details.append((words["due_date"], document.due_date))
+    if document.delivery_dates:
+        details.append((words["delivery_date"], ", ".join(document.delivery_dates)))
+    details.append((words["currency"], document.currency))
+    detail_table = Table([[printer.p(label, "label"), printer.p(value, "body")] for label, value in details], colWidths=[28 * mm, 36 * mm], hAlign="RIGHT")
     detail_table.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0), ("TOPPADDING", (0, 0), (-1, -1), 1), ("BOTTOMPADDING", (0, 0), (-1, -1), 1)]))
-    header = Table([[_party_flowables(printer, document.issuer, "issuer"), [printer.p("Invoice", "title"), Spacer(1, 4), detail_table]]], colWidths=[width * 0.52, width * 0.48])
+    header = Table([[_party_flowables(printer, document.issuer, "issuer"), [printer.p(words["invoice"], "title"), Spacer(1, 4), detail_table]]], colWidths=[width * 0.52, width * 0.48])
     header.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0)]))
     story += [header, Spacer(1, 10 * mm)]
 
-    story += [printer.p("Billed to", "label"), *_party_flowables(printer, document.customer, "bold"), Spacer(1, 6 * mm)]
+    story += [printer.p(words["billed_to"], "label"), *_party_flowables(printer, document.customer, "bold"), Spacer(1, 6 * mm)]
 
     if document.description:
-        story += [printer.p("Description", "label"), printer.p(document.description), Spacer(1, 5 * mm)]
+        story += [printer.p(words["description"], "label"), printer.p(document.description), Spacer(1, 5 * mm)]
 
     # Reference information: the custom-field values stored per source transaction (generic label and text).
     with_fields = [source for source in document.sources if source.fields]
     if with_fields:
-        story.append(printer.p("Reference information", "label"))
+        story.append(printer.p(words["reference_information"], "label"))
         for source in with_fields:
             if len(document.sources) > 1:
-                story.append(printer.p(f"Transaction of {source.date}", "bold"))
+                story.append(printer.p(words["transaction_of"].format(date=source.date), "bold"))
             story += _fields(printer, source.fields, "body")
         story.append(Spacer(1, 5 * mm))
 
     # Lines. Fixed minimum widths for the figure columns; each grows to fit its widest printed figure and the
     # description takes what is left (never less than MIN_DESCRIPTION_WIDTH: beyond that a figure wraps by character).
-    heads = [("Description", "cell_head"), ("Qty", "cell_head_right"), ("Unit", "cell_head"), ("Unit price", "cell_head_right"), ("VAT %", "cell_head_right"), ("Net", "cell_head_right"), ("VAT", "cell_head_right"), ("Gross", "cell_head_right")]
+    heads = [
+        (words["description"], "cell_head"),
+        (words["qty"], "cell_head_right"),
+        (words["unit"], "cell_head"),
+        (words["unit_price"], "cell_head_right"),
+        (words["vat_pct"], "cell_head_right"),
+        (words["net"], "cell_head_right"),
+        (words["vat"], "cell_head_right"),
+        (words["gross"], "cell_head_right"),
+    ]
     shown = [
-        [trimmed(line.quantity), line.unit, money(line.unit_price), trimmed(line.vat_rate), money(line.net), money(line.vat), money(line.gross)]
+        [trimmed(line.quantity, sep), line.unit, money(line.unit_price, sep), trimmed(line.vat_rate, sep), money(line.net, sep), money(line.vat, sep), money(line.gross, sep)]
         for line in document.lines
     ]
     minimums = [30, 40, 52, 34, 54, 46, 58]
@@ -237,7 +255,7 @@ def _build(document: PdfDocument, fonts: font_layer.Registered) -> bytes:
     for line, cells in zip(document.lines, shown):
         rows.append(
             [
-                [printer.p(line.description, "cell"), *_fields(printer, line.fields, "cell_note")],
+                [printer.p(line.description, "cell"), *[printer.p(note, "cell_note") for note in line.notes], *_fields(printer, line.fields, "cell_note")],
                 printer.p(cells[0], "cell_right"),
                 printer.p(cells[1], "cell"),
                 printer.p(cells[2], "cell_right"),
@@ -263,34 +281,47 @@ def _build(document: PdfDocument, fonts: font_layer.Registered) -> bytes:
         )
         story.append(table)
     else:
-        story.append(printer.p("This invoice has no lines."))
+        story.append(printer.p(words["no_lines"]))
     story.append(Spacer(1, 6 * mm))
 
     # The stored VAT breakdown, then the stored totals: once, after the last line.
     closing: list = []
     if document.vat_rows:
-        breakdown = [[printer.p("VAT rate (%)", "cell_head_right"), printer.p("Net", "cell_head_right"), printer.p("VAT", "cell_head_right")]]
-        breakdown += [[printer.p(trimmed(row.rate), "cell_right"), printer.p(money(row.net), "cell_right"), printer.p(money(row.vat), "cell_right")] for row in document.vat_rows]
+        breakdown = [[printer.p(words["vat_rate_pct"], "cell_head_right"), printer.p(words["net"], "cell_head_right"), printer.p(words["vat"], "cell_head_right")]]
+        breakdown += [[printer.p(trimmed(row.rate, sep), "cell_right"), printer.p(money(row.net, sep), "cell_right"), printer.p(money(row.vat, sep), "cell_right")] for row in document.vat_rows]
         vat_widths = [
-            _column_width([trimmed(row.rate) for row in document.vat_rows], "cell_right", 60),
-            _column_width([money(row.net) for row in document.vat_rows], "cell_right", 80),
-            _column_width([money(row.vat) for row in document.vat_rows], "cell_right", 70),
+            _column_width([trimmed(row.rate, sep) for row in document.vat_rows], "cell_right", 60),
+            _column_width([money(row.net, sep) for row in document.vat_rows], "cell_right", 80),
+            _column_width([money(row.vat, sep) for row in document.vat_rows], "cell_right", 70),
         ]
         vat_table = Table(breakdown, colWidths=vat_widths, hAlign="RIGHT")
         vat_table.setStyle(TableStyle([("LINEBELOW", (0, 0), (-1, 0), 0.6, colors.black), ("LEFTPADDING", (0, 0), (-1, -1), 3), ("RIGHTPADDING", (0, 0), (-1, -1), 3)]))
         closing += [vat_table, Spacer(1, 4 * mm)]
     totals = Table(
         [
-            [printer.p(f"Net total ({document.currency})", "total_label"), printer.p(money(document.net), "total_value")],
-            [printer.p(f"VAT total ({document.currency})", "total_label"), printer.p(money(document.vat), "total_value")],
-            [printer.p(f"Gross total ({document.currency})", "total_label"), printer.p(money(document.gross), "total_value")],
+            [printer.p(words["net_total"].format(currency=document.currency), "total_label"), printer.p(money(document.net, sep), "total_value")],
+            [printer.p(words["vat_total"].format(currency=document.currency), "total_label"), printer.p(money(document.vat, sep), "total_value")],
+            [printer.p(words["gross_total"].format(currency=document.currency), "total_label"), printer.p(money(document.gross, sep), "total_value")],
         ],
-        colWidths=[90, _column_width([money(document.net), money(document.vat), money(document.gross)], "total_value", 80)],
+        colWidths=[110, _column_width([money(document.net, sep), money(document.vat, sep), money(document.gross, sep)], "total_value", 80)],
         hAlign="RIGHT",
     )
     totals.setStyle(TableStyle([("LINEABOVE", (0, 2), (-1, 2), 0.8, colors.black), ("LEFTPADDING", (0, 0), (-1, -1), 3), ("RIGHTPADDING", (0, 0), (-1, -1), 3)]))
     closing.append(totals)
     story.append(KeepTogether(closing))
+
+    # How to pay: only what the issuer snapshot stores (schema 2), with the invoice number as the reference.
+    if document.payment is not None:
+        payment = document.payment
+        rows = [(words[key], value) for key, value in (("bankgiro", payment.bankgiro), ("plusgiro", payment.plusgiro), ("iban", payment.iban), ("bic", payment.bic)) if value]
+        rows.append((words["reference"], payment.reference))
+        if document.due_date is not None:
+            rows.append((words["due_date"], document.due_date))
+        if payment.terms_days is not None:
+            rows.append((words["terms"], words["terms_days"].format(days=payment.terms_days)))
+        pay_table = Table([[printer.p(label, "label"), printer.p(value, "body")] for label, value in rows], colWidths=[34 * mm, width - 34 * mm])
+        pay_table.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("TOPPADDING", (0, 0), (-1, -1), 1), ("BOTTOMPADDING", (0, 0), (-1, -1), 1)]))
+        story.append(KeepTogether([Spacer(1, 8 * mm), printer.p(words["payment"], "bold"), Spacer(1, 2), pay_table]))
 
     doc.build(story, canvasmaker=_numbered_canvas(footer))
     data = buffer.getvalue()

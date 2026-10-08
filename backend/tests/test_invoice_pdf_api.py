@@ -100,11 +100,12 @@ def test_later_downloads_return_exactly_the_stored_bytes_and_never_render_again(
 
 def test_a_new_template_or_renderer_never_changes_an_artifact_that_exists(client, world, monkeypatch):
     first = client.get(pdf_url(world.document), headers=world.headers).content
-    monkeypatch.setattr(render, "TEMPLATE_VERSION", 2)
+    made_with = render.TEMPLATE_VERSION
+    monkeypatch.setattr(render, "TEMPLATE_VERSION", made_with + 1)
     monkeypatch.setattr(render, "renderer_identity", lambda: "reportlab 99; other fonts")
     assert client.get(pdf_url(world.document), headers=world.headers).content == first
     (row,) = stored(world.db, world.document)
-    assert row.template_version == 1 and row.renderer.startswith("reportlab 5")  # provenance of what was served
+    assert row.template_version == made_with and row.renderer.startswith("reportlab 5")  # provenance of what was served
 
 
 def test_the_download_reads_no_live_table_neither_the_first_time_nor_later(client, world):
