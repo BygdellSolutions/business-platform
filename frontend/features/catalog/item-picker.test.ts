@@ -21,6 +21,8 @@ function item(overrides: Partial<Item>): Item {
     unit: "session",
     price_ex_vat: "850.00" as MoneyString,
     current_discount: null,
+    sku: null,
+    track_stock: false,
     vat_rate: "25.00" as PercentString,
     active: true,
     created_at: "",

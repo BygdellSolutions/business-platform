@@ -30,6 +30,11 @@ class Item(TenantOwned, Authored, Base):
         CheckConstraint("type IN ('" + "', '".join(ItemType) + "')", name="ck_items_type"),
         CheckConstraint("price_ex_vat >= 0", name="ck_items_price_ex_vat_nonnegative"),
         CheckConstraint("vat_rate >= 0 AND vat_rate <= 100", name="ck_items_vat_rate_range"),
+        # Only a product can hold stock; a service never does.
+        CheckConstraint("NOT track_stock OR type = 'product'", name="ck_items_track_stock_product"),
+        CheckConstraint("sku IS NULL OR length(btrim(sku)) > 0", name="ck_items_sku_not_blank"),
+        # An article number identifies one item within its organization (another organization may use the same).
+        Index("uq_items_organization_sku", "organization_id", "sku", unique=True, postgresql_where=text("sku IS NOT NULL")),
     )
 
     type: Mapped[str] = mapped_column(String(16))
@@ -43,6 +48,10 @@ class Item(TenantOwned, Authored, Base):
     # Percentage, e.g. 25.00 for 25 %.
     vat_rate: Mapped[Decimal] = mapped_column(Numeric(5, 2))
     active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+    # Article number (free text, optional, unique per organization).
+    sku: Mapped[str | None] = mapped_column(String(64))
+    # Whether the Inventory module keeps a stock ledger for this product (see app/modules/inventory).
+    track_stock: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
 
 
 class ItemDiscount(TenantOwned, Authored, Base):

@@ -1,4 +1,4 @@
-"""Generic lifecycle validation: "may this transition happen?" asked of whoever has an opinion.
+"""Generic lifecycle validation ("may this transition happen?") and effects ("it happened: act on it").
 
 A module that owns a lifecycle (for example one with a "complete" step) calls
 `ensure_valid(...)` before it performs the transition. Any capability that registered a
@@ -13,6 +13,12 @@ A failed validation is a 409 whose body tells the client exactly where to look:
 
 Validators receive the TenantContext and must only look at records of that organization,
 so a problem can never describe another tenant's data.
+
+Effects are the other half: after the owning module has written the new status, it calls
+`run_effects(...)` while still holding its row lock and BEFORE it commits. A capability that
+registered an effect (Inventory delivers or returns stock) does its work in that same database
+transaction; it never commits, and an effect that raises rolls the whole step back. Validators
+always run first, so a vetoed step never reaches an effect.
 """
 
 from dataclasses import asdict, dataclass
@@ -50,6 +56,16 @@ def collect_problems(
     for validator in registry.validators:
         problems.extend(validator(db, ctx, event, entity_key, entity_id))
     return problems
+
+
+def run_effects(db: Session, ctx: TenantContext, event: str, entity_key: str, entity_id: uuid.UUID) -> None:
+    """Let every registered effect act on a step that has been written but not committed.
+
+    An effect must ignore events and entity types it has no interest in, must only touch records
+    of `ctx.organization_id`, must not commit, and raises (typically an HTTPException) to refuse.
+    """
+    for effect in registry.effects:
+        effect(db, ctx, event, entity_key, entity_id)
 
 
 def ensure_valid(

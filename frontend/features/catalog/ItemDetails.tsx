@@ -12,6 +12,7 @@ export function ItemDetails({ item }: { item: Item }) {
       testId="record-details"
       details={[
         { label: "Type", value: TYPE_LABELS[item.type] },
+        { label: "Article number", value: item.sku },
         { label: "Name", value: item.name },
         { label: "Description", value: item.description },
         { label: "Unit", value: item.unit },
@@ -26,6 +27,7 @@ export function ItemDetails({ item }: { item: Item }) {
           ) : null,
           testId: "detail-current-discount",
         },
+        ...(item.type === "product" ? [{ label: "Stock", value: item.track_stock ? "Tracked" : "Not tracked" }] : []),
         { label: "Status", value: <StatusBadge active={item.active} /> },
       ]}
     />

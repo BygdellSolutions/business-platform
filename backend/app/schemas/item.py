@@ -10,6 +10,9 @@ from app.schemas.money import DiscountPercentIn, MoneyIn, MoneyOut, PercentIn, P
 Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
 Unit = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=32)]
 Description = Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)]
+Sku = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)]
+
+TRACK_STOCK_ONLY_PRODUCTS = "only a product can track stock"
 
 # As with Customers: no organization_id field, and extra="forbid" turns a
 # client-supplied one into a 422. The organization comes from the tenant context.
@@ -25,6 +28,14 @@ class ItemCreate(BaseModel):
     price_ex_vat: MoneyIn
     vat_rate: PercentIn
     active: bool = True
+    sku: Sku | None = None
+    track_stock: bool = False
+
+    @model_validator(mode="after")
+    def stock_only_for_products(self):
+        if self.track_stock and self.type != ItemType.PRODUCT:
+            raise ValueError(TRACK_STOCK_ONLY_PRODUCTS)
+        return self
 
 
 class ItemUpdate(BaseModel):
@@ -39,8 +50,10 @@ class ItemUpdate(BaseModel):
     price_ex_vat: MoneyIn | None = None
     vat_rate: PercentIn | None = None
     active: bool | None = None
+    sku: Sku | None = None  # null removes the article number
+    track_stock: bool | None = None
 
-    @field_validator("type", "name", "unit", "price_ex_vat", "vat_rate", "active")
+    @field_validator("type", "name", "unit", "price_ex_vat", "vat_rate", "active", "track_stock")
     @classmethod
     def not_null(cls, value):
         # Runs only for fields that were sent; these columns are NOT NULL.
@@ -60,6 +73,8 @@ class ItemRead(BaseModel):
     price_ex_vat: MoneyOut
     vat_rate: PercentOut
     active: bool
+    sku: str | None
+    track_stock: bool
     created_at: datetime
     updated_at: datetime
     # Who created it and who changed it last (null: not recorded, e.g. before authors were kept).

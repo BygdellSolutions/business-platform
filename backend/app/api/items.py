@@ -30,6 +30,7 @@ def create_item(
     # lock on the organization row would also conflict with that change; this lock states the
     # intent explicitly instead of relying on how foreign-key locking happens to work.
     share_lock_organization(db, ctx.organization_id)
+    _ensure_sku_free(db, ctx, payload.sku, None)
     item = create_scoped(db, ctx, Item, **payload.model_dump())
     audit.created(db, ctx, item, "item")
     commit_and_refresh(db, item)
@@ -76,7 +77,13 @@ def update_item(
     db: Session = Depends(get_db),
 ) -> ItemRead:
     item = get_scoped_or_404(db, ctx, Item, item_id)
-    audit.apply_audited_update(db, ctx, item, "item", payload.model_dump(exclude_unset=True))
+    values = payload.model_dump(exclude_unset=True)
+    # The rule is about the item as it will be, so a change of type alone is checked too.
+    if values.get("track_stock", item.track_stock) and values.get("type", item.type) != ItemType.PRODUCT:
+        reference_error("track_stock", "Only a product can track stock", "item.track_stock_service")
+    if "sku" in values:
+        _ensure_sku_free(db, ctx, values["sku"], item.id)
+    audit.apply_audited_update(db, ctx, item, "item", values)
     return _with_discounts(db, ctx, [item])[0]
 
 
@@ -89,6 +96,17 @@ def delete_item(
     item = get_scoped_or_404(db, ctx, Item, item_id)
     delete_or_409(db, item, "Item is referenced by other records", after_delete=audit.deletion(db, ctx, item, "item"))
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def _ensure_sku_free(db: Session, ctx: TenantContext, sku: str | None, item_id: uuid.UUID | None) -> None:
+    """An article number names one item of the organization (the unique index is the backstop for a race)."""
+    if sku is None:
+        return
+    query = scoped_select(Item, ctx).where(Item.sku == sku)
+    if item_id is not None:
+        query = query.where(Item.id != item_id)
+    if db.scalar(query) is not None:
+        reference_error("sku", "Another item already has this article number", "item.sku_taken")
 
 
 def _with_discounts(db: Session, ctx: TenantContext, items: list[Item]) -> list[ItemRead]:

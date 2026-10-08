@@ -26,6 +26,8 @@ function item(overrides: Partial<Item> = {}): Item {
     unit: "hour",
     price_ex_vat: "850.00" as MoneyString,
     current_discount: null,
+    sku: null,
+    track_stock: false,
     vat_rate: "25.00" as PercentString,
     active: true,
     created_at: "2026-10-01T10:00:00Z",
@@ -101,7 +103,7 @@ describe("decimals are strings from the input to the request body", () => {
 
     const body = mocked.mock.calls[0][2]?.body as Record<string, unknown>;
     expect(Object.values(body).filter((value) => typeof value === "number")).toEqual([]);
-    expect(body).toEqual({ type: "service", name: "Saddle fitting", description: null, unit: "hour", price_ex_vat: "8.20", vat_rate: "25", active: true });
+    expect(body).toEqual({ type: "service", name: "Saddle fitting", description: null, unit: "hour", price_ex_vat: "8.20", vat_rate: "25", active: true, sku: null, track_stock: false });
   });
 
   it("shows the saved record exactly as the backend formatted it", async () => {
@@ -263,5 +265,33 @@ describe("organization scope", () => {
 
     expect(screen.getByLabelText("Name")).toHaveValue("");
     expect(screen.getByLabelText("Price excluding VAT")).toHaveValue("");
+  });
+});
+
+describe("article number and stock tracking", () => {
+  it("offers stock tracking only for a product, and sends it with the article number", async () => {
+    mocked.mockResolvedValue(ok(item(), 201));
+    mount(A);
+    expect(screen.queryByLabelText("Track stock")).toBeNull(); // a service never holds stock
+
+    await userEvent.selectOptions(screen.getByLabelText("Type"), "product");
+    await userEvent.type(screen.getByLabelText("Article number (SKU)"), "LIN-01");
+    await userEvent.click(screen.getByLabelText("Track stock"));
+    await fillNew("120", "25");
+    await userEvent.click(screen.getByRole("button", { name: "Create item" }));
+
+    expect(mocked.mock.calls[0][2]?.body).toMatchObject({ type: "product", sku: "LIN-01", track_stock: true });
+  });
+
+  it("turning a stock-tracking product into a service stops tracking in the same save", async () => {
+    mocked.mockResolvedValue(ok(item({ type: "service", track_stock: false })));
+    mount(A, item({ type: "product", track_stock: true, sku: "LIN-01" }));
+
+    await userEvent.selectOptions(screen.getByLabelText("Type"), "service");
+    expect(screen.queryByLabelText("Track stock")).toBeNull();
+    await userEvent.clear(screen.getByLabelText("Article number (SKU)"));
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(mocked.mock.calls[0][2]?.body).toEqual({ type: "service", sku: null, track_stock: false });
   });
 });

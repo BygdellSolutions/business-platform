@@ -150,6 +150,10 @@ export interface Item {
   /** Percent, a decimal STRING with two decimals ("25.00"). */
   vat_rate: PercentString;
   active: boolean;
+  /** Article number (unique within the organization), if any. */
+  sku: string | null;
+  /** Whether the Inventory module keeps a stock ledger for this product (never true for a service). */
+  track_stock: boolean;
   /** The temporary discount active today, if any (the price above never changes). */
   current_discount: ItemDiscount | null;
   created_at: string;
@@ -167,9 +171,32 @@ export interface ItemCreate {
   price_ex_vat: MoneyString;
   vat_rate: PercentString;
   active: boolean;
+  sku?: string | null;
+  track_stock?: boolean;
 }
 
 export type ItemUpdate = Partial<ItemCreate>;
+
+/** One change of an item's physical stock (GET /api/items/{id}/stock), newest first. */
+export interface StockMovement {
+  id: string;
+  reason: "opening" | "adjustment" | "receipt" | "delivery" | "return";
+  quantity_change: QuantityString;
+  quantity_before: QuantityString;
+  quantity_after: QuantityString;
+  note: string | null;
+  transaction_id: string | null;
+  created_at: string;
+  created_by: string | null;
+  created_by_name: string | null;
+}
+
+export interface Stock {
+  item_id: string;
+  track_stock: boolean;
+  on_hand: QuantityString;
+  movements: StockMovement[];
+}
 
 /** The compact customer the backend embeds in records that refer to one (a horse owner). */
 export interface CustomerRef {

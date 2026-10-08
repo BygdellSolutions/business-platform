@@ -17,6 +17,7 @@ from app.core.lifecycle import (
     COMPLETE as EVENT_COMPLETE,
     REOPEN as EVENT_REOPEN,
     ensure_valid,
+    run_effects,
 )
 from app.core.org_time import as_instant, organization_today
 from app.core.query import commit_and_refresh
@@ -574,6 +575,10 @@ def _transition(
     tx.status = to
     tx.version += 1
     audit.updated(db, ctx, tx, "transaction", before, action=verb)
+    db.flush()
+    # Whatever reacts to the step (Inventory delivers or returns stock) does so now: in this database
+    # transaction, under this row lock. If an effect refuses, nothing of the step is committed.
+    run_effects(db, ctx, event, "transaction", tx.id)
     commit_and_refresh(db, tx)
     return _read_one(db, ctx, transaction_id)
 

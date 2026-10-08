@@ -16,7 +16,7 @@ import type { Item, ItemCreate, ItemType, ItemUpdate } from "@/lib/api/types";
 import { parseMoney, parsePercent } from "@/lib/decimal";
 import { NOT_A_DECIMAL, blankToNull, problemsFrom, useMutation } from "@/lib/forms";
 
-const CONTROLS = ["type", "name", "description", "unit", "price_ex_vat", "vat_rate", "active"] as const;
+const CONTROLS = ["type", "name", "description", "unit", "price_ex_vat", "vat_rate", "active", "sku", "track_stock"] as const;
 
 const TYPES = [
   { value: "service", label: "Service" },
@@ -37,6 +37,8 @@ interface FormState {
   price_ex_vat: string;
   vat_rate: string;
   active: boolean;
+  sku: string;
+  track_stock: boolean;
 }
 
 function toState(item?: Item): FormState {
@@ -48,6 +50,8 @@ function toState(item?: Item): FormState {
     price_ex_vat: item?.price_ex_vat ?? "",
     vat_rate: item?.vat_rate ?? "",
     active: item?.active ?? true,
+    sku: item?.sku ?? "",
+    track_stock: item?.track_stock ?? false,
   };
 }
 
@@ -89,6 +93,8 @@ export function ItemForm({ item }: { item?: Item }) {
       price_ex_vat: parsed.price,
       vat_rate: parsed.vat,
       active: state.active,
+      sku: blankToNull(state.sku),
+      track_stock: state.type === "product" && state.track_stock,
     };
     const created = await run(() => apiFetch<Item>(orgId, "/items", { method: "POST", body }));
     if (created === null) return;
@@ -110,6 +116,9 @@ export function ItemForm({ item }: { item?: Item }) {
     if (state.unit !== current.unit) body.unit = state.unit;
     if (parsed.price !== current.price_ex_vat) body.price_ex_vat = parsed.price;
     if (parsed.vat !== current.vat_rate) body.vat_rate = parsed.vat;
+    if (blankToNull(state.sku) !== current.sku) body.sku = blankToNull(state.sku);
+    const trackStock = state.type === "product" && state.track_stock;
+    if (trackStock !== current.track_stock) body.track_stock = trackStock;
     if (Object.keys(body).length === 0) {
       setNotice("unchanged");
       return;
@@ -141,11 +150,15 @@ export function ItemForm({ item }: { item?: Item }) {
       )}
       <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4" aria-label={record ? "Edit item" : "New item"}>
         <SelectField label="Type" name="type" value={state.type} onChange={(value) => set("type", value as ItemType)} options={TYPES} error={errorsFor("type")} />
+        <TextField label="Article number (SKU)" name="sku" value={state.sku} onChange={(value) => set("sku", value)} error={errorsFor("sku")} hint="Optional. Unique within the organization." autoComplete="off" />
         <TextField label="Name" name="name" value={state.name} onChange={(value) => set("name", value)} error={errorsFor("name")} autoComplete="off" />
         <TextAreaField label="Description" name="description" value={state.description} onChange={(value) => set("description", value)} error={errorsFor("description")} />
         <TextField label="Unit" name="unit" value={state.unit} onChange={(value) => set("unit", value)} error={errorsFor("unit")} hint="For example hour, piece or kg." autoComplete="off" />
         <DecimalField label="Price excluding VAT" name="price_ex_vat" value={state.price_ex_vat} onChange={(value) => set("price_ex_vat", value)} error={errorsFor("price_ex_vat")} />
         <DecimalField label="VAT rate (%)" name="vat_rate" value={state.vat_rate} onChange={(value) => set("vat_rate", value)} error={errorsFor("vat_rate")} />
+        {state.type === "product" && (
+          <CheckboxField label="Track stock" name="track_stock" checked={state.track_stock} onChange={(checked) => set("track_stock", checked)} error={errorsFor("track_stock")} />
+        )}
         {!record && <CheckboxField label="Active" name="active" checked={state.active} onChange={(checked) => set("active", checked)} error={errorsFor("active")} />}
         <ErrorSummary messages={problems.general} />
         {notice === "saved" && <Notice testId="saved">Saved.</Notice>}

@@ -71,6 +71,8 @@ IsEditable = Callable[[Session, TenantContext, uuid.UUID], bool]
 ReferenceGuard = Callable[[Session, str, uuid.UUID, uuid.UUID], bool]
 # (db, ctx, event, entity_key, entity_id) -> list of lifecycle Problems
 LifecycleValidator = Callable[[Session, TenantContext, str, str, uuid.UUID], list[Any]]
+# (db, ctx, event, entity_key, entity_id): acts after a lifecycle step, inside its database transaction; never commits.
+LifecycleEffect = Callable[[Session, TenantContext, str, str, uuid.UUID], None]
 # (db, organization_id) -> a human reason if stored prices make a currency change unsafe, else None
 CurrencyGuard = Callable[[Session, uuid.UUID], str | None]
 
@@ -94,6 +96,7 @@ class Registry:
         self._entities: dict[str, EntityType] = {}
         self._reference_guards: list[ReferenceGuard] = []
         self._validators: list[LifecycleValidator] = []
+        self._effects: list[LifecycleEffect] = []
         self._currency_guards: list[CurrencyGuard] = []
 
     # --- entity types ---------------------------------------------------------------------
@@ -180,6 +183,15 @@ class Registry:
     @property
     def validators(self) -> list[LifecycleValidator]:
         return list(self._validators)
+
+    # --- lifecycle effects (see app.core.lifecycle.run_effects) ---------------------------------
+
+    def add_effect(self, effect: LifecycleEffect) -> None:
+        self._effects.append(effect)
+
+    @property
+    def effects(self) -> list[LifecycleEffect]:
+        return list(self._effects)
 
     # --- currency guards -----------------------------------------------------------------------
 

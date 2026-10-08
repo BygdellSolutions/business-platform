@@ -66,7 +66,7 @@ export const unique = (prefix: string) => `${prefix} ${randomUUID().slice(0, 8)}
 export async function createItem(
   context: BrowserContext,
   orgId: string,
-  data: { name: string; type?: "service" | "product"; unit?: string; price_ex_vat?: string; vat_rate?: string; description?: string; active?: boolean },
+  data: { name: string; type?: "service" | "product"; unit?: string; price_ex_vat?: string; vat_rate?: string; description?: string; active?: boolean; sku?: string; track_stock?: boolean },
 ) {
   const response = await context.request.post(bffUrl(orgId, "/items"), {
     data: { type: "service", unit: "hour", price_ex_vat: "10.00", vat_rate: "25", ...data },
@@ -349,6 +349,8 @@ export function createWorld(options: { currency?: string | null; label?: string 
         "transaction_lines",
         "transactions",
         "horses",
+        "stock_movements",
+        "item_discounts",
         "items",
         "customers",
         "organization_creation_requests",

@@ -119,6 +119,8 @@ export function item(id: string, name: string, overrides: Partial<Item> = {}): I
     unit: "session",
     price_ex_vat: money("850.00"),
     current_discount: null,
+    sku: null,
+    track_stock: false,
     vat_rate: "25.00" as PercentString,
     active: true,
     created_at: "",

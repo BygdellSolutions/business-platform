@@ -75,6 +75,13 @@ QuantityIn = Annotated[
     Field(gt=0, max_digits=12, decimal_places=3, allow_inf_nan=False),
 ]
 
+# NUMERIC(12,3), >= 0: a stock count may find nothing on the shelf.
+CountIn = Annotated[
+    Decimal,
+    BeforeValidator(_strict_decimal_input(_QUANTITY_RE)),
+    Field(ge=0, max_digits=12, decimal_places=3, allow_inf_nan=False),
+]
+
 MoneyOut = Annotated[Decimal, _two_decimals_out]
 PercentOut = Annotated[Decimal, _two_decimals_out]
 QuantityOut = Annotated[Decimal, _three_decimals_out]

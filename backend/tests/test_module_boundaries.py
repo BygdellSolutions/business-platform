@@ -28,6 +28,7 @@ MODULE_PREFIX = {
     # package and the wiring may import it: the dependency runs invoicing -> sales / custom
     # fields (never the reverse), and everything else meets it through the core registry.
     "invoicing": "app.modules.invoicing",
+    "inventory": "app.modules.inventory",
 }
 
 
@@ -111,9 +112,9 @@ def test_invoicing_really_uses_its_allowance():
 def test_wiring_files_really_wire_the_modules():
     # If a wiring file stops importing a module, shrink WIRING (keeps the allowlist honest).
     for path in WIRING:
-        for name in ("equine", "sales", "invoicing"):
-            if path.name == "seed_dev.py" and name == "invoicing":
-                continue  # the seed creates no invoices
+        for name in ("equine", "sales", "invoicing", "inventory"):
+            if path.name == "seed_dev.py" and name in ("invoicing", "inventory"):
+                continue  # the seed creates no invoices and no stock
             assert imports_matching(path, MODULE_PREFIX[name]), (path, name)
 
 
@@ -123,9 +124,12 @@ def test_wiring_files_really_wire_the_modules():
 @pytest.mark.parametrize(
     "package,forbidden",
     [
-        ("sales", ["equine", "custom_fields", "invoicing"]),
-        ("equine", ["sales", "custom_fields", "invoicing"]),
-        ("custom_fields", ["sales", "equine", "invoicing"]),
+        ("sales", ["equine", "custom_fields", "invoicing", "inventory"]),
+        ("equine", ["sales", "custom_fields", "invoicing", "inventory"]),
+        ("custom_fields", ["sales", "equine", "invoicing", "inventory"]),
+        ("invoicing", ["equine", "inventory"]),
+        # Inventory reacts to Sales through the core lifecycle seam, not by importing it (yet: slice I3 decides).
+        ("inventory", ["sales", "equine", "custom_fields", "invoicing"]),
     ],
 )
 def test_modules_do_not_import_each_other(package: str, forbidden: list[str]):
@@ -198,5 +202,5 @@ def test_custom_fields_depends_on_core_only():
 
 def test_alembic_collects_the_models_of_every_module():
     env = (BACKEND / "alembic" / "env.py").read_text(encoding="utf-8")
-    for module in ("equine", "sales", "invoicing"):
+    for module in ("equine", "sales", "invoicing", "inventory"):
         assert f"app.modules.{module}" in env
