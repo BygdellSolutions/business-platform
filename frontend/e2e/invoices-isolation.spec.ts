@@ -116,7 +116,7 @@ test("eligibility, the invoice-state view and the pages show only the active org
 test("switching organization clears the invoice list, the detail and an open draft editor", async ({ page, context }) => {
   const m = await build(context);
   // One person who belongs to both organizations.
-  testRow(`insert into organization_users (organization_id, user_id, role) select ${sql(b.orgId)}, id, 'owner' from users where email = ${sql(a.email)}`);
+  testRow(`update users set max_owned_organizations = max_owned_organizations + 1 where email = ${sql(a.email)}; insert into organization_users (organization_id, user_id, role) select ${sql(b.orgId)}, id, 'owner' from users where email = ${sql(a.email)}`); // owning a second organization needs the allowance
 
   await page.goto(`/o/${a.orgId}/invoices/${m.a.draft.id}`);
   await page.getByTestId("edit-details").click();
@@ -142,7 +142,7 @@ test("switching organization clears the invoice list, the detail and an open dra
 
 test("a request for one organization's invoice through the other organization's address is refused for a member of both", async ({ context }) => {
   const m = await build(context);
-  testRow(`insert into organization_users (organization_id, user_id, role) select ${sql(b.orgId)}, id, 'owner' from users where email = ${sql(a.email)}`);
+  testRow(`update users set max_owned_organizations = max_owned_organizations + 1 where email = ${sql(a.email)}; insert into organization_users (organization_id, user_id, role) select ${sql(b.orgId)}, id, 'owner' from users where email = ${sql(a.email)}`); // owning a second organization needs the allowance
 
   // Member of both, but the invoice belongs to B: through A's address it does not exist.
   const viaA = await context.request.get(bffUrl(a.orgId, `/invoices/${m.b.issued.id}`));
@@ -154,7 +154,7 @@ test("a request for one organization's invoice through the other organization's 
 
 test("a request that is still running when the user switches organization cannot touch the other organization's screen", async ({ page, context }) => {
   const m = await build(context);
-  testRow(`insert into organization_users (organization_id, user_id, role) select ${sql(b.orgId)}, id, 'owner' from users where email = ${sql(a.email)}`);
+  testRow(`update users set max_owned_organizations = max_owned_organizations + 1 where email = ${sql(a.email)}; insert into organization_users (organization_id, user_id, role) select ${sql(b.orgId)}, id, 'owner' from users where email = ${sql(a.email)}`); // owning a second organization needs the allowance
   await page.route("**/api/o/*/invoices/*/issue", async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 1500)); // a slow answer for A's issuance
     await route.continue();

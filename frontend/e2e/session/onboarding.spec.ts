@@ -99,7 +99,7 @@ test("the operator's grant and revoke take effect immediately for a signed-in us
   await page.getByTestId("submit").click();
   await expect(page).toHaveURL(UUID_URL);
 
-  expect(testRow(`select string_agg(detail, ',' order by id) from security_events where event_type = 'capability_changed' and actor_user_id = ${sql(me.id)}`)).toBe("org_creation_granted:cli,org_creation_revoked:cli,org_creation_granted:cli");
+  expect(testRow(`select string_agg(detail, ',' order by id) from security_events where event_type = 'capability_changed' and actor_user_id = ${sql(me.id)}`)).toBe("owned_limit:1:cli,owned_limit:0:cli,owned_limit:1:cli");
   expect(testRow(`select count(*) from organization_users where user_id = ${sql(me.id)}`)).toBe("1"); // only the organization it created
 });
 
