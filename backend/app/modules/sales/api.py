@@ -1,6 +1,6 @@
 import uuid
 from collections.abc import Sequence
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
@@ -19,7 +19,7 @@ from app.core.lifecycle import (
     ensure_valid,
     run_effects,
 )
-from app.core.org_time import as_instant, organization_today
+from app.core.org_time import MONTH_PATTERN, as_instant, month_range, organization_today
 from app.core.query import commit_and_refresh
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import (
@@ -445,17 +445,21 @@ def assign_currency(
 
 
 @router.get("/summary", response_model=SalesSummary)
-def sales_summary(ctx: TenantContext = Depends(get_tenant_context), db: Session = Depends(get_db)) -> SalesSummary:
-    """Open drafts, what was completed this month (per currency) and services performed this month (any member)."""
+def sales_summary(
+    month: str | None = Query(default=None, pattern=MONTH_PATTERN, description="YYYY-MM; the current month when absent"),
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: Session = Depends(get_db),
+) -> SalesSummary:
+    """Open drafts, and what was completed (per currency) and how many services were performed in the month (any member)."""
     today = organization_today(db, ctx.organization_id)
-    month_start = today.replace(day=1)
+    month_start, month_end = month_range(month, today)
     drafts = db.scalar(
         select(func.count()).select_from(Transaction).where(Transaction.organization_id == ctx.organization_id, Transaction.status == DRAFT)
     )
     this_month = (
         Transaction.organization_id == ctx.organization_id,
         Transaction.transaction_date >= month_start,
-        Transaction.transaction_date <= today,
+        Transaction.transaction_date <= month_end,
     )
     completed = db.scalar(select(func.count()).select_from(Transaction).where(*this_month, Transaction.status == COMPLETED))
     amounts = db.execute(
@@ -473,6 +477,10 @@ def sales_summary(ctx: TenantContext = Depends(get_tenant_context), db: Session 
     )
     return SalesSummary(
         month_start=month_start,
+        month_end=month_end,
+        month=month_start.strftime("%Y-%m"),
+        previous_month=(month_start - timedelta(days=1)).strftime("%Y-%m"),
+        next_month=None if month_end >= today else (month_end + timedelta(days=1)).strftime("%Y-%m"),
         today=today,
         drafts=drafts,
         completed_this_month=CountAndAmounts(count=completed, amounts=[CurrencyAmount(currency=c, amount=a) for c, a in amounts]),

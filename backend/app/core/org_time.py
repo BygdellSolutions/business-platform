@@ -6,9 +6,10 @@ organization without a configured time zone keeps the old behavior (UTC); nothin
 """
 
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo, available_timezones
 
+from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -44,3 +45,22 @@ def as_instant(db: Session, organization_id: uuid.UUID, moment: datetime) -> dat
     if moment.tzinfo is not None:
         return moment
     return moment.replace(tzinfo=organization_zone(db, organization_id))
+
+
+MONTH_PATTERN = r"^\d{4}-(0[1-9]|1[0-2])$"
+
+
+def month_range(month: str | None, today: date) -> tuple[date, date]:
+    """The days a dashboard month covers: "YYYY-MM" (None: the current month) from its first day to its last, or to
+    today for the current month. A month after the current one is refused (it has no figures yet)."""
+    if month is None:
+        return today.replace(day=1), today
+    year, number = (int(part) for part in month.split("-"))
+    start = date(year, number, 1)
+    if start > today:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=[{"loc": ["query", "month"], "msg": "A month in the future has no figures yet", "type": "month.future"}],
+        )
+    following = date(year + 1, 1, 1) if number == 12 else date(year, number + 1, 1)
+    return start, min(following - timedelta(days=1), today)

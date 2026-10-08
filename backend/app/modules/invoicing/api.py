@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import Pagination, pagination
 from app.core.authz import roles_required
 from app.core.db import get_db
-from app.core.org_time import organization_today
+from app.core.org_time import MONTH_PATTERN, month_range, organization_today
 from app.core.query import contains_pattern
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import scoped_select
@@ -110,10 +110,15 @@ def list_invoiceable_transactions(
 
 
 @router.get("/summary", response_model=InvoicingSummary)
-def invoicing_summary(ctx: TenantContext = Depends(get_tenant_context), db: Session = Depends(get_db)) -> InvoicingSummary:
-    """What is ready to invoice, draft invoices, what was issued this month and what is past its due date (any member)."""
+def invoicing_summary(
+    month: str | None = Query(default=None, pattern=MONTH_PATTERN, description="YYYY-MM; the current month when absent"),
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: Session = Depends(get_db),
+) -> InvoicingSummary:
+    """What is to do and pending now (ready to invoice, drafts, past due, unpaid), and what was issued and paid in the
+    month (any member)."""
     today = organization_today(db, ctx.organization_id)
-    month_start = today.replace(day=1)
+    month_start, month_end = month_range(month, today)
     reserved = exists().where(InvoiceTransaction.organization_id == Transaction.organization_id, InvoiceTransaction.transaction_id == Transaction.id)
     ready = (Transaction.organization_id == ctx.organization_id, Transaction.status == TransactionStatus.COMPLETED, Transaction.currency.is_not(None), ~reserved)
     ready_count = db.scalar(select(func.count()).select_from(Transaction).where(*ready))
@@ -134,21 +139,25 @@ def invoicing_summary(ctx: TenantContext = Depends(get_tenant_context), db: Sess
     return InvoicingSummary(
         ready_to_invoice=CountAndAmounts(count=ready_count, amounts=[CurrencyAmount(currency=c, amount=a) for c, a in ready_amounts]),
         draft_invoices=db.scalar(select(func.count()).select_from(Invoice).where(Invoice.organization_id == ctx.organization_id, Invoice.status == InvoiceStatus.DRAFT)),
-        issued_this_month=invoices(Invoice.status == InvoiceStatus.ISSUED, Invoice.invoice_date >= month_start, Invoice.invoice_date <= today),
-        past_due=_past_due(db, ctx, today),
-        paid_this_month=_paid_between(db, ctx, month_start, today),
+        month_start=month_start,
+        month_end=month_end,
+        issued_this_month=invoices(Invoice.status == InvoiceStatus.ISSUED, Invoice.invoice_date >= month_start, Invoice.invoice_date <= month_end),
+        past_due=_outstanding(db, ctx, Invoice.due_date.is_not(None), Invoice.due_date < today),
+        unpaid=_outstanding(db, ctx),
+        not_yet_due=_outstanding(db, ctx, or_(Invoice.due_date.is_(None), Invoice.due_date >= today)),
+        partially_paid=_outstanding(db, ctx, payments.paid_sum_expression() > 0),
+        paid_this_month=_paid_between(db, ctx, month_start, month_end),
     )
 
 
-def _past_due(db: Session, ctx: TenantContext, today: date) -> CountAndAmounts:
-    """Issued, past the due date and not fully paid; the amounts are what is still outstanding."""
+def _outstanding(db: Session, ctx: TenantContext, *conditions) -> CountAndAmounts:
+    """Issued invoices not fully paid (and matching `conditions`); the amounts are what is still outstanding."""
     paid = payments.paid_sum_expression()
     where = (
         Invoice.organization_id == ctx.organization_id,
         Invoice.status == InvoiceStatus.ISSUED,
-        Invoice.due_date.is_not(None),
-        Invoice.due_date < today,
         paid < Invoice.gross_amount,
+        *conditions,
     )
     count = db.scalar(select(func.count()).select_from(Invoice).where(*where))
     amounts = db.execute(select(Invoice.currency, func.sum(Invoice.gross_amount - paid)).where(*where).group_by(Invoice.currency).order_by(Invoice.currency)).all()

@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { SummaryCard } from "@/features/dashboard/SummaryCard";
-import type { InventorySummary, InvoicingSummary, SalesSummary } from "@/lib/api/types";
+import type { InventorySummary, InvoicingSummary, Organization, SalesSummary } from "@/lib/api/types";
 import { getCredential } from "@/lib/auth/credential";
 import { getMemberships } from "@/lib/orgs";
 import { canMutateInvoices, canWriteRecords } from "@/lib/roles";
@@ -12,15 +12,29 @@ import { serverRead } from "@/lib/server-api";
  * problems) and how the month is going. Each figure comes from the module that owns it and counts this organization
  * only; amounts are per currency. Every card links to the list where the work is done.
  */
-export default async function Dashboard({ params }: { params: Promise<{ orgId: string }> }) {
+const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+export default async function Dashboard({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ orgId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { orgId } = await params;
+  const requested = (await searchParams).month;
+  // Only a well-formed month up to the organization's current one is passed on (the backend refuses a future month);
+  // anything else shows the current month.
+  const { today } = await serverRead<Organization>(orgId, "/api/organization");
+  const month = typeof requested === "string" && MONTH.test(requested) && requested <= today.slice(0, 7) ? requested : null;
+  const monthQuery = month ? `?${new URLSearchParams({ month })}` : "";
   // The layout has already validated the user and the organization; this read is memoized.
   const credential = await getCredential();
   const result = credential ? await getMemberships(credential) : null;
   const organization = result?.status === "ok" ? result.memberships.find((m) => m.id === orgId) : undefined;
   const [sales, invoicing, inventory] = await Promise.all([
-    serverRead<SalesSummary>(orgId, "/api/transactions/summary"),
-    serverRead<InvoicingSummary>(orgId, "/api/invoices/summary"),
+    serverRead<SalesSummary>(orgId, "/api/transactions/summary", monthQuery),
+    serverRead<InvoicingSummary>(orgId, "/api/invoices/summary", monthQuery),
     serverRead<InventorySummary>(orgId, "/api/inventory/summary"),
   ]);
   const base = `/o/${orgId}`;
@@ -79,14 +93,75 @@ export default async function Dashboard({ params }: { params: Promise<{ orgId: s
         </div>
       </section>
 
-      <section aria-label="This month" className="flex flex-col gap-2">
-        <h2 className="text-lg font-semibold">This month (from {sales.month_start})</h2>
+      <section aria-label="Pending" className="flex flex-col gap-2">
+        <h2 className="text-lg font-semibold">Pending</h2>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <SummaryCard
+            title="Unpaid invoices"
+            count={invoicing.unpaid.count}
+            amounts={invoicing.unpaid.amounts}
+            href={`${base}/invoices?payment=open`}
+            note="Issued and not fully paid: what is still outstanding."
+            testId="card-unpaid"
+          />
+          <SummaryCard
+            title="Not yet due"
+            count={invoicing.not_yet_due.count}
+            amounts={invoicing.not_yet_due.amounts}
+            href={`${base}/invoices?payment=open`}
+            note="Outstanding, due date not passed (or none)."
+            testId="card-not-yet-due"
+          />
+          <SummaryCard
+            title="Partially paid"
+            count={invoicing.partially_paid.count}
+            amounts={invoicing.partially_paid.amounts}
+            href={`${base}/invoices?payment=partially_paid`}
+            note="Some paid; the amount is what is left."
+            testId="card-partially-paid"
+          />
+          <SummaryCard
+            title="Ready to invoice"
+            count={invoicing.ready_to_invoice.count}
+            amounts={invoicing.ready_to_invoice.amounts}
+            href={`${base}/invoices/new`}
+            note="Completed sales on no invoice yet."
+            testId="card-pending-ready"
+          />
+        </div>
+      </section>
+
+      <section aria-label="Month" className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold" data-testid="month-heading">
+            {sales.next_month === null ? "This month" : "Month"} · {sales.month} ({sales.month_start} – {sales.month_end})
+          </h2>
+          <form action={base} className="flex items-center gap-2 text-sm" data-testid="month-picker">
+            <Link href={`${base}?month=${sales.previous_month}`} className="rounded border border-zinc-400 px-2 py-1" aria-label="Previous month" data-testid="previous-month">
+              ←
+            </Link>
+            <input type="month" name="month" defaultValue={sales.month} max={sales.today.slice(0, 7)} aria-label="Month" className="rounded border border-zinc-400 px-2 py-1 dark:bg-zinc-900" />
+            <button type="submit" className="rounded border border-zinc-400 px-2 py-1">
+              Show
+            </button>
+            {sales.next_month !== null && (
+              <>
+                <Link href={`${base}?month=${sales.next_month}`} className="rounded border border-zinc-400 px-2 py-1" aria-label="Next month" data-testid="next-month">
+                  →
+                </Link>
+                <Link href={base} className="underline">
+                  This month
+                </Link>
+              </>
+            )}
+          </form>
+        </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <SummaryCard
             title="Completed sales"
             count={sales.completed_this_month.count}
             amounts={sales.completed_this_month.amounts}
-            href={`${base}/transactions?status=completed&date_from=${sales.month_start}`}
+            href={`${base}/transactions?status=completed&date_from=${sales.month_start}&date_to=${sales.month_end}`}
             note="Including VAT."
             testId="card-completed"
           />
@@ -95,7 +170,7 @@ export default async function Dashboard({ params }: { params: Promise<{ orgId: s
             title="Invoiced"
             count={invoicing.issued_this_month.count}
             amounts={invoicing.issued_this_month.amounts}
-            href={`${base}/invoices?status=issued&date_from=${sales.month_start}`}
+            href={`${base}/invoices?status=issued&date_from=${sales.month_start}&date_to=${sales.month_end}`}
             note="Issued invoices, including VAT."
             testId="card-invoiced"
           />
@@ -104,7 +179,7 @@ export default async function Dashboard({ params }: { params: Promise<{ orgId: s
             count={invoicing.paid_this_month.count}
             amounts={invoicing.paid_this_month.amounts}
             href={`${base}/invoices?payment=paid`}
-            note="Payments recorded with a payment date this month."
+            note="Payments with a payment date in this month."
             testId="card-paid"
           />
         </div>

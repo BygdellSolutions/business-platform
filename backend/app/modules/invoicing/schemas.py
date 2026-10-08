@@ -213,13 +213,19 @@ class InvoiceStateRead(BaseModel):
 
 
 class InvoicingSummary(BaseModel):
-    """The dashboard's figures from Invoicing. Payments are not tracked yet, so "past due" means issued and past its
-    due date, whether or not it was paid."""
+    """The dashboard's figures from Invoicing: what is to do and pending NOW, and the chosen month (issued, paid)."""
 
+    month_start: date
+    month_end: date
     ready_to_invoice: CountAndAmounts
     draft_invoices: int
-    issued_this_month: CountAndAmounts
     # Issued, past the due date and not fully paid: what is still outstanding.
     past_due: CountAndAmounts
-    # Payments recorded with a payment date this month (reversals subtracted).
+    # Pending money: every issued invoice not fully paid; of those, the ones not yet due and the partially paid ones
+    # (amounts are what is still outstanding).
+    unpaid: CountAndAmounts
+    not_yet_due: CountAndAmounts
+    partially_paid: CountAndAmounts
+    # The chosen month: issued invoices (gross) and payments dated in it (reversals subtracted).
+    issued_this_month: CountAndAmounts
     paid_this_month: CountAndAmounts

@@ -739,6 +739,12 @@ export interface CountAndAmounts {
 /** GET /api/transactions/summary: the organization's month, in its time zone. */
 export interface SalesSummary {
   month_start: string;
+  /** The last day counted: the month's last day, or today for the current month. */
+  month_end: string;
+  /** "YYYY-MM" of the month shown and its neighbours (no next month after the current one). */
+  month: string;
+  previous_month: string;
+  next_month: string | null;
   today: string;
   drafts: number;
   completed_this_month: CountAndAmounts;
@@ -747,8 +753,14 @@ export interface SalesSummary {
 
 /** GET /api/invoices/summary. Payments are not tracked yet: "past due" counts every issued invoice past its due date. */
 export interface InvoicingSummary {
+  month_start: string;
+  month_end: string;
   ready_to_invoice: CountAndAmounts;
   draft_invoices: number;
+  /** Issued and not fully paid; of those, the ones not yet due and the partially paid ones (amounts outstanding). */
+  unpaid: CountAndAmounts;
+  not_yet_due: CountAndAmounts;
+  partially_paid: CountAndAmounts;
   issued_this_month: CountAndAmounts;
   /** Issued, past the due date and not fully paid (the amounts are what is outstanding). */
   past_due: CountAndAmounts;

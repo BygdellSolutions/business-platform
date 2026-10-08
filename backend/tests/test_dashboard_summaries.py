@@ -103,3 +103,48 @@ def test_another_organizations_records_never_count(client: TestClient, db_sessio
     assert invoicing["ready_to_invoice"] == {"count": 0, "amounts": []}
     assert inventory["tracked_items"] == 0
     assert client.get("/api/transactions/summary", headers=other_owner).json()["drafts"] == 1
+
+
+# --- choosing a month, and pending money -----------------------------------------------------------------------------
+
+
+def test_a_past_month_covers_all_its_days_and_a_future_month_is_refused(client: TestClient, db_session: Session):
+    org, owner = _world(db_session)
+    today = today_in(None)
+    last_month_end = today.replace(day=1) - timedelta(days=1)
+    _sale(db_session, org, on=last_month_end)  # the last day of last month
+    _sale(db_session, org, on=last_month_end.replace(day=1))  # its first day
+    _sale(db_session, org)  # this month
+    month = last_month_end.strftime("%Y-%m")
+
+    chosen = client.get("/api/transactions/summary", params={"month": month}, headers=owner).json()
+    current = client.get("/api/transactions/summary", headers=owner).json()
+    next_month = (today.replace(day=28) + timedelta(days=5)).strftime("%Y-%m")
+
+    assert (chosen["month_start"], chosen["month_end"]) == (str(last_month_end.replace(day=1)), str(last_month_end))
+    assert chosen["completed_this_month"]["count"] == 2 and current["completed_this_month"]["count"] == 1
+    assert current["month_end"] == str(today)
+    assert (chosen["month"], chosen["next_month"], current["next_month"]) == (month, today.strftime("%Y-%m"), None)
+    assert current["previous_month"] == month
+    for bad in (next_month, "2026-13", "26-01", "nonsense"):
+        assert client.get("/api/transactions/summary", params={"month": bad}, headers=owner).status_code == 422
+        assert client.get("/api/invoices/summary", params={"month": bad}, headers=owner).status_code == 422
+
+
+def test_pending_shows_unpaid_not_yet_due_and_partially_paid_with_what_is_outstanding(client: TestClient, db_session: Session, sales):
+    today = today_in(None)
+    overdue = issue(client, sales.headers, draft_invoice(client, sales.headers, completed(db_session, sales.org, sales.billing),
+                                                         invoice_date=str(today - timedelta(days=40)), due_date=str(today - timedelta(days=10))))
+    upcoming = issue(client, sales.headers, draft_invoice(client, sales.headers, completed(db_session, sales.org, sales.billing),
+                                                          invoice_date=str(today), due_date=str(today + timedelta(days=20))))
+    paid = issue(client, sales.headers, draft_invoice(client, sales.headers, completed(db_session, sales.org, sales.billing), invoice_date=str(today)))
+    pay = lambda invoice, amount: client.post(f"/api/invoices/{invoice['id']}/payments", json={"amount": amount, "paid_on": str(today), "method": "swish"}, headers=sales.headers)  # noqa: E731
+    pay(upcoming, "62.50")
+    pay(paid, "1062.50")
+
+    summary = client.get("/api/invoices/summary", headers=sales.headers).json()
+
+    assert summary["unpaid"] == {"count": 2, "amounts": [{"currency": "SEK", "amount": "2062.50"}]}  # 1062.50 + 1000.00
+    assert summary["not_yet_due"] == {"count": 1, "amounts": [{"currency": "SEK", "amount": "1000.00"}]}
+    assert summary["partially_paid"] == {"count": 1, "amounts": [{"currency": "SEK", "amount": "1000.00"}]}
+    assert summary["past_due"]["count"] == 1 and overdue["id"]

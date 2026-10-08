@@ -255,9 +255,16 @@ class ServiceRecord(BaseModel):
 
 
 class SalesSummary(BaseModel):
-    """The dashboard's figures from Sales, for the organization's current month (in its time zone)."""
+    """The dashboard's figures from Sales: open drafts now, and the chosen month (the current one by default, in the
+    organization's time zone)."""
 
     month_start: date
+    # The last day counted: the month's last day, or today for the current month.
+    month_end: date
+    # "YYYY-MM" of the month shown and its neighbours (no next month after the current one).
+    month: str
+    previous_month: str
+    next_month: str | None
     today: date
     drafts: int
     completed_this_month: CountAndAmounts
