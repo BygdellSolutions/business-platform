@@ -27,7 +27,7 @@ test("payment details set in Settings reach the invoice, and the terms decide it
   const customer = await createCustomer(context, world.orgId, "Anna Andersson");
   const tx = await createCompletedTransaction(context, world.orgId, customer.id);
   const invoice = await createInvoiceApi(context, world.orgId, [tx.id], { invoice_date: "2026-10-08" });
-  expect(invoice.issuer_snapshot).toMatchObject({ schema: 2, bankgiro: "123-4567", iban: "SE4550000000058398257466", approved_for_f_tax: true, document_language: "sv" });
+  expect(invoice.issuer_snapshot).toMatchObject({ schema: 3, bankgiro: "123-4567", iban: "SE4550000000058398257466", approved_for_f_tax: true, document_language: "sv" });
 
   await page.goto(`/o/${world.orgId}/invoices/${invoice.id}`);
   await expect(page.getByTestId("invoice-due-date")).toHaveText("2026-11-07");
