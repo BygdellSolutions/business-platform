@@ -91,8 +91,9 @@ export function LineRow({ line, ordinal }: { line: TransactionLine; ordinal: num
         )}
         {shortage && (
           <span className="block text-xs text-amber-800 dark:text-amber-300" data-testid="stock-warning">
-            Only {trimQuantity(shortage.available)} of {trimQuantity(shortage.requested)} {line.unit} available{shortage.allocated !== "0.000" && ` (${trimQuantity(shortage.allocated)} on other drafts)`}; {trimQuantity(shortage.shortage)} will be
-            backordered at completion.
+            In stock for this line: {trimQuantity(shortage.available)} of {trimQuantity(shortage.requested)}
+            {shortage.allocated !== "0.000" && ` (${trimQuantity(shortage.allocated)} on other drafts)`}. {trimQuantity(shortage.shortage)} will be backordered at
+            completion.
             {shortage.incoming !== "0.000" && ` ${trimQuantity(shortage.incoming)} on its way.`}
           </span>
         )}

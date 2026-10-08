@@ -59,7 +59,7 @@ test("a draft that asks for more than is in stock warns, and the line is still a
   await page.getByTestId("submit-line").click();
 
   await expect(page.getByTestId("line-row")).toHaveCount(1);
-  await expect(page.getByTestId("stock-warning")).toHaveText("Only 5 of 8 pcs available; 3 will be backordered at completion.");
+  await expect(page.getByTestId("stock-warning")).toHaveText("In stock for this line: 5 of 8. 3 will be backordered at completion.");
 
   // The draft's 8 are allocated: not final, but no longer shown as available to anyone else.
   await page.goto(`/o/${world.orgId}/inventory`);

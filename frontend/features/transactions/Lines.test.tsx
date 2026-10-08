@@ -556,7 +556,7 @@ describe("stock on a draft (a warning, never a refusal)", () => {
 
   it("warns on each line of an item that the draft asks more of than is available", () => {
     render(<Harness initial={tx({ lines: [line({ id: "l1", item_id: "i1", unit: "pcs" })] })} stock={[demand("3.000")]} />);
-    expect(screen.getByTestId("stock-warning")).toHaveTextContent("Only 5 of 8 pcs available; 3 will be backordered at completion.");
+    expect(screen.getByTestId("stock-warning")).toHaveTextContent("In stock for this line: 5 of 8. 3 will be backordered at completion.");
   });
 
   it("says nothing when there is enough, for a line of another item, or once the transaction is completed", () => {
