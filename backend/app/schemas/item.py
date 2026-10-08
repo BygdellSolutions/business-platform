@@ -5,7 +5,7 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, StringConstraints, field_validator, model_validator
 
 from app.models import ItemType
-from app.schemas.money import DiscountPercentIn, MoneyIn, MoneyOut, PercentIn, PercentOut
+from app.schemas.money import CountIn, DiscountPercentIn, MoneyIn, MoneyOut, PercentIn, PercentOut, QuantityOut
 
 Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
 Unit = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=32)]
@@ -30,6 +30,7 @@ class ItemCreate(BaseModel):
     active: bool = True
     sku: Sku | None = None
     track_stock: bool = False
+    low_stock_threshold: CountIn | None = None
 
     @model_validator(mode="after")
     def stock_only_for_products(self):
@@ -52,6 +53,7 @@ class ItemUpdate(BaseModel):
     active: bool | None = None
     sku: Sku | None = None  # null removes the article number
     track_stock: bool | None = None
+    low_stock_threshold: CountIn | None = None  # null: no threshold
 
     @field_validator("type", "name", "unit", "price_ex_vat", "vat_rate", "active", "track_stock")
     @classmethod
@@ -75,6 +77,7 @@ class ItemRead(BaseModel):
     active: bool
     sku: str | None
     track_stock: bool
+    low_stock_threshold: QuantityOut | None
     created_at: datetime
     updated_at: datetime
     # Who created it and who changed it last (null: not recorded, e.g. before authors were kept).

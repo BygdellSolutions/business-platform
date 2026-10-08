@@ -154,6 +154,8 @@ export interface Item {
   sku: string | null;
   /** Whether the Inventory module keeps a stock ledger for this product (never true for a service). */
   track_stock: boolean;
+  /** Below this quantity on hand the product is "low stock" (null: no threshold). */
+  low_stock_threshold: QuantityString | null;
   /** The temporary discount active today, if any (the price above never changes). */
   current_discount: ItemDiscount | null;
   created_at: string;
@@ -173,6 +175,7 @@ export interface ItemCreate {
   active: boolean;
   sku?: string | null;
   track_stock?: boolean;
+  low_stock_threshold?: QuantityString | null;
 }
 
 export type ItemUpdate = Partial<ItemCreate>;
@@ -201,6 +204,9 @@ export interface ItemAvailability {
   available: QuantityString;
   /** On its way: open incoming deliveries not received yet. */
   incoming: QuantityString;
+  low_stock_threshold: QuantityString | null;
+  /** Separate states that can hold together (out of stock and low stock exclude each other). */
+  states: ("out_of_stock" | "low_stock" | "backordered" | "incoming")[];
 }
 
 /** What a transaction asks of one stock-tracking item, summed over its lines (GET /api/inventory/transactions/{id}). */

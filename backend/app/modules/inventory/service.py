@@ -115,6 +115,21 @@ def tracked_ids(db: Session, organization_id: uuid.UUID, item_ids: Iterable[uuid
     )
 
 
+def stock_states(on_hand_now: Decimal, threshold: Decimal | None, waiting: Decimal, coming: Decimal) -> list[str]:
+    """The item's stock states, in a fixed order. Out of stock and low stock exclude each other (nothing on hand is
+    "out of stock", not also "low"); the others combine freely."""
+    states = []
+    if on_hand_now <= 0:
+        states.append("out_of_stock")
+    elif threshold is not None and on_hand_now < threshold:
+        states.append("low_stock")
+    if waiting > 0:
+        states.append("backordered")
+    if coming > 0:
+        states.append("incoming")
+    return states
+
+
 def has_movements(db: Session, organization_id: uuid.UUID, item_id: uuid.UUID) -> bool:
     return db.scalar(
         select(StockMovement.id).where(StockMovement.organization_id == organization_id, StockMovement.item_id == item_id).limit(1)

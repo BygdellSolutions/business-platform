@@ -13,10 +13,10 @@ import { Notice } from "@/components/ui/Notice";
 import { apiFetch } from "@/lib/api/client";
 import type { FieldErrors } from "@/lib/api/errors";
 import type { Item, ItemCreate, ItemType, ItemUpdate } from "@/lib/api/types";
-import { parseMoney, parsePercent } from "@/lib/decimal";
+import { parseMoney, parsePercent, type QuantityString } from "@/lib/decimal";
 import { NOT_A_DECIMAL, blankToNull, problemsFrom, useMutation } from "@/lib/forms";
 
-const CONTROLS = ["type", "name", "description", "unit", "price_ex_vat", "vat_rate", "active", "sku", "track_stock"] as const;
+const CONTROLS = ["type", "name", "description", "unit", "price_ex_vat", "vat_rate", "active", "sku", "track_stock", "low_stock_threshold"] as const;
 
 const TYPES = [
   { value: "service", label: "Service" },
@@ -39,6 +39,7 @@ interface FormState {
   active: boolean;
   sku: string;
   track_stock: boolean;
+  low_stock_threshold: string;
 }
 
 function toState(item?: Item): FormState {
@@ -52,6 +53,7 @@ function toState(item?: Item): FormState {
     active: item?.active ?? true,
     sku: item?.sku ?? "",
     track_stock: item?.track_stock ?? false,
+    low_stock_threshold: item?.low_stock_threshold ?? "",
   };
 }
 
@@ -95,6 +97,9 @@ export function ItemForm({ item }: { item?: Item }) {
       active: state.active,
       sku: blankToNull(state.sku),
       track_stock: state.type === "product" && state.track_stock,
+      ...(state.type === "product" && state.track_stock && state.low_stock_threshold.trim() !== ""
+        ? { low_stock_threshold: state.low_stock_threshold.trim() as QuantityString }
+        : {}),
     };
     const created = await run(() => apiFetch<Item>(orgId, "/items", { method: "POST", body }));
     if (created === null) return;
@@ -119,6 +124,8 @@ export function ItemForm({ item }: { item?: Item }) {
     if (blankToNull(state.sku) !== current.sku) body.sku = blankToNull(state.sku);
     const trackStock = state.type === "product" && state.track_stock;
     if (trackStock !== current.track_stock) body.track_stock = trackStock;
+    const threshold = state.low_stock_threshold.trim() === "" ? null : (state.low_stock_threshold.trim() as QuantityString);
+    if (trackStock && threshold !== current.low_stock_threshold) body.low_stock_threshold = threshold;
     if (Object.keys(body).length === 0) {
       setNotice("unchanged");
       return;
@@ -158,6 +165,16 @@ export function ItemForm({ item }: { item?: Item }) {
         <DecimalField label="VAT rate (%)" name="vat_rate" value={state.vat_rate} onChange={(value) => set("vat_rate", value)} error={errorsFor("vat_rate")} />
         {state.type === "product" && (
           <CheckboxField label="Track stock" name="track_stock" checked={state.track_stock} onChange={(checked) => set("track_stock", checked)} error={errorsFor("track_stock")} />
+        )}
+        {state.type === "product" && state.track_stock && (
+          <DecimalField
+            label="Low-stock threshold (optional)"
+            name="low_stock_threshold"
+            value={state.low_stock_threshold}
+            onChange={(value) => set("low_stock_threshold", value)}
+            error={errorsFor("low_stock_threshold")}
+            hint="Below this quantity on hand the product is shown as low stock."
+          />
         )}
         {!record && <CheckboxField label="Active" name="active" checked={state.active} onChange={(checked) => set("active", checked)} error={errorsFor("active")} />}
         <ErrorSummary messages={problems.general} />

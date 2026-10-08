@@ -35,6 +35,12 @@ test("the opening count and later changes are listed and explain the quantity on
   await expect(panel.getByTestId("stock-movement").first()).toContainText("Adjustment");
   await expect(panel.getByTestId("stock-movement").first()).toContainText("Damaged");
   await expect(panel.getByTestId("stock-movement").last()).toContainText("Opening count");
+
+  await page.goto(`/o/${world.orgId}/catalog`);
+  const row = page.getByTestId("item-row").filter({ hasText: "Liniment" });
+  await expect(row.getByTestId("item-sku")).toHaveText("LIN-01");
+  await expect(row.getByTestId("item-on-hand")).toHaveText("8.000");
+  await expect(row.getByTestId("item-stock-states")).toHaveText("In stock");
 });
 
 test("a draft that asks for more than is in stock warns, and the line is still added", async ({ page, context }) => {

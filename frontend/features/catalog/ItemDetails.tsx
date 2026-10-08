@@ -28,6 +28,7 @@ export function ItemDetails({ item }: { item: Item }) {
           testId: "detail-current-discount",
         },
         ...(item.type === "product" ? [{ label: "Stock", value: item.track_stock ? "Tracked" : "Not tracked" }] : []),
+        ...(item.track_stock ? [{ label: "Low-stock threshold", value: item.low_stock_threshold }] : []),
         { label: "Status", value: <StatusBadge active={item.active} /> },
       ]}
     />

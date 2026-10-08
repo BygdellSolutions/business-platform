@@ -115,3 +115,21 @@ def test_a_viewer_sees_incoming_stock_but_cannot_record_or_receive_it(client: Te
     assert client.post("/api/inventory/incoming", json={"item_id": str(item.id), "quantity": "1"}, headers=headers).status_code == 403
     assert client.post(f"/api/inventory/incoming/{incoming_id}/receive", json={}, headers=headers).status_code == 403
     assert client.post(f"/api/inventory/incoming/{incoming_id}/cancel", headers=headers).status_code == 403
+
+
+def test_stock_states_are_separate_and_combine(client: TestClient, db_session: Session):
+    org, owner = _world(db_session)
+    item = make_item(db_session, org, name="Fly spray", type=ItemType.PRODUCT, unit="pcs", track_stock=True)
+    assert client.patch(f"/api/items/{item.id}", json={"low_stock_threshold": "5"}, headers=owner).json()["low_stock_threshold"] == "5.000"
+    states = lambda: _availability(client, item, owner)["states"]  # noqa: E731
+
+    assert states() == ["out_of_stock"]
+    client.post(f"/api/items/{item.id}/stock", json={"kind": "count", "quantity": "3"}, headers=owner)
+    assert states() == ["low_stock"]
+    client.post("/api/inventory/incoming", json={"item_id": str(item.id), "quantity": "10"}, headers=owner)
+    assert states() == ["low_stock", "incoming"]
+    tx = make_transaction(db_session, org, billing_customer=make_customer(db_session, org))
+    make_line(db_session, org, tx, item=item, description="Fly spray", unit="pcs", quantity="4", unit_price_ex_vat="120.00")
+    client.post(f"/api/transactions/{tx.id}/complete", headers=owner)  # 3 delivered, 1 backordered
+    assert states() == ["out_of_stock", "backordered", "incoming"]
+    assert client.patch(f"/api/items/{item.id}", json={"low_stock_threshold": "-1"}, headers=owner).status_code == 422

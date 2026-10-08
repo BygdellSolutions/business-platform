@@ -263,7 +263,7 @@ def test_availability_lists_only_this_organizations_stock_tracking_items(client:
 
     response = client.get("/api/inventory/availability", params={"item_id": [str(tracked.id), str(untracked.id), str(foreign.id)]}, headers=owner)
 
-    assert response.json() == [{"item_id": str(tracked.id), "on_hand": "5.000", "committed": "0.000", "available": "5.000", "incoming": "0.000"}]
+    assert response.json() == [{"item_id": str(tracked.id), "on_hand": "5.000", "committed": "0.000", "available": "5.000", "incoming": "0.000", "low_stock_threshold": None, "states": []}]
 
 
 def test_a_draft_shows_the_shortage_over_all_its_lines_and_lines_are_never_refused_for_stock(client: TestClient, db_session: Session):

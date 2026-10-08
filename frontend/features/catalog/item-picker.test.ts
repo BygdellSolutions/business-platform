@@ -23,6 +23,7 @@ function item(overrides: Partial<Item>): Item {
     current_discount: null,
     sku: null,
     track_stock: false,
+    low_stock_threshold: null,
     vat_rate: "25.00" as PercentString,
     active: true,
     created_at: "",

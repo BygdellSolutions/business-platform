@@ -13,6 +13,8 @@ import type { ItemAvailability, Stock, StockMovement } from "@/lib/api/types";
 import { blankToNull, problemsFrom, useMutation } from "@/lib/forms";
 import { formatTimestamp } from "@/lib/timestamps";
 
+import { StockBadges } from "./StockBadges";
+
 const CONTROLS = ["kind", "quantity", "note"] as const;
 
 const REASONS: Record<StockMovement["reason"], string> = {
@@ -71,7 +73,9 @@ export function StockPanel({
 
   return (
     <section aria-label="Stock" data-testid="stock-panel" className="flex max-w-3xl flex-col gap-3">
-      <h2 className="text-lg font-semibold">Stock</h2>
+      <h2 className="flex items-center gap-2 text-lg font-semibold">
+        Stock {figures && <StockBadges states={figures.states} />}
+      </h2>
       <p className="text-sm">
         On hand:{" "}
         <span className="font-semibold" data-testid="on-hand">

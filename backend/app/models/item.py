@@ -33,6 +33,7 @@ class Item(TenantOwned, Authored, Base):
         # Only a product can hold stock; a service never does.
         CheckConstraint("NOT track_stock OR type = 'product'", name="ck_items_track_stock_product"),
         CheckConstraint("sku IS NULL OR length(btrim(sku)) > 0", name="ck_items_sku_not_blank"),
+        CheckConstraint("low_stock_threshold IS NULL OR low_stock_threshold >= 0", name="ck_items_low_stock_threshold"),
         # An article number identifies one item within its organization (another organization may use the same).
         Index("uq_items_organization_sku", "organization_id", "sku", unique=True, postgresql_where=text("sku IS NOT NULL")),
     )
@@ -52,6 +53,8 @@ class Item(TenantOwned, Authored, Base):
     sku: Mapped[str | None] = mapped_column(String(64))
     # Whether the Inventory module keeps a stock ledger for this product (see app/modules/inventory).
     track_stock: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    # Below this quantity on hand the product is "low stock" (only meaningful while it tracks stock).
+    low_stock_threshold: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
 
 
 class ItemDiscount(TenantOwned, Authored, Base):

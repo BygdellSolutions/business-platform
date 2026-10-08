@@ -121,6 +121,7 @@ export function item(id: string, name: string, overrides: Partial<Item> = {}): I
     current_discount: null,
     sku: null,
     track_stock: false,
+    low_stock_threshold: null,
     vat_rate: "25.00" as PercentString,
     active: true,
     created_at: "",

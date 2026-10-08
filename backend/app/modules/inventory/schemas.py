@@ -53,6 +53,10 @@ class ItemAvailability(BaseModel):
     available: QuantityOut
     # On its way: open incoming deliveries not received yet.
     incoming: QuantityOut
+    low_stock_threshold: QuantityOut | None
+    # Separate states that can hold at the same time: "out_of_stock" (nothing on hand) or "low_stock" (some, but
+    # below the threshold), "backordered" (sales are waiting) and "incoming" (a delivery is on its way).
+    states: list[Literal["out_of_stock", "low_stock", "backordered", "incoming"]]
 
 
 class TransactionDemand(BaseModel):

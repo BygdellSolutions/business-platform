@@ -4,13 +4,38 @@ import { DecimalText } from "@/components/ui/DecimalText";
 import { ListFilters } from "@/components/ui/ListFilters";
 import { Pagination } from "@/components/ui/Pagination";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { StockBadges } from "@/features/catalog/StockBadges";
 import { readActiveRole } from "@/lib/active-role";
-import type { Item } from "@/lib/api/types";
+import type { Item, ItemAvailability } from "@/lib/api/types";
 import { backendQuery, listHref, pageOf, parseListParams } from "@/lib/list-params";
 import { canWriteRecords } from "@/lib/roles";
 import { serverRead } from "@/lib/server-api";
 
 const TYPES = ["service", "product"] as const;
+
+/** The stock columns of one row: empty for an item that does not track stock. */
+function StockCells({ figures }: { figures: ItemAvailability | undefined }) {
+  if (!figures) return <td colSpan={5} />;
+  return (
+    <>
+      <td className="py-1 pr-4 text-right" data-testid="item-on-hand">
+        <DecimalText value={figures.on_hand} />
+      </td>
+      <td className="py-1 pr-4 text-right" data-testid="item-available">
+        <DecimalText value={figures.available} />
+      </td>
+      <td className="py-1 pr-4 text-right">
+        <DecimalText value={figures.committed} />
+      </td>
+      <td className="py-1 pr-4 text-right">
+        <DecimalText value={figures.incoming} />
+      </td>
+      <td className="py-1 pr-4" data-testid="item-stock-states">
+        <StockBadges states={figures.states} />
+      </td>
+    </>
+  );
+}
 
 export default async function CatalogPage({
   params,
@@ -23,6 +48,14 @@ export default async function CatalogPage({
   const canWrite = canWriteRecords(await readActiveRole(orgId));
   const list = parseListParams(await searchParams, TYPES);
   const { rows: items, hasNext } = pageOf(await serverRead<Item[]>(orgId, "/api/items", backendQuery(list)));
+  const tracked = items.filter((item) => item.track_stock);
+  const stock = new Map(
+    tracked.length === 0
+      ? []
+      : (
+          await serverRead<ItemAvailability[]>(orgId, "/api/inventory/availability", `?${new URLSearchParams(tracked.map((item) => ["item_id", item.id]))}`)
+        ).map((entry) => [entry.item_id, entry]),
+  );
   const base = `/o/${orgId}/catalog`;
   const filtered = list.q !== "" || list.active !== "all" || list.type !== "";
 
@@ -51,14 +84,20 @@ export default async function CatalogPage({
       {items.length === 0 ? (
         <p data-testid="empty">{filtered ? "No items match." : "No items yet."}</p>
       ) : (
-        <table data-testid="items-table" className="w-full max-w-4xl text-left text-sm">
+        <table data-testid="items-table" className="w-full max-w-6xl text-left text-sm">
           <thead>
             <tr className="border-b border-zinc-300 dark:border-zinc-700">
               <th className="py-1 pr-4">Name</th>
+              <th className="py-1 pr-4">SKU</th>
               <th className="py-1 pr-4">Type</th>
               <th className="py-1 pr-4">Unit</th>
               <th className="py-1 pr-4 text-right">Price excl. VAT</th>
               <th className="py-1 pr-4 text-right">VAT %</th>
+              <th className="py-1 pr-4 text-right">On hand</th>
+              <th className="py-1 pr-4 text-right">Available</th>
+              <th className="py-1 pr-4 text-right">Backordered</th>
+              <th className="py-1 pr-4 text-right">Incoming</th>
+              <th className="py-1 pr-4">Stock</th>
               <th className="py-1">Status</th>
             </tr>
           </thead>
@@ -70,6 +109,7 @@ export default async function CatalogPage({
                     {item.name}
                   </Link>
                 </td>
+                <td className="py-1 pr-4" data-testid="item-sku">{item.sku}</td>
                 <td className="py-1 pr-4">{item.type}</td>
                 <td className="py-1 pr-4">{item.unit}</td>
                 <td className="py-1 pr-4 text-right" data-testid="item-price">
@@ -84,6 +124,7 @@ export default async function CatalogPage({
                 <td className="py-1 pr-4 text-right" data-testid="item-vat">
                   <DecimalText value={item.vat_rate} />
                 </td>
+                <StockCells figures={stock.get(item.id)} />
                 <td className="py-1">
                   <StatusBadge active={item.active} />
                 </td>

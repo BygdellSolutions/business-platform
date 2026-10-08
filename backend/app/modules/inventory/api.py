@@ -78,8 +78,18 @@ def read_availability(
     figures = service.available(db, ctx.organization_id, ids)
     promised = service.committed(db, ctx.organization_id, ids)
     coming = service.incoming(db, ctx.organization_id, ids)
+    thresholds = dict(db.execute(select(Item.id, Item.low_stock_threshold).where(Item.organization_id == ctx.organization_id, Item.id.in_(ids))).all())
     return [
-        ItemAvailability(item_id=i, on_hand=figures[i][0], committed=promised[i], available=figures[i][1], incoming=coming[i]) for i in sorted(ids)
+        ItemAvailability(
+            item_id=i,
+            on_hand=figures[i][0],
+            committed=promised[i],
+            available=figures[i][1],
+            incoming=coming[i],
+            low_stock_threshold=thresholds.get(i),
+            states=service.stock_states(figures[i][0], thresholds.get(i), promised[i], coming[i]),
+        )
+        for i in sorted(ids)
     ]
 
 
