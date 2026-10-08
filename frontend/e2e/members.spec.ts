@@ -150,7 +150,8 @@ test("the last owner cannot leave or step down: the server refuses and nothing c
   await expect(page.getByTestId("sole-owner")).toContainText("You are the only owner of this organization.");
   await expect(page.getByTestId("leave-organization")).toHaveCount(0);
   // ...and the server refuses a forged leave too.
-  const forged = await context.request.post(bffUrl(w.orgId, "/members/leave"), { data: {} });
+  // With the right password (session run), so it is the last-owner rule that refuses, not the missing proof.
+  const forged = await context.request.post(bffUrl(w.orgId, "/members/leave"), { data: { password: E2E_PASSWORD } });
   expect(forged.status()).toBe(409);
 
   const myId = testRow(`select ou.id from organization_users ou join users u on u.id = ou.user_id where u.email = ${sql(w.email)}`);
