@@ -49,6 +49,7 @@ EXIT_OK, EXIT_FAILED, EXIT_REFUSED = 0, 1, 2
 # What the schema's guarantees rest on (derived from the migrations; tests/test_verify_restore.py proves this list equals what a
 # freshly migrated database really contains, so a new trigger or function cannot be forgotten).
 REQUIRED_TRIGGERS = {
+    ("audit_events", "trg_audit_events_append_only"),
     ("invoice_lines", "trg_invoice_lines_immutability"),
     ("invoice_pdfs", "trg_invoice_pdfs_guard"),
     ("invoice_transactions", "trg_invoice_transactions_immutability"),
@@ -61,6 +62,7 @@ REQUIRED_TRIGGERS = {
 }
 DEFERRED_CONSTRAINT_TRIGGERS = {"trg_organization_users_owner_required_delete", "trg_organization_users_owner_required_update"}
 REQUIRED_FUNCTIONS = {
+    "audit_events_append_only",
     "invoice_children_immutability",
     "invoice_pdfs_guard",
     "invoices_immutability",
@@ -69,7 +71,7 @@ REQUIRED_FUNCTIONS = {
     "transactions_currency_is_immutable",
 }
 TENANT_TABLES = {
-    "custom_field_definitions", "custom_field_options", "custom_field_values", "customers", "horses", "invoice_counters", "invoice_lines",
+    "audit_events", "custom_field_definitions", "custom_field_options", "custom_field_values", "customers", "horses", "invoice_counters", "invoice_lines",
     "invoice_pdfs", "invoice_transactions", "invoice_vat_rows", "invoices", "items", "organization_creation_requests",
     "organization_invitations", "organization_users", "transaction_lines", "transactions",
 }  # `security_events.organization_id` is deliberately nullable (an event may be about no organization)
