@@ -39,7 +39,8 @@ from app.modules.invoicing.pdf.labels import decimal_separator, labels
 #    discount steps and service details under a line.
 # 3: one layout for every language (accent header, the customer beside an "amount due" box, a coloured table head,
 #    the amount due emphasised, a payment section on every invoice). What is not stored is left out, never invented.
-TEMPLATE_VERSION = 3
+# 4: the sender labelled From / Från, and a four-column seller footer on every page.
+TEMPLATE_VERSION = 4
 ACCENT = colors.HexColor("#1f4e5f")
 ACCENT_LIGHT = colors.HexColor("#e8f0f2")
 # Room for the footer columns (up to five lines each) above the page number.
