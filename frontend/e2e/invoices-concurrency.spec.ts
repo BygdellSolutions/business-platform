@@ -100,10 +100,10 @@ test.describe("issuing from another tab", () => {
 
     await a.getByTestId("issue").click();
     await a.getByTestId("issue-confirm").click();
-    await expect(status(a)).toHaveText("Issued");
+    await expect(status(a)).toHaveAttribute("data-status", "issued");
 
     await b.getByTestId("save-details").click();
-    await expect(status(b)).toHaveText("Issued"); // the issued document replaced the stale draft UI
+    await expect(status(b)).toHaveAttribute("data-status", "issued"); // the issued document replaced the stale draft UI
     await expect(b.getByTestId("invoice-notice")).toContainText("no longer a draft");
     await expect(b.getByTestId("invoice-number")).toHaveText("1");
     for (const control of ["issue", "delete-draft", "edit-details", "save-details"]) await expect(b.getByTestId(control)).toHaveCount(0);
@@ -114,10 +114,10 @@ test.describe("issuing from another tab", () => {
     const { a, b } = await twoTabs(context);
     await a.getByTestId("issue").click();
     await a.getByTestId("issue-confirm").click();
-    await expect(status(a)).toHaveText("Issued");
+    await expect(status(a)).toHaveAttribute("data-status", "issued");
 
     await becomeVisible(b);
-    await expect(status(b)).toHaveText("Issued");
+    await expect(status(b)).toHaveAttribute("data-status", "issued");
     // The only control left is the PDF download: nothing that changes the invoice.
     await expect(b.getByTestId("invoice-view").getByRole("button")).toHaveCount(1);
     await expect(b.getByTestId("download-pdf")).toBeVisible();
@@ -132,7 +132,7 @@ test.describe("issuing from another tab", () => {
 
     await b.getByTestId("issue").click(); // B still believes it is a draft
     await b.getByTestId("issue-confirm").click();
-    await expect(status(b)).toHaveText("Issued");
+    await expect(status(b)).toHaveAttribute("data-status", "issued");
     await expect(b.getByTestId("invoice-number")).toHaveText("1");
     await expect(b.getByTestId("invoice-notice")).toBeVisible();
 
@@ -168,7 +168,7 @@ test.describe("issuing from another tab", () => {
 
     await a.getByTestId("issue").click();
     await a.getByTestId("issue-confirm").click();
-    await expect(status(a)).toHaveText("Issued");
+    await expect(status(a)).toHaveAttribute("data-status", "issued");
   });
 });
 
@@ -185,7 +185,7 @@ test.describe("a lost response is checked, never assumed", () => {
     await a.getByTestId("issue").click();
     await a.getByTestId("issue-confirm").click();
 
-    await expect(status(a)).toHaveText("Issued"); // found out by checking, not by assuming
+    await expect(status(a)).toHaveAttribute("data-status", "issued"); // found out by checking, not by assuming
     await expect(a.getByTestId("invoice-number")).toHaveText("1");
     await expect(a.getByTestId("issue")).toHaveCount(0);
     expect(posts).toBe(1);
@@ -212,7 +212,7 @@ test.describe("a lost response is checked, never assumed", () => {
 
     await a.getByTestId("issue").click();
     await a.getByTestId("issue-confirm").click();
-    await expect(status(a)).toHaveText("Issued");
+    await expect(status(a)).toHaveAttribute("data-status", "issued");
     expect(posts).toBe(2);
     expect(testRow(`select next_number from invoice_counters where organization_id = ${sql(world.orgId)}`)).toBe("2");
   });
@@ -263,6 +263,6 @@ test.describe("one change at a time", () => {
 
     await expect(a.getByTestId("issue")).toBeDisabled();
     await expect(a.getByTestId("delete-draft")).toBeDisabled();
-    await expect(status(a)).toHaveText("Issued");
+    await expect(status(a)).toHaveAttribute("data-status", "issued");
   });
 });

@@ -208,7 +208,7 @@ test.describe("issuing", () => {
     await page.getByTestId("issue").click();
     await page.getByTestId("issue-confirm").click();
 
-    await expect(page.getByTestId("invoice-status")).toHaveText("Issued");
+    await expect(page.getByTestId("invoice-status")).toHaveAttribute("data-status", "issued");
     await expect(page.getByTestId("invoice-heading")).toHaveText("Invoice 1");
     await expect(page.getByTestId("invoice-number")).toHaveText("1");
     await expect(page.getByTestId("issued-note")).toContainText("cannot be edited or deleted");

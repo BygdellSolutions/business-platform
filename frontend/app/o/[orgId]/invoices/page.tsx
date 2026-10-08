@@ -6,7 +6,6 @@ import { Notice } from "@/components/ui/Notice";
 import { Pagination } from "@/components/ui/Pagination";
 import { CustomerFilter } from "@/features/customers/CustomerFilter";
 import { InvoiceStatusBadge } from "@/features/invoices/InvoiceStatusBadge";
-import { PAYMENT_STATES } from "@/features/invoices/payment-labels";
 import type { Customer, InvoiceSummary } from "@/lib/api/types";
 import { requireCredential } from "@/lib/auth/credential";
 import { backendQuery, listHref, pageOf, parseListParams, type ExtraSpec } from "@/lib/list-params";
@@ -105,7 +104,6 @@ export default async function InvoicesPage({
                 <th className="py-1 pr-4">Invoice date</th>
                 <th className="py-1 pr-4">Due date</th>
                 <th className="py-1 pr-4">Status</th>
-                <th className="py-1 pr-4">Payment</th>
                 <th className="py-1 pr-4">Currency</th>
                 <th className="py-1 pr-4 text-right">Net</th>
                 <th className="py-1 pr-4 text-right">VAT</th>
@@ -130,10 +128,7 @@ export default async function InvoicesPage({
                     {invoice.due_date ?? "—"}
                   </td>
                   <td className="py-1 pr-4">
-                    <InvoiceStatusBadge status={invoice.status} />
-                  </td>
-                  <td className="py-1 pr-4" data-testid="invoice-payment">
-                    {invoice.payment_status ? PAYMENT_STATES[invoice.payment_status] : ""}
+                    <InvoiceStatusBadge status={invoice.status} paymentStatus={invoice.payment_status} />
                     {invoice.payment_status === "partially_paid" && invoice.outstanding_amount && (
                       <span className="block text-xs text-zinc-500">
                         <DecimalText value={invoice.outstanding_amount} /> left

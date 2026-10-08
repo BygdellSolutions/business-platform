@@ -20,6 +20,7 @@ test("an issued invoice is paid in two parts, a mistake is reversed, and the lis
   await page.goto(`/o/${world.orgId}/invoices/${invoice.id}`);
   const panel = page.getByTestId("payments-panel");
   await expect(panel.getByTestId("payment-status")).toHaveText("Unpaid");
+  await expect(page.getByTestId("invoice-status")).toHaveText("Unpaid"); // the invoice's own status says how far it is paid
   const gross = await panel.getByLabel(/^Amount/).inputValue();
 
   await panel.getByLabel(/^Amount/).fill("100.00");
@@ -30,11 +31,12 @@ test("an issued invoice is paid in two parts, a mistake is reversed, and the lis
 
   await page.goto(`/o/${world.orgId}/invoices?payment=open`);
   await expect(page.getByTestId("invoice-row")).toHaveCount(1);
-  await expect(page.getByTestId("invoice-payment")).toContainText("Partially paid");
+  await expect(page.getByTestId("invoice-status")).toHaveText("Partially paid");
 
   await page.goto(`/o/${world.orgId}/invoices/${invoice.id}`);
   await panel.getByTestId("record-payment").click(); // the amount is prefilled with what is outstanding
   await expect(panel.getByTestId("payment-status")).toHaveText("Paid");
+  await expect(page.getByTestId("invoice-status")).toHaveText("Paid");
   await expect(panel.getByTestId("record-payment")).toHaveCount(0);
 
   await panel.getByTestId("reverse-payment").first().click();

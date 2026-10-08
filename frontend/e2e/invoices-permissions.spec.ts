@@ -89,7 +89,7 @@ for (const role of ["accountant", "admin"] as RoleName[]) {
     for (const control of ["issue", "delete-draft", "edit-details"]) await expect(page.getByTestId(control)).toBeVisible();
     await page.getByTestId("issue").click();
     await page.getByTestId("issue-confirm").click();
-    await expect(page.getByTestId("invoice-status")).toHaveText("Issued");
+    await expect(page.getByTestId("invoice-status")).toHaveAttribute("data-status", "issued");
     await expect(page.getByTestId("invoice-number")).toHaveText("2");
 
     await page.goto(`/o/${world.orgId}/invoices/new`);

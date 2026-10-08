@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { InvoiceDocument } from "@/features/invoices/InvoiceDocument";
+import { InvoiceStatusBadge } from "@/features/invoices/InvoiceStatusBadge";
 import { CUSTOMER_ID, INVOICE_ID, ORG_A, TX_1, TX_2, invoice, issued, line, party, snapshot } from "@/features/invoices/testing";
 import type { MoneyString, PercentString, QuantityString } from "@/lib/decimal";
 
@@ -210,5 +211,22 @@ describe("shape of the page", () => {
   it("has the id the page was asked for only as an anchor for tests, not as text", () => {
     render(<InvoiceDocument invoice={invoice()} orgId={ORG_A} />);
     expect(screen.getByTestId("invoice-document").textContent).not.toContain(INVOICE_ID);
+  });
+});
+
+
+describe("the status says how far an issued invoice is paid", () => {
+  it.each([
+    ["unpaid", "Unpaid"],
+    ["partially_paid", "Partially paid"],
+    ["paid", "Paid"],
+  ] as const)("%s reads %s", (paymentStatus, label) => {
+    render(<InvoiceStatusBadge status="issued" paymentStatus={paymentStatus} />);
+    expect(screen.getByTestId("invoice-status")).toHaveTextContent(label);
+  });
+
+  it("a draft is a draft whatever else is said", () => {
+    render(<InvoiceStatusBadge status="draft" paymentStatus={null} />);
+    expect(screen.getByTestId("invoice-status")).toHaveTextContent("Draft");
   });
 });
