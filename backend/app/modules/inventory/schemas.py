@@ -47,9 +47,11 @@ class StockMovementRead(BaseModel):
 class ItemAvailability(BaseModel):
     item_id: uuid.UUID
     on_hand: QuantityOut
-    # Promised to open backorders.
+    # On open draft sales: meant for a customer, not a done deal (completion decides).
+    allocated: QuantityOut
+    # Promised to open backorders (completed sales still waiting).
     committed: QuantityOut
-    # On hand minus committed (never below zero).
+    # On hand minus allocated minus committed (never below zero).
     available: QuantityOut
     # On its way: open incoming deliveries not received yet.
     incoming: QuantityOut
@@ -68,6 +70,9 @@ class TransactionDemand(BaseModel):
     item_id: uuid.UUID
     requested: QuantityOut
     on_hand: QuantityOut
+    # On OTHER open drafts.
+    allocated: QuantityOut
+    # What this draft can count on: on hand minus backorders minus other drafts.
     available: QuantityOut
     incoming: QuantityOut
     shortage: QuantityOut

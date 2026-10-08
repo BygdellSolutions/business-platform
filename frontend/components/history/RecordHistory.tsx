@@ -45,7 +45,8 @@ function Entry({ event, ownType, timeZone, names }: { event: HistoryEvent; ownTy
   );
 }
 
-/** The history of one record, newest first: who did what, when, and what each value was before. */
+/** The history of one record, newest first: who did what, when, and what each value was before. Collapsed until
+ * opened, so a long history never pushes the record itself out of view. */
 export function RecordHistory({ data, entityType, timeZone }: { data: RecordHistoryData; entityType: string; timeZone: string | null }) {
   return (
     <section aria-label="History" data-testid="history" className="flex max-w-3xl flex-col gap-1">
@@ -55,11 +56,14 @@ export function RecordHistory({ data, entityType, timeZone }: { data: RecordHist
           No changes recorded yet. (Changes made before history was kept are not listed.)
         </p>
       ) : (
-        <ul>
-          {data.history.events.map((event) => (
-            <Entry key={event.id} event={event} ownType={entityType} timeZone={timeZone} names={data.names} />
-          ))}
-        </ul>
+        <details data-testid="history-toggle">
+          <summary className="cursor-pointer select-none text-sm text-zinc-700 underline dark:text-zinc-300">Show history ({data.history.events.length})</summary>
+          <ul>
+            {data.history.events.map((event) => (
+              <Entry key={event.id} event={event} ownType={entityType} timeZone={timeZone} names={data.names} />
+            ))}
+          </ul>
+        </details>
       )}
     </section>
   );

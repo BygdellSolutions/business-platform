@@ -16,7 +16,7 @@ from app.core import clock
 from app.core.tenant import TenantContext
 from app.models import Item, ItemType
 from app.modules.inventory.models import IncomingStock, LineFulfillment, MovementReason, StockMovement
-from app.modules.sales.models import TransactionLine
+from app.modules.sales.models import Transaction, TransactionLine, TransactionStatus
 
 ZERO = Decimal("0.000")
 
@@ -90,6 +90,38 @@ def incoming(db: Session, organization_id: uuid.UUID, item_ids: Iterable[uuid.UU
     for item_id, quantity in rows:
         result[item_id] = quantity
     return result
+
+
+def allocated(
+    db: Session, organization_id: uuid.UUID, item_ids: Iterable[uuid.UUID], *, except_transaction: uuid.UUID | None = None
+) -> dict[uuid.UUID, Decimal]:
+    """Units on open DRAFT sales per item: not a done deal (nothing is set aside, completion decides), but already
+    meant for a customer, so they are not shown as available to anyone else. `except_transaction`: leave out one
+    draft's own lines (what that draft may still count on)."""
+    ids = list(set(item_ids))
+    result = {item_id: ZERO for item_id in ids}
+    if not ids:
+        return result
+    query = (
+        select(TransactionLine.item_id, func.sum(TransactionLine.quantity))
+        .join(Transaction, (Transaction.organization_id == TransactionLine.organization_id) & (Transaction.id == TransactionLine.transaction_id))
+        .where(TransactionLine.organization_id == organization_id, TransactionLine.item_id.in_(ids), Transaction.status == TransactionStatus.DRAFT)
+        .group_by(TransactionLine.item_id)
+    )
+    if except_transaction is not None:
+        query = query.where(Transaction.id != except_transaction)
+    for item_id, quantity in db.execute(query):
+        result[item_id] = quantity
+    return result
+
+
+def free(db: Session, organization_id: uuid.UUID, item_ids: Iterable[uuid.UUID], *, except_transaction: uuid.UUID | None = None) -> dict[uuid.UUID, Decimal]:
+    """What is available as people read it: on hand minus committed (backorders) minus allocated (drafts), never below
+    zero. Completion itself only subtracts committed (`available`): a draft holds nothing until it is completed."""
+    ids = list(set(item_ids))
+    deliverable = available(db, organization_id, ids)
+    held = allocated(db, organization_id, ids, except_transaction=except_transaction)
+    return {item_id: max(ZERO, deliverable[item_id][1] - held[item_id]) for item_id in ids}
 
 
 def available(db: Session, organization_id: uuid.UUID, item_ids: Iterable[uuid.UUID]) -> dict[uuid.UUID, tuple[Decimal, Decimal]]:

@@ -85,7 +85,7 @@ def test_promised_units_are_not_available_to_a_newer_sale(client: TestClient, db
     second = _sale(db_session, org, "1", item=item)
     client.post(f"/api/transactions/{second.id}/complete", headers=owner)
 
-    assert availability == [{"item_id": str(item.id), "on_hand": "1.000", "committed": "2.000", "available": "0.000", "incoming": "0.000", "low_stock_threshold": None, "states": ["backordered"]}]
+    assert availability == [{"item_id": str(item.id), "on_hand": "1.000", "allocated": "0.000", "committed": "2.000", "available": "0.000", "incoming": "0.000", "low_stock_threshold": None, "states": ["backordered"]}]
     assert [(r["delivered"], r["backordered"]) for r in _fulfillment(client, second, owner)] == [("0.000", "1.000")]
     assert _fulfillment(client, first, owner)[0]["state"] == "ready_to_fulfill"  # stock is there; a person allocates it (I5)
     assert _on_hand(client, item, owner) == "1.000"

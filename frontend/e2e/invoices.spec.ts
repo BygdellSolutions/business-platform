@@ -175,7 +175,7 @@ test.describe("draft invoices", () => {
 
     await page.goto(`${list(world)}/${invoice.id}`);
     await page.getByTestId("delete-draft").click();
-    await expect(page.getByRole("group")).toContainText("transactions become invoiceable again");
+    await expect(page.getByRole("group", { name: /^Delete this draft/ })).toContainText("transactions become invoiceable again");
     await page.getByTestId("delete-draft-confirm").click();
 
     await expect(page).toHaveURL(new RegExp(`${list(world)}\\?deleted=1$`));
@@ -201,7 +201,7 @@ test.describe("issuing", () => {
 
     await page.goto(`${list(world)}/${invoice.id}`);
     await page.getByTestId("issue").click();
-    await expect(page.getByRole("group")).toContainText("cannot be edited or deleted");
+    await expect(page.getByRole("group", { name: /^Issue this invoice/ })).toContainText("cannot be edited or deleted");
     await page.getByTestId("issue-keep").click(); // declining changes nothing
     expect((await getInvoiceApi(context, world.orgId, invoice.id)).status).toBe("draft");
 

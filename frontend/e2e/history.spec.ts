@@ -23,6 +23,9 @@ test("a customer shows who created it, who changed it and what it was before", a
   await expect(page.getByTestId("saved")).toBeVisible();
 
   const latest = page.getByTestId("history-event").first();
+  await expect(latest).toBeHidden(); // collapsed until asked for
+  await page.getByTestId("history-toggle").getByText(/Show history \(2\)/).click();
+  await expect(latest).toBeVisible();
   await expect(latest).toHaveAttribute("data-action", "updated");
   await expect(latest.getByTestId("history-change")).toHaveText("Name: Anna → Anna Andersson");
   await expect(page.getByTestId("history-event")).toHaveCount(2);

@@ -16,11 +16,14 @@ const TYPES = ["service", "product"] as const;
 
 /** The stock columns of one row: empty for an item that does not track stock. */
 function StockCells({ figures }: { figures: ItemAvailability | undefined }) {
-  if (!figures) return <td colSpan={5} />;
+  if (!figures) return <td colSpan={6} />;
   return (
     <>
       <td className="py-1 pr-4 text-right" data-testid="item-on-hand">
         {trimQuantity(figures.on_hand)}
+      </td>
+      <td className="py-1 pr-4 text-right" data-testid="item-allocated">
+        {trimQuantity(figures.allocated)}
       </td>
       <td className="py-1 pr-4 text-right" data-testid="item-available">
         {trimQuantity(figures.available)}
@@ -95,6 +98,7 @@ export default async function CatalogPage({
               <th className="py-1 pr-4 text-right">Price excl. VAT</th>
               <th className="py-1 pr-4 text-right">VAT %</th>
               <th className="py-1 pr-4 text-right">On hand</th>
+              <th className="py-1 pr-4 text-right">Allocated</th>
               <th className="py-1 pr-4 text-right">Available</th>
               <th className="py-1 pr-4 text-right">Backordered</th>
               <th className="py-1 pr-4 text-right">Incoming</th>

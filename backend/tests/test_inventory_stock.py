@@ -263,7 +263,7 @@ def test_availability_lists_only_this_organizations_stock_tracking_items(client:
 
     response = client.get("/api/inventory/availability", params={"item_id": [str(tracked.id), str(untracked.id), str(foreign.id)]}, headers=owner)
 
-    assert response.json() == [{"item_id": str(tracked.id), "on_hand": "5.000", "committed": "0.000", "available": "5.000", "incoming": "0.000", "low_stock_threshold": None, "states": []}]
+    assert response.json() == [{"item_id": str(tracked.id), "on_hand": "5.000", "allocated": "0.000", "committed": "0.000", "available": "5.000", "incoming": "0.000", "low_stock_threshold": None, "states": []}]
 
 
 def test_a_draft_shows_the_shortage_over_all_its_lines_and_lines_are_never_refused_for_stock(client: TestClient, db_session: Session):
@@ -277,7 +277,7 @@ def test_a_draft_shows_the_shortage_over_all_its_lines_and_lines_are_never_refus
 
     assert added.status_code == 201  # 8 asked, 5 on hand: allowed; the shortage is only a warning
     demand = client.get(f"/api/inventory/transactions/{tx.id}", headers=owner).json()
-    assert demand == [{"item_id": str(item.id), "requested": "8.000", "on_hand": "5.000", "available": "5.000", "incoming": "0.000", "shortage": "3.000"}]
+    assert demand == [{"item_id": str(item.id), "requested": "8.000", "on_hand": "5.000", "allocated": "0.000", "available": "5.000", "incoming": "0.000", "shortage": "3.000"}]
 
 
 def test_another_organizations_transaction_demand_is_not_found(client: TestClient, db_session: Session):
@@ -286,3 +286,27 @@ def test_another_organizations_transaction_demand_is_not_found(client: TestClien
     tx_b = make_transaction(db_session, org_b, billing_customer=make_customer(db_session, org_b))
 
     assert client.get(f"/api/inventory/transactions/{tx_b.id}", headers=owner_a).status_code == 404
+
+
+def test_units_on_open_drafts_are_allocated_and_not_shown_as_available_to_others(client: TestClient, db_session: Session):
+    org, owner = _world(db_session)
+    item = _product(db_session, org)
+    _adjust(client, item.id, owner, kind="count", quantity="10")
+    first = make_transaction(db_session, org, billing_customer=make_customer(db_session, org))
+    make_line(db_session, org, first, item=item, description="Liniment", unit="pcs", quantity="8", unit_price_ex_vat="120.00")
+    second = make_transaction(db_session, org, billing_customer=make_customer(db_session, org))
+    make_line(db_session, org, second, item=item, description="Liniment", unit="pcs", quantity="3", unit_price_ex_vat="120.00")
+
+    [figures] = client.get("/api/inventory/availability", params={"item_id": str(item.id)}, headers=owner).json()
+    [first_view] = client.get(f"/api/inventory/transactions/{first.id}", headers=owner).json()
+    [second_view] = client.get(f"/api/inventory/transactions/{second.id}", headers=owner).json()
+
+    assert (figures["on_hand"], figures["allocated"], figures["available"]) == ("10.000", "11.000", "0.000")
+    # Each draft sees what the OTHER drafts hold; its own lines are what it asks for.
+    assert (first_view["allocated"], first_view["available"], first_view["shortage"]) == ("3.000", "7.000", "1.000")
+    assert (second_view["allocated"], second_view["available"], second_view["shortage"]) == ("8.000", "2.000", "1.000")
+
+    # Nothing is set aside by a draft: whichever is completed first gets the stock.
+    client.post(f"/api/transactions/{second.id}/complete", headers=owner)
+    [figures] = client.get("/api/inventory/availability", params={"item_id": str(item.id)}, headers=owner).json()
+    assert (figures["on_hand"], figures["allocated"], figures["available"]) == ("7.000", "8.000", "0.000")

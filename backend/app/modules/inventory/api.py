@@ -96,6 +96,8 @@ def list_stock_items(
     ids = [item.id for item in items]
     figures = service.available(db, ctx.organization_id, ids)
     promised = service.committed(db, ctx.organization_id, ids)
+    held = service.allocated(db, ctx.organization_id, ids)
+    free = service.free(db, ctx.organization_id, ids)
     coming = service.incoming(db, ctx.organization_id, ids)
     rows = []
     for item in items:
@@ -112,8 +114,9 @@ def list_stock_items(
                 unit=item.unit,
                 active=item.active,
                 on_hand=figures[item.id][0],
+                allocated=held[item.id],
                 committed=promised[item.id],
-                available=figures[item.id][1],
+                available=free[item.id],
                 incoming=coming[item.id],
                 low_stock_threshold=item.low_stock_threshold,
                 states=states,
@@ -132,14 +135,17 @@ def read_availability(
     ids = service.tracked_ids(db, ctx.organization_id, item_id)
     figures = service.available(db, ctx.organization_id, ids)
     promised = service.committed(db, ctx.organization_id, ids)
+    held = service.allocated(db, ctx.organization_id, ids)
+    free = service.free(db, ctx.organization_id, ids)
     coming = service.incoming(db, ctx.organization_id, ids)
     thresholds = dict(db.execute(select(Item.id, Item.low_stock_threshold).where(Item.organization_id == ctx.organization_id, Item.id.in_(ids))).all())
     return [
         ItemAvailability(
             item_id=i,
             on_hand=figures[i][0],
+            allocated=held[i],
             committed=promised[i],
-            available=figures[i][1],
+            available=free[i],
             incoming=coming[i],
             low_stock_threshold=thresholds.get(i),
             states=service.stock_states(figures[i][0], thresholds.get(i), promised[i], coming[i]),
@@ -167,15 +173,18 @@ def read_transaction_demand(
     )
     ids = service.tracked_ids(db, ctx.organization_id, requested)
     figures = service.available(db, ctx.organization_id, ids)
+    others = service.allocated(db, ctx.organization_id, ids, except_transaction=transaction_id)
+    free = service.free(db, ctx.organization_id, ids, except_transaction=transaction_id)
     coming = service.incoming(db, ctx.organization_id, ids)
     return [
         TransactionDemand(
             item_id=i,
             requested=requested[i],
             on_hand=figures[i][0],
-            available=figures[i][1],
+            allocated=others[i],
+            available=free[i],
             incoming=coming[i],
-            shortage=max(Decimal(0), requested[i] - figures[i][1]),
+            shortage=max(Decimal(0), requested[i] - free[i]),
         )
         for i in sorted(ids)
     ]

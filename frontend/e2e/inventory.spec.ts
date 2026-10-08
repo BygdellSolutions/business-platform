@@ -54,12 +54,17 @@ test("a draft that asks for more than is in stock warns, and the line is still a
   await page.goto(`/o/${world.orgId}/transactions/${tx.id}`);
   await openAddLine(page);
   await pick(page, "item_id", "Hoof oil");
-  await expect(page.getByTestId("item-availability")).toContainText("In stock: 5, available: 5");
+  await expect(page.getByTestId("item-availability")).toContainText("In stock: 5, on other drafts: 0, available: 5");
   await page.getByLabel("Quantity").fill("8");
   await page.getByTestId("submit-line").click();
 
   await expect(page.getByTestId("line-row")).toHaveCount(1);
   await expect(page.getByTestId("stock-warning")).toHaveText("Only 5 of 8 pcs available; 3 will be backordered at completion.");
+
+  // The draft's 8 are allocated: not final, but no longer shown as available to anyone else.
+  await page.goto(`/o/${world.orgId}/inventory`);
+  await expect(page.getByTestId("stock-row-allocated")).toHaveText("8");
+  await expect(page.getByTestId("stock-row-available")).toHaveText("0");
 });
 
 test("completion delivers what is in stock and backorders the rest; a reopen gives it back", async ({ page, context }) => {

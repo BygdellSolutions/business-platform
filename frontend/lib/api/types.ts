@@ -224,9 +224,11 @@ export interface StockMovement {
 export interface ItemAvailability {
   item_id: string;
   on_hand: QuantityString;
-  /** Promised to open backorders. */
+  /** On open draft sales: meant for a customer, not a done deal (completion decides). */
+  allocated: QuantityString;
+  /** Promised to open backorders (completed sales still waiting). */
   committed: QuantityString;
-  /** On hand minus committed, never below zero. */
+  /** On hand minus allocated minus committed, never below zero. */
   available: QuantityString;
   /** On its way: open incoming deliveries not received yet. */
   incoming: QuantityString;
@@ -240,6 +242,9 @@ export interface StockDemand {
   item_id: string;
   requested: QuantityString;
   on_hand: QuantityString;
+  /** On OTHER open drafts. */
+  allocated: QuantityString;
+  /** What this draft can count on: on hand minus backorders minus other drafts. */
   available: QuantityString;
   incoming: QuantityString;
   /** "0.000" when there is enough; otherwise what completion would backorder. */

@@ -85,40 +85,44 @@ export function StockPanel({
         {figures && (
           <span className="text-zinc-600 dark:text-zinc-400" data-testid="stock-figures">
             {" "}
-            · committed to backorders {trimQuantity(figures.committed)} · available {trimQuantity(figures.available)} · incoming {trimQuantity(figures.incoming)}
+            · allocated to drafts {trimQuantity(figures.allocated)} · committed to backorders {trimQuantity(figures.committed)} · available {trimQuantity(figures.available)} ·
+            incoming {trimQuantity(figures.incoming)}
           </span>
         )}
       </p>
       {stock.movements.length > 0 && (
-        <table className="text-left text-sm">
-          <thead>
-            <tr className="border-b border-zinc-300 dark:border-zinc-700">
-              <th className="py-1 pr-4">When</th>
-              <th className="py-1 pr-4">What</th>
-              <th className="py-1 pr-4 text-right">Change</th>
-              <th className="py-1 pr-4 text-right">On hand after</th>
-              <th className="py-1 pr-4">Note</th>
-              <th className="py-1 pr-4">By</th>
-            </tr>
-          </thead>
-          <tbody>
-            {stock.movements.map((movement) => (
-              <tr key={movement.id} data-testid="stock-movement" className="border-b border-zinc-200 dark:border-zinc-800">
-                <td className="py-1 pr-4">{formatTimestamp(movement.created_at, timeZone)}</td>
-                <td className="py-1 pr-4">{REASONS[movement.reason]}</td>
-                <td className="py-1 pr-4 text-right">
-                  {movement.quantity_change.startsWith("-") ? "" : "+"}
-                  {trimQuantity(movement.quantity_change)}
-                </td>
-                <td className="py-1 pr-4 text-right">
-                  {trimQuantity(movement.quantity_after)}
-                </td>
-                <td className="py-1 pr-4">{movement.note}</td>
-                <td className="py-1 pr-4">{movement.created_by_name ?? <span className="text-zinc-500">not recorded</span>}</td>
+        <details data-testid="stock-history-toggle">
+          <summary className="cursor-pointer select-none text-sm text-zinc-700 underline dark:text-zinc-300">Show stock history ({stock.movements.length})</summary>
+          <table className="text-left text-sm">
+            <thead>
+              <tr className="border-b border-zinc-300 dark:border-zinc-700">
+                <th className="py-1 pr-4">When</th>
+                <th className="py-1 pr-4">What</th>
+                <th className="py-1 pr-4 text-right">Change</th>
+                <th className="py-1 pr-4 text-right">On hand after</th>
+                <th className="py-1 pr-4">Note</th>
+                <th className="py-1 pr-4">By</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {stock.movements.map((movement) => (
+                <tr key={movement.id} data-testid="stock-movement" className="border-b border-zinc-200 dark:border-zinc-800">
+                  <td className="py-1 pr-4">{formatTimestamp(movement.created_at, timeZone)}</td>
+                  <td className="py-1 pr-4">{REASONS[movement.reason]}</td>
+                  <td className="py-1 pr-4 text-right">
+                    {movement.quantity_change.startsWith("-") ? "" : "+"}
+                    {trimQuantity(movement.quantity_change)}
+                  </td>
+                  <td className="py-1 pr-4 text-right">
+                    {trimQuantity(movement.quantity_after)}
+                  </td>
+                  <td className="py-1 pr-4">{movement.note}</td>
+                  <td className="py-1 pr-4">{movement.created_by_name ?? <span className="text-zinc-500">not recorded</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
       )}
       {canAdjust && (
         <form onSubmit={adjust} noValidate aria-label="Change stock" className="flex flex-col gap-3">

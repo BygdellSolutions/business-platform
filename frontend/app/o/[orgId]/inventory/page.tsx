@@ -48,6 +48,10 @@ export default async function InventoryPage({
       <h1 className="text-2xl font-semibold">Inventory</h1>
       <section aria-label="Stock" className="flex flex-col gap-2">
         <h2 className="text-lg font-semibold">Stock</h2>
+        <p className="text-xs text-zinc-500">
+          Allocated: on open draft sales (not final; whichever sale is completed first gets the stock). Committed: completed sales still waiting for
+          stock. Available = on hand − allocated − committed.
+        </p>
         <form action={`/o/${orgId}/inventory`} className="flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1 text-sm">
             Search
@@ -79,7 +83,12 @@ export default async function InventoryPage({
                 <th className="py-1 pr-4">SKU</th>
                 <th className="py-1 pr-4">Unit</th>
                 <th className="py-1 pr-4 text-right">On hand</th>
-                <th className="py-1 pr-4 text-right">Committed</th>
+                <th className="py-1 pr-4 text-right" title="On open draft sales: meant for a customer, not final yet">
+                  Allocated
+                </th>
+                <th className="py-1 pr-4 text-right" title="Completed sales still waiting for stock (backorders)">
+                  Committed
+                </th>
                 <th className="py-1 pr-4 text-right">Available</th>
                 <th className="py-1 pr-4 text-right">Incoming</th>
                 <th className="py-1 pr-4 text-right">Low below</th>
@@ -99,10 +108,13 @@ export default async function InventoryPage({
                   <td className="py-1 pr-4 text-right" data-testid="stock-row-on-hand">
                     {trimQuantity(item.on_hand)}
                   </td>
+                  <td className="py-1 pr-4 text-right" data-testid="stock-row-allocated">
+                    {trimQuantity(item.allocated)}
+                  </td>
                   <td className="py-1 pr-4 text-right">
                     {trimQuantity(item.committed)}
                   </td>
-                  <td className="py-1 pr-4 text-right">
+                  <td className="py-1 pr-4 text-right" data-testid="stock-row-available">
                     {trimQuantity(item.available)}
                   </td>
                   <td className="py-1 pr-4 text-right">

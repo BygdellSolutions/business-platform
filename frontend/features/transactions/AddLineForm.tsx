@@ -233,7 +233,8 @@ function AddLinePanel({ onClose }: { onClose: () => void }) {
           <EntityPicker label="Item" name="item_id" value={item} onChange={setItem} search={search} error={errorsFor("item_id")} hint="Its name, unit, price and VAT are copied by the server when the line is added." />
           {availability && availability.item_id === item?.id && (
             <p className="text-sm text-zinc-600 dark:text-zinc-400" data-testid="item-availability">
-              In stock: {trimQuantity(availability.on_hand)}, available: {trimQuantity(availability.available)}. A shortage is backordered at completion; the line is never refused.
+              In stock: {trimQuantity(availability.on_hand)}, on other drafts: {trimQuantity(availability.allocated)}, available: {trimQuantity(availability.available)}. A
+              shortage is backordered at completion; the line is never refused.
             </p>
           )}
           <DecimalField label="Quantity" name="quantity" value={fields.quantity} onChange={set("quantity")} error={errorsFor("quantity")} />
