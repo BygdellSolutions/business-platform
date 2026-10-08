@@ -40,6 +40,7 @@ from app.modules.sales.pricing import (
     discounted_unit_price,
 )
 from app.modules.sales.schemas import (
+    SalesSummary,
     ServiceRecord,
     AssignCurrency,
     AssignCurrencyResult,
@@ -56,6 +57,7 @@ from app.modules.sales.schemas import (
 )
 from app.modules.sales.versioning import ensure_current
 from app.schemas.customer import CustomerRef
+from app.schemas.money import CountAndAmounts, CurrencyAmount
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 
@@ -414,6 +416,42 @@ def assign_currency(
     ).rowcount
     db.commit()
     return AssignCurrencyResult(currency=currency, assigned=assigned)
+
+
+@router.get("/summary", response_model=SalesSummary)
+def sales_summary(ctx: TenantContext = Depends(get_tenant_context), db: Session = Depends(get_db)) -> SalesSummary:
+    """Open drafts, what was completed this month (per currency) and services performed this month (any member)."""
+    today = organization_today(db, ctx.organization_id)
+    month_start = today.replace(day=1)
+    drafts = db.scalar(
+        select(func.count()).select_from(Transaction).where(Transaction.organization_id == ctx.organization_id, Transaction.status == DRAFT)
+    )
+    this_month = (
+        Transaction.organization_id == ctx.organization_id,
+        Transaction.transaction_date >= month_start,
+        Transaction.transaction_date <= today,
+    )
+    completed = db.scalar(select(func.count()).select_from(Transaction).where(*this_month, Transaction.status == COMPLETED))
+    amounts = db.execute(
+        select(Transaction.currency, func.sum(TransactionLine.gross_amount))
+        .join(TransactionLine, and_(TransactionLine.organization_id == Transaction.organization_id, TransactionLine.transaction_id == Transaction.id))
+        .where(*this_month, Transaction.status == COMPLETED, Transaction.currency.is_not(None))
+        .group_by(Transaction.currency)
+        .order_by(Transaction.currency)
+    ).all()
+    services = db.scalar(
+        select(func.count())
+        .select_from(TransactionLine)
+        .join(Transaction, and_(Transaction.organization_id == TransactionLine.organization_id, Transaction.id == TransactionLine.transaction_id))
+        .where(*this_month, Transaction.status != CANCELLED, TransactionLine.kind == "service")
+    )
+    return SalesSummary(
+        month_start=month_start,
+        today=today,
+        drafts=drafts,
+        completed_this_month=CountAndAmounts(count=completed, amounts=[CurrencyAmount(currency=c, amount=a) for c, a in amounts]),
+        services_this_month=services,
+    )
 
 
 @router.get("/services", response_model=list[ServiceRecord])

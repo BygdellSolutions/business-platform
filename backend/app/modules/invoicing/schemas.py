@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from app.modules.invoicing.models import InvoiceStatus
 from app.schemas.customer import CustomerRef
-from app.schemas.money import MoneyOut, PercentOut, QuantityOut
+from app.schemas.money import CountAndAmounts, MoneyOut, PercentOut, QuantityOut
 from app.schemas.profile import optional_text
 
 MAX_TRANSACTIONS_PER_INVOICE = 200
@@ -162,3 +162,13 @@ class InvoiceStateRead(BaseModel):
     invoice_id: uuid.UUID | None
     number_text: str | None
 
+
+
+class InvoicingSummary(BaseModel):
+    """The dashboard's figures from Invoicing. Payments are not tracked yet, so "past due" means issued and past its
+    due date, whether or not it was paid."""
+
+    ready_to_invoice: CountAndAmounts
+    draft_invoices: int
+    issued_this_month: CountAndAmounts
+    past_due: CountAndAmounts

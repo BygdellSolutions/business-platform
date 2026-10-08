@@ -17,7 +17,7 @@ import re
 from decimal import Decimal
 from typing import Annotated, Any
 
-from pydantic import BeforeValidator, Field, PlainSerializer
+from pydantic import BaseModel, BeforeValidator, Field, PlainSerializer
 
 _MONEY_RE = re.compile(r"\d{1,10}(\.\d{1,2})?")  # NUMERIC(12,2): up to 10 integer digits
 _PERCENT_RE = re.compile(r"\d{1,3}(\.\d{1,2})?")  # NUMERIC(5,2): up to 3 integer digits
@@ -85,3 +85,16 @@ CountIn = Annotated[
 MoneyOut = Annotated[Decimal, _two_decimals_out]
 PercentOut = Annotated[Decimal, _two_decimals_out]
 QuantityOut = Annotated[Decimal, _three_decimals_out]
+
+
+
+class CurrencyAmount(BaseModel):
+    """A sum in ONE currency. Summaries list one per currency; amounts in different currencies are never added."""
+
+    currency: str
+    amount: MoneyOut
+
+
+class CountAndAmounts(BaseModel):
+    count: int
+    amounts: list[CurrencyAmount]

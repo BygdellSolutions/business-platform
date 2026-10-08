@@ -3,12 +3,13 @@ from collections.abc import Sequence
 from datetime import date
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
-from sqlalchemy import and_, exists, or_, select
+from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import Pagination, pagination
 from app.core.authz import roles_required
 from app.core.db import get_db
+from app.core.org_time import organization_today
 from app.core.query import contains_pattern
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import scoped_select
@@ -26,10 +27,12 @@ from app.modules.invoicing.schemas import (
     InvoiceStateRead,
     InvoiceSummary,
     InvoiceUpdate,
+    InvoicingSummary,
 )
 from app.modules.sales.models import Transaction, TransactionLine, TransactionStatus
 from app.modules.sales.pricing import calculate_totals
 from app.schemas.customer import CustomerRef
+from app.schemas.money import CountAndAmounts, CurrencyAmount
 
 router = APIRouter(prefix="/api/invoices", tags=["invoices"])
 invoiceable_router = APIRouter(prefix="/api/invoiceable-transactions", tags=["invoices"])
@@ -100,6 +103,36 @@ def list_invoiceable_transactions(
 
 
 # --- invoices ------------------------------------------------------------------------------------------------------
+
+
+@router.get("/summary", response_model=InvoicingSummary)
+def invoicing_summary(ctx: TenantContext = Depends(get_tenant_context), db: Session = Depends(get_db)) -> InvoicingSummary:
+    """What is ready to invoice, draft invoices, what was issued this month and what is past its due date (any member)."""
+    today = organization_today(db, ctx.organization_id)
+    month_start = today.replace(day=1)
+    reserved = exists().where(InvoiceTransaction.organization_id == Transaction.organization_id, InvoiceTransaction.transaction_id == Transaction.id)
+    ready = (Transaction.organization_id == ctx.organization_id, Transaction.status == TransactionStatus.COMPLETED, Transaction.currency.is_not(None), ~reserved)
+    ready_count = db.scalar(select(func.count()).select_from(Transaction).where(*ready))
+    ready_amounts = db.execute(
+        select(Transaction.currency, func.sum(TransactionLine.gross_amount))
+        .join(TransactionLine, and_(TransactionLine.organization_id == Transaction.organization_id, TransactionLine.transaction_id == Transaction.id))
+        .where(*ready)
+        .group_by(Transaction.currency)
+        .order_by(Transaction.currency)
+    ).all()
+
+    def invoices(*conditions) -> CountAndAmounts:
+        where = (Invoice.organization_id == ctx.organization_id, *conditions)
+        count = db.scalar(select(func.count()).select_from(Invoice).where(*where))
+        amounts = db.execute(select(Invoice.currency, func.sum(Invoice.gross_amount)).where(*where).group_by(Invoice.currency).order_by(Invoice.currency)).all()
+        return CountAndAmounts(count=count, amounts=[CurrencyAmount(currency=c, amount=a) for c, a in amounts])
+
+    return InvoicingSummary(
+        ready_to_invoice=CountAndAmounts(count=ready_count, amounts=[CurrencyAmount(currency=c, amount=a) for c, a in ready_amounts]),
+        draft_invoices=db.scalar(select(func.count()).select_from(Invoice).where(Invoice.organization_id == ctx.organization_id, Invoice.status == InvoiceStatus.DRAFT)),
+        issued_this_month=invoices(Invoice.status == InvoiceStatus.ISSUED, Invoice.invoice_date >= month_start, Invoice.invoice_date <= today),
+        past_due=invoices(Invoice.status == InvoiceStatus.ISSUED, Invoice.due_date.is_not(None), Invoice.due_date < today),
+    )
 
 
 @router.get("/by-transaction", response_model=list[InvoiceStateRead])

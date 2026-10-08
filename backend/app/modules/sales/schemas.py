@@ -14,7 +14,7 @@ from pydantic import (
 from app.modules.sales.models import TransactionStatus
 from app.schemas.customer import CustomerRef
 from app.schemas.profile import CurrencyCode
-from app.schemas.money import MoneyIn, MoneyOut, PercentIn, PercentOut, QuantityIn, QuantityOut
+from app.schemas.money import CountAndAmounts, MoneyIn, MoneyOut, PercentIn, PercentOut, QuantityIn, QuantityOut
 
 Description = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
 Unit = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=32)]
@@ -243,3 +243,13 @@ class ServiceRecord(BaseModel):
     subject_id: uuid.UUID
     subject_label: str | None
     notes: str | None
+
+
+class SalesSummary(BaseModel):
+    """The dashboard's figures from Sales, for the organization's current month (in its time zone)."""
+
+    month_start: date
+    today: date
+    drafts: int
+    completed_this_month: CountAndAmounts
+    services_this_month: int

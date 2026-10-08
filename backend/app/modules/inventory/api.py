@@ -19,6 +19,7 @@ from app.modules.inventory.schemas import (
     BackorderRead,
     IncomingCreate,
     IncomingRead,
+    InventorySummary,
     ItemAvailability,
     LineFulfillmentRead,
     ProposedAllocation,
@@ -155,6 +156,36 @@ def read_transaction_fulfillment(
         )
         for row in rows
     ]
+
+
+@availability_router.get("/summary", response_model=InventorySummary)
+def inventory_summary(ctx: TenantContext = Depends(get_tenant_context), db: Session = Depends(get_db)) -> InventorySummary:
+    """How many active stock-tracking products are out of stock or low, what waits and what is coming (any member)."""
+    rows = db.execute(
+        select(Item.id, Item.low_stock_threshold).where(
+            Item.organization_id == ctx.organization_id, Item.active.is_(True), Item.track_stock.is_(True), Item.type == "product"
+        )
+    ).all()
+    ids = [item_id for item_id, _ in rows]
+    stock = service.on_hand(db, ctx.organization_id, ids)
+    states = [service.stock_states(stock[item_id], threshold, Decimal(0), Decimal(0)) for item_id, threshold in rows]
+    open_backorders = (
+        LineFulfillment.organization_id == ctx.organization_id,
+        LineFulfillment.cancelled_at.is_(None),
+        LineFulfillment.fulfilled_later < LineFulfillment.backordered,
+    )
+    return InventorySummary(
+        tracked_items=len(rows),
+        out_of_stock=sum(1 for each in states if "out_of_stock" in each),
+        low_stock=sum(1 for each in states if "low_stock" in each),
+        open_backorders=db.scalar(select(func.count()).select_from(LineFulfillment).where(*open_backorders)),
+        backordered_items=db.scalar(select(func.count(func.distinct(LineFulfillment.item_id))).where(*open_backorders)),
+        incoming_deliveries=db.scalar(
+            select(func.count())
+            .select_from(IncomingStock)
+            .where(IncomingStock.organization_id == ctx.organization_id, IncomingStock.cancelled_at.is_(None), IncomingStock.received < IncomingStock.quantity)
+        ),
+    )
 
 
 # --- the backorder backlog and allocation ------------------------------------------------------------------------

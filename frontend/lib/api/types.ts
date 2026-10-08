@@ -681,3 +681,41 @@ export interface Colleague {
   user_id: string;
   name: string;
 }
+
+/** A sum in ONE currency (summaries never add amounts of different currencies). */
+export interface CurrencyAmount {
+  currency: string;
+  amount: MoneyString;
+}
+
+export interface CountAndAmounts {
+  count: number;
+  amounts: CurrencyAmount[];
+}
+
+/** GET /api/transactions/summary: the organization's month, in its time zone. */
+export interface SalesSummary {
+  month_start: string;
+  today: string;
+  drafts: number;
+  completed_this_month: CountAndAmounts;
+  services_this_month: number;
+}
+
+/** GET /api/invoices/summary. Payments are not tracked yet: "past due" counts every issued invoice past its due date. */
+export interface InvoicingSummary {
+  ready_to_invoice: CountAndAmounts;
+  draft_invoices: number;
+  issued_this_month: CountAndAmounts;
+  past_due: CountAndAmounts;
+}
+
+/** GET /api/inventory/summary: active products that track stock. */
+export interface InventorySummary {
+  tracked_items: number;
+  out_of_stock: number;
+  low_stock: number;
+  open_backorders: number;
+  backordered_items: number;
+  incoming_deliveries: number;
+}

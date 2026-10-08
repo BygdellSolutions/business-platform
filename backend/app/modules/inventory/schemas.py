@@ -181,6 +181,19 @@ class AllocationConfirm(BaseModel):
         return self
 
 
+class InventorySummary(BaseModel):
+    """The dashboard's figures from Inventory: active products that track stock, by state."""
+
+    tracked_items: int
+    out_of_stock: int
+    low_stock: int
+    # Sales waiting for stock, and how many products they wait for.
+    open_backorders: int
+    backordered_items: int
+    # Deliveries on their way (not fully received, not cancelled).
+    incoming_deliveries: int
+
+
 class StockRead(BaseModel):
     item_id: uuid.UUID
     track_stock: bool
