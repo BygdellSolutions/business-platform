@@ -93,6 +93,25 @@ export default async function Dashboard({
         </div>
       </section>
 
+      {inventory.tracked_items > 0 && (
+        <section aria-label="Stock" className="flex flex-col gap-2">
+          <h2 className="text-lg font-semibold">Stock</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <SummaryCard title="Out of stock" count={inventory.out_of_stock} href={`${base}/catalog?type=product`} testId="card-out-of-stock" tone="attention" />
+            <SummaryCard title="Low stock" count={inventory.low_stock} href={`${base}/catalog?type=product`} testId="card-low-stock" tone="attention" />
+            <SummaryCard
+              title="Sales waiting for stock"
+              count={inventory.open_backorders}
+              note={inventory.backordered_items > 0 ? `${inventory.backordered_items} product(s)` : undefined}
+              href={`${base}/inventory`}
+              testId="card-backorders"
+              tone="attention"
+            />
+            <SummaryCard title="Deliveries on their way" count={inventory.incoming_deliveries} href={`${base}/inventory`} testId="card-incoming" />
+          </div>
+        </section>
+      )}
+
       <section aria-label="Pending" className="flex flex-col gap-2">
         <h2 className="text-lg font-semibold">Pending</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -218,24 +237,6 @@ export default async function Dashboard({
         </div>
       </section>
 
-      {inventory.tracked_items > 0 && (
-        <section aria-label="Stock" className="flex flex-col gap-2">
-          <h2 className="text-lg font-semibold">Stock</h2>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <SummaryCard title="Out of stock" count={inventory.out_of_stock} href={`${base}/catalog?type=product`} testId="card-out-of-stock" tone="attention" />
-            <SummaryCard title="Low stock" count={inventory.low_stock} href={`${base}/catalog?type=product`} testId="card-low-stock" tone="attention" />
-            <SummaryCard
-              title="Sales waiting for stock"
-              count={inventory.open_backorders}
-              note={inventory.backordered_items > 0 ? `${inventory.backordered_items} product(s)` : undefined}
-              href={`${base}/inventory`}
-              testId="card-backorders"
-              tone="attention"
-            />
-            <SummaryCard title="Deliveries on their way" count={inventory.incoming_deliveries} href={`${base}/inventory`} testId="card-incoming" />
-          </div>
-        </section>
-      )}
 
     </div>
   );

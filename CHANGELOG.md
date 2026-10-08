@@ -72,6 +72,7 @@ All notable changes to `business-platform` will be documented in this file.
 - `reset_test_db` (Playwright's global setup) needed an `APP_ENV` only a developer's `.env` supplied; plain `alembic upgrade`/`current` loaded the web settings (now only the migration credentials; `alembic check` and `revision` still need `DATABASE_URL` too); the `database-isolation` Playwright spec queried a development database service that does not exist in CI (it asserts none is running there). All found by running each job from a clean checkout copy.
 
 ### Changed
+- Dashboard order: To do, Stock, Pending, Month, This year (what to act on first, then what is on its way in, then how it is going).
 - A default account may now create its first organization (limit 1), including invited members; before, creating needed the operator's explicit right. Retrying a creation that already committed returns it even when the limit has since been reached or lowered (it creates nothing new); before, a revoked right refused the replay.
 - `APP_ENV` has no default in the backend (a process that was not told its environment does not start); `PUBLIC_ORIGIN` and `CORS_ORIGINS` default only in development; `app.core.db.Base` moved to `app.core.base` (re-exported); the container commands are `--no-access-log --no-proxy-headers --no-server-header`; every response of the backend carries `x-request-id`.
 - `next.config.ts`: `output: "standalone"`, `poweredByHeader: false`.
