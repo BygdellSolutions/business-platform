@@ -194,6 +194,8 @@ def deliver_on_completion(db: Session, ctx: TenantContext, transaction_id: uuid.
         return
     items = lock_items(db, ctx, tracked)
     left = {item_id: figures[1] for item_id, figures in available(db, ctx.organization_id, tracked).items()}
+    # The backlog is served oldest first by this time: taken from the clock, not the database transaction's start.
+    completed_at = clock.utcnow()
     for line in lines:
         deliver = min(line.quantity, left[line.item_id])
         if deliver > 0:
@@ -210,6 +212,7 @@ def deliver_on_completion(db: Session, ctx: TenantContext, transaction_id: uuid.
                 backordered=line.quantity - deliver,
                 fulfilled_later=ZERO,
                 created_by=ctx.user.id,
+                created_at=completed_at,
             )
         )
     db.flush()
@@ -251,6 +254,74 @@ def return_on_undo(db: Session, ctx: TenantContext, transaction_id: uuid.UUID, r
         row.cancelled_by = ctx.user.id
         row.cancel_reason = reason
     db.flush()
+
+
+def propose_allocation(db: Session, organization_id: uuid.UUID, item_id: uuid.UUID) -> tuple[Decimal, list[tuple[LineFulfillment, Decimal]]]:
+    """On hand, and the item's open backorders oldest first with what each would get from it (possibly nothing)."""
+    stock = on_hand(db, organization_id, [item_id])[item_id]
+    rows = db.scalars(
+        select(LineFulfillment)
+        .where(
+            LineFulfillment.organization_id == organization_id,
+            LineFulfillment.item_id == item_id,
+            LineFulfillment.cancelled_at.is_(None),
+            LineFulfillment.fulfilled_later < LineFulfillment.backordered,
+        )
+        .order_by(LineFulfillment.created_at, LineFulfillment.id)
+    )
+    left = stock
+    proposal = []
+    for row in rows:
+        share = min(left, row.backordered - row.fulfilled_later)
+        proposal.append((row, share))
+        left -= share
+    return stock, proposal
+
+
+def allocate(db: Session, ctx: TenantContext, item: Item, allocations: list[tuple[uuid.UUID, Decimal]]) -> list[LineFulfillment]:
+    """Deliver confirmed quantities to open backorders of `item` (whose row lock the caller holds).
+
+    Each allocation is a delivery movement for the backorder's sale and line (who and when are the movement's), and
+    the backorder's `fulfilled_later` grows. Refused as a whole if a backorder is not an open one of this item, or a
+    quantity is more than it still waits for; stock never goes below zero (the ledger refuses).
+    """
+    ids = [fulfillment_id for fulfillment_id, _ in allocations]
+    rows = {
+        row.id: row
+        for row in db.scalars(
+            select(LineFulfillment)
+            .where(LineFulfillment.organization_id == ctx.organization_id, LineFulfillment.id.in_(ids))
+            .order_by(LineFulfillment.id)
+            .with_for_update()
+        )
+    }
+    for position, (fulfillment_id, quantity) in enumerate(allocations):
+        row = rows.get(fulfillment_id)
+        if row is None or row.item_id != item.id or row.cancelled_at is not None or row.fulfilled_later >= row.backordered:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=[{"loc": ["body", "allocations", position, "fulfillment_id"], "msg": "Not an open backorder of this item", "type": "backorder.not_open"}],
+            )
+        if quantity > row.backordered - row.fulfilled_later:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=[{"loc": ["body", "allocations", position, "quantity"], "msg": "More than this backorder still waits for", "type": "backorder.too_much"}],
+            )
+    total = sum((quantity for _, quantity in allocations), ZERO)
+    stock = on_hand(db, ctx.organization_id, [item.id])[item.id]
+    if total > stock:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=[{"loc": ["body", "allocations"], "msg": f"Only {stock.normalize():f} on hand to share", "type": "allocation.beyond_stock"}],
+        )
+    for fulfillment_id, quantity in allocations:
+        row = rows[fulfillment_id]
+        record_movement(
+            db, ctx, item, -quantity, MovementReason.DELIVERY, note="Backorder fulfilled", transaction_id=row.transaction_id, transaction_line_id=row.transaction_line_id
+        )
+        row.fulfilled_later = row.fulfilled_later + quantity
+    db.flush()
+    return [rows[fulfillment_id] for fulfillment_id, _ in allocations]
 
 
 def fulfillment_state(row: LineFulfillment, on_hand_now: Decimal) -> str:

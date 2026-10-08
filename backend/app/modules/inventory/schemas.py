@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from app.schemas.money import CountIn, QuantityIn, QuantityOut
 
@@ -120,6 +120,61 @@ class IncomingRead(BaseModel):
     created_at: datetime
     created_by_name: str | None
     cancelled_at: datetime | None
+
+
+class BackorderRead(BaseModel):
+    """An open (or, on request, closed) backorder: units of a completed sale still waiting for stock."""
+
+    fulfillment_id: uuid.UUID
+    transaction_id: uuid.UUID
+    transaction_line_id: uuid.UUID
+    transaction_date: date
+    customer_name: str | None
+    item_id: uuid.UUID
+    item_name: str
+    item_unit: str
+    backordered: QuantityOut
+    fulfilled_later: QuantityOut
+    remaining: QuantityOut
+    state: Literal["waiting_for_stock", "partially_fulfilled", "ready_to_fulfill", "fulfilled", "cancelled"]
+    # When the sale was completed (the backlog is served oldest first).
+    created_at: datetime
+
+
+class ProposedAllocation(BaseModel):
+    fulfillment_id: uuid.UUID
+    transaction_id: uuid.UUID
+    remaining: QuantityOut
+    proposed: QuantityOut
+
+
+class AllocationProposal(BaseModel):
+    """How the stock on hand WOULD be shared among the item's open backorders, oldest first. Nothing happens until a
+    person confirms it (and they may change the quantities)."""
+
+    item_id: uuid.UUID
+    on_hand: QuantityOut
+    proposals: list[ProposedAllocation]
+
+
+class Allocation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    fulfillment_id: uuid.UUID
+    quantity: QuantityIn
+
+
+class AllocationConfirm(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    allocations: list[Allocation] = Field(min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def each_backorder_once(self):
+        ids = [allocation.fulfillment_id for allocation in self.allocations]
+        if len(set(ids)) != len(ids):
+            raise ValueError("each backorder may appear only once")
+        return self
 
 
 class StockRead(BaseModel):

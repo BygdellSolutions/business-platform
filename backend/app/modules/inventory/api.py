@@ -10,15 +10,19 @@ from app.core.authz import record_writer
 from app.core.db import get_db
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import get_scoped, get_scoped_or_404, reference_error
-from app.models import Item, User
+from app.models import Customer, Item, User
 from app.modules.inventory import service
 from app.modules.inventory.models import IncomingStock, LineFulfillment, MovementReason, StockMovement
 from app.modules.inventory.schemas import (
+    AllocationConfirm,
+    AllocationProposal,
+    BackorderRead,
     IncomingCreate,
     IncomingRead,
     ItemAvailability,
-    Receipt,
     LineFulfillmentRead,
+    ProposedAllocation,
+    Receipt,
     StockAdjustment,
     StockMovementRead,
     StockRead,
@@ -141,6 +145,77 @@ def read_transaction_fulfillment(
         )
         for row in rows
     ]
+
+
+# --- the backorder backlog and allocation ------------------------------------------------------------------------
+
+
+@availability_router.get("/backorders", response_model=list[BackorderRead])
+def list_backorders(
+    item_id: uuid.UUID | None = None,
+    include_closed: bool = False,
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: Session = Depends(get_db),
+) -> list[BackorderRead]:
+    """Backordered sales, oldest first (any member). By default only those still waiting for something."""
+    query = (
+        select(LineFulfillment, Transaction.transaction_date, Customer.name, Item.name, Item.unit)
+        .join(Transaction, (Transaction.organization_id == LineFulfillment.organization_id) & (Transaction.id == LineFulfillment.transaction_id))
+        .outerjoin(Customer, (Customer.organization_id == Transaction.organization_id) & (Customer.id == Transaction.billing_customer_id))
+        .join(Item, (Item.organization_id == LineFulfillment.organization_id) & (Item.id == LineFulfillment.item_id))
+        .where(LineFulfillment.organization_id == ctx.organization_id, LineFulfillment.backordered > 0)
+    )
+    if item_id is not None:
+        query = query.where(LineFulfillment.item_id == item_id)
+    if not include_closed:
+        query = query.where(LineFulfillment.cancelled_at.is_(None), LineFulfillment.fulfilled_later < LineFulfillment.backordered)
+    rows = db.execute(query.order_by(LineFulfillment.created_at, LineFulfillment.id).limit(MOVEMENTS_SHOWN)).all()
+    stock = service.on_hand(db, ctx.organization_id, [row[0].item_id for row in rows])
+    return [
+        BackorderRead(
+            fulfillment_id=row.id,
+            transaction_id=row.transaction_id,
+            transaction_line_id=row.transaction_line_id,
+            transaction_date=transaction_date,
+            customer_name=customer_name,
+            item_id=row.item_id,
+            item_name=item_name,
+            item_unit=item_unit,
+            backordered=row.backordered,
+            fulfilled_later=row.fulfilled_later,
+            remaining=row.backordered - row.fulfilled_later if row.cancelled_at is None else Decimal(0),
+            state=service.fulfillment_state(row, stock[row.item_id]),
+            created_at=row.created_at,
+        )
+        for row, transaction_date, customer_name, item_name, item_unit in rows
+    ]
+
+
+@availability_router.get("/items/{item_id}/allocation", response_model=AllocationProposal)
+def propose_allocation(item_id: uuid.UUID, ctx: TenantContext = Depends(get_tenant_context), db: Session = Depends(get_db)) -> AllocationProposal:
+    """The oldest-first proposal for sharing the item's stock among its open backorders. Changes nothing."""
+    get_scoped_or_404(db, ctx, Item, item_id)
+    stock, proposal = service.propose_allocation(db, ctx.organization_id, item_id)
+    return AllocationProposal(
+        item_id=item_id,
+        on_hand=stock,
+        proposals=[
+            ProposedAllocation(fulfillment_id=row.id, transaction_id=row.transaction_id, remaining=row.backordered - row.fulfilled_later, proposed=share)
+            for row, share in proposal
+        ],
+    )
+
+
+@availability_router.post("/items/{item_id}/allocation", response_model=list[BackorderRead])
+def confirm_allocation(
+    item_id: uuid.UUID, payload: AllocationConfirm, ctx: TenantContext = Depends(record_writer), db: Session = Depends(get_db)
+) -> list[BackorderRead]:
+    """A person confirms who gets what: each quantity is delivered to that backorder now (who and when are recorded)."""
+    item = get_scoped_or_404(db, ctx, Item, item_id, for_update=True)
+    service.ensure_tracked(item)
+    service.allocate(db, ctx, item, [(allocation.fulfillment_id, allocation.quantity) for allocation in payload.allocations])
+    db.commit()
+    return list_backorders(item_id=item_id, include_closed=True, ctx=ctx, db=db)
 
 
 # --- incoming stock and goods receipt -------------------------------------------------------------------------------

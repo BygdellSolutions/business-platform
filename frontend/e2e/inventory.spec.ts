@@ -107,3 +107,35 @@ test("a delivery on its way is recorded, received in part, and the rest cancelle
   await expect(page.getByTestId("on-hand")).toHaveText("4.000");
   await expect(page.getByTestId("stock-figures")).toContainText("incoming 0.000");
 });
+
+test("received stock goes to waiting sales only when a person confirms the oldest-first proposal", async ({ page, context }) => {
+  world = createWorld({ label: "Backlog" });
+  await signIn(context, world.email);
+  const item = await createItem(context, world.orgId, { name: "Hoof oil", type: "product", unit: "pcs", price_ex_vat: "90.00", track_stock: true });
+  const anna = await createCustomer(context, world.orgId, "Anna Andersson");
+  const club = await createCustomer(context, world.orgId, "Umeå HK");
+  for (const [customer, quantity] of [[anna, "2"], [club, "3"]] as const) {
+    const tx = await createTransaction(context, world.orgId, { billing_customer_id: customer.id });
+    expect((await context.request.post(bffUrl(world.orgId, `/transactions/${tx.id}/lines`), { data: { item_id: item.id, quantity } })).status()).toBe(201);
+    await lifecycle(context, world.orgId, tx.id, "complete");
+  }
+  const incoming = (await (await context.request.post(bffUrl(world.orgId, "/inventory/incoming"), { data: { item_id: item.id, quantity: "4" } })).json()) as { id: string };
+  expect((await context.request.post(bffUrl(world.orgId, `/inventory/incoming/${incoming.id}/receive`), { data: {} })).status()).toBe(200);
+
+  await page.goto(`/o/${world.orgId}/inventory`);
+  await expect(page.getByTestId("backlog-row")).toHaveCount(2);
+
+  await page.goto(`/o/${world.orgId}/catalog/${item.id}`);
+  const panel = page.getByTestId("backorders-panel");
+  await expect(panel.getByTestId("backorder-state")).toHaveText(["Ready to fulfill", "Ready to fulfill"]);
+  await panel.getByTestId("propose-allocation").click();
+  await expect(panel.getByTestId("allocation-proposed")).toContainText("from 4.000 on hand");
+  await expect(panel.getByTestId("allocation-quantity").first()).toHaveValue("2.000");
+  await expect(panel.getByTestId("allocation-quantity").last()).toHaveValue("2.000");
+  await panel.getByTestId("confirm-allocation").click();
+
+  await expect(panel.getByTestId("backorder-row")).toHaveCount(1); // Anna's sale is fulfilled; Umeå HK still waits for 1
+  await expect(panel.getByTestId("backorder-row")).toContainText("Umeå HK");
+  await expect(panel.getByTestId("backorder-row")).toContainText("1.000 pcs");
+  await expect(page.getByTestId("on-hand")).toHaveText("0.000");
+});

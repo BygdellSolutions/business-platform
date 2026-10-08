@@ -244,6 +244,30 @@ export interface Incoming {
   cancelled_at: string | null;
 }
 
+/** A completed sale's units still waiting for stock (GET /api/inventory/backorders), oldest first. */
+export interface Backorder {
+  fulfillment_id: string;
+  transaction_id: string;
+  transaction_line_id: string;
+  transaction_date: string;
+  customer_name: string | null;
+  item_id: string;
+  item_name: string;
+  item_unit: string;
+  backordered: QuantityString;
+  fulfilled_later: QuantityString;
+  remaining: QuantityString;
+  state: LineFulfillment["state"];
+  created_at: string;
+}
+
+/** How the stock on hand WOULD be shared, oldest first (GET /api/inventory/items/{id}/allocation). */
+export interface AllocationProposal {
+  item_id: string;
+  on_hand: QuantityString;
+  proposals: { fulfillment_id: string; transaction_id: string; remaining: QuantityString; proposed: QuantityString }[];
+}
+
 export interface Stock {
   item_id: string;
   track_stock: boolean;
