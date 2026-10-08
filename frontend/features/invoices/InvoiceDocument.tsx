@@ -189,6 +189,7 @@ function Party({ title, testId, party }: { title: string; testId: string; party:
       <div data-testid={`party-${testId}-name`} className="font-medium">
         {name}
       </div>
+      {party.our_reference && <div data-testid={`party-${testId}-reference`}>Our reference: {party.our_reference}</div>}
       {lines.map((line) => (
         <div key={line}>{line}</div>
       ))}

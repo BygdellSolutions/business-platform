@@ -219,7 +219,7 @@ def create_draft(db: Session, ctx: TenantContext, payload: InvoiceCreate) -> uui
                 customer_id=customer.id,
                 currency=ordered[0].currency,
                 customer_snapshot=snapshot,
-                issuer_snapshot=snapshots.issuer_snapshot(organization),
+                issuer_snapshot=snapshots.issuer_snapshot(organization, ctx.user.name),
                 customer_name=customer.name,
                 invoice_date=invoice_date,
                 due_date=due_date,
@@ -539,7 +539,7 @@ def issue(db: Session, ctx: TenantContext, invoice_id: uuid.UUID, if_match: str 
         assert customer is not None and organization is not None
         invoice.customer_snapshot = snapshots.customer_snapshot(customer)
         invoice.customer_name = customer.name
-        invoice.issuer_snapshot = snapshots.issuer_snapshot(organization)
+        invoice.issuer_snapshot = snapshots.issuer_snapshot(organization, ctx.user.name)
         transaction_fields = custom_fields.read_values(db, ctx, TRANSACTION, [l.transaction_id for l in links], flag=INVOICE_FLAG)
         line_fields = custom_fields.read_values(db, ctx, TRANSACTION_LINE, [l.source_line_id for l in lines], flag=INVOICE_FLAG)
         for link in links:

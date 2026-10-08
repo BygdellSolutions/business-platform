@@ -48,7 +48,7 @@ def customer_snapshot(customer: Customer) -> dict[str, Any]:
     }
 
 
-def issuer_snapshot(organization: Organization) -> dict[str, Any]:
+def issuer_snapshot(organization: Organization, our_reference: str | None = None) -> dict[str, Any]:
     """The seller, as it is now (the organization's own profile; its default currency is not
     part of it: the invoice carries the currency of its sources). Schema 2: also contact, payment
     details, F-tax and the document language, so an issued invoice never depends on today's settings."""
@@ -59,6 +59,9 @@ def issuer_snapshot(organization: Organization) -> dict[str, Any]:
         "legal_name": organization.legal_name,
         **{field: getattr(organization, field) for field in PROFILE_FIELDS},
         **{field: getattr(organization, field) for field in ISSUER_FIELDS},
+        # Schema 3: the person at the seller the customer can turn to ("Vår referens"): who issued the invoice (who
+        # created the draft until then), by name as it was at that moment.
+        "our_reference": our_reference,
     }
 
 

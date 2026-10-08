@@ -64,7 +64,7 @@ def test_an_invoice_keeps_the_payment_details_and_takes_its_due_date_from_the_te
 
     assert invoice["due_date"] == "2026-11-07" and explicit["due_date"] == "2026-10-20"
     snapshot = invoice["issuer_snapshot"]
-    assert snapshot["schema"] == 2
+    assert snapshot["schema"] == 3 and snapshot["our_reference"]  # who made the draft, until it is issued
     assert {key: snapshot[key] for key in PROFILE} == {**PROFILE, "iban": "SE4550000000058398257466", "bic": "ESLSSESS"}
 
     # Issuing re-takes the snapshot; changing the settings afterwards never changes the issued invoice.
@@ -78,3 +78,20 @@ def test_an_invoice_keeps_the_payment_details_and_takes_its_due_date_from_the_te
 def test_without_payment_terms_an_invoice_has_no_due_date_unless_given(client: TestClient, db_session: Session, sales):
     invoice = draft_invoice(client, sales.headers, completed(db_session, sales.org, sales.billing), invoice_date=str(date(2026, 10, 8)))
     assert invoice["due_date"] is None
+
+
+def test_our_reference_is_who_issued_the_invoice_by_name_at_that_moment(client: TestClient, db_session: Session, sales):
+    from app.models import User
+    from tests.factories import add_member, make_user
+
+    issuer = make_user(db_session, name="Tina Accountant")
+    add_member(db_session, sales.org, issuer, Role.ACCOUNTANT)
+    headers = {"X-Dev-User-Email": issuer.email}
+    draft = draft_invoice(client, sales.headers, completed(db_session, sales.org, sales.billing))
+
+    issued = issue(client, headers, draft)
+    db_session.get(User, issuer.id).name = "Tina Renamed"
+    db_session.flush()
+
+    assert issued["issuer_snapshot"]["our_reference"] == "Tina Accountant"
+    assert client.get(f"/api/invoices/{issued['id']}", headers=headers).json()["issuer_snapshot"]["our_reference"] == "Tina Accountant"

@@ -608,6 +608,8 @@ export interface PartySnapshot {
   country_code: string | null;
   registration_number: string | null;
   vat_number: string | null;
+  /** Seller only (issuer snapshot schema 3): who issued the invoice, by name at that moment. */
+  our_reference?: string | null;
 }
 
 export interface Invoice extends InvoiceSummary {

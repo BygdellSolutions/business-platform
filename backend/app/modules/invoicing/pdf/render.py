@@ -40,7 +40,8 @@ from app.modules.invoicing.pdf.labels import decimal_separator, labels
 # 3: one layout for every language (accent header, the customer beside an "amount due" box, a coloured table head,
 #    the amount due emphasised, a payment section on every invoice). What is not stored is left out, never invented.
 # 4: the sender labelled From / Från, and a four-column seller footer on every page.
-TEMPLATE_VERSION = 4
+# 5: "Our reference" / "Vår referens" under the seller's name: who issued the invoice.
+TEMPLATE_VERSION = 5
 ACCENT = colors.HexColor("#1f4e5f")
 ACCENT_LIGHT = colors.HexColor("#e8f0f2")
 # Room for the footer columns (up to five lines each) above the page number.
@@ -146,7 +147,8 @@ def _used(widths: list[float]) -> float:
 
 
 def _party_flowables(printer: _Printer, party: PdfParty, name_kind: str) -> list:
-    return [printer.p(party.name, name_kind), *[printer.p(line) for line in party.lines]]
+    reference = [printer.p(party.reference, "bold")] if party.reference else []
+    return [printer.p(party.name, name_kind), *reference, *[printer.p(line) for line in party.lines]]
 
 
 def _fields(printer: _Printer, fields: tuple[PdfField, ...], kind: str) -> list[Paragraph]:

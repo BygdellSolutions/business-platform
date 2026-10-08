@@ -381,7 +381,7 @@ def test_a_different_document_renders_to_different_bytes():
 
 
 def test_the_renderer_identifies_itself_with_library_and_font_versions():
-    assert TEMPLATE_VERSION == 4
+    assert TEMPLATE_VERSION == 5
     assert renderer_identity().startswith("reportlab ") and "bundled Noto fonts" in renderer_identity()
 
 
@@ -486,7 +486,7 @@ def test_the_font_layer_refuses_unsupported_characters_by_itself_not_only_throug
 # The layout code as of TEMPLATE_VERSION. A download serves the stored PDF of the CURRENT template version, so a
 # change to what is printed without a new version would leave earlier downloads looking old. When this fails: bump
 # TEMPLATE_VERSION in render.py, then update both values here.
-PINNED_TEMPLATE = (4, "9d7c3dced3f2d644c4a9c826415b15f92f1127dbb46b5448a2621dbf82a96b96")
+PINNED_TEMPLATE = (5, "cc42f57735e4f4096987971a9fceb5590869c3c55e450b2159cf77e906299c17")
 
 
 def test_a_change_to_the_printed_layout_comes_with_a_new_template_version():

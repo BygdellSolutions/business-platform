@@ -55,6 +55,8 @@ class PdfField(Frozen):
 class PdfParty(Frozen):
     name: str
     lines: tuple[str, ...]  # address and identifier lines, only those that are stored
+    # The seller's contact person on this invoice ("Vår referens: Anna Andersson"), already worded; None if not stored.
+    reference: str | None = None
 
 
 class PdfLine(Frozen):
@@ -176,6 +178,8 @@ def iter_strings(document: PdfDocument):
     for party in (document.issuer, document.customer):
         yield party.name
         yield from party.lines
+        if party.reference is not None:
+            yield party.reference
     for source in document.sources:
         yield source.date
         for field in source.fields:

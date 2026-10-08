@@ -330,11 +330,12 @@ def test_party_snapshots_hold_only_fields_that_exist(client, db_session, sales):
         "postal_code": None, "city": "Umeå", "country_code": "SE", "registration_number": None, "vat_number": "SE1",
     }
     assert body["issuer_snapshot"] == {
-        "schema": 2, "organization_id": str(sales.org.id), "name": "Solo", "legal_name": "Solo AB",
+        "schema": 3, "organization_id": str(sales.org.id), "name": "Solo", "legal_name": "Solo AB",
         "address_line1": None, "address_line2": None, "postal_code": None, "city": "Umeå",
         "country_code": None, "registration_number": None, "vat_number": "SE556000000101",
         "phone": None, "email": None, "website": None, "bankgiro": None, "plusgiro": None, "iban": None, "bic": None,
         "payment_terms_days": None, "approved_for_f_tax": None, "document_language": None,
+        "our_reference": body["issuer_snapshot"]["our_reference"],
     }
     assert body["customer_name"] == "Umeå HK"
 

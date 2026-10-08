@@ -112,3 +112,12 @@ def test_the_sender_is_labelled_and_the_footer_has_the_standard_columns():
 def test_a_footer_column_with_nothing_stored_is_left_out():
     document = document_from_invoice(stored())  # no contact or payment details stored
     assert [column[0] for column in document.issuer_footer] == ["Fredrik Horse Therapy AB", "Registration no. 556000-0001"]
+
+
+def test_our_reference_is_printed_under_the_sellers_name_and_left_out_when_not_stored():
+    with_reference = pdf_text(render_pdf(document_from_invoice(_swedish(our_reference="Tina Accountant"))))
+    without = pdf_text(render_pdf(document_from_invoice(_swedish())))
+
+    assert "Vår referens: Tina Accountant" in with_reference
+    assert with_reference.index("Fredrik Horse Therapy AB") < with_reference.index("Vår referens: Tina Accountant") < with_reference.index("Storgatan 1")
+    assert "Vår referens" not in without

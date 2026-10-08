@@ -130,7 +130,9 @@ def document_from_invoice(invoice: Any) -> PdfDocument:
         due_date=_text(data["due_date"]) if data.get("due_date") else None,
         currency=_text(data["currency"]),
         description=_text(data["description"]) if data.get("description") else None,
-        issuer=_party(issuer, prefer_legal_name=True, words=words),
+        issuer=_party(issuer, prefer_legal_name=True, words=words).model_copy(
+            update={"reference": _text(f"{words['our_reference']}: {issuer['our_reference']}") if issuer.get("our_reference") else None}
+        ),
         customer=_party(data["customer_snapshot"], prefer_legal_name=False, words=words),
         sources=tuple(PdfSource(date=_text(source["transaction_date"]), fields=_fields(source["fields"])) for source in data["transactions"]),
         lines=tuple(
