@@ -1,4 +1,4 @@
-"""Getting an invoice's PDF: the frozen artifact, created on first download.
+"""Getting an invoice's PDF: the frozen artifact of the CURRENT template, created on first download.
 
 Flow (no database row lock and no open transaction is held while ReportLab renders):
 
@@ -12,8 +12,9 @@ Flow (no database row lock and no open transaction is held while ReportLab rende
        that lost the race discards its own rendering and serves the winner's.
 
 Concurrent first downloads may therefore render twice; exactly one artifact becomes canonical, and
-every caller ends up with that artifact's bytes. After that, rendering never happens again for the
-invoice: a later change of the template, the fonts or the library does not touch it.
+every caller ends up with that artifact's bytes. A stored artifact is never changed: when the template changes, the
+next download renders a NEW artifact with the current template (same invoice content) and serves that one; the older
+artifacts stay stored as history (owner decision 2026-10-08: the current template at all times).
 """
 
 import hashlib
@@ -49,7 +50,14 @@ class StoredPdf:
 
 
 def _stored(db: Session, ctx: TenantContext, invoice_id: uuid.UUID) -> InvoicePdf | None:
-    return db.scalar(select(InvoicePdf).where(InvoicePdf.organization_id == ctx.organization_id, InvoicePdf.invoice_id == invoice_id))
+    """The invoice's artifact made with the current template, if there is one."""
+    return db.scalar(
+        select(InvoicePdf).where(
+            InvoicePdf.organization_id == ctx.organization_id,
+            InvoicePdf.invoice_id == invoice_id,
+            InvoicePdf.template_version == render.TEMPLATE_VERSION,
+        )
+    )
 
 
 def _refusal(error: Exception) -> HTTPException:
@@ -103,7 +111,7 @@ def get_or_create_pdf(db: Session, ctx: TenantContext, invoice_id: uuid.UUID) ->
             template_version=render.TEMPLATE_VERSION,
             source_sha256=source_sha256(document),
         )
-        .on_conflict_do_nothing(index_elements=[InvoicePdf.organization_id, InvoicePdf.invoice_id])
+        .on_conflict_do_nothing(index_elements=[InvoicePdf.organization_id, InvoicePdf.invoice_id, InvoicePdf.template_version])
     )
     db.commit()
 

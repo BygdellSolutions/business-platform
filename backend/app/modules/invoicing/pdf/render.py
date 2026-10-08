@@ -35,9 +35,13 @@ from app.modules.invoicing.pdf.document import DocumentTooLarge, PdfDocument, Pd
 from app.modules.invoicing.pdf.format import money, trimmed
 from app.modules.invoicing.pdf.labels import decimal_separator, labels
 
-# 2: the document's language (English prints what template 1 printed), payment details, F-tax, delivery dates, the
-# seller's identifiers on every page, and the discount steps and service details under a line.
-TEMPLATE_VERSION = 2
+# 2: the document's language, payment details, F-tax, delivery dates, the seller's identifiers on every page, and the
+#    discount steps and service details under a line.
+# 3: one layout for every language (accent header, the customer beside an "amount due" box, a coloured table head,
+#    the amount due emphasised, a payment section on every invoice). What is not stored is left out, never invented.
+TEMPLATE_VERSION = 3
+ACCENT = colors.HexColor("#1f4e5f")
+ACCENT_LIGHT = colors.HexColor("#e8f0f2")
 MIN_DESCRIPTION_WIDTH = 90  # points
 MAX_OUTPUT_BYTES = 64 * 1024 * 1024  # defensive: a rendering that large is a bug, not an invoice
 
@@ -62,12 +66,16 @@ KINDS = {
     "body": ("regular", 9, 12, 0, colors.black),
     "bold": ("bold", 9, 12, 0, colors.black),
     "label": ("bold", 8, 11, 0, colors.HexColor("#555555")),
-    "title": ("bold", 20, 24, 2, colors.black),
+    "title": ("bold", 22, 26, 2, colors.HexColor("#1f4e5f")),
+    "box_label": ("bold", 8, 11, 0, colors.HexColor("#1f4e5f")),
+    "due_label": ("bold", 8, 11, 2, colors.HexColor("#1f4e5f")),
+    "due_value": ("bold", 16, 20, 2, colors.black),
+    "due_note": ("regular", 8, 11, 2, colors.HexColor("#444444")),
     "issuer": ("bold", 12, 15, 0, colors.black),
     "cell": ("regular", 8, 10, 0, colors.black),
     "cell_right": ("regular", 8, 10, 2, colors.black),
-    "cell_head": ("bold", 8, 10, 0, colors.black),
-    "cell_head_right": ("bold", 8, 10, 2, colors.black),
+    "cell_head": ("bold", 8, 10, 0, colors.white),
+    "cell_head_right": ("bold", 8, 10, 2, colors.white),
     "cell_note": ("italic", 7, 9, 0, colors.HexColor("#444444")),
     "total_label": ("bold", 9, 12, 0, colors.black),
     "total_value": ("bold", 9, 12, 2, colors.black),
@@ -75,7 +83,7 @@ KINDS = {
 }
 # Figures are laid out without CJK wrapping: ReportLab's CJK mode treats a no-break space as a break opportunity,
 # which would split a grouped amount ("1 062.50") between its digit groups.
-NUMERIC_KINDS = {"cell_right", "cell_head_right", "total_value"}
+NUMERIC_KINDS = {"cell_right", "cell_head_right", "total_value", "due_value"}
 _STYLES: dict[str, ParagraphStyle] = {}
 
 
@@ -203,10 +211,42 @@ def _build(document: PdfDocument, fonts: font_layer.Registered) -> bytes:
     detail_table = Table([[printer.p(label, "label"), printer.p(value, "body")] for label, value in details], colWidths=[28 * mm, 36 * mm], hAlign="RIGHT")
     detail_table.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0), ("TOPPADDING", (0, 0), (-1, -1), 1), ("BOTTOMPADDING", (0, 0), (-1, -1), 1)]))
     header = Table([[_party_flowables(printer, document.issuer, "issuer"), [printer.p(words["invoice"], "title"), Spacer(1, 4), detail_table]]], colWidths=[width * 0.52, width * 0.48])
-    header.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0)]))
-    story += [header, Spacer(1, 10 * mm)]
+    header.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+                ("LINEBELOW", (0, 0), (-1, 0), 1.5, ACCENT),
+            ]
+        )
+    )
+    story += [header, Spacer(1, 7 * mm)]
 
-    story += [printer.p(words["billed_to"], "label"), *_party_flowables(printer, document.customer, "bold"), Spacer(1, 6 * mm)]
+    # The customer, and beside it what is to be paid and by when (always: the stored total and due date).
+    due = [printer.p(words["amount_due"], "due_label"), printer.p(f"{money(document.gross, sep)} {document.currency}", "due_value")]
+    if document.due_date is not None:
+        due.append(printer.p(f"{words['due_date']} {document.due_date}", "due_note"))
+    due.append(printer.p(f"{words['reference']} {document.number_text}", "due_note"))
+    parties = Table(
+        [[[printer.p(words["billed_to"], "box_label"), Spacer(1, 2), *_party_flowables(printer, document.customer, "bold")], due]],
+        colWidths=[width * 0.58, width * 0.42],
+    )
+    parties.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("BACKGROUND", (1, 0), (1, 0), ACCENT_LIGHT),
+                ("LEFTPADDING", (0, 0), (0, 0), 0),
+                ("LEFTPADDING", (1, 0), (1, 0), 8),
+                ("RIGHTPADDING", (1, 0), (1, 0), 8),
+                ("TOPPADDING", (1, 0), (1, 0), 6),
+                ("BOTTOMPADDING", (1, 0), (1, 0), 6),
+            ]
+        )
+    )
+    story += [parties, Spacer(1, 7 * mm)]
 
     if document.description:
         story += [printer.p(words["description"], "label"), printer.p(document.description), Spacer(1, 5 * mm)]
@@ -271,7 +311,7 @@ def _build(document: PdfDocument, fonts: font_layer.Registered) -> bytes:
             TableStyle(
                 [
                     ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eeeeee")),
+                    ("BACKGROUND", (0, 0), (-1, 0), ACCENT),
                     ("LINEBELOW", (0, 0), (-1, 0), 0.6, colors.black),
                     ("LINEBELOW", (0, 1), (-1, -1), 0.25, colors.HexColor("#bbbbbb")),
                     ("LEFTPADDING", (0, 0), (-1, -1), 3),
@@ -295,7 +335,7 @@ def _build(document: PdfDocument, fonts: font_layer.Registered) -> bytes:
             _column_width([money(row.vat, sep) for row in document.vat_rows], "cell_right", 70),
         ]
         vat_table = Table(breakdown, colWidths=vat_widths, hAlign="RIGHT")
-        vat_table.setStyle(TableStyle([("LINEBELOW", (0, 0), (-1, 0), 0.6, colors.black), ("LEFTPADDING", (0, 0), (-1, -1), 3), ("RIGHTPADDING", (0, 0), (-1, -1), 3)]))
+        vat_table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), ACCENT), ("LEFTPADDING", (0, 0), (-1, -1), 3), ("RIGHTPADDING", (0, 0), (-1, -1), 3)]))
         closing += [vat_table, Spacer(1, 4 * mm)]
     totals = Table(
         [
@@ -306,22 +346,42 @@ def _build(document: PdfDocument, fonts: font_layer.Registered) -> bytes:
         colWidths=[110, _column_width([money(document.net, sep), money(document.vat, sep), money(document.gross, sep)], "total_value", 80)],
         hAlign="RIGHT",
     )
-    totals.setStyle(TableStyle([("LINEABOVE", (0, 2), (-1, 2), 0.8, colors.black), ("LEFTPADDING", (0, 0), (-1, -1), 3), ("RIGHTPADDING", (0, 0), (-1, -1), 3)]))
+    totals.setStyle(
+        TableStyle(
+            [
+                ("LINEABOVE", (0, 2), (-1, 2), 1.2, ACCENT),
+                ("BACKGROUND", (0, 2), (-1, 2), ACCENT_LIGHT),
+                ("LEFTPADDING", (0, 0), (-1, -1), 3),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+            ]
+        )
+    )
     closing.append(totals)
     story.append(KeepTogether(closing))
 
-    # How to pay: only what the issuer snapshot stores (schema 2), with the invoice number as the reference.
-    if document.payment is not None:
-        payment = document.payment
-        rows = [(words[key], value) for key, value in (("bankgiro", payment.bankgiro), ("plusgiro", payment.plusgiro), ("iban", payment.iban), ("bic", payment.bic)) if value]
-        rows.append((words["reference"], payment.reference))
-        if document.due_date is not None:
-            rows.append((words["due_date"], document.due_date))
+    # How to pay, on every invoice: the reference (the invoice number) and due date always, then whatever the issuer
+    # snapshot stores (bankgiro, plusgiro, IBAN, BIC, terms). Nothing that is not stored is printed.
+    payment = document.payment
+    rows: list[tuple[str, str]] = [(words["reference"], document.number_text)]
+    if document.due_date is not None:
+        rows.append((words["due_date"], document.due_date))
+    if payment is not None:
+        rows += [(words[key], value) for key, value in (("bankgiro", payment.bankgiro), ("plusgiro", payment.plusgiro), ("iban", payment.iban), ("bic", payment.bic)) if value]
         if payment.terms_days is not None:
             rows.append((words["terms"], words["terms_days"].format(days=payment.terms_days)))
-        pay_table = Table([[printer.p(label, "label"), printer.p(value, "body")] for label, value in rows], colWidths=[34 * mm, width - 34 * mm])
-        pay_table.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("TOPPADDING", (0, 0), (-1, -1), 1), ("BOTTOMPADDING", (0, 0), (-1, -1), 1)]))
-        story.append(KeepTogether([Spacer(1, 8 * mm), printer.p(words["payment"], "bold"), Spacer(1, 2), pay_table]))
+    pay_table = Table([[printer.p(label, "label"), printer.p(value, "body")] for label, value in rows], colWidths=[36 * mm, width - 36 * mm - 16])
+    pay_table.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("BOX", (0, 0), (-1, -1), 0.6, ACCENT),
+                ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                ("TOPPADDING", (0, 0), (-1, -1), 2),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+            ]
+        )
+    )
+    story.append(KeepTogether([Spacer(1, 8 * mm), printer.p(words["payment"], "box_label"), Spacer(1, 2), pay_table]))
 
     doc.build(story, canvasmaker=_numbered_canvas(footer))
     data = buffer.getvalue()

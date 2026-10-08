@@ -74,12 +74,14 @@ def test_discount_steps_and_service_details_are_printed_under_the_line():
     assert "Service for Kalle" in text and "Stiff left shoulder" in text and "−20 % campaign" in text
 
 
-def test_a_schema_1_snapshot_prints_in_english_without_a_payment_block():
+def test_a_schema_1_snapshot_prints_in_english_with_only_the_reference_to_pay_by():
     document = document_from_invoice(stored())  # the fixture's issuer snapshot has no schema-2 fields
 
     assert document.language == "en" and document.payment is None and document.approved_for_f_tax is False
     text = pdf_text(render_pdf(document))
-    assert "Invoice no." in text and "Payment" not in text and "F-tax" not in text
+    assert "Invoice no." in text and "F-tax" not in text
+    # The payment section is on every invoice, with only what is stored: the reference, nothing invented.
+    assert "Payment reference" in text and "Bankgiro" not in text and "IBAN" not in text
 
 
 def test_nothing_prints_n_a_or_an_empty_label():

@@ -268,9 +268,11 @@ class InvoiceCounter(Base):
 
 
 class InvoicePdf(TenantOwned, Base):
-    """The frozen PDF of an issued invoice: the bytes first served, stored once and served forever.
+    """A frozen PDF of an issued invoice, per template version: rendered once and never changed.
 
-    One per invoice. Never updated or deleted (a trigger refuses both) and only an ISSUED invoice can
+    One per invoice AND template version (owner decision 2026-10-08: the current template is used at all times). A
+    download serves the artifact of the current template, creating it on first need; artifacts of older templates stay
+    stored, unchanged, as history. Never updated or deleted (a trigger refuses both) and only an ISSUED invoice can
     have one. `source_sha256` is the hash of the canonical document the PDF was rendered from, so the
     artifact can always be checked against the immutable invoice; `renderer` and `template_version`
     say what produced it. The bytes live here (not in a file store) so they are backed up, restored and
@@ -279,7 +281,7 @@ class InvoicePdf(TenantOwned, Base):
 
     __tablename__ = "invoice_pdfs"
     __table_args__ = (
-        UniqueConstraint("organization_id", "invoice_id", name="uq_invoice_pdfs_one_per_invoice"),
+        UniqueConstraint("organization_id", "invoice_id", "template_version", name="uq_invoice_pdfs_one_per_template"),
         ForeignKeyConstraint(
             ["organization_id", "invoice_id"],
             ["invoices.organization_id", "invoices.id"],

@@ -39,7 +39,7 @@ def test_the_invoice_prints_its_stored_content():
 
 def test_nothing_that_is_not_stored_is_invented():
     text = pdf_text(render_pdf(document(due_date=None, description=None, issuer=document().issuer.model_copy(update={"lines": ()}))))
-    for invented in ("IBAN", "Bankgiro", "Plusgiro", "Payment", "Swish", "QR", "Due date", "bank"):
+    for invented in ("IBAN", "Bankgiro", "Plusgiro", "Swish", "QR", "Due date", "bank"):
         assert invented not in text, invented
 
 
@@ -59,7 +59,7 @@ def test_totals_and_the_vat_breakdown_are_printed_exactly_once_each():
     text = pdf_text(data)
     for label in ("Net total (SEK)", "VAT total (SEK)", "Gross total (SEK)", "VAT rate (%)"):
         assert text.count(label) == 1, label
-    assert "1 168.50" in text and text.count("1 168.50") == 1
+    assert text.count("1 168.50") == 2  # the gross total, and the same stored figure as the amount due
     rows = [row for row in text.splitlines() if row.strip() in ("6", "25")]
     assert rows  # both rates were printed in the breakdown
 
@@ -381,7 +381,7 @@ def test_a_different_document_renders_to_different_bytes():
 
 
 def test_the_renderer_identifies_itself_with_library_and_font_versions():
-    assert TEMPLATE_VERSION == 2
+    assert TEMPLATE_VERSION == 3
     assert renderer_identity().startswith("reportlab ") and "bundled Noto fonts" in renderer_identity()
 
 
@@ -409,7 +409,7 @@ def test_the_widest_valid_figures_stay_on_the_page_and_never_overlap_each_other(
         for (x1, w1), (x2, _) in zip(cells, cells[1:]):
             assert x1 + w1 <= x2 + 0.5, "two pieces of text overlap"
     text = running_text(data)
-    assert text.count("9999999999999999.99") == 3  # the three invoice totals, whole
+    assert text.count("9999999999999999.99") == 4  # the three invoice totals and the amount due, whole
     assert text.replace("9999999999999999.99", "").count("999999999999.99") == 3  # the three line amounts, whole
     assert "9999999999.99" in text and "999999999.999" in text
 
