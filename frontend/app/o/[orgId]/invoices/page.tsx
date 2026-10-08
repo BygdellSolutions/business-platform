@@ -15,8 +15,8 @@ import { serverRead, serverReadOrNull } from "@/lib/server-api";
 
 const STATUSES = ["draft", "issued"] as const;
 // Exactly the filters GET /api/invoices supports: status, customer, invoice date range, search (customer name or number).
-const PAYMENTS = ["open", "unpaid", "partially_paid", "paid"] as const;
-const EXTRAS: Record<string, ExtraSpec> = { status: STATUSES, payment: PAYMENTS, date_from: "date", date_to: "date" };
+const PAYMENTS = ["open", "overdue", "not_yet_due", "unpaid", "partially_paid", "paid"] as const;
+const EXTRAS: Record<string, ExtraSpec> = { status: STATUSES, payment: PAYMENTS, date_from: "date", date_to: "date", paid_from: "date", paid_to: "date" };
 const CONTROL = "rounded border border-zinc-400 px-2 py-1 text-sm dark:bg-zinc-900";
 
 /**
@@ -62,6 +62,15 @@ export default async function InvoicesPage({
       </div>
       {first(raw.deleted) === "1" && <Notice testId="deleted">Draft deleted. Its transactions can be invoiced again.</Notice>}
 
+      {(list.extra.paid_from || list.extra.paid_to) && (
+        <Notice testId="paid-period">
+          Invoices with a payment {list.extra.paid_from ? `from ${list.extra.paid_from} ` : ""}
+          {list.extra.paid_to ? `to ${list.extra.paid_to}` : ""}.{" "}
+          <Link href={base} className="underline">
+            Show all
+          </Link>
+        </Notice>
+      )}
       <ListFilters action={base} params={list} activeStatus={false}>
         <label className="flex flex-col gap-1 text-sm">
           Status
@@ -76,6 +85,8 @@ export default async function InvoicesPage({
           <select name="payment" defaultValue={list.extra.payment ?? ""} className={CONTROL}>
             <option value="">All</option>
             <option value="open">Not fully paid</option>
+            <option value="overdue">Overdue</option>
+            <option value="not_yet_due">Not yet due</option>
             <option value="unpaid">Unpaid</option>
             <option value="partially_paid">Partially paid</option>
             <option value="paid">Paid</option>

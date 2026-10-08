@@ -85,7 +85,7 @@ export default async function Dashboard({
             title="Past due date"
             count={invoicing.past_due.count}
             amounts={invoicing.past_due.amounts}
-            href={`${base}/invoices?payment=open`}
+            href={`${base}/invoices?payment=overdue`}
             note="Issued, past the due date and not fully paid: what is still outstanding."
             testId="card-past-due"
             tone="attention"
@@ -97,17 +97,17 @@ export default async function Dashboard({
         <section aria-label="Stock" className="flex flex-col gap-2">
           <h2 className="text-lg font-semibold">Stock</h2>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <SummaryCard title="Out of stock" count={inventory.out_of_stock} href={`${base}/catalog?type=product`} testId="card-out-of-stock" tone="attention" />
-            <SummaryCard title="Low stock" count={inventory.low_stock} href={`${base}/catalog?type=product`} testId="card-low-stock" tone="attention" />
+            <SummaryCard title="Out of stock" count={inventory.out_of_stock} href={`${base}/inventory?state=out_of_stock`} testId="card-out-of-stock" tone="attention" />
+            <SummaryCard title="Low stock" count={inventory.low_stock} href={`${base}/inventory?state=low_stock`} testId="card-low-stock" tone="attention" />
             <SummaryCard
               title="Sales waiting for stock"
               count={inventory.open_backorders}
               note={inventory.backordered_items > 0 ? `${inventory.backordered_items} product(s)` : undefined}
-              href={`${base}/inventory`}
+              href={`${base}/inventory?state=backordered`}
               testId="card-backorders"
               tone="attention"
             />
-            <SummaryCard title="Deliveries on their way" count={inventory.incoming_deliveries} href={`${base}/inventory`} testId="card-incoming" />
+            <SummaryCard title="Deliveries on their way" count={inventory.incoming_deliveries} href={`${base}/inventory?state=incoming`} testId="card-incoming" />
           </div>
         </section>
       )}
@@ -127,7 +127,7 @@ export default async function Dashboard({
             title="Not yet due"
             count={invoicing.not_yet_due.count}
             amounts={invoicing.not_yet_due.amounts}
-            href={`${base}/invoices?payment=open`}
+            href={`${base}/invoices?payment=not_yet_due`}
             note="Outstanding, due date not passed (or none)."
             testId="card-not-yet-due"
           />
@@ -189,7 +189,7 @@ export default async function Dashboard({
             title="Paid"
             count={invoicing.paid_this_month.count}
             amounts={invoicing.paid_this_month.amounts}
-            href={`${base}/invoices?payment=paid`}
+            href={`${base}/invoices?paid_from=${sales.month_start}&paid_to=${sales.month_end}`}
             note="Payments with a payment date in this month."
             testId="card-paid"
           />
@@ -222,7 +222,7 @@ export default async function Dashboard({
             title="Paid"
             count={invoicing.paid_this_year.count}
             amounts={invoicing.paid_this_year.amounts}
-            href={`${base}/invoices?payment=paid`}
+            href={`${base}/invoices?paid_from=${sales.year_start}&paid_to=${sales.year_end}`}
             note="Payments with a payment date in this year."
             testId="card-year-paid"
           />

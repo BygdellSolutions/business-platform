@@ -237,9 +237,13 @@ def list_invoices(
     date_from: date | None = None,
     date_to: date | None = None,
     q: str | None = Query(default=None, max_length=255, description="Customer name or invoice number contains"),
-    payment: Literal["unpaid", "partially_paid", "paid", "open"] | None = Query(
-        default=None, description="Issued invoices by payment state; 'open' is anything not fully paid"
+    payment: Literal["unpaid", "partially_paid", "paid", "open", "overdue", "not_yet_due"] | None = Query(
+        default=None,
+        description="Issued invoices by payment state; 'open' is anything not fully paid, 'overdue' open and past the due "
+        "date, 'not_yet_due' open with the due date today or later (or none)",
     ),
+    paid_from: date | None = Query(default=None, description="Invoices with a payment dated on or after this day"),
+    paid_to: date | None = Query(default=None, description="Invoices with a payment dated on or before this day"),
     page: Pagination = Depends(pagination),
     ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
@@ -256,6 +260,20 @@ def list_invoices(
             query = query.where(paid >= Invoice.gross_amount)
         else:
             query = query.where(paid < Invoice.gross_amount)
+            if payment in ("overdue", "not_yet_due"):
+                today = organization_today(db, ctx.organization_id)
+                if payment == "overdue":
+                    query = query.where(Invoice.due_date.is_not(None), Invoice.due_date < today)
+                else:
+                    query = query.where(or_(Invoice.due_date.is_(None), Invoice.due_date >= today))
+    if paid_from is not None or paid_to is not None:
+        # The dashboard's "Paid" figures: invoices that received a payment in the period (reversals are not payments).
+        dated = [InvoicePayment.organization_id == Invoice.organization_id, InvoicePayment.invoice_id == Invoice.id, InvoicePayment.reverses_payment_id.is_(None)]
+        if paid_from is not None:
+            dated.append(InvoicePayment.paid_on >= paid_from)
+        if paid_to is not None:
+            dated.append(InvoicePayment.paid_on <= paid_to)
+        query = query.where(exists().where(*dated))
     if status_filter is not None:
         query = query.where(Invoice.status == status_filter)
     if customer_id is not None:

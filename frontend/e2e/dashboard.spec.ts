@@ -1,6 +1,6 @@
 import { expect, test } from "./fixtures";
 
-import { createCompletedTransaction, createCustomer, createInvoiceApi, createTransaction, createWorld, issueInvoiceApi, organizationToday, signIn, type World } from "./support";
+import { createCompletedTransaction, createCustomer, createInvoiceApi, createItem, createTransaction, createWorld, issueInvoiceApi, organizationToday, signIn, type World } from "./support";
 
 /**
  * Slice 13: the owner's dashboard shows what needs doing and how the month is going, for this organization only, and
@@ -55,4 +55,32 @@ test("the month can be chosen, and pending shows what is not yet paid", async ({
 
   await page.goto(`/o/${world.orgId}?month=2999-01`); // the future: shown as the current month
   await expect(page.getByTestId("month-heading")).toContainText("This month");
+});
+
+test("every card opens the list filtered to what its title says", async ({ page, context }) => {
+  world = createWorld({ label: "DashboardLinks" });
+  await signIn(context, world.email);
+  const product = await createItem(context, world.orgId, { name: "Hoof oil", type: "product", unit: "pcs", track_stock: true });
+  expect(product.id).toBeTruthy(); // a stock-tracking product makes the Stock section appear
+
+  const cases: [string, RegExp][] = [
+    ["card-out-of-stock", /\/inventory\?state=out_of_stock$/],
+    ["card-low-stock", /\/inventory\?state=low_stock$/],
+    ["card-backorders", /\/inventory\?state=backordered$/],
+    ["card-incoming", /\/inventory\?state=incoming$/],
+    ["card-past-due", /\/invoices\?payment=overdue$/],
+    ["card-not-yet-due", /\/invoices\?payment=not_yet_due$/],
+    ["card-paid", /\/invoices\?paid_from=\d{4}-\d{2}-\d{2}&paid_to=\d{4}-\d{2}-\d{2}$/],
+    ["card-year-paid", /\/invoices\?paid_from=\d{4}-01-01&paid_to=\d{4}-\d{2}-\d{2}$/],
+  ];
+  for (const [card, url] of cases) {
+    await page.goto(`/o/${world.orgId}`);
+    await page.getByTestId(card).click();
+    await expect(page, card).toHaveURL(url);
+  }
+  // The filtered pages say what they show.
+  await expect(page.getByTestId("paid-period")).toContainText("Invoices with a payment from");
+  await page.goto(`/o/${world.orgId}/inventory?state=out_of_stock`);
+  await expect(page.getByTestId("stock-row")).toHaveCount(1);
+  await expect(page.getByLabel("State")).toHaveValue("out_of_stock");
 });

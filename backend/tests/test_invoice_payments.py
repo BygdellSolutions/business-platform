@@ -129,3 +129,20 @@ def test_the_list_filters_by_payment_state_and_the_dashboard_counts_only_what_is
     summary = client.get("/api/invoices/summary", headers=sales.headers).json()
     assert summary["past_due"] == {"count": 1, "amounts": [{"currency": "SEK", "amount": "1062.50"}]}  # the paid one is not past due
     assert summary["paid_this_month"] == {"count": 2, "amounts": [{"currency": "SEK", "amount": "1125.00"}]}
+
+
+
+def test_the_list_finds_overdue_not_yet_due_and_paid_in_a_period(client: TestClient, db_session: Session, sales):
+    today = today_in(None)
+    overdue = _issued(client, db_session, sales, invoice_date=str(today - timedelta(days=40)), due_date=str(today - timedelta(days=10)))
+    upcoming = _issued(client, db_session, sales, invoice_date=str(today), due_date=str(today + timedelta(days=10)))
+    paid_now = _issued(client, db_session, sales)
+    _pay(client, sales.headers, paid_now, "100.00")
+
+    def ids(**params):
+        return {row["id"] for row in client.get("/api/invoices", params=params, headers=sales.headers).json()}
+
+    assert ids(payment="overdue") == {overdue["id"]}
+    assert ids(payment="not_yet_due") == {upcoming["id"], paid_now["id"]}  # no due date counts as not yet due
+    assert ids(paid_from=str(today), paid_to=str(today)) == {paid_now["id"]}
+    assert ids(paid_from=str(today + timedelta(days=1))) == set()
