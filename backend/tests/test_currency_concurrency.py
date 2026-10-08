@@ -65,6 +65,9 @@ def purge(world: World) -> None:
             "delete from transactions where organization_id = :o",
             "delete from items where organization_id = :o",
             "delete from customers where organization_id = :o",
+            # History goes only together with its organization (the append-only trigger's one exception).
+            "select set_config('app.deleting_organization', cast(:o as text), true)",
+            "delete from audit_events where organization_id = :o",
             "delete from organization_users where organization_id = :o",
             "delete from organizations where id = :o",
         ):

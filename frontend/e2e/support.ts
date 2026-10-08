@@ -354,6 +354,7 @@ export function createWorld(options: { currency?: string | null; label?: string 
         "organization_creation_requests",
         "organization_invitations",
         "organization_users",
+        "audit_events",
       ];
       const statements = [
         "set local session_replication_role = replica",
