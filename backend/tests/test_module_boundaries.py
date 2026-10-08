@@ -74,6 +74,10 @@ INVOICING_MAY_IMPORT = {
 }
 
 
+# Inventory reads what a transaction asks for: Sales' models only (never its API, schemas or registration).
+INVENTORY_MAY_IMPORT = {"app.modules.sales": ("models",)}
+
+
 @pytest.mark.parametrize("name", MODULE_PREFIX)
 def test_nothing_imports_a_module_except_itself_and_the_wiring_files(name: str):
     allowed = (MODULES / name,)
@@ -81,6 +85,23 @@ def test_nothing_imports_a_module_except_itself_and_the_wiring_files(name: str):
     if MODULE_PREFIX[name] in INVOICING_MAY_IMPORT:
         # Invoicing is let in, but only through the named submodules.
         offenders = [o for o in offenders if Path(o).parts[:3] != ("app", "modules", "invoicing")]
+    if MODULE_PREFIX[name] in INVENTORY_MAY_IMPORT:
+        offenders = [o for o in offenders if Path(o).parts[:3] != ("app", "modules", "inventory")]
+    assert offenders == []
+
+
+def test_inventory_imports_only_what_it_is_allowed_to():
+    allowed_prefixes = ["app.core", "app.models", "app.schemas", "app.api.deps", "app.modules.inventory"]
+    for module, submodules in INVENTORY_MAY_IMPORT.items():
+        allowed_prefixes += [f"{module}.{name}" for name in submodules]
+    offenders = [
+        f"{path.relative_to(BACKEND)} -> {name}"
+        for path in python_files(MODULES / "inventory")
+        for name in imports_of(path)
+        if name.split(".")[0] == "app"
+        and name not in INVENTORY_MAY_IMPORT
+        and not any(name == p or name.startswith(p + ".") for p in allowed_prefixes)
+    ]
     assert offenders == []
 
 
@@ -128,8 +149,8 @@ def test_wiring_files_really_wire_the_modules():
         ("equine", ["sales", "custom_fields", "invoicing", "inventory"]),
         ("custom_fields", ["sales", "equine", "invoicing", "inventory"]),
         ("invoicing", ["equine", "inventory"]),
-        # Inventory reacts to Sales through the core lifecycle seam, not by importing it (yet: slice I3 decides).
-        ("inventory", ["sales", "equine", "custom_fields", "invoicing"]),
+        # Inventory reacts to Sales through the core lifecycle seam and reads only Sales' models (checked above).
+        ("inventory", ["equine", "custom_fields", "invoicing"]),
     ],
 )
 def test_modules_do_not_import_each_other(package: str, forbidden: list[str]):

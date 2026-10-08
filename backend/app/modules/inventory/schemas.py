@@ -44,6 +44,25 @@ class StockMovementRead(BaseModel):
     created_by_name: str | None = None
 
 
+class ItemAvailability(BaseModel):
+    item_id: uuid.UUID
+    on_hand: QuantityOut
+    available: QuantityOut
+
+
+class TransactionDemand(BaseModel):
+    """What a draft asks of one stock-tracking item, summed over its lines, against what is available now.
+
+    A warning, never a refusal: at completion the available units are delivered and the shortage is backordered.
+    """
+
+    item_id: uuid.UUID
+    requested: QuantityOut
+    on_hand: QuantityOut
+    available: QuantityOut
+    shortage: QuantityOut
+
+
 class StockRead(BaseModel):
     item_id: uuid.UUID
     track_stock: bool

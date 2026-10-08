@@ -48,6 +48,27 @@ def on_hand(db: Session, organization_id: uuid.UUID, item_ids: Iterable[uuid.UUI
     return result
 
 
+def available(db: Session, organization_id: uuid.UUID, item_ids: Iterable[uuid.UUID]) -> dict[uuid.UUID, tuple[Decimal, Decimal]]:
+    """(on hand, available) per item. Nothing is set aside before completion, so today both are the physical stock;
+    open backorders (I3) will be subtracted from "available" as units already promised."""
+    stock = on_hand(db, organization_id, item_ids)
+    return {item_id: (quantity, quantity) for item_id, quantity in stock.items()}
+
+
+def tracked_ids(db: Session, organization_id: uuid.UUID, item_ids: Iterable[uuid.UUID]) -> list[uuid.UUID]:
+    """The given items that are this organization's products tracking stock (anything else is simply left out)."""
+    ids = list(set(item_ids))
+    if not ids:
+        return []
+    return list(
+        db.scalars(
+            select(Item.id).where(
+                Item.organization_id == organization_id, Item.id.in_(ids), Item.type == ItemType.PRODUCT, Item.track_stock.is_(True)
+            )
+        )
+    )
+
+
 def has_movements(db: Session, organization_id: uuid.UUID, item_id: uuid.UUID) -> bool:
     return db.scalar(
         select(StockMovement.id).where(StockMovement.organization_id == organization_id, StockMovement.item_id == item_id).limit(1)

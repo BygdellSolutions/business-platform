@@ -14,7 +14,7 @@ import { LinesTable } from "@/features/transactions/LinesTable";
 import { TotalsPanel } from "@/features/transactions/TotalsPanel";
 import { TransactionStatusBadge } from "@/features/transactions/TransactionStatusBadge";
 import type { ApiResult, Problem } from "@/lib/api/errors";
-import type { Transaction } from "@/lib/api/types";
+import type { StockDemand, Transaction } from "@/lib/api/types";
 
 /**
  * The transaction page's interactive part.
@@ -36,16 +36,20 @@ import type { Transaction } from "@/lib/api/types";
  * `canEdit` is false for a role that may only read (a viewer): the whole transaction is then shown
  * read-only, without lifecycle or add-line controls. Presentation only; FastAPI refuses the writes.
  */
+const NO_STOCK: StockDemand[] = [];
+
 export function TransactionEditor({
   transaction,
   fields,
   canEdit,
   timeZone = null,
+  stock = NO_STOCK,
 }: {
   transaction: Transaction;
   fields: Fields;
   canEdit: boolean;
   timeZone?: string | null;
+  stock?: StockDemand[];
 }) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
@@ -162,6 +166,7 @@ export function TransactionEditor({
     () => ({
       transaction,
       timeZone,
+      stock,
       readOnly: !canEdit || transaction.status !== "draft",
       busy,
       refreshing,
@@ -175,7 +180,7 @@ export function TransactionEditor({
       refresh,
       registerEditor,
     }),
-    [transaction, timeZone, canEdit, busy, refreshing, editorsOpen, notice, fields, fieldErrors, mutate, report, announce, refresh, registerEditor],
+    [transaction, timeZone, stock, canEdit, busy, refreshing, editorsOpen, notice, fields, fieldErrors, mutate, report, announce, refresh, registerEditor],
   );
 
   return (

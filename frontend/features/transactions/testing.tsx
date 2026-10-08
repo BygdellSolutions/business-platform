@@ -6,7 +6,7 @@ import type { TransactionFields } from "@/features/transactions/editor-context";
 import { TransactionEditor } from "@/features/transactions/TransactionEditor";
 import { apiFetch } from "@/lib/api/client";
 import { normalizeError, type ApiResult } from "@/lib/api/errors";
-import type { Customer, Item, Transaction, TransactionLine } from "@/lib/api/types";
+import type { Customer, Item, StockDemand, Transaction, TransactionLine } from "@/lib/api/types";
 import type { MoneyString, PercentString, QuantityString } from "@/lib/decimal";
 import { EMPTY_PROFILE } from "@/lib/profile";
 
@@ -174,12 +174,14 @@ export function Harness({
   fields = NO_FIELDS,
   canEdit = true,
   timeZone = null,
+  stock = [],
 }: {
   initial: Transaction;
   orgId?: string;
   fields?: TransactionFields;
   canEdit?: boolean;
   timeZone?: string | null;
+  stock?: StockDemand[];
 }) {
   const [current, setCurrent] = useState(initial);
   useEffect(() => {
@@ -192,7 +194,7 @@ export function Harness({
     <>
       <Gate />
       <OrgScope orgId={orgId}>
-        <TransactionEditor transaction={current} fields={fields} canEdit={canEdit} timeZone={timeZone} />
+        <TransactionEditor transaction={current} fields={fields} canEdit={canEdit} timeZone={timeZone} stock={stock} />
       </OrgScope>
     </>
   );
@@ -225,6 +227,7 @@ export const DIRECTORY = {
 export function installBackend(handle: (call: Call) => ApiResult<unknown> | Promise<ApiResult<unknown>>) {
   vi.mocked(apiFetch).mockImplementation((async (orgId: string, path: string, request?: { method?: string; body?: unknown; ifMatch?: number }) => {
     const method = request?.method ?? "GET";
+    if (method === "GET" && path.startsWith("/inventory/availability?")) return ok([]);
     if (method === "GET" && (path.startsWith("/customers?") || path.startsWith("/items?"))) {
       const url = new URL(path, "http://x");
       const q = (url.searchParams.get("q") ?? "").toLowerCase();

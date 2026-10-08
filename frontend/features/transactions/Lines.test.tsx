@@ -542,3 +542,26 @@ describe("the kinds of line", () => {
     expect(screen.getByTestId("service-notes")).toHaveTextContent("Stiff left shoulder");
   });
 });
+
+describe("stock on a draft (a warning, never a refusal)", () => {
+  const demand = (shortage: string) => ({
+    item_id: "i1",
+    requested: "8.000" as QuantityString,
+    on_hand: "5.000" as QuantityString,
+    available: "5.000" as QuantityString,
+    shortage: shortage as QuantityString,
+  });
+
+  it("warns on each line of an item that the draft asks more of than is available", () => {
+    render(<Harness initial={tx({ lines: [line({ id: "l1", item_id: "i1", unit: "pcs" })] })} stock={[demand("3.000")]} />);
+    expect(screen.getByTestId("stock-warning")).toHaveTextContent("Only 5.000 of 8.000 pcs available; 3.000 will be backordered at completion.");
+  });
+
+  it("says nothing when there is enough, for a line of another item, or once the transaction is completed", () => {
+    const { unmount } = render(<Harness initial={tx({ lines: [line({ id: "l1", item_id: "i1" })] })} stock={[demand("0.000")]} />);
+    expect(screen.queryByTestId("stock-warning")).toBeNull();
+    unmount();
+    render(<Harness initial={tx({ status: "completed", lines: [line({ id: "l1", item_id: "i1" })] })} stock={[demand("3.000")]} />);
+    expect(screen.queryByTestId("stock-warning")).toBeNull();
+  });
+});

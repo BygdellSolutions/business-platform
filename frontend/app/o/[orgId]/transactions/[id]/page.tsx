@@ -6,7 +6,7 @@ import { Notice } from "@/components/ui/Notice";
 import { TransactionEditor } from "@/features/transactions/TransactionEditor";
 import { readActiveRole } from "@/lib/active-role";
 import { readEntityFields } from "@/lib/custom-fields/server";
-import type { Organization, Transaction } from "@/lib/api/types";
+import type { Organization, StockDemand, Transaction } from "@/lib/api/types";
 import { readRecordHistory } from "@/lib/history-server";
 import { canWriteRecords } from "@/lib/roles";
 import { requireUuid, serverRead } from "@/lib/server-api";
@@ -27,11 +27,12 @@ export default async function TransactionPage({
   const { orgId, id } = await params;
   const { created } = await searchParams;
   const recordId = requireUuid(id);
-  const [transaction, role, organization, history] = await Promise.all([
+  const [transaction, role, organization, history, stock] = await Promise.all([
     serverRead<Transaction>(orgId, `/api/transactions/${recordId}`),
     readActiveRole(orgId),
     serverRead<Organization>(orgId, "/api/organization"),
     readRecordHistory(orgId, "transaction", recordId),
+    serverRead<StockDemand[]>(orgId, `/api/inventory/transactions/${recordId}`),
   ]);
   // The organization's custom-field definitions for transactions and for lines, and the values of
   // this transaction and its lines: read here, on the server, like everything else on the page.
@@ -61,6 +62,7 @@ export default async function TransactionPage({
         transaction={transaction}
         canEdit={canWriteRecords(role)}
         timeZone={organization.timezone}
+        stock={stock}
         fields={{
           transaction: { definitions: transactionFields.definitions, values: transactionFields.values[transaction.id] ?? [] },
           line: { definitions: lineFields.definitions, values: lineFields.values },

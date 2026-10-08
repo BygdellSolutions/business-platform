@@ -24,7 +24,9 @@ import { formatTimestamp } from "@/lib/timestamps";
  */
 export function LineRow({ line, ordinal }: { line: TransactionLine; ordinal: number }) {
   const orgId = useOrgId();
-  const { transaction, timeZone, readOnly, busy, mutate, report } = useEditor();
+  const { transaction, timeZone, stock, readOnly, busy, mutate, report } = useEditor();
+  const demand = line.item_id && transaction.status === "draft" ? stock.find((entry) => entry.item_id === line.item_id) : undefined;
+  const shortage = demand && demand.shortage !== "0.000" ? demand : undefined;
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -64,6 +66,11 @@ export function LineRow({ line, ordinal }: { line: TransactionLine; ordinal: num
         {line.description}
         {line.kind === "service" && line.performed_at && (
           <ServiceSummary subject={line.subject_label} when={formatTimestamp(line.performed_at, timeZone)} by={line.performed_by_name} notes={line.notes} />
+        )}
+        {shortage && (
+          <span className="block text-xs text-amber-800 dark:text-amber-300" data-testid="stock-warning">
+            Only {shortage.available} of {shortage.requested} {line.unit} available; {shortage.shortage} will be backordered at completion.
+          </span>
         )}
       </td>
       <td className="py-1 pr-3" data-testid="line-unit">{line.unit}</td>

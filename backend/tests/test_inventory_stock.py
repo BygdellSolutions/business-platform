@@ -247,3 +247,42 @@ def test_a_vetoed_step_never_reaches_an_effect(client: TestClient, db_session: S
 
     assert response.status_code == 409 and response.json()["detail"]["problems"][0]["code"] == "test.veto"
     assert reached == []
+
+
+# --- I2: availability, a warning and never a refusal ----------------------------------------------------------------
+
+
+def test_availability_lists_only_this_organizations_stock_tracking_items(client: TestClient, db_session: Session):
+    org, owner = _world(db_session)
+    other_org, other_owner = _world(db_session)
+    tracked = _product(db_session, org)
+    untracked = make_item(db_session, org, name="Plain product", type=ItemType.PRODUCT)
+    foreign = _product(db_session, other_org)
+    _adjust(client, tracked.id, owner, kind="count", quantity="5")
+    _adjust(client, foreign.id, other_owner, kind="count", quantity="99")
+
+    response = client.get("/api/inventory/availability", params={"item_id": [str(tracked.id), str(untracked.id), str(foreign.id)]}, headers=owner)
+
+    assert response.json() == [{"item_id": str(tracked.id), "on_hand": "5.000", "available": "5.000"}]
+
+
+def test_a_draft_shows_the_shortage_over_all_its_lines_and_lines_are_never_refused_for_stock(client: TestClient, db_session: Session):
+    org, owner = _world(db_session)
+    item = _product(db_session, org)
+    _adjust(client, item.id, owner, kind="count", quantity="5")
+    tx = make_transaction(db_session, org, billing_customer=make_customer(db_session, org))
+    make_line(db_session, org, tx, item=item, description="Liniment", unit="pcs", quantity="4", unit_price_ex_vat="120.00")
+
+    added = client.post(f"/api/transactions/{tx.id}/lines", json={"item_id": str(item.id), "quantity": "4"}, headers=owner)
+
+    assert added.status_code == 201  # 8 asked, 5 on hand: allowed; the shortage is only a warning
+    demand = client.get(f"/api/inventory/transactions/{tx.id}", headers=owner).json()
+    assert demand == [{"item_id": str(item.id), "requested": "8.000", "on_hand": "5.000", "available": "5.000", "shortage": "3.000"}]
+
+
+def test_another_organizations_transaction_demand_is_not_found(client: TestClient, db_session: Session):
+    _, owner_a = _world(db_session)
+    org_b, _ = _world(db_session)
+    tx_b = make_transaction(db_session, org_b, billing_customer=make_customer(db_session, org_b))
+
+    assert client.get(f"/api/inventory/transactions/{tx_b.id}", headers=owner_a).status_code == 404

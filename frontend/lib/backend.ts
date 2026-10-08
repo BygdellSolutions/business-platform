@@ -38,6 +38,7 @@ export const ALLOWED_API_AREAS = [
   "custom-fields",
   "invoices",
   "invoiceable-transactions",
+  "inventory",
   "organization",
   "members",
   "invitations",

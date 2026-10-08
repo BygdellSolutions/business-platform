@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect } from "react";
 
 import type { ApiResult, Problem } from "@/lib/api/errors";
-import type { Transaction } from "@/lib/api/types";
+import type { StockDemand, Transaction } from "@/lib/api/types";
 import type { Definition, ValueRead } from "@/lib/custom-fields/types";
 
 export type { Problem };
@@ -34,6 +34,8 @@ export interface EditorApi {
   transaction: Transaction;
   /** The organization's time zone, for showing service times (null: UTC). */
   timeZone: string | null;
+  /** What the transaction asks of each stock-tracking item, as the page read it with the transaction (a warning only). */
+  stock: StockDemand[];
   /** Not a draft, or the user's role may only read: nothing can be edited. Presentation only; FastAPI enforces it. */
   readOnly: boolean;
   /** A change is running, or the page is being refreshed. Nothing else may be changed meanwhile. */

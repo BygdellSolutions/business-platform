@@ -191,6 +191,23 @@ export interface StockMovement {
   created_by_name: string | null;
 }
 
+/** On hand and available for an item that tracks stock (GET /api/inventory/availability). */
+export interface ItemAvailability {
+  item_id: string;
+  on_hand: QuantityString;
+  available: QuantityString;
+}
+
+/** What a transaction asks of one stock-tracking item, summed over its lines (GET /api/inventory/transactions/{id}). */
+export interface StockDemand {
+  item_id: string;
+  requested: QuantityString;
+  on_hand: QuantityString;
+  available: QuantityString;
+  /** "0.000" when there is enough; otherwise what completion would backorder. */
+  shortage: QuantityString;
+}
+
 export interface Stock {
   item_id: string;
   track_stock: boolean;

@@ -67,6 +67,7 @@ app.include_router(custom_fields.router)
 app.include_router(invoicing.router)
 app.include_router(invoicing.invoiceable_router)
 app.include_router(inventory.router)
+app.include_router(inventory.availability_router)
 
 # Modules register what they expose to generic capabilities; nothing imports a module
 # except here. validate() fails fast at startup on an inconsistent registration.

@@ -1,6 +1,6 @@
 import { expect, test } from "./fixtures";
 
-import { createItem, createWorld, signIn, type World } from "./support";
+import { bffUrl, createCustomer, createItem, createTransaction, createWorld, openAddLine, pick, signIn, type World } from "./support";
 
 /**
  * Inventory I1: a product that tracks stock gets a Stock panel. The first count is the opening stock; every later
@@ -35,4 +35,23 @@ test("the opening count and later changes are listed and explain the quantity on
   await expect(panel.getByTestId("stock-movement").first()).toContainText("Adjustment");
   await expect(panel.getByTestId("stock-movement").first()).toContainText("Damaged");
   await expect(panel.getByTestId("stock-movement").last()).toContainText("Opening count");
+});
+
+test("a draft that asks for more than is in stock warns, and the line is still added", async ({ page, context }) => {
+  world = createWorld({ label: "Availability" });
+  await signIn(context, world.email);
+  const item = await createItem(context, world.orgId, { name: "Hoof oil", type: "product", unit: "pcs", price_ex_vat: "90.00", track_stock: true });
+  expect((await context.request.post(bffUrl(world.orgId, `/items/${item.id}/stock`), { data: { kind: "count", quantity: "5" } })).status()).toBe(201);
+  const customer = await createCustomer(context, world.orgId, "Anna Andersson");
+  const tx = await createTransaction(context, world.orgId, { billing_customer_id: customer.id });
+
+  await page.goto(`/o/${world.orgId}/transactions/${tx.id}`);
+  await openAddLine(page);
+  await pick(page, "item_id", "Hoof oil");
+  await expect(page.getByTestId("item-availability")).toContainText("In stock: 5.000, available: 5.000");
+  await page.getByLabel("Quantity").fill("8");
+  await page.getByTestId("submit-line").click();
+
+  await expect(page.getByTestId("line-row")).toHaveCount(1);
+  await expect(page.getByTestId("stock-warning")).toHaveText("Only 5.000 of 8.000 pcs available; 3.000 will be backordered at completion.");
 });

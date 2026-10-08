@@ -13,7 +13,7 @@ import { classify } from "@/features/transactions/failures";
 import { apiFetch } from "@/lib/api/client";
 import type { FieldErrors } from "@/lib/api/errors";
 import { SUBJECT_KINDS } from "@/features/transactions/service-subjects";
-import type { Colleague, LineCreate, TransactionLine } from "@/lib/api/types";
+import type { Colleague, ItemAvailability, LineCreate, TransactionLine } from "@/lib/api/types";
 import { parseMoney, parsePercent, parseQuantity } from "@/lib/decimal";
 import { NOT_A_DECIMAL, NO_PROBLEMS, problemsFrom, type Problems } from "@/lib/forms";
 
@@ -67,6 +67,16 @@ function AddLinePanel({ onClose }: { onClose: () => void }) {
   const subjectSearch = useMemo(() => subjectKind.search(orgId), [subjectKind, orgId]);
   const [service, setService] = useState({ performed_by_user_id: "", performed_at: "", notes: "" });
   const [colleagues, setColleagues] = useState<Colleague[]>([]);
+  const [availability, setAvailability] = useState<ItemAvailability | null>(null);
+  useEffect(() => {
+    if (mode !== "item" || item === null) return;
+    const controller = new AbortController();
+    void apiFetch<ItemAvailability[]>(orgId, `/inventory/availability?${new URLSearchParams({ item_id: item.id })}`, { signal: controller.signal }).then((result) => {
+      // Only a product that tracks stock is answered; anything else shows nothing.
+      if (result.ok && Array.isArray(result.data)) setAvailability(result.data[0] ?? null);
+    });
+    return () => controller.abort();
+  }, [mode, item, orgId]);
   useEffect(() => {
     if (mode !== "service" || colleagues.length > 0) return;
     const controller = new AbortController();
@@ -221,6 +231,11 @@ function AddLinePanel({ onClose }: { onClose: () => void }) {
       ) : mode === "item" ? (
         <>
           <EntityPicker label="Item" name="item_id" value={item} onChange={setItem} search={search} error={errorsFor("item_id")} hint="Its name, unit, price and VAT are copied by the server when the line is added." />
+          {availability && availability.item_id === item?.id && (
+            <p className="text-sm text-zinc-600 dark:text-zinc-400" data-testid="item-availability">
+              In stock: {availability.on_hand}, available: {availability.available}. A shortage is backordered at completion; the line is never refused.
+            </p>
+          )}
           <DecimalField label="Quantity" name="quantity" value={fields.quantity} onChange={set("quantity")} error={errorsFor("quantity")} />
         </>
       ) : (
