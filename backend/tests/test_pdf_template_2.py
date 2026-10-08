@@ -48,7 +48,8 @@ def test_f_tax_and_the_seller_contact_are_on_every_page():
     assert len(pages) > 1
     text = pdf_text(render_pdf(document_from_invoice(many)))
     assert text.count("Godkänd för F-skatt") == text.count("Faktura 7 · Sida")  # once per page, in the footer
-    assert "info@example.test · 090-123456 · https://example.test" in text
+    for expected in ("Telefon 090-123456", "E-post info@example.test", "https://example.test", "Bankgiro 123-4567"):
+        assert text.count(expected) >= text.count("Faktura 7 · Sida"), expected  # in every page's footer
 
 
 def test_no_f_tax_statement_unless_the_seller_said_yes():
@@ -94,3 +95,20 @@ def test_a_line_discount_is_printed_as_the_last_step():
     data = _swedish()
     data["lines"][0].update(list_unit_price="500.00", line_discount_percent="20.00", unit_price_ex_vat="400.00")
     assert document_from_invoice(data).lines[0].notes == ("Listpris 500,00 −20 % rabatt",)
+
+
+def test_the_sender_is_labelled_and_the_footer_has_the_standard_columns():
+    document = document_from_invoice(_swedish())
+    assert document.issuer_footer == (
+        ("Fredrik Horse Therapy AB", "Storgatan 1", "903 26 Umeå", "SE"),
+        ("Telefon 090-123456", "E-post info@example.test", "https://example.test"),
+        ("Org.nr 556000-0001", "Momsreg.nr SE556000000101", "Godkänd för F-skatt"),
+        ("Bankgiro 123-4567", "IBAN SE4550000000058398257466", "BIC ESLSSESS"),
+    )
+    text = pdf_text(render_pdf(document))
+    assert "Från" in text and text.index("Från") < text.index("Fredrik Horse Therapy AB")
+
+
+def test_a_footer_column_with_nothing_stored_is_left_out():
+    document = document_from_invoice(stored())  # no contact or payment details stored
+    assert [column[0] for column in document.issuer_footer] == ["Fredrik Horse Therapy AB", "Registration no. 556000-0001"]

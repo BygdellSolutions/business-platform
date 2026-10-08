@@ -61,20 +61,28 @@ def _payment(issuer: dict[str, Any], number_text: str) -> PdfPayment | None:
     )
 
 
-def _footer(issuer: dict[str, Any], words: dict[str, str]) -> tuple[str, ...]:
-    """The seller's identifiers and contact details for every page (only stored values)."""
-    parts = [issuer.get("legal_name") or issuer.get("name")]
-    if issuer.get("registration_number"):
-        parts.append(f"{words['registration']} {issuer['registration_number']}")
-    if issuer.get("vat_number"):
-        parts.append(f"{words['vat_no']} {issuer['vat_number']}")
-    if issuer.get("approved_for_f_tax") is True:
-        parts.append(words["f_tax"])
-    contact = [issuer.get(key) for key in ("email", "phone", "website") if issuer.get(key)]
-    lines = [" · ".join(_text(part) for part in parts if part)]
-    if contact:
-        lines.append(" · ".join(_text(part) for part in contact))
-    return tuple(line for line in lines if line)
+def _footer(issuer: dict[str, Any], words: dict[str, str]) -> tuple[tuple[str, ...], ...]:
+    """The seller's details for every page, as a standard invoice footer: company and address, contact, tax
+    identifiers, payment. Only stored values; a column with nothing stored is left out."""
+    place = " ".join(part for part in (issuer.get("postal_code"), issuer.get("city")) if part)
+    company = [issuer.get("legal_name") or issuer.get("name"), issuer.get("address_line1"), issuer.get("address_line2"), place, issuer.get("country_code")]
+    contact = [
+        f"{words['phone']} {issuer['phone']}" if issuer.get("phone") else None,
+        f"{words['email']} {issuer['email']}" if issuer.get("email") else None,
+        issuer.get("website"),
+    ]
+    tax = [
+        f"{words['registration']} {issuer['registration_number']}" if issuer.get("registration_number") else None,
+        f"{words['vat_no']} {issuer['vat_number']}" if issuer.get("vat_number") else None,
+        words["f_tax"] if issuer.get("approved_for_f_tax") is True else None,
+    ]
+    payment = [f"{words[key]} {issuer[key]}" for key in ("bankgiro", "plusgiro", "iban", "bic") if issuer.get(key)]
+    columns = []
+    for column in (company, contact, tax, payment):
+        lines = tuple(cleaned for cleaned in (_text(line) for line in column if line) if cleaned)
+        if lines:
+            columns.append(lines)
+    return tuple(columns)
 
 
 def _notes(line: dict[str, Any], words: dict[str, str], separator: str) -> tuple[str, ...]:

@@ -42,6 +42,8 @@ from app.modules.invoicing.pdf.labels import decimal_separator, labels
 TEMPLATE_VERSION = 3
 ACCENT = colors.HexColor("#1f4e5f")
 ACCENT_LIGHT = colors.HexColor("#e8f0f2")
+# Room for the footer columns (up to five lines each) above the page number.
+FOOTER_HEIGHT = 26 * mm
 MIN_DESCRIPTION_WIDTH = 90  # points
 MAX_OUTPUT_BYTES = 64 * 1024 * 1024  # defensive: a rendering that large is a bug, not an invoice
 
@@ -80,6 +82,8 @@ KINDS = {
     "total_label": ("bold", 9, 12, 0, colors.black),
     "total_value": ("bold", 9, 12, 2, colors.black),
     "foot": ("regular", 7, 9, 1, colors.HexColor("#555555")),
+    "foot_cell": ("regular", 7, 9, 0, colors.HexColor("#333333")),
+    "from_label": ("bold", 8, 11, 0, colors.HexColor("#1f4e5f")),
 }
 # Figures are laid out without CJK wrapping: ReportLab's CJK mode treats a no-break space as a break opportunity,
 # which would split a grouped amount ("1 062.50") between its digit groups.
@@ -179,10 +183,26 @@ def _build(document: PdfDocument, fonts: font_layer.Registered) -> bytes:
     sep = decimal_separator(document.language)
 
     def footer(page: canvas.Canvas, number: int, total: int) -> None:
-        lines = [*document.issuer_footer, words["page"].format(number=document.number_text, page=number, total=total)]
-        text = printer.p("\n".join(lines), "foot")
-        text.wrap(width, 20 * mm)
-        text.drawOn(page, margin, 8 * mm)
+        # A standard invoice footer: the seller's details in columns under a rule, then the page number.
+        if document.issuer_footer:
+            columns = [[printer.p(line, "foot_cell") for line in column] for column in document.issuer_footer]
+            table = Table([columns], colWidths=[width / len(columns)] * len(columns))
+            table.setStyle(
+                TableStyle(
+                    [
+                        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                        ("LINEABOVE", (0, 0), (-1, 0), 0.8, ACCENT),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                        ("TOPPADDING", (0, 0), (-1, -1), 4),
+                    ]
+                )
+            )
+            _, height = table.wrap(width, FOOTER_HEIGHT)
+            table.drawOn(page, margin, 13 * mm)
+        text = printer.p(words["page"].format(number=document.number_text, page=number, total=total), "foot")
+        text.wrap(width, 10 * mm)
+        text.drawOn(page, margin, 7 * mm)
 
     doc = SimpleDocTemplate(
         buffer,
@@ -190,7 +210,7 @@ def _build(document: PdfDocument, fonts: font_layer.Registered) -> bytes:
         leftMargin=margin,
         rightMargin=margin,
         topMargin=margin,
-        bottomMargin=(20 + 4 * len(document.issuer_footer)) * mm,
+        bottomMargin=(18 * mm + FOOTER_HEIGHT) if document.issuer_footer else 20 * mm,
         invariant=1,
         pageCompression=1,
         title=f"{words['invoice']} {document.number_text}",
@@ -210,7 +230,8 @@ def _build(document: PdfDocument, fonts: font_layer.Registered) -> bytes:
     details.append((words["currency"], document.currency))
     detail_table = Table([[printer.p(label, "label"), printer.p(value, "body")] for label, value in details], colWidths=[28 * mm, 36 * mm], hAlign="RIGHT")
     detail_table.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0), ("TOPPADDING", (0, 0), (-1, -1), 1), ("BOTTOMPADDING", (0, 0), (-1, -1), 1)]))
-    header = Table([[_party_flowables(printer, document.issuer, "issuer"), [printer.p(words["invoice"], "title"), Spacer(1, 4), detail_table]]], colWidths=[width * 0.52, width * 0.48])
+    sender = [printer.p(words["from"], "from_label"), Spacer(1, 2), *_party_flowables(printer, document.issuer, "issuer")]
+    header = Table([[sender, [printer.p(words["invoice"], "title"), Spacer(1, 4), detail_table]]], colWidths=[width * 0.52, width * 0.48])
     header.setStyle(
         TableStyle(
             [
