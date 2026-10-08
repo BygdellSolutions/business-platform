@@ -8,7 +8,7 @@ from sqlalchemy import and_, func, select, update
 from sqlalchemy.orm import Session
 
 from app.api.deps import Pagination, pagination
-from app.core import audit
+from app.core import audit, discounts
 from app.core.authz import record_writer, roles_required
 from app.core.currency import default_currency_for_new_record
 from app.core.db import get_db
@@ -35,6 +35,7 @@ from app.modules.sales.pricing import (
     Totals,
     calculate_line,
     calculate_totals,
+    discounted_unit_price,
 )
 from app.modules.sales.schemas import (
     AssignCurrency,
@@ -183,10 +184,27 @@ def _calculate(
         )
 
 
+NO_DISCOUNTS = dict(list_unit_price=None, catalog_discount_percent=None, customer_discount_percent=None)
+
+
+def _catalog_price(db: Session, ctx: TenantContext, item: Item, customer_id: uuid.UUID, on_date: date) -> dict:
+    """The price of a catalog line: the item's price, then the temporary catalog discount active on the sale's date,
+    then the billing customer's permanent discount (each layer rounded before the next). All four are stored."""
+    catalog = discounts.catalog_percent(db, ctx.organization_id, item.id, on_date)
+    customer = discounts.customer_percent(db, ctx.organization_id, customer_id)
+    return dict(
+        list_unit_price=item.price_ex_vat,
+        catalog_discount_percent=catalog,
+        customer_discount_percent=customer,
+        unit_price_ex_vat=discounted_unit_price(item.price_ex_vat, catalog, customer),
+    )
+
+
 def _new_line_values(
-    db: Session, ctx: TenantContext, line: LineCreate, path: tuple[str | int, ...] = ()
+    db: Session, ctx: TenantContext, line: LineCreate, path: tuple[str | int, ...] = (), *, customer_id: uuid.UUID, on_date: date
 ) -> dict:
-    """Snapshot values for a new line: request values win, the Item fills the gaps."""
+    """Snapshot values for a new line: request values win, the Item fills the gaps. A catalog line whose price was not
+    typed is priced with the discount layers; a typed price (or an ad-hoc line) carries no discounts."""
     item = None
     if line.item_id is not None:
         item = resolve_reference(db, ctx, Item, line.item_id, (*path, "item_id"))
@@ -196,19 +214,22 @@ def _new_line_values(
 
     description = pick(line.description, item.name if item else None)
     unit = pick(line.unit, item.unit if item else None)
-    price = pick(line.unit_price_ex_vat, item.price_ex_vat if item else None)
+    if item is not None and line.unit_price_ex_vat is None:
+        pricing_values = _catalog_price(db, ctx, item, customer_id, on_date)
+    else:
+        pricing_values = {**NO_DISCOUNTS, "unit_price_ex_vat": line.unit_price_ex_vat}
     vat_rate = pick(line.vat_rate, item.vat_rate if item else None)
-    amounts = _calculate(line.quantity, price, vat_rate, path)
+    amounts = _calculate(line.quantity, pricing_values["unit_price_ex_vat"], vat_rate, path)
     return dict(
         item_id=line.item_id,
         description=description,
         unit=unit,
         quantity=line.quantity,
-        unit_price_ex_vat=price,
         vat_rate=vat_rate,
         net_amount=amounts.net,
         vat_amount=amounts.vat,
         gross_amount=amounts.gross,
+        **pricing_values,
     )
 
 
@@ -224,9 +245,10 @@ def create_transaction(
     resolve_reference(
         db, ctx, Customer, payload.billing_customer_id, "billing_customer_id", label="Customer"
     )
+    transaction_date = payload.transaction_date or organization_today(db, ctx.organization_id)
     # Validate every line before writing anything.
     line_values = [
-        _new_line_values(db, ctx, line, ("lines", index))
+        _new_line_values(db, ctx, line, ("lines", index), customer_id=payload.billing_customer_id, on_date=transaction_date)
         for index, line in enumerate(payload.lines)
     ]
     # Snapshot the organization's currency now; the row stays share-locked until the commit, so a
@@ -238,7 +260,7 @@ def create_transaction(
         Transaction,
         billing_customer_id=payload.billing_customer_id,
         currency=currency,
-        transaction_date=payload.transaction_date or organization_today(db, ctx.organization_id),
+        transaction_date=transaction_date,
     )
     audit.created(db, ctx, tx, "transaction")
     for position, values in enumerate(line_values, start=1):
@@ -363,8 +385,40 @@ def update_transaction(
         )
     if _changes(tx, values):
         values.update(header_version=tx.header_version + 1, version=tx.version + 1)
-    audit.apply_audited_update(db, ctx, tx, "transaction", values)
+    reprice = any(field in values and values[field] != getattr(tx, field) for field in ("billing_customer_id", "transaction_date"))
+    audit.set_audited(db, ctx, tx, "transaction", values)
+    if reprice:
+        _reprice_catalog_lines(db, ctx, tx)  # in the same database transaction as the header change
+    commit_and_refresh(db, tx)
     return _read_one(db, ctx, transaction_id)
+
+
+def _reprice_catalog_lines(db: Session, ctx: TenantContext, tx: Transaction) -> None:
+    """A new billing customer or date changes which discounts apply: lines priced from the catalog (and not by hand)
+    get the layers again. Each changed line moves its version and is recorded in the history."""
+    lines = db.scalars(
+        select(TransactionLine).where(
+            TransactionLine.organization_id == ctx.organization_id,
+            TransactionLine.transaction_id == tx.id,
+            TransactionLine.item_id.is_not(None),
+            TransactionLine.list_unit_price.is_not(None),
+        )
+    ).all()
+    for line in lines:
+        catalog = discounts.catalog_percent(db, ctx.organization_id, line.item_id, tx.transaction_date)
+        customer = discounts.customer_percent(db, ctx.organization_id, tx.billing_customer_id)
+        price = discounted_unit_price(line.list_unit_price, catalog, customer)
+        if (catalog, customer, price) == (line.catalog_discount_percent, line.customer_discount_percent, line.unit_price_ex_vat):
+            continue
+        amounts = _calculate(line.quantity, price, line.vat_rate)
+        audit.set_audited(
+            db, ctx, line, "transaction_line",
+            dict(
+                catalog_discount_percent=catalog, customer_discount_percent=customer, unit_price_ex_vat=price,
+                net_amount=amounts.net, vat_amount=amounts.vat, gross_amount=amounts.gross, version=line.version + 1,
+            ),
+            context=("transaction", tx.id),
+        )
 
 
 @router.delete("/{transaction_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -496,7 +550,7 @@ def add_line(
 ) -> TransactionLine:
     tx = _lock(db, ctx, transaction_id)
     _require_draft(tx)
-    values = _new_line_values(db, ctx, payload)
+    values = _new_line_values(db, ctx, payload, customer_id=tx.billing_customer_id, on_date=tx.transaction_date)
     tx.version += 1  # no precondition (adding commutes with other edits), but the transaction changed
     last_position = db.scalar(
         select(func.coalesce(func.max(TransactionLine.position), 0)).where(
@@ -528,13 +582,16 @@ def update_line(
     ensure_current(if_match, line.version, "transaction_line", line.id)
     values = payload.model_dump(exclude_unset=True)
 
+    if "unit_price_ex_vat" in values:
+        values.update(NO_DISCOUNTS)  # a price typed by a person replaces the catalog's price and its discounts
     if values.get("item_id") is not None and values["item_id"] != line.item_id:
         # A different item: copy its values for everything not overridden in this request.
         item = resolve_reference(db, ctx, Item, values["item_id"], "item_id")
         values.setdefault("description", item.name)
         values.setdefault("unit", item.unit)
-        values.setdefault("unit_price_ex_vat", item.price_ex_vat)
         values.setdefault("vat_rate", item.vat_rate)
+        if "unit_price_ex_vat" not in values:
+            values.update(_catalog_price(db, ctx, item, tx.billing_customer_id, tx.transaction_date))
 
     amounts = _calculate(
         values.get("quantity", line.quantity),

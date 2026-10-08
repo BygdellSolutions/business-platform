@@ -20,6 +20,7 @@ function item(overrides: Partial<Item>): Item {
     description: null,
     unit: "session",
     price_ex_vat: "850.00" as MoneyString,
+    current_discount: null,
     vat_rate: "25.00" as PercentString,
     active: true,
     created_at: "",

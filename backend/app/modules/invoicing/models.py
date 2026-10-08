@@ -39,6 +39,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.base import Base
 from app.models.mixins import Authored, TenantOwned
+from app.modules.sales.models import discount_constraints
 
 DEFAULT_SERIES = "default"
 SNAPSHOT_SCHEMA = 1  # version of the customer/issuer snapshot structure
@@ -198,6 +199,7 @@ class InvoiceLine(TenantOwned, Base):
         CheckConstraint("vat_amount = round(net_amount * vat_rate / 100, 2)", name="ck_invoice_lines_vat_amount"),
         CheckConstraint("gross_amount = net_amount + vat_amount", name="ck_invoice_lines_gross_amount"),
         CheckConstraint("jsonb_typeof(fields) = 'array'", name="ck_invoice_lines_fields_array"),
+        *discount_constraints("invoice_lines"),
     )
 
     invoice_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
@@ -208,6 +210,11 @@ class InvoiceLine(TenantOwned, Base):
     unit: Mapped[str] = mapped_column(String(32))
     quantity: Mapped[Decimal] = mapped_column(Numeric(12, 3))
     unit_price_ex_vat: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    # Discount layers (see discount_constraints): the price before discounts and the two percentages, copied when the
+    # line is priced from the catalog. NULL for ad-hoc lines and manually set prices.
+    list_unit_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    catalog_discount_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    customer_discount_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
     vat_rate: Mapped[Decimal] = mapped_column(Numeric(5, 2))
     net_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     vat_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))

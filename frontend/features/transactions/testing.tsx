@@ -34,6 +34,9 @@ export function line(overrides: Partial<TransactionLine> = {}): TransactionLine 
     unit: "session",
     quantity: "1.000" as QuantityString,
     unit_price_ex_vat: money("850.00"),
+    list_unit_price: null,
+    catalog_discount_percent: null,
+    customer_discount_percent: null,
     vat_rate: "25.00" as PercentString,
     net_amount: money("850.00"),
     vat_amount: money("212.50"),
@@ -55,6 +58,9 @@ export function second(overrides: Partial<TransactionLine> = {}): TransactionLin
     unit: "km",
     quantity: "12.500" as QuantityString,
     unit_price_ex_vat: money("3.50"),
+    list_unit_price: null,
+    catalog_discount_percent: null,
+    customer_discount_percent: null,
     vat_rate: "6.00" as PercentString,
     net_amount: money("43.75"),
     vat_amount: money("2.63"),
@@ -93,7 +99,7 @@ export function tx(overrides: Partial<Transaction> = {}): Transaction {
 }
 
 export function customer(id: string, name: string, active = true): Customer {
-  return { id, customer_type: "person", name, email: null, phone: null, active, created_at: "", updated_at: "", created_by: null, updated_by: null, ...EMPTY_PROFILE };
+  return { id, customer_type: "person", name, email: null, phone: null, active, created_at: "", updated_at: "", created_by: null, updated_by: null, default_discount_percent: null, ...EMPTY_PROFILE };
 }
 
 export function item(id: string, name: string, overrides: Partial<Item> = {}): Item {
@@ -104,6 +110,7 @@ export function item(id: string, name: string, overrides: Partial<Item> = {}): I
     description: null,
     unit: "session",
     price_ex_vat: money("850.00"),
+    current_discount: null,
     vat_rate: "25.00" as PercentString,
     active: true,
     created_at: "",

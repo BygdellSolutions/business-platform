@@ -6,15 +6,24 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import Pagination, pagination
 from app.core import audit
-from app.core.authz import record_writer
+from app.core.authz import record_writer, require_role
 from app.core.db import get_db
 from app.core.query import commit_and_refresh, contains_pattern, delete_or_409
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import create_scoped, get_scoped_or_404, scoped_select
-from app.models import Customer
+from app.models import Customer, Role
 from app.schemas.customer import CustomerCreate, CustomerRead, CustomerUpdate
 
 router = APIRouter(prefix="/api/customers", tags=["customers"])
+
+# A customer's permanent discount is a pricing decision: owners and admins only, whoever else may edit the customer.
+DISCOUNT_ROLES = (Role.OWNER, Role.ADMIN)
+
+
+def _require_discount_authority(ctx: TenantContext, values: dict, current=None) -> None:
+    """Only a request that sets or changes the discount needs the authority (an untouched or still-empty one does not)."""
+    if "default_discount_percent" in values and values["default_discount_percent"] != current:
+        require_role(ctx, DISCOUNT_ROLES)
 
 
 @router.post("", response_model=CustomerRead, status_code=status.HTTP_201_CREATED)
@@ -23,6 +32,7 @@ def create_customer(
     ctx: TenantContext = Depends(record_writer),
     db: Session = Depends(get_db),
 ) -> Customer:
+    _require_discount_authority(ctx, payload.model_dump(exclude_unset=True))
     customer = create_scoped(db, ctx, Customer, **payload.model_dump())
     audit.created(db, ctx, customer, "customer")
     commit_and_refresh(db, customer)
@@ -69,6 +79,7 @@ def update_customer(
     db: Session = Depends(get_db),
 ) -> Customer:
     customer = get_scoped_or_404(db, ctx, Customer, customer_id)
+    _require_discount_authority(ctx, payload.model_dump(exclude_unset=True), customer.default_discount_percent)
     audit.apply_audited_update(db, ctx, customer, "customer", payload.model_dump(exclude_unset=True))
     return customer
 

@@ -67,6 +67,8 @@ export interface Customer extends Profile {
   email: string | null;
   phone: string | null;
   active: boolean;
+  /** Permanent discount in percent (null: none). Set by owners and admins. */
+  default_discount_percent: PercentString | null;
   created_at: string;
   updated_at: string;
   /** Who created it and who changed it last (user ids); null = not recorded (before authors were kept). */
@@ -81,6 +83,7 @@ export interface CustomerCreate extends Profile {
   email: string | null;
   phone: string | null;
   active: boolean;
+  default_discount_percent?: string | null;
 }
 
 /** Partial update: only the fields present are changed. */
@@ -147,6 +150,8 @@ export interface Item {
   /** Percent, a decimal STRING with two decimals ("25.00"). */
   vat_rate: PercentString;
   active: boolean;
+  /** The temporary discount active today, if any (the price above never changes). */
+  current_discount: ItemDiscount | null;
   created_at: string;
   updated_at: string;
   /** Who created it and who changed it last (user ids); null = not recorded (before authors were kept). */
@@ -231,6 +236,10 @@ export interface TransactionLine {
   unit: string;
   quantity: QuantityString;
   unit_price_ex_vat: MoneyString;
+  /** Discount layers as stored (null: ad-hoc or a typed price). The unit price above is the result. */
+  list_unit_price: MoneyString | null;
+  catalog_discount_percent: PercentString | null;
+  customer_discount_percent: PercentString | null;
   vat_rate: PercentString;
   net_amount: MoneyString;
   vat_amount: MoneyString;
@@ -363,6 +372,10 @@ export interface InvoiceLine {
   unit: string;
   quantity: QuantityString;
   unit_price_ex_vat: MoneyString;
+  /** Discount layers as stored (null: ad-hoc or a typed price). The unit price above is the result. */
+  list_unit_price: MoneyString | null;
+  catalog_discount_percent: PercentString | null;
+  customer_discount_percent: PercentString | null;
   vat_rate: PercentString;
   net_amount: MoneyString;
   vat_amount: MoneyString;
@@ -465,4 +478,16 @@ export interface HistoryEvent {
 export interface History {
   events: HistoryEvent[];
   people: Person[];
+}
+
+/** A temporary catalog discount (GET /api/items/{id}/discounts). Dates are inclusive; no end means open-ended. */
+export interface ItemDiscount {
+  id: string;
+  item_id: string;
+  percent: PercentString;
+  starts_on: string;
+  ends_on: string | null;
+  note: string | null;
+  created_at: string;
+  created_by: string | null;
 }

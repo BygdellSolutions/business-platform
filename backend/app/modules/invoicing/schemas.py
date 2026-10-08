@@ -77,6 +77,10 @@ class InvoiceLineRead(BaseModel):
     unit: str
     quantity: QuantityOut
     unit_price_ex_vat: MoneyOut
+    # The price before discounts and the discount layers (null: ad-hoc or a manually set price; see the line CHECK).
+    list_unit_price: MoneyOut | None
+    catalog_discount_percent: PercentOut | None
+    customer_discount_percent: PercentOut | None
     vat_rate: PercentOut
     net_amount: MoneyOut
     vat_amount: MoneyOut

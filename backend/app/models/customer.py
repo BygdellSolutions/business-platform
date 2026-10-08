@@ -1,6 +1,7 @@
+from decimal import Decimal
 from enum import StrEnum
 
-from sqlalchemy import Boolean, CheckConstraint, String, UniqueConstraint, text
+from sqlalchemy import Boolean, CheckConstraint, Numeric, String, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.base import Base
@@ -25,6 +26,10 @@ class Customer(TenantOwned, Authored, BusinessProfile, Base):
             name="ck_customers_customer_type",
         ),
         *profile_constraints("customers"),
+        CheckConstraint(
+            "default_discount_percent IS NULL OR (default_discount_percent > 0 AND default_discount_percent < 100)",
+            name="ck_customers_default_discount_range",
+        ),
     )
 
     customer_type: Mapped[str] = mapped_column(String(16))
@@ -33,3 +38,6 @@ class Customer(TenantOwned, Authored, BusinessProfile, Base):
     email: Mapped[str | None] = mapped_column(String(320))
     phone: Mapped[str | None] = mapped_column(String(64))
     active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+    # The customer's permanent discount (percent), applied to catalog-priced lines after any temporary catalog
+    # discount, until it is changed or removed (NULL: none). Set by owners and admins; its history is recorded.
+    default_discount_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))

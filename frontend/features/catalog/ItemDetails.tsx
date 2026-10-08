@@ -17,6 +17,15 @@ export function ItemDetails({ item }: { item: Item }) {
         { label: "Unit", value: item.unit },
         { label: "Price excl. VAT", value: <DecimalText value={item.price_ex_vat} />, testId: "detail-price" },
         { label: "VAT %", value: <DecimalText value={item.vat_rate} /> },
+        {
+          label: "Discount today",
+          value: item.current_discount ? (
+            <>
+              −<DecimalText value={item.current_discount.percent} /> % {item.current_discount.ends_on ? `until ${item.current_discount.ends_on}` : "(no end date)"}
+            </>
+          ) : null,
+          testId: "detail-current-discount",
+        },
         { label: "Status", value: <StatusBadge active={item.active} /> },
       ]}
     />

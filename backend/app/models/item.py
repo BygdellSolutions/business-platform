@@ -1,7 +1,10 @@
+import uuid
+from datetime import date
 from decimal import Decimal
 from enum import StrEnum
 
-from sqlalchemy import Boolean, CheckConstraint, Numeric, String, Text, UniqueConstraint, text
+from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKeyConstraint, Index, Numeric, String, Text, UniqueConstraint, text
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.base import Base
@@ -40,3 +43,27 @@ class Item(TenantOwned, Authored, Base):
     # Percentage, e.g. 25.00 for 25 %.
     vat_rate: Mapped[Decimal] = mapped_column(Numeric(5, 2))
     active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+
+
+class ItemDiscount(TenantOwned, Authored, Base):
+    """A temporary discount on an item: `percent` off from `starts_on` to `ends_on` (inclusive; open-ended when
+    NULL), in the organization's calendar. It applies by itself when its period starts and stops when it ends;
+    nothing is cleaned up. The item's own price never changes. Periods of one item never overlap (checked by the API
+    under the item's row lock). A sale takes the discount active on the transaction's date, as a snapshot on the line.
+    """
+
+    __tablename__ = "item_discounts"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "item_id"], ["items.organization_id", "items.id"], ondelete="CASCADE", name="fk_item_discounts_item"
+        ),
+        CheckConstraint("percent > 0 AND percent < 100", name="ck_item_discounts_percent_range"),
+        CheckConstraint("ends_on IS NULL OR ends_on >= starts_on", name="ck_item_discounts_period"),
+        Index("ix_item_discounts_item_period", "organization_id", "item_id", "starts_on"),
+    )
+
+    item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    percent: Mapped[Decimal] = mapped_column(Numeric(5, 2))
+    starts_on: Mapped[date] = mapped_column(Date)
+    ends_on: Mapped[date | None] = mapped_column(Date)
+    note: Mapped[str | None] = mapped_column(String(255))

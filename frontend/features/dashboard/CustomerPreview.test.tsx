@@ -16,7 +16,7 @@ const B = "00000000-0000-4000-8000-0000000000b2";
 const mocked = vi.mocked(apiFetch);
 
 function customer(name: string): Customer {
-  return { id: name, customer_type: "person", name, email: null, phone: null, active: true, created_at: "", updated_at: "", created_by: null, updated_by: null, ...EMPTY_PROFILE };
+  return { id: name, customer_type: "person", name, email: null, phone: null, active: true, created_at: "", updated_at: "", created_by: null, updated_by: null, default_discount_percent: null, ...EMPTY_PROFILE };
 }
 const ok = (customers: Customer[]): ApiResult<Customer[]> => ({ ok: true, status: 200, data: customers });
 

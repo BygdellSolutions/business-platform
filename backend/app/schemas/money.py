@@ -61,6 +61,13 @@ PercentIn = Annotated[
     Field(ge=0, le=100, max_digits=5, decimal_places=2, allow_inf_nan=False),
 ]
 
+# A discount: NUMERIC(5,2), strictly between 0 and 100 (0 is "no discount", which is null; 100 would be free).
+DiscountPercentIn = Annotated[
+    Decimal,
+    BeforeValidator(_strict_decimal_input(_PERCENT_RE)),
+    Field(gt=0, lt=100, max_digits=5, decimal_places=2, allow_inf_nan=False),
+]
+
 # NUMERIC(12,3), strictly positive (quantities of units, hours, kilograms, ...).
 QuantityIn = Annotated[
     Decimal,

@@ -1,19 +1,20 @@
 import uuid
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.api.deps import Pagination, pagination
-from app.core import audit
-from app.core.authz import record_writer
+from app.core import audit, discounts
+from app.core.authz import record_writer, roles_required
 from app.core.currency import share_lock_organization
 from app.core.db import get_db
+from app.core.org_time import organization_today
 from app.core.query import commit_and_refresh, contains_pattern, delete_or_409
 from app.core.tenant import TenantContext, get_tenant_context
-from app.core.tenant_scope import create_scoped, get_scoped_or_404, scoped_select
-from app.models import Item, ItemType
-from app.schemas.item import ItemCreate, ItemRead, ItemUpdate
+from app.core.tenant_scope import create_scoped, get_scoped_or_404, reference_error, scoped_select
+from app.models import Item, ItemDiscount, ItemType, Role
+from app.schemas.item import ItemCreate, ItemDiscountCreate, ItemDiscountRead, ItemRead, ItemUpdate
 
 router = APIRouter(prefix="/api/items", tags=["items"])
 
@@ -23,7 +24,7 @@ def create_item(
     payload: ItemCreate,
     ctx: TenantContext = Depends(record_writer),
     db: Session = Depends(get_db),
-) -> Item:
+) -> ItemRead:
     # A price is only meaningful in the organization's currency, so an item cannot appear while
     # the currency is being changed (see app/core/currency.py). The foreign key's own key-share
     # lock on the organization row would also conflict with that change; this lock states the
@@ -32,7 +33,7 @@ def create_item(
     item = create_scoped(db, ctx, Item, **payload.model_dump())
     audit.created(db, ctx, item, "item")
     commit_and_refresh(db, item)
-    return item
+    return _with_discounts(db, ctx, [item])[0]
 
 
 @router.get("", response_model=list[ItemRead])
@@ -43,7 +44,7 @@ def list_items(
     page: Pagination = Depends(pagination),
     ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
-) -> list[Item]:
+) -> list[ItemRead]:
     query = scoped_select(Item, ctx)
     if q:
         pattern = contains_pattern(q)
@@ -55,7 +56,7 @@ def list_items(
     if active is not None:
         query = query.where(Item.active == active)
     query = query.order_by(Item.name, Item.id).limit(page.limit).offset(page.offset)
-    return list(db.scalars(query))
+    return _with_discounts(db, ctx, list(db.scalars(query)))
 
 
 @router.get("/{item_id}", response_model=ItemRead)
@@ -63,8 +64,8 @@ def read_item(
     item_id: uuid.UUID,
     ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
-) -> Item:
-    return get_scoped_or_404(db, ctx, Item, item_id)
+) -> ItemRead:
+    return _with_discounts(db, ctx, [get_scoped_or_404(db, ctx, Item, item_id)])[0]
 
 
 @router.patch("/{item_id}", response_model=ItemRead)
@@ -73,10 +74,10 @@ def update_item(
     payload: ItemUpdate,
     ctx: TenantContext = Depends(record_writer),
     db: Session = Depends(get_db),
-) -> Item:
+) -> ItemRead:
     item = get_scoped_or_404(db, ctx, Item, item_id)
     audit.apply_audited_update(db, ctx, item, "item", payload.model_dump(exclude_unset=True))
-    return item
+    return _with_discounts(db, ctx, [item])[0]
 
 
 @router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -87,4 +88,64 @@ def delete_item(
 ) -> Response:
     item = get_scoped_or_404(db, ctx, Item, item_id)
     delete_or_409(db, item, "Item is referenced by other records", after_delete=audit.deletion(db, ctx, item, "item"))
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def _with_discounts(db: Session, ctx: TenantContext, items: list[Item]) -> list[ItemRead]:
+    """Items as read, each with the temporary discount active today in the organization's time zone."""
+    active = discounts.active_item_discounts(db, ctx.organization_id, [item.id for item in items], organization_today(db, ctx.organization_id))
+    return [
+        ItemRead.model_validate(item).model_copy(
+            update={"current_discount": ItemDiscountRead.model_validate(active[item.id]) if item.id in active else None}
+        )
+        for item in items
+    ]
+
+
+# --- temporary discounts: reading for every member, changing for owners and admins (a pricing decision) ------------
+
+discount_admin = roles_required(Role.OWNER, Role.ADMIN)
+
+
+@router.get("/{item_id}/discounts", response_model=list[ItemDiscountRead])
+def list_item_discounts(
+    item_id: uuid.UUID, ctx: TenantContext = Depends(get_tenant_context), db: Session = Depends(get_db)
+) -> list[ItemDiscount]:
+    get_scoped_or_404(db, ctx, Item, item_id)
+    query = scoped_select(ItemDiscount, ctx).where(ItemDiscount.item_id == item_id).order_by(ItemDiscount.starts_on.desc())
+    return list(db.scalars(query))
+
+
+@router.post("/{item_id}/discounts", response_model=ItemDiscountRead, status_code=status.HTTP_201_CREATED)
+def create_item_discount(
+    item_id: uuid.UUID, payload: ItemDiscountCreate, ctx: TenantContext = Depends(discount_admin), db: Session = Depends(get_db)
+) -> ItemDiscount:
+    # The item's row lock serializes discount changes of one item, so two overlapping periods cannot both pass.
+    get_scoped_or_404(db, ctx, Item, item_id, for_update=True)
+    overlap = db.scalar(
+        scoped_select(ItemDiscount, ctx).where(
+            ItemDiscount.item_id == item_id,
+            or_(ItemDiscount.ends_on.is_(None), ItemDiscount.ends_on >= payload.starts_on),
+            *([ItemDiscount.starts_on <= payload.ends_on] if payload.ends_on is not None else []),
+        )
+    )
+    if overlap is not None:
+        reference_error("starts_on", "This period overlaps another discount of this item", "discount.overlap")
+    discount = create_scoped(db, ctx, ItemDiscount, item_id=item_id, **payload.model_dump())
+    audit.created(db, ctx, discount, "item_discount", context=("item", item_id))
+    commit_and_refresh(db, discount)
+    return discount
+
+
+@router.delete("/{item_id}/discounts/{discount_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_item_discount(
+    item_id: uuid.UUID, discount_id: uuid.UUID, ctx: TenantContext = Depends(discount_admin), db: Session = Depends(get_db)
+) -> Response:
+    get_scoped_or_404(db, ctx, Item, item_id, for_update=True)
+    discount = db.scalar(scoped_select(ItemDiscount, ctx).where(ItemDiscount.id == discount_id, ItemDiscount.item_id == item_id))
+    if discount is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Not found")
+    audit.deleted(db, ctx, discount, "item_discount", context=("item", item_id))
+    db.delete(discount)
+    db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

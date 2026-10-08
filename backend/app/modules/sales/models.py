@@ -21,6 +21,23 @@ from app.core.base import Base
 from app.models.mixins import Authored, TenantOwned
 
 
+
+def discount_constraints(table: str) -> tuple[CheckConstraint, ...]:
+    """The discount layers of a line, as the database enforces them (the same rule as
+    `pricing.discounted_unit_price`): a line either has no list price and no discounts (ad-hoc or a manually set
+    price), or its unit price is the list price after the catalog layer, rounded, then the customer layer, rounded."""
+    percent = "{0} IS NULL OR ({0} > 0 AND {0} < 100)"
+    return (
+        CheckConstraint(percent.format("catalog_discount_percent"), name=f"ck_{table}_catalog_discount_range"),
+        CheckConstraint(percent.format("customer_discount_percent"), name=f"ck_{table}_customer_discount_range"),
+        CheckConstraint(
+            "(list_unit_price IS NULL AND catalog_discount_percent IS NULL AND customer_discount_percent IS NULL)"
+            " OR (list_unit_price IS NOT NULL AND unit_price_ex_vat = round(round(list_unit_price"
+            " * (100 - coalesce(catalog_discount_percent, 0)) / 100, 2) * (100 - coalesce(customer_discount_percent, 0)) / 100, 2))",
+            name=f"ck_{table}_discount_layers",
+        ),
+    )
+
 class TransactionStatus(StrEnum):
     """Lifecycle of the transaction itself (not its invoicing).
 
@@ -133,6 +150,7 @@ class TransactionLine(TenantOwned, Authored, Base):
         CheckConstraint(
             "gross_amount = net_amount + vat_amount", name="ck_transaction_lines_gross_amount"
         ),
+        *discount_constraints("transaction_lines"),
         Index("ix_transaction_lines_organization_transaction", "organization_id", "transaction_id"),
         Index("ix_transaction_lines_organization_item", "organization_id", "item_id"),
     )
@@ -145,6 +163,11 @@ class TransactionLine(TenantOwned, Authored, Base):
     unit: Mapped[str] = mapped_column(String(32))
     quantity: Mapped[Decimal] = mapped_column(Numeric(12, 3))
     unit_price_ex_vat: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    # Discount layers (see discount_constraints): the price before discounts and the two percentages, copied when the
+    # line is priced from the catalog. NULL for ad-hoc lines and manually set prices.
+    list_unit_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    catalog_discount_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    customer_discount_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
     vat_rate: Mapped[Decimal] = mapped_column(Numeric(5, 2))
     net_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     vat_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))

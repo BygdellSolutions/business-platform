@@ -301,7 +301,8 @@ def test_a_line_that_came_from_an_item_carries_no_item_reference(client, db_sess
     body = draft_invoice(client, sales.headers, tx)
     assert set(body["lines"][0]) == {
         "id", "position", "source_transaction_id", "source_line_id", "description", "unit", "quantity",
-        "unit_price_ex_vat", "vat_rate", "net_amount", "vat_amount", "gross_amount", "fields",
+        "unit_price_ex_vat", "list_unit_price", "catalog_discount_percent", "customer_discount_percent",
+        "vat_rate", "net_amount", "vat_amount", "gross_amount", "fields",
     }
 
 

@@ -5,6 +5,7 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, StringConstraints, field_validator
 
 from app.models import CustomerType
+from app.schemas.money import DiscountPercentIn, PercentOut
 from app.schemas.profile import ProfileIn, ProfileRead
 
 Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
@@ -21,6 +22,8 @@ class CustomerCreate(ProfileIn):
     email: Email | None = None
     phone: Phone | None = None
     active: bool = True
+    # Owners and admins only (checked by the endpoint). Null: no permanent discount.
+    default_discount_percent: DiscountPercentIn | None = None
 
 
 class CustomerUpdate(ProfileIn):
@@ -32,6 +35,7 @@ class CustomerUpdate(ProfileIn):
     email: Email | None = None
     phone: Phone | None = None
     active: bool | None = None
+    default_discount_percent: DiscountPercentIn | None = None  # null removes it; owners and admins only
 
     @field_validator("customer_type", "name", "active")
     @classmethod
@@ -59,6 +63,7 @@ class CustomerRead(ProfileRead):
     email: str | None
     phone: str | None
     active: bool
+    default_discount_percent: PercentOut | None
     created_at: datetime
     updated_at: datetime
     # Who created it and who changed it last (null: not recorded, e.g. before authors were kept).

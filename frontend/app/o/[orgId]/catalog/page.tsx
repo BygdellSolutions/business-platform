@@ -75,6 +75,11 @@ export default async function CatalogPage({
                 <td className="py-1 pr-4 text-right" data-testid="item-price">
                   {/* Exactly the string the backend sent: no parsing, rounding or formatting. */}
                   <DecimalText value={item.price_ex_vat} />
+                  {item.current_discount && (
+                    <span className="ml-1 text-xs text-red-700 dark:text-red-400" data-testid="current-discount">
+                      −<DecimalText value={item.current_discount.percent} />% now
+                    </span>
+                  )}
                 </td>
                 <td className="py-1 pr-4 text-right" data-testid="item-vat">
                   <DecimalText value={item.vat_rate} />

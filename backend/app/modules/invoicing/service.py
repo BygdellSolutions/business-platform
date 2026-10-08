@@ -287,6 +287,9 @@ def _insert_children(
                 unit=line.unit,
                 quantity=line.quantity,
                 unit_price_ex_vat=line.unit_price_ex_vat,
+                list_unit_price=line.list_unit_price,
+                catalog_discount_percent=line.catalog_discount_percent,
+                customer_discount_percent=line.customer_discount_percent,
                 vat_rate=line.vat_rate,
                 net_amount=line.net_amount,
                 vat_amount=line.vat_amount,
@@ -448,7 +451,10 @@ def _verify_unchanged(
     copied = {line.source_line_id: line for line in lines}
     if {line.id for line in source_lines} != set(copied) or len(source_lines) != len(lines):
         raise _source_changed("The lines of a source transaction were changed")
-    columns = ("description", "unit", "quantity", "unit_price_ex_vat", "vat_rate", "net_amount", "vat_amount", "gross_amount")
+    columns = (
+        "description", "unit", "quantity", "unit_price_ex_vat", "list_unit_price", "catalog_discount_percent", "customer_discount_percent",
+        "vat_rate", "net_amount", "vat_amount", "gross_amount",
+    )
     for source_line in source_lines:
         copy = copied[source_line.id]
         if copy.source_transaction_id != source_line.transaction_id or any(

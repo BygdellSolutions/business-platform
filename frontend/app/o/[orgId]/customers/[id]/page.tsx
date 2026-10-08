@@ -38,7 +38,7 @@ export default async function CustomerPage({
       </h1>
       {created === "1" && <Notice testId="created">Customer created.</Notice>}
       <RecordMeta record={customer} people={history.history.people} timeZone={organization.timezone} />
-      {canWriteRecords(role) ? <CustomerForm key={customer.id} customer={customer} /> : <CustomerDetails customer={customer} />}
+      {canWriteRecords(role) ? <CustomerForm key={customer.id} customer={customer} canSetDiscount={role === "owner" || role === "admin"} /> : <CustomerDetails customer={customer} />}
       <RecordHistory data={history} entityType="customer" timeZone={organization.timezone} />
     </div>
   );

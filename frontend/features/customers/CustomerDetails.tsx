@@ -17,6 +17,7 @@ export function CustomerDetails({ customer }: { customer: Customer }) {
         { label: "Name", value: customer.name },
         { label: "Email", value: customer.email },
         { label: "Phone", value: customer.phone },
+        { label: "Default discount %", value: customer.default_discount_percent },
         ...PROFILE_FIELDS.map((field) => ({ label: PROFILE_LABELS[field], value: customer[field] })),
         { label: "Status", value: <StatusBadge active={customer.active} /> },
       ]}

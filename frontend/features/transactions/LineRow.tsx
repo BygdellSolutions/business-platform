@@ -7,6 +7,7 @@ import { useOrgId } from "@/components/shell/org-context";
 import { Button } from "@/components/ui/Button";
 import { ConfirmButton } from "@/components/ui/ConfirmButton";
 import { DecimalText } from "@/components/ui/DecimalText";
+import { DiscountSteps } from "@/components/ui/DiscountSteps";
 import { useEditor } from "@/features/transactions/editor-context";
 import { classify } from "@/features/transactions/failures";
 import { LineEditor } from "@/features/transactions/LineEditor";
@@ -60,7 +61,10 @@ export function LineRow({ line, ordinal }: { line: TransactionLine; ordinal: num
       <td className="py-1 pr-3" data-testid="line-description">{line.description}</td>
       <td className="py-1 pr-3" data-testid="line-unit">{line.unit}</td>
       <td className="py-1 pr-3 text-right" data-testid="line-quantity"><DecimalText value={line.quantity} /></td>
-      <td className="py-1 pr-3 text-right" data-testid="line-price"><DecimalText value={line.unit_price_ex_vat} /></td>
+      <td className="py-1 pr-3 text-right" data-testid="line-price">
+        <DecimalText value={line.unit_price_ex_vat} />
+        <DiscountSteps list={line.list_unit_price} catalog={line.catalog_discount_percent} customer={line.customer_discount_percent} />
+      </td>
       <td className="py-1 pr-3 text-right" data-testid="line-vat-rate"><DecimalText value={line.vat_rate} /></td>
       <td className="py-1 pr-3 text-right" data-testid="line-net"><DecimalText value={line.net_amount} /></td>
       <td className="py-1 pr-3 text-right" data-testid="line-vat"><DecimalText value={line.vat_amount} /></td>

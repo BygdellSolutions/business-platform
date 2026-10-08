@@ -159,12 +159,21 @@ def apply_audited_update(
     anything changed."""
     from app.core.query import commit_and_refresh  # query imports the registry; keep this module light
 
+    changed = set_audited(db, ctx, target, entity_type, values, context=context)
+    commit_and_refresh(db, target)
+    return changed
+
+
+def set_audited(
+    db: Session, ctx: TenantContext, target: Any, entity_type: str, values: dict[str, Any], *,
+    context: tuple[str, uuid.UUID] | None = None,
+) -> bool:
+    """Set the values and record what changed, WITHOUT committing (for a change made of several records that must
+    commit together). Returns whether anything changed."""
     before = snapshot(target)
     for field, value in values.items():
         setattr(target, field, value)
     # Compare what the database STORED (900 becomes 900.00, a trimmed name stays trimmed), not what was sent.
     db.flush()
     db.refresh(target)
-    changed = updated(db, ctx, target, entity_type, before, context=context)
-    commit_and_refresh(db, target)
-    return changed
+    return updated(db, ctx, target, entity_type, before, context=context)
