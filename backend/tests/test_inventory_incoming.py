@@ -133,3 +133,28 @@ def test_stock_states_are_separate_and_combine(client: TestClient, db_session: S
     client.post(f"/api/transactions/{tx.id}/complete", headers=owner)  # 3 delivered, 1 backordered
     assert states() == ["out_of_stock", "backordered", "incoming"]
     assert client.patch(f"/api/items/{item.id}", json={"low_stock_threshold": "-1"}, headers=owner).status_code == 422
+
+
+def test_the_inventory_lists_every_stock_tracking_product_with_its_figures(client: TestClient, db_session: Session):
+    org, owner = _world(db_session)
+    other, other_owner = _world(db_session)
+    shelf = make_item(db_session, org, name="Hoof oil", type=ItemType.PRODUCT, unit="pcs", track_stock=True, sku="HO-1")
+    empty = make_item(db_session, org, name="Fly spray", type=ItemType.PRODUCT, unit="pcs", track_stock=True)
+    make_item(db_session, org, name="Plain", type=ItemType.PRODUCT)  # does not track stock
+    make_item(db_session, org, name="Massage")  # a service
+    make_item(db_session, other, name="Theirs", type=ItemType.PRODUCT, track_stock=True)
+    client.post(f"/api/items/{shelf.id}/stock", json={"kind": "count", "quantity": "7"}, headers=owner)
+
+    rows = client.get("/api/inventory/items", headers=owner).json()
+    in_stock = client.get("/api/inventory/items", params={"state": "in_stock"}, headers=owner).json()
+    out = client.get("/api/inventory/items", params={"state": "out_of_stock"}, headers=owner).json()
+    by_sku = client.get("/api/inventory/items", params={"q": "ho-1"}, headers=owner).json()
+
+    assert [(r["name"], r["sku"], r["on_hand"], r["available"], r["states"]) for r in rows] == [
+        ("Fly spray", None, "0.000", "0.000", ["out_of_stock"]),
+        ("Hoof oil", "HO-1", "7.000", "7.000", []),
+    ]
+    assert [r["name"] for r in in_stock] == ["Hoof oil"] and [r["name"] for r in out] == ["Fly spray"]
+    assert [r["item_id"] for r in by_sku] == [str(shelf.id)]
+    assert [r["name"] for r in client.get("/api/inventory/items", headers=other_owner).json()] == ["Theirs"]
+    assert empty.id

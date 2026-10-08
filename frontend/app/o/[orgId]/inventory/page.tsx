@@ -2,16 +2,43 @@ import Link from "next/link";
 
 import { DecimalText } from "@/components/ui/DecimalText";
 import { BACKORDER_STATES } from "@/features/catalog/BackordersPanel";
-import type { Backorder, Incoming } from "@/lib/api/types";
+import { StockBadges } from "@/features/catalog/StockBadges";
+import type { Backorder, Incoming, StockItem } from "@/lib/api/types";
 import { serverRead } from "@/lib/server-api";
 
+const STATES = [
+  { value: "", label: "All" },
+  { value: "in_stock", label: "In stock" },
+  { value: "low_stock", label: "Low stock" },
+  { value: "out_of_stock", label: "Out of stock" },
+  { value: "backordered", label: "Backordered" },
+  { value: "incoming", label: "Incoming" },
+] as const;
+const CONTROL = "rounded border border-zinc-400 px-2 py-1 text-sm dark:bg-zinc-900";
+
+function one(value: string | string[] | undefined): string {
+  return typeof value === "string" ? value : "";
+}
+
 /**
- * The organization's open backorders (oldest first) and the deliveries on their way, across all products. Allocation
- * and receipt happen on each product's page, where the stock they change is shown.
+ * The organization's stock at a glance: every product that tracks stock with what is on hand, promised, available and
+ * on its way; then the open backorders (oldest first) and the deliveries on their way. Counting, receiving and
+ * allocating happen on each product's page, where the stock they change is shown.
  */
-export default async function InventoryPage({ params }: { params: Promise<{ orgId: string }> }) {
+export default async function InventoryPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ orgId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { orgId } = await params;
-  const [backorders, incoming] = await Promise.all([
+  const raw = await searchParams;
+  const q = one(raw.q).trim();
+  const state = STATES.some((entry) => entry.value === one(raw.state)) ? one(raw.state) : "";
+  const query = new URLSearchParams({ ...(q ? { q } : {}), ...(state ? { state } : {}) }).toString();
+  const [items, backorders, incoming] = await Promise.all([
+    serverRead<StockItem[]>(orgId, "/api/inventory/items", query ? `?${query}` : ""),
     serverRead<Backorder[]>(orgId, "/api/inventory/backorders"),
     serverRead<Incoming[]>(orgId, "/api/inventory/incoming"),
   ]);
@@ -19,6 +46,76 @@ export default async function InventoryPage({ params }: { params: Promise<{ orgI
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold">Inventory</h1>
+      <section aria-label="Stock" className="flex flex-col gap-2">
+        <h2 className="text-lg font-semibold">Stock</h2>
+        <form action={`/o/${orgId}/inventory`} className="flex flex-wrap items-end gap-3">
+          <label className="flex flex-col gap-1 text-sm">
+            Search
+            <input name="q" defaultValue={q} placeholder="Name or SKU" className={CONTROL} />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            State
+            <select name="state" defaultValue={state} className={CONTROL}>
+              {STATES.map((entry) => (
+                <option key={entry.value} value={entry.value}>
+                  {entry.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="submit" className="rounded border border-zinc-400 px-3 py-1 text-sm">
+            Show
+          </button>
+        </form>
+        {items.length === 0 ? (
+          <p className="text-sm text-zinc-500" data-testid="no-stock-items">
+            {q || state ? "No product matches." : "No product tracks stock yet. Open a product in the Catalog and tick “Track stock”."}
+          </p>
+        ) : (
+          <table className="w-full max-w-6xl text-left text-sm" data-testid="stock-table">
+            <thead>
+              <tr className="border-b border-zinc-300 dark:border-zinc-700">
+                <th className="py-1 pr-4">Product</th>
+                <th className="py-1 pr-4">SKU</th>
+                <th className="py-1 pr-4 text-right">On hand</th>
+                <th className="py-1 pr-4 text-right">Committed</th>
+                <th className="py-1 pr-4 text-right">Available</th>
+                <th className="py-1 pr-4 text-right">Incoming</th>
+                <th className="py-1 pr-4 text-right">Low below</th>
+                <th className="py-1">State</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={item.item_id} data-testid="stock-row" className="border-b border-zinc-200 dark:border-zinc-800">
+                  <td className="py-1 pr-4">
+                    <Link href={`/o/${orgId}/catalog/${item.item_id}`} className="underline">
+                      {item.name}
+                    </Link>
+                  </td>
+                  <td className="py-1 pr-4">{item.sku}</td>
+                  <td className="py-1 pr-4 text-right" data-testid="stock-row-on-hand">
+                    <DecimalText value={item.on_hand} /> {item.unit}
+                  </td>
+                  <td className="py-1 pr-4 text-right">
+                    <DecimalText value={item.committed} />
+                  </td>
+                  <td className="py-1 pr-4 text-right">
+                    <DecimalText value={item.available} />
+                  </td>
+                  <td className="py-1 pr-4 text-right">
+                    <DecimalText value={item.incoming} />
+                  </td>
+                  <td className="py-1 pr-4 text-right">{item.low_stock_threshold ? <DecimalText value={item.low_stock_threshold} /> : null}</td>
+                  <td className="py-1">
+                    <StockBadges states={item.states} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
       <section aria-label="Backorders" className="flex flex-col gap-2">
         <h2 className="text-lg font-semibold">Backorders</h2>
         {backorders.length === 0 ? (

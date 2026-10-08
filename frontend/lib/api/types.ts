@@ -258,6 +258,14 @@ export interface LineFulfillment {
   state: "waiting_for_stock" | "partially_fulfilled" | "ready_to_fulfill" | "fulfilled" | "cancelled";
 }
 
+/** A product that tracks stock, with its figures (GET /api/inventory/items). */
+export interface StockItem extends ItemAvailability {
+  name: string;
+  sku: string | null;
+  unit: string;
+  active: boolean;
+}
+
 /** A delivery on its way (GET /api/inventory/incoming). */
 export interface Incoming {
   id: string;

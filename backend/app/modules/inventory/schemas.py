@@ -181,6 +181,15 @@ class AllocationConfirm(BaseModel):
         return self
 
 
+class StockItemRead(ItemAvailability):
+    """One stock-tracking product on the Inventory page: what it is, and its figures and states."""
+
+    name: str
+    sku: str | None
+    unit: str
+    active: bool
+
+
 class InventorySummary(BaseModel):
     """The dashboard's figures from Inventory: active products that track stock, by state."""
 

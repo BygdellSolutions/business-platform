@@ -1,16 +1,18 @@
 import uuid
 from decimal import Decimal
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core import clock
 from app.core.authz import record_writer
 from app.core.db import get_db
+from app.core.query import contains_pattern
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import get_scoped, get_scoped_or_404, reference_error
-from app.models import Customer, Item, User
+from app.models import Customer, Item, ItemType, User
 from app.modules.inventory import service
 from app.modules.inventory.models import IncomingStock, LineFulfillment, MovementReason, StockMovement
 from app.modules.inventory.schemas import (
@@ -21,6 +23,7 @@ from app.modules.inventory.schemas import (
     IncomingRead,
     InventorySummary,
     ItemAvailability,
+    StockItemRead,
     LineFulfillmentRead,
     ProposedAllocation,
     Receipt,
@@ -66,6 +69,57 @@ def adjust_stock(
     service.record_movement(db, ctx, item, change, MovementReason.OPENING if opening else MovementReason.ADJUSTMENT, note=payload.note)
     db.commit()
     return _stock_read(db, ctx, item)
+
+
+STOCK_ITEMS_SHOWN = 500
+
+
+@availability_router.get("/items", response_model=list[StockItemRead])
+def list_stock_items(
+    q: str | None = Query(default=None, max_length=255, description="Name or article number contains"),
+    state: Literal["out_of_stock", "low_stock", "backordered", "incoming", "in_stock"] | None = None,
+    include_inactive: bool = False,
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: Session = Depends(get_db),
+) -> list[StockItemRead]:
+    """Every product that tracks stock, by name, with on hand, committed, available, incoming and its states (any
+    member). `state` keeps those in that state ("in_stock": none of the problem states)."""
+    query = select(Item).where(
+        Item.organization_id == ctx.organization_id, Item.type == ItemType.PRODUCT, Item.track_stock.is_(True)
+    )
+    if not include_inactive:
+        query = query.where(Item.active.is_(True))
+    if q:
+        pattern = contains_pattern(q)
+        query = query.where(or_(Item.name.ilike(pattern, escape="\\"), Item.sku.ilike(pattern, escape="\\")))
+    items = list(db.scalars(query.order_by(Item.name, Item.id).limit(STOCK_ITEMS_SHOWN)))
+    ids = [item.id for item in items]
+    figures = service.available(db, ctx.organization_id, ids)
+    promised = service.committed(db, ctx.organization_id, ids)
+    coming = service.incoming(db, ctx.organization_id, ids)
+    rows = []
+    for item in items:
+        states = service.stock_states(figures[item.id][0], item.low_stock_threshold, promised[item.id], coming[item.id])
+        if state == "in_stock" and any(s in states for s in ("out_of_stock", "low_stock")):
+            continue
+        if state not in (None, "in_stock") and state not in states:
+            continue
+        rows.append(
+            StockItemRead(
+                item_id=item.id,
+                name=item.name,
+                sku=item.sku,
+                unit=item.unit,
+                active=item.active,
+                on_hand=figures[item.id][0],
+                committed=promised[item.id],
+                available=figures[item.id][1],
+                incoming=coming[item.id],
+                low_stock_threshold=item.low_stock_threshold,
+                states=states,
+            )
+        )
+    return rows
 
 
 @availability_router.get("/availability", response_model=list[ItemAvailability])

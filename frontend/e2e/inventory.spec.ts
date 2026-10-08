@@ -130,6 +130,9 @@ test("received stock goes to waiting sales only when a person confirms the oldes
 
   await page.goto(`/o/${world.orgId}/inventory`);
   await expect(page.getByTestId("backlog-row")).toHaveCount(2);
+  await expect(page.getByTestId("stock-row")).toHaveCount(1); // the product, with what is on hand and what is promised
+  await expect(page.getByTestId("stock-row-on-hand")).toHaveText("4.000 pcs");
+  await expect(page.getByTestId("stock-row")).toContainText("Backordered");
 
   await page.goto(`/o/${world.orgId}/catalog/${item.id}`);
   const panel = page.getByTestId("backorders-panel");
