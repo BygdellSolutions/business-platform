@@ -53,7 +53,7 @@ export default async function Dashboard({
           {canWriteRecords(role) && (
             <>
               <Link href={`${base}/transactions/new`} className="rounded border border-zinc-400 px-3 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-800">
-                New transaction
+                New order
               </Link>
               <Link href={`${base}/customers/new`} className="rounded border border-zinc-400 px-3 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-800">
                 New customer
@@ -71,7 +71,7 @@ export default async function Dashboard({
       <section aria-label="To do" className="flex flex-col gap-2">
         <h2 className="text-lg font-semibold">To do</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <SummaryCard title="Draft transactions" count={sales.drafts} href={`${base}/transactions?status=draft`} testId="card-drafts" />
+          <SummaryCard title="Draft orders" count={sales.drafts} href={`${base}/transactions?status=draft`} testId="card-drafts" />
           <SummaryCard
             title="Ready to invoice"
             count={invoicing.ready_to_invoice.count}

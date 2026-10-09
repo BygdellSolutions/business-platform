@@ -20,7 +20,7 @@ export const FIELD_LABELS: Record<string, Record<string, string>> = {
     net_amount: "Net",
     vat_amount: "VAT",
     gross_amount: "Gross",
-    transaction_id: "Transaction",
+    transaction_id: "Order",
   },
   invoice: {
     payment: "Payment",
@@ -44,7 +44,7 @@ export const ENTITY_LABELS: Record<string, string> = {
   item: "Item",
   horse: "Horse",
   horse_note: "Note",
-  transaction: "Transaction",
+  transaction: "Order",
   transaction_line: "Line",
   invoice: "Invoice",
 };

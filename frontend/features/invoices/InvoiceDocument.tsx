@@ -12,7 +12,7 @@ import type { Invoice, PartySnapshot } from "@/lib/api/types";
  * content. Nothing here fetches or looks anything up, and nothing is calculated: amounts, totals
  * and the VAT breakdown are the strings the server stored.
  *
- * The one place a live record is mentioned is the "Source transactions" section: links for
+ * The one place a live record is mentioned is the "Source orders" section: links for
  * navigation and audit, visibly secondary, labelled with the date the invoice itself recorded.
  * Following one shows the live record, which may by now differ from what this invoice says.
  */
@@ -161,16 +161,16 @@ export function InvoiceDocument({ invoice, orgId }: { invoice: Invoice; orgId: s
         )}
       </section>
 
-      <section aria-label="Source transactions" data-testid="sources" className="flex flex-col gap-2 border-t border-zinc-300 pt-3 text-sm text-zinc-600 dark:border-zinc-700 dark:text-zinc-400">
-        <h3 className="text-sm font-medium">Source transactions (navigation and audit only)</h3>
+      <section aria-label="Source orders" data-testid="sources" className="flex flex-col gap-2 border-t border-zinc-300 pt-3 text-sm text-zinc-600 dark:border-zinc-700 dark:text-zinc-400">
+        <h3 className="text-sm font-medium">Source orders (navigation and audit only)</h3>
         <p>These links open the live records, which may have changed since this invoice recorded them. The invoice above is not affected by them.</p>
         <ul className="flex flex-col gap-2">
           {invoice.transactions.map((source) => (
             <li key={source.transaction_id} data-testid="source">
               <Link href={`/o/${orgId}/transactions/${source.transaction_id}`} data-testid="source-link" className="underline">
-                Transaction of {source.transaction_date}
+                Order of {source.transaction_date}
               </Link>
-              <FieldSnapshots fields={source.fields} label={`Fields of the transaction of ${source.transaction_date}`} testId="transaction-fields" />
+              <FieldSnapshots fields={source.fields} label={`Fields of the order of ${source.transaction_date}`} testId="transaction-fields" />
             </li>
           ))}
         </ul>

@@ -80,12 +80,12 @@ function toState(organization: Organization): FormState {
 
 function currencyHint(organization: Organization): string {
   if (organization.default_currency === null) {
-    return "Not set yet. Transactions cannot be created until a currency is set.";
+    return "Not set yet. Orders cannot be created until a currency is set.";
   }
   if (organization.default_currency_locked) {
     return `Fixed: it can no longer be changed because prices already exist. ${organization.default_currency_lock_reason ?? ""}`.trim();
   }
-  return "It can be changed only until the first item or transaction exists.";
+  return "It can be changed only until the first item or order exists.";
 }
 
 function timezoneHint(organization: Organization): string {

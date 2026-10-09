@@ -145,7 +145,7 @@ describe("the snapshot wins over live data (the live world deliberately disagree
     const sources = within(screen.getByTestId("sources"));
     expect(sources.getByText(/navigation and audit only/)).toBeInTheDocument();
     const link = sources.getByTestId("source-link");
-    expect(link).toHaveTextContent("Transaction of 2026-09-30");
+    expect(link).toHaveTextContent("Order of 2026-09-30");
     expect(link).toHaveAttribute("href", `/o/${ORG_A}/transactions/${TX_1}`);
     // The links are the ONLY links in the document, and no link carries customer or item text.
     expect(within(screen.getByTestId("invoice-document")).getAllByRole("link")).toHaveLength(1);
@@ -166,7 +166,7 @@ describe("the snapshot wins over live data (the live world deliberately disagree
     });
     render(<InvoiceDocument invoice={two} orgId={ORG_A} />);
     const rows = screen.getAllByTestId("source");
-    expect(rows.map((row) => within(row).getByTestId("source-link").textContent)).toEqual(["Transaction of 2026-09-30", "Transaction of 2026-10-02"]);
+    expect(rows.map((row) => within(row).getByTestId("source-link").textContent)).toEqual(["Order of 2026-09-30", "Order of 2026-10-02"]);
     expect(within(rows[0]).getByText("PO-1")).toBeInTheDocument();
     expect(within(rows[1]).queryByTestId("transaction-fields")).toBeNull();
   });

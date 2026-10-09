@@ -79,7 +79,7 @@ export function CreateOrganizationForm() {
         required
         error={local.default_currency ?? problems.byField.default_currency}
         autoComplete="off"
-        hint="A three-letter code, for example EUR. It can be changed only until the first item or transaction exists."
+        hint="A three-letter code, for example EUR. It can be changed only until the first item or order exists."
       />
       {refused ? <Notice tone="error" testId="creation-refused">This account is not allowed to create organizations.</Notice> : <ErrorSummary messages={problems.general} />}
       {unknownOutcome && (

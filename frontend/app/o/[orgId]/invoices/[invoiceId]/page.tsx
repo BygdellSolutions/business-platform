@@ -50,7 +50,7 @@ export default async function InvoicePage({
           Back to invoices
         </Link>
       </div>
-      {created === "1" && <Notice testId="created">Draft invoice created. Its transactions are reserved until you issue or delete it.</Notice>}
+      {created === "1" && <Notice testId="created">Draft invoice created. Its orders are reserved until you issue or delete it.</Notice>}
       <RecordMeta record={invoice} people={history.history.people} timeZone={organization.timezone} />
       {invoice.issued_at !== null && (
         <p className="text-sm text-zinc-500" data-testid="issued-meta">

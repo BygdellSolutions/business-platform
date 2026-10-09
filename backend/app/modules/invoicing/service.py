@@ -138,22 +138,22 @@ def _check_invoiceable(db: Session, ctx: TenantContext, sources: Sequence[Transa
     ids = [t.id for t in sources]
     not_completed = [t.id for t in sources if t.status != TransactionStatus.COMPLETED]
     if not_completed:
-        raise conflict("transactions_not_completed", "Only completed transactions can be invoiced", not_completed)
+        raise conflict("transactions_not_completed", "Only completed orders can be invoiced", not_completed)
     if len({t.billing_customer_id for t in sources}) > 1:
-        raise conflict("mixed_customers", "All transactions on an invoice must have the same billing customer", ids)
+        raise conflict("mixed_customers", "All orders on an invoice must have the same billing customer", ids)
     without_currency = [t.id for t in sources if t.currency is None]
     if without_currency:
         raise conflict(
             "currency_missing",
-            "A transaction without a currency cannot be invoiced; an owner or admin can assign the "
-            "organization's currency to earlier transactions in the settings",
+            "An order without a currency cannot be invoiced; an owner or admin can assign the "
+            "organization's currency to earlier orders in the settings",
             without_currency,
         )
     if len({t.currency for t in sources}) > 1:
-        raise conflict("mixed_currencies", "All transactions on an invoice must be in the same currency", ids)
+        raise conflict("mixed_currencies", "All orders on an invoice must be in the same currency", ids)
     reserved = _already_invoiced(db, ctx, ids)
     if reserved:
-        raise conflict("already_invoiced", "A transaction is already on a draft or issued invoice", reserved)
+        raise conflict("already_invoiced", "An order is already on a draft or issued invoice", reserved)
 
 
 def _first_by_transaction(rows: Sequence[Any], key: str = "transaction_id") -> dict[uuid.UUID, list[Any]]:
@@ -171,7 +171,7 @@ def create_draft(db: Session, ctx: TenantContext, payload: InvoiceCreate) -> uui
     # mixture of found and not found gives the one answer: the caller learns nothing about which.
     sources = _lock_sources(db, ctx, requested)
     if len(sources) != len(requested):
-        reference_error("transaction_ids", "One or more transactions were not found", "reference.not_found")
+        reference_error("transaction_ids", "One or more orders were not found", "reference.not_found")
 
     # 5-8. Eligibility, under the locks.
     _check_invoiceable(db, ctx, sources)
@@ -236,7 +236,7 @@ def create_draft(db: Session, ctx: TenantContext, payload: InvoiceCreate) -> uui
         if _violated(error) == SOURCE_ONCE_CONSTRAINT:
             raise conflict(
                 "already_invoiced",
-                "A transaction is already on a draft or issued invoice",
+                "An order is already on a draft or issued invoice",
                 _already_invoiced(db, ctx, requested),
             ) from error
         raise
@@ -446,7 +446,7 @@ def delete_draft(db: Session, ctx: TenantContext, invoice_id: uuid.UUID, if_matc
 def _source_changed(message: str) -> HTTPException:
     return conflict(
         "source_changed",
-        f"{message}. The draft no longer matches its source transactions and cannot be issued; delete it and create a new one",
+        f"{message}. The draft no longer matches its source orders and cannot be issued; delete it and create a new one",
     )
 
 
@@ -460,20 +460,20 @@ def _verify_unchanged(
 ) -> list[TransactionLine]:
     """Nothing the draft reserved may differ from what it copied. Returns the source lines."""
     if {s.id for s in sources} != {link.transaction_id for link in links} or len(sources) != len(links):
-        raise _source_changed("A source transaction is missing")
+        raise _source_changed("A source order is missing")
     by_id = {s.id: s for s in sources}
     for link in links:
         source = by_id[link.transaction_id]
         if source.status != TransactionStatus.COMPLETED:
-            raise _source_changed("A source transaction is no longer completed")
+            raise _source_changed("A source order is no longer completed")
         if source.version != link.source_version:
-            raise _source_changed("A source transaction was changed")
+            raise _source_changed("A source order was changed")
         if (source.billing_customer_id, source.currency, source.transaction_date) != (
             link.customer_id,
             link.currency,
             link.transaction_date,
         ):
-            raise _source_changed("A source transaction's customer, currency or date was changed")
+            raise _source_changed("A source order's customer, currency or date was changed")
     source_lines = list(
         db.scalars(
             _fresh(
@@ -485,7 +485,7 @@ def _verify_unchanged(
     )
     copied = {line.source_line_id: line for line in lines}
     if {line.id for line in source_lines} != set(copied) or len(source_lines) != len(lines):
-        raise _source_changed("The lines of a source transaction were changed")
+        raise _source_changed("The lines of a source order were changed")
     columns = (
         "description", "unit", "quantity", "unit_price_ex_vat", "list_unit_price", "catalog_discount_percent", "customer_discount_percent",
         "line_discount_percent", "vat_rate", "net_amount", "vat_amount", "gross_amount",
@@ -495,7 +495,7 @@ def _verify_unchanged(
         if copy.source_transaction_id != source_line.transaction_id or any(
             getattr(copy, column) != getattr(source_line, column) for column in columns
         ):
-            raise _source_changed("A line of a source transaction was changed")
+            raise _source_changed("A line of a source order was changed")
     # The stored header and VAT breakdown must still be the sums of the stored lines.
     net, vat, gross, by_rate = sum_lines(lines)
     if (net, vat, gross) != (invoice.net_amount, invoice.vat_amount, invoice.gross_amount):

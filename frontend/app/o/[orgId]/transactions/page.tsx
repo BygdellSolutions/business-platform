@@ -44,10 +44,10 @@ export default async function TransactionsPage({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold">Transactions</h1>
+        <h1 className="text-2xl font-semibold">Orders</h1>
         {canWrite && (
           <Link href={`${base}/new`} className="underline" data-testid="new-transaction">
-            New transaction
+            New order
           </Link>
         )}
       </div>
@@ -75,7 +75,7 @@ export default async function TransactionsPage({
 
       {transactions.length === 0 ? (
         <p data-testid="empty">
-          {filtered ? "No transactions match." : "No transactions yet."}{" "}
+          {filtered ? "No orders match." : "No orders yet."}{" "}
           {!filtered && canWrite && (
             <Link href={`${base}/new`} className="underline">
               Create the first one.

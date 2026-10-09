@@ -284,7 +284,7 @@ describe("a blocked completion, at the controls", () => {
     expect(linePanel(LINE_2).queryByTestId("error-region")).toBeNull();
     // the summary list is preserved, with a link to each place
     const items = within(screen.getByTestId("editor-problems")).getAllByRole("listitem");
-    expect(items.map((item) => item.textContent)).toEqual(["Transaction · Project: Project is required", "Line 2 · District: District is required"]);
+    expect(items.map((item) => item.textContent)).toEqual(["Order · Project: Project is required", "Line 2 · District: District is required"]);
     expect(within(items[0]).getByRole("link")).toHaveAttribute("href", "#transaction-fields");
     expect(within(items[1]).getByRole("link")).toHaveAttribute("href", `#line-${LINE_2}-fields`);
     expect(document.getElementById("transaction-fields")).not.toBeNull();

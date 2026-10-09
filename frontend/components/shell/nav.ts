@@ -16,7 +16,7 @@ export const NAV: NavItem[] = [
   { label: "Catalog", path: "/catalog", enabled: true },
   { label: "Inventory", path: "/inventory", enabled: true },
   { label: "Horses", path: "/horses", enabled: true },
-  { label: "Transactions", path: "/transactions", enabled: true },
+  { label: "Orders", path: "/transactions", enabled: true },
   { label: "Invoices", path: "/invoices", enabled: true },
   { label: "Settings", path: "/settings", enabled: true },
   { label: "Members", path: "/members", enabled: true, roles: ["owner", "admin"] },

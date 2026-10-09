@@ -59,8 +59,8 @@ export function LifecycleBar() {
         )}
         {(status === "draft" || status === "completed") && (
           <ConfirmButton
-            label={running === "cancel" ? PROGRESS.cancel : "Cancel transaction"}
-            question="Cancel this transaction? This is final."
+            label={running === "cancel" ? PROGRESS.cancel : "Cancel order"}
+            question="Cancel this order? This is final."
             confirmLabel="Yes, cancel it"
             disabled={blocked}
             onConfirm={() => void act("cancel")}

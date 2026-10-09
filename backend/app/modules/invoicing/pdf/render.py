@@ -41,7 +41,8 @@ from app.modules.invoicing.pdf.labels import decimal_separator, labels
 #    the amount due emphasised, a payment section on every invoice). What is not stored is left out, never invented.
 # 4: the sender labelled From / Från, and a four-column seller footer on every page.
 # 5: "Our reference" / "Vår referens" under the seller's name: who issued the invoice.
-TEMPLATE_VERSION = 5
+# 6: sources are called orders ("Order of {date}" / "Order {date}").
+TEMPLATE_VERSION = 6
 ACCENT = colors.HexColor("#1f4e5f")
 ACCENT_LIGHT = colors.HexColor("#e8f0f2")
 # Room for the footer columns (up to five lines each) above the page number.

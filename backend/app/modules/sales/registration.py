@@ -47,7 +47,7 @@ def register(registry: Registry) -> None:
     registry.register(
         EntityType(
             key="transaction",
-            label="Transaction",
+            label="Order",
             model=Transaction,
             custom_fields=True,
             is_editable=_transaction_is_editable,
@@ -56,7 +56,7 @@ def register(registry: Registry) -> None:
     registry.register(
         EntityType(
             key="transaction_line",
-            label="Transaction line",
+            label="Order line",
             model=TransactionLine,
             custom_fields=True,
             parent=ParentSpec(entity="transaction", column="transaction_id"),

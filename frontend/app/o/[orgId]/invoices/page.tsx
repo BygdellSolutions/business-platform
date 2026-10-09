@@ -60,7 +60,7 @@ export default async function InvoicesPage({
           </Link>
         )}
       </div>
-      {first(raw.deleted) === "1" && <Notice testId="deleted">Draft deleted. Its transactions can be invoiced again.</Notice>}
+      {first(raw.deleted) === "1" && <Notice testId="deleted">Draft deleted. Its orders can be invoiced again.</Notice>}
 
       {(list.extra.paid_from || list.extra.paid_to) && (
         <Notice testId="paid-period">

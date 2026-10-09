@@ -56,7 +56,7 @@ describe("the list", () => {
 
   it("says so when nothing is waiting to be invoiced", () => {
     mount(ORG_A, { rows: [] });
-    expect(screen.getByTestId("empty")).toHaveTextContent("No completed transactions");
+    expect(screen.getByTestId("empty")).toHaveTextContent("No completed orders");
   });
 
   it("starts with an empty selection and nothing to submit", () => {

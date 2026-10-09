@@ -144,7 +144,7 @@ describe("a role that may only read (viewer)", () => {
     render(<Harness initial={tx()} canEdit={false} />);
 
     expect(status()).toHaveTextContent("Draft");
-    expect(screen.getByTestId("role-note")).toHaveTextContent(/can view transactions but not change them/);
+    expect(screen.getByTestId("role-note")).toHaveTextContent(/can view orders but not change them/);
     expect(screen.queryByTestId("lifecycle")).toBeNull();
     for (const id of ["complete", "reopen", "cancel", "edit-header", "add-line", "edit-line", "delete-line"]) expect(screen.queryByTestId(id)).toBeNull();
     expect(screen.queryAllByRole("textbox")).toHaveLength(0);
@@ -234,7 +234,7 @@ describe("lifecycle", () => {
     render(<Harness initial={tx()} />);
 
     await userEvent.click(screen.getByTestId("cancel"));
-    expect(screen.getByText("Cancel this transaction? This is final.")).toBeInTheDocument();
+    expect(screen.getByText("Cancel this order? This is final.")).toBeInTheDocument();
     expect(writes()).toHaveLength(0);
     await userEvent.click(screen.getByTestId("cancel-keep"));
     expect(writes()).toHaveLength(0);
@@ -311,7 +311,7 @@ describe("lifecycle", () => {
     expect(notice).toHaveTextContent("The complete step was blocked: 3 problem(s) must be fixed first");
     expect(within(screen.getByTestId("editor-problems")).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
       "Line 2 · Owner: is required",
-      "Transaction · Project: is required",
+      "Order · Project: is required",
       "Record: something else",
     ]);
     expect(status()).toHaveTextContent("Draft");

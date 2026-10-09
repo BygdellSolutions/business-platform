@@ -25,7 +25,7 @@ export function ServiceList({ orgId, services, timeZone, title }: { orgId: strin
               <th className="py-1 pr-4">For</th>
               <th className="py-1 pr-4">By</th>
               <th className="py-1 pr-4 text-right">Amount</th>
-              <th className="py-1">Transaction</th>
+              <th className="py-1">Order</th>
             </tr>
           </thead>
           <tbody>

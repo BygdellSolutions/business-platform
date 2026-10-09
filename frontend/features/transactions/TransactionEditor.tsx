@@ -194,7 +194,7 @@ export function TransactionEditor({
           <TransactionStatusBadge status={transaction.status} />
           {transaction.status === "completed" && <span data-testid="status-note">Completed: finalized and read-only. Reopen it to make changes.</span>}
           {transaction.status === "cancelled" && <span data-testid="status-note">Cancelled: final, kept for the record. It cannot be changed.</span>}
-          {!canEdit && <span data-testid="role-note">Your role in this organization can view transactions but not change them.</span>}
+          {!canEdit && <span data-testid="role-note">Your role in this organization can view orders but not change them.</span>}
         </div>
 
         {notice && (

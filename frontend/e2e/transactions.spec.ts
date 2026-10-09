@@ -583,7 +583,7 @@ test.describe("lifecycle", () => {
     const edit = await context.request.patch(bffUrl(ORG_A.id, `/transactions/${transaction.id}/lines/${line.id}`), { data: { quantity: "9" }, headers: ifMatch(1) });
     const header = await context.request.patch(bffUrl(ORG_A.id, `/transactions/${transaction.id}`), { data: { transaction_date: "2030-01-01" }, headers: ifMatch(done.header_version) });
     expect([edit.status(), header.status()]).toEqual([409, 409]);
-    expect(await edit.text()).toContain("completed transaction cannot be");
+    expect(await edit.text()).toContain("completed order cannot be");
 
     const cancelled = await lifecycle(context, ORG_A.id, transaction.id, "cancel");
     const reopen = await context.request.post(bffUrl(ORG_A.id, `/transactions/${transaction.id}/reopen`), { headers: ifMatch(cancelled.version) });
@@ -600,7 +600,7 @@ test.describe("lifecycle", () => {
       await page.getByTestId("complete").click();
 
       await expect(page.getByTestId("editor-notice")).toContainText("blocked");
-      await expect(page.getByTestId("editor-problems")).toContainText(`Transaction · ${label}`);
+      await expect(page.getByTestId("editor-problems")).toContainText(`Order · ${label}`);
       await expect(page.getByTestId("tx-status")).toHaveText("Draft");
       expect(testRow(`select status from transactions where id = ${sql(transaction.id)}`)).toBe("draft");
     });
@@ -670,7 +670,7 @@ test.describe("lifecycle", () => {
 
   test("the main navigation reaches Transactions", async ({ page }) => {
     await page.goto(`/o/${ORG_A.id}`);
-    await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Transactions" }).click();
+    await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Orders" }).click();
     await expect(page).toHaveURL(list);
     await page.getByTestId("new-transaction").click();
     await expect(page).toHaveURL(`${list}/new`);

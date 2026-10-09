@@ -234,7 +234,7 @@ test.describe("stale lifecycle", () => {
 
     await b.getByTestId("complete").click();
 
-    await expect(b.getByTestId("editor-notice")).toContainText("completed transaction cannot be completed");
+    await expect(b.getByTestId("editor-notice")).toContainText("completed order cannot be completed");
     await expect(b.getByTestId("tx-status")).toHaveText("Completed");
   });
 

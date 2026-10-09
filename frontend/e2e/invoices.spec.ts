@@ -175,7 +175,7 @@ test.describe("draft invoices", () => {
 
     await page.goto(`${list(world)}/${invoice.id}`);
     await page.getByTestId("delete-draft").click();
-    await expect(page.getByRole("group", { name: /^Delete this draft/ })).toContainText("transactions become invoiceable again");
+    await expect(page.getByRole("group", { name: /^Delete this draft/ })).toContainText("orders become invoiceable again");
     await page.getByTestId("delete-draft-confirm").click();
 
     await expect(page).toHaveURL(new RegExp(`${list(world)}\\?deleted=1$`));

@@ -205,7 +205,7 @@ def test_stale_lifecycle_actions_fail_safely(worlds):
     again = tab_b.call("post", f"/api/transactions/{tx_id}/complete", seen_b["version"])
     edit = tab_b.call("patch", f"/api/transactions/{tx_id}", seen_b["header_version"], json={"transaction_date": "2030-01-01"})
     assert again.status_code == edit.status_code == 409
-    assert "completed transaction cannot be" in again.json()["detail"] and "completed transaction cannot be" in edit.json()["detail"]
+    assert "completed order cannot be" in again.json()["detail"] and "completed order cannot be" in edit.json()["detail"]
     final = row(tx_id)
     assert (final["status"], final["version"]) == ("completed", 3)
 
@@ -219,7 +219,7 @@ def test_a_stale_reopen_fails_safely(worlds):
     assert tab_a.call("post", f"/api/transactions/{tx_id}/reopen", 2).status_code == 200  # reopened, version 3
 
     stale = tab_b.call("post", f"/api/transactions/{tx_id}/reopen", seen_b["version"])  # reopening a draft
-    assert stale.status_code == 409 and "draft transaction cannot be reopened" in stale.json()["detail"]
+    assert stale.status_code == 409 and "draft order cannot be reopened" in stale.json()["detail"]
     assert row(tx_id)["status"] == "draft"
 
 

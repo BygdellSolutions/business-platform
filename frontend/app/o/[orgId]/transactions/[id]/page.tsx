@@ -50,13 +50,13 @@ export default async function TransactionPage({
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold" data-testid="record-name">
-          Transaction · {transaction.transaction_date}
+          Order · {transaction.transaction_date}
         </h1>
         <Link href={`/o/${orgId}/transactions`} className="text-sm underline">
-          Back to transactions
+          Back to orders
         </Link>
       </div>
-      {created === "1" && <Notice testId="created">Transaction created. Add its lines below.</Notice>}
+      {created === "1" && <Notice testId="created">Order created. Add its lines below.</Notice>}
       <RecordMeta record={transaction} people={history.history.people} timeZone={organization.timezone} />
       <TransactionEditor
         key={transaction.id}

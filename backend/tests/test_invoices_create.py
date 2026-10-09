@@ -118,7 +118,7 @@ def test_a_transaction_cannot_be_invoiced_twice_even_across_a_draft_and_an_issue
         assert response.status_code == 409
         assert response.json()["detail"] == {
             "code": "already_invoiced",
-            "message": "A transaction is already on a draft or issued invoice",
+            "message": "An order is already on a draft or issued invoice",
             "transaction_ids": [str(tx.id)],
         }
     assert counts(db_session)[0] == 2  # nothing new was created

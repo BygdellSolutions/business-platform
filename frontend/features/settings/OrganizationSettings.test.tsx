@@ -207,7 +207,7 @@ describe("the default currency", () => {
   it("explains that none is set and that transactions need one", () => {
     mount(A, organization({ default_currency: null }));
     expect(screen.getByLabelText("Default currency")).toHaveValue("");
-    expect(screen.getByText(/Transactions cannot be created until a currency is set/)).toBeInTheDocument();
+    expect(screen.getByText(/Orders cannot be created until a currency is set/)).toBeInTheDocument();
     expect(screen.getByLabelText("Default currency")).toBeEnabled();
   });
 
@@ -321,7 +321,7 @@ describe("transactions without a currency", () => {
 
   it("explains that they have none and asks for the currency to be set first when it is not", () => {
     mountEarlier({ default_currency: null, transactions_without_currency: 3 });
-    expect(screen.getByTestId("earlier-count")).toHaveTextContent("3 transactions were created before currencies existed and have no currency");
+    expect(screen.getByTestId("earlier-count")).toHaveTextContent("3 orders were created before currencies existed and have no currency");
     expect(screen.getByText(/Set the organization.s default currency first/)).toBeInTheDocument();
     expect(screen.queryByRole("button")).toBeNull();
   });
@@ -332,12 +332,12 @@ describe("transactions without a currency", () => {
 
     await userEvent.click(screen.getByTestId("assign-currency"));
     expect(mocked).not.toHaveBeenCalled(); // the first click only asks
-    expect(screen.getByText(/Assign SEK to 3 transactions\? This cannot be undone\./)).toBeInTheDocument();
+    expect(screen.getByText(/Assign SEK to 3 orders\? This cannot be undone\./)).toBeInTheDocument();
     await userEvent.click(screen.getByTestId("assign-currency-confirm"));
 
     expect(mocked).toHaveBeenCalledTimes(1);
     expect(mocked).toHaveBeenCalledWith(A, "/transactions/assign-currency", { method: "POST", body: { currency: "SEK" } });
-    expect(await screen.findByTestId("assigned")).toHaveTextContent("3 transactions now have the currency SEK");
+    expect(await screen.findByTestId("assigned")).toHaveTextContent("3 orders now have the currency SEK");
     expect(router.refresh).toHaveBeenCalledTimes(1);
   });
 
@@ -345,7 +345,7 @@ describe("transactions without a currency", () => {
     mocked.mockResolvedValue(ok<AssignCurrencyResult>({ currency: "EUR", assigned: 2 }));
     mountEarlier({ default_currency: "EUR", transactions_without_currency: 2 });
 
-    expect(screen.getByTestId("assign-currency")).toHaveTextContent("Assign EUR to these transactions");
+    expect(screen.getByTestId("assign-currency")).toHaveTextContent("Assign EUR to these orders");
     await userEvent.click(screen.getByTestId("assign-currency"));
     await userEvent.click(screen.getByTestId("assign-currency-confirm"));
 
@@ -374,7 +374,7 @@ describe("transactions without a currency", () => {
     await userEvent.click(screen.getByTestId("assign-currency"));
     await userEvent.click(screen.getByTestId("assign-currency-keep"));
     expect(mocked).not.toHaveBeenCalled();
-    expect(screen.getByTestId("earlier-count")).toHaveTextContent("1 transaction was created");
+    expect(screen.getByTestId("earlier-count")).toHaveTextContent("1 order was created");
   });
 
   it("offers no action to anyone else", () => {
@@ -395,7 +395,7 @@ describe("transactions without a currency", () => {
 
     await userEvent.click(screen.getByTestId("assign-currency"));
     await userEvent.click(screen.getByTestId("assign-currency-confirm"));
-    expect(await screen.findByTestId("assigned")).toHaveTextContent("1 transaction now has the currency SEK");
+    expect(await screen.findByTestId("assigned")).toHaveTextContent("1 order now has the currency SEK");
   });
 });
 

@@ -214,7 +214,7 @@ def _require_draft(tx: Transaction, what: str = "changed") -> None:
     hint = "; reopen it first" if tx.status == COMPLETED else ""
     raise HTTPException(
         status.HTTP_409_CONFLICT,
-        detail=f"A {tx.status} transaction cannot be {what}{hint}",
+        detail=f"A {tx.status} order cannot be {what}{hint}",
     )
 
 
@@ -648,7 +648,7 @@ def _transition(
     tx = _lock(db, ctx, transaction_id)
     if tx.status not in allowed_from:
         raise HTTPException(
-            status.HTTP_409_CONFLICT, detail=f"A {tx.status} transaction cannot be {verb}"
+            status.HTTP_409_CONFLICT, detail=f"A {tx.status} order cannot be {verb}"
         )
     # A lifecycle step is a decision about everything the caller was looking at: the header,
     # the lines and the totals. It is refused if any of that changed since.
@@ -665,7 +665,7 @@ def _transition(
         if line_count == 0:
             raise HTTPException(
                 status.HTTP_409_CONFLICT,
-                detail="A transaction needs at least one line to be completed",
+                detail="An order needs at least one line to be completed",
             )
     # Anything registered on the core lifecycle seam may object: required custom fields to a
     # completion, and (later) whatever holds a claim on a completed transaction to a reopen or a

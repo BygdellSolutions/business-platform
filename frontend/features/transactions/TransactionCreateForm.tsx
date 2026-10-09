@@ -48,7 +48,7 @@ export function TransactionCreateForm({ today }: { today: string }) {
   }
 
   return (
-    <form onSubmit={onSubmit} noValidate aria-label="New transaction" className="flex max-w-xl flex-col gap-4">
+    <form onSubmit={onSubmit} noValidate aria-label="New order" className="flex max-w-xl flex-col gap-4">
       <EntityPicker label="Billing customer" name="billing_customer_id" value={customer} onChange={setCustomer} search={search} error={problems.byField.billing_customer_id} />
       <label className="flex flex-col gap-1 text-sm font-medium">
         Date
@@ -69,7 +69,7 @@ export function TransactionCreateForm({ today }: { today: string }) {
       <ErrorSummary messages={problems.general} />
       <div className="flex items-center gap-4">
         <Button type="submit" disabled={pending || (date !== "" && !isDateShape(date))} data-testid="submit">
-          {pending ? "Creating…" : "Create transaction"}
+          {pending ? "Creating…" : "Create order"}
         </Button>
         <Link href={`/o/${orgId}/transactions`} className="text-sm underline">
           Cancel

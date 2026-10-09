@@ -94,7 +94,7 @@ export function InvoiceCreateForm({
   const general = error?.kind === "validation" ? error.formErrors : error && ["forbidden", "client", "unauthorized"].includes(error.kind) ? [error.message] : [];
   const labelOf = (id: string) => {
     const row = selection.find((selected) => selected.id === id) ?? rows.find((candidate) => candidate.id === id);
-    return row ? `${row.transaction_date} · ${row.billing_customer.name}` : "A selected transaction";
+    return row ? `${row.transaction_date} · ${row.billing_customer.name}` : "A selected order";
   };
 
   async function onSubmit(event: FormEvent) {
@@ -116,7 +116,7 @@ export function InvoiceCreateForm({
           setProblem(failure.message);
           refresh();
         } else if (failure.kind === "validation" && failure.fieldErrors.transaction_ids) {
-          setProblem("One or more of the selected transactions could not be found. The eligible list was re-read.");
+          setProblem("One or more of the selected orders could not be found. The eligible list was re-read.");
           refresh();
         } else if (failure.kind === "unconfirmed") {
           // Unknown outcome: the draft may exist. Re-read eligibility (its transactions would be gone from it) and say so.
@@ -164,7 +164,7 @@ export function InvoiceCreateForm({
               </button>
               {customerFilter === null && (
                 <Link href={`${base}?customer_id=${first.billing_customer_id}`} className="underline" data-testid="only-this-customer">
-                  Show only this customer&apos;s transactions
+                  Show only this customer&apos;s orders
                 </Link>
               )}
             </div>
@@ -194,7 +194,7 @@ export function InvoiceCreateForm({
 
       <div aria-busy={refreshing} data-testid="eligible" className={refreshing ? "opacity-50" : ""}>
         {rows.length === 0 ? (
-          <p data-testid="empty">{customerFilter !== null ? "No invoiceable transactions for this customer." : "No completed transactions are waiting to be invoiced."}</p>
+          <p data-testid="empty">{customerFilter !== null ? "No invoiceable orders for this customer." : "No completed orders are waiting to be invoiced."}</p>
         ) : (
           <div className="overflow-x-auto">
             <table data-testid="eligible-table" className="w-full max-w-5xl text-left text-sm">
@@ -218,7 +218,7 @@ export function InvoiceCreateForm({
                 {rows.map((row) => {
                   const chosen = selection.some((selected) => selected.id === row.id);
                   const fit = chosen ? "ok" : compatibility(selection, row);
-                  const label = `Select transaction of ${row.transaction_date}, ${row.billing_customer.name}`;
+                  const label = `Select order of ${row.transaction_date}, ${row.billing_customer.name}`;
                   return (
                     <tr key={row.id} data-testid="eligible-row" data-compat={fit} className={`border-b border-zinc-200 dark:border-zinc-800 ${fit === "ok" ? "" : "text-zinc-400"}`}>
                       {canMutate && (

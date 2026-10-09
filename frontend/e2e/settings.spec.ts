@@ -253,7 +253,7 @@ test.describe("the default currency", () => {
 
     // Set the currency in the settings (typed in lower case; stored upper case).
     await page.goto(settings(world.orgId));
-    await expect(page.getByText(/Transactions cannot be created until a currency is set/)).toBeVisible();
+    await expect(page.getByText(/Orders cannot be created until a currency is set/)).toBeVisible();
     await page.getByLabel("Default currency", { exact: true }).fill("eur");
     await page.getByTestId("submit").click();
     await expect(page.getByTestId("saved")).toBeVisible();
@@ -309,7 +309,7 @@ test.describe("transactions that predate currencies", () => {
 
     // The settings explain it and ask for the organization's currency first.
     await page.goto(settings(world.orgId));
-    await expect(page.getByTestId("earlier-count")).toContainText("2 transactions were created before currencies existed");
+    await expect(page.getByTestId("earlier-count")).toContainText("2 orders were created before currencies existed");
     await expect(page.getByTestId("assign-currency")).toHaveCount(0);
 
     // Setting the organization's currency does NOT touch them either.
@@ -321,13 +321,13 @@ test.describe("transactions that predate currencies", () => {
     // Only the explicit, confirmed action assigns it.
     await expect(page.getByTestId("assign-currency")).toBeVisible();
     await page.getByTestId("assign-currency").click();
-    await expect(page.getByText(/Assign SEK to 2 transactions\? This cannot be undone\./)).toBeVisible();
+    await expect(page.getByText(/Assign SEK to 2 orders\? This cannot be undone\./)).toBeVisible();
     await page.getByTestId("assign-currency-keep").click();
     expect(testRow(`select count(*) from transactions where organization_id = ${sql(world.orgId)} and currency is not null`)).toBe("0"); // declining changes nothing
 
     await page.getByTestId("assign-currency").click();
     await page.getByTestId("assign-currency-confirm").click();
-    await expect(page.getByTestId("assigned")).toHaveText(/2 transactions now have the currency SEK/);
+    await expect(page.getByTestId("assigned")).toHaveText(/2 orders now have the currency SEK/);
 
     expect(testRow(`select string_agg(currency, ',') from transactions where organization_id = ${sql(world.orgId)}`)).toBe("SEK,SEK");
     await page.goto(`/o/${world.orgId}/transactions/${second}`);
@@ -343,7 +343,7 @@ test.describe("transactions that predate currencies", () => {
     await signIn(context, world.addMember("employee"));
 
     await page.goto(settings(world.orgId));
-    await expect(page.getByTestId("earlier-count")).toContainText("1 transaction was created");
+    await expect(page.getByTestId("earlier-count")).toContainText("1 order was created");
     await expect(page.getByTestId("assign-currency")).toHaveCount(0);
     const attempt = await context.request.post(bffUrl(world.orgId, "/transactions/assign-currency"), { data: { currency: "SEK" } });
     expect(attempt.status()).toBe(403);

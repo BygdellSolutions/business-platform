@@ -79,7 +79,7 @@ def test_line_level_fields_print_under_their_line_and_transaction_level_fields_i
     ))
     text = pdf_text(data)
     assert "Reference information" in text and "PO number: PO-17" in text
-    assert "Transaction of 2026-09-30" not in text  # one source: no heading needed
+    assert "Order of 2026-09-30" not in text  # one source: no heading needed
     assert text.index("Owner: Anna Andersson") < text.index("Horse massage 2")  # belongs to line 1
     assert text.index("Horse massage 1") < text.index("Owner: Anna Andersson")
     assert "Remark: Handle with care" in text
@@ -91,8 +91,8 @@ def test_several_sources_are_grouped_by_their_stored_dates_and_sources_without_f
         PdfSource(date="2026-10-02", fields=()),
         PdfSource(date="2026-10-03", fields=(field("PO number", "PO-18"),)),
     ))))
-    assert "Transaction of 2026-09-30" in text and "Transaction of 2026-10-03" in text
-    assert "Transaction of 2026-10-02" not in text
+    assert "Order of 2026-09-30" in text and "Order of 2026-10-03" in text
+    assert "Order of 2026-10-02" not in text
 
 
 def test_the_field_code_is_generic_whatever_a_field_is_called():
@@ -381,7 +381,7 @@ def test_a_different_document_renders_to_different_bytes():
 
 
 def test_the_renderer_identifies_itself_with_library_and_font_versions():
-    assert TEMPLATE_VERSION == 5
+    assert TEMPLATE_VERSION == 6
     assert renderer_identity().startswith("reportlab ") and "bundled Noto fonts" in renderer_identity()
 
 
@@ -486,7 +486,7 @@ def test_the_font_layer_refuses_unsupported_characters_by_itself_not_only_throug
 # The layout code as of TEMPLATE_VERSION. A download serves the stored PDF of the CURRENT template version, so a
 # change to what is printed without a new version would leave earlier downloads looking old. When this fails: bump
 # TEMPLATE_VERSION in render.py, then update both values here.
-PINNED_TEMPLATE = (5, "cc42f57735e4f4096987971a9fceb5590869c3c55e450b2159cf77e906299c17")
+PINNED_TEMPLATE = (6, "007604bbb082dea08c732ad231ec82d2e7d21b17dfc7f051ad60fd07de28782c")
 
 
 def test_a_change_to_the_printed_layout_comes_with_a_new_template_version():

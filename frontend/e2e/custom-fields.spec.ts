@@ -85,7 +85,7 @@ test.describe("the real workflow", () => {
       await expect(page.getByTestId("org-name")).toHaveText(ORG_A.name);
 
       // 3. A transaction billed to Umeå HK.
-      await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Transactions" }).click();
+      await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Orders" }).click();
       await page.getByTestId("new-transaction").click();
       // A client-side navigation does not wait for the new page: the transactions LIST has a picker with the same test id (its
       // filter), so interacting before the form has replaced the list acts on the wrong, soon unmounted, picker.
@@ -365,7 +365,7 @@ test.describe("the six value types", () => {
 
       await page.getByTestId("complete").click();
       await expect(txPanel(page).getByTestId(`cf-${key}`).getByTestId(`error-${key}`)).toHaveText("Project T is required");
-      await expect(page.getByTestId("editor-problems")).toContainText("Transaction · Project T: Project T is required");
+      await expect(page.getByTestId("editor-problems")).toContainText("Order · Project T: Project T is required");
       await expect(page.getByTestId("editor-problems").getByRole("link").first()).toHaveAttribute("href", "#transaction-fields");
 
       await txPanel(page).getByTestId("edit-fields").click();
