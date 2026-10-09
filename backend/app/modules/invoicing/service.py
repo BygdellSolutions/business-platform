@@ -28,13 +28,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core import audit, subjects
+from app.core.entity_registry import registry
 from app.core.org_time import organization_today, organization_zone
 from app.core.tenant import TenantContext
 from app.core.tenant_scope import create_scoped, get_scoped, get_scoped_or_404, reference_error, scoped_select
 from app.models import Customer, Organization, User
 from app.modules.custom_fields import service as custom_fields
 from app.modules.invoicing import numbering, snapshots
-from app.modules.invoicing import payments
+from app.modules.invoicing import credits, payments, returns
 from app.modules.invoicing.models import (
     Invoice,
     InvoiceLine,
@@ -355,23 +356,41 @@ def read_invoice(db: Session, ctx: TenantContext, invoice_id: uuid.UUID) -> Invo
         )
     )
     paid = payments.paid_amounts(db, ctx.organization_id, [invoice.id]).get(invoice.id, Decimal("0.00"))
+    credited = credits.credited_amounts(db, ctx.organization_id, [invoice.id]).get(invoice.id, Decimal("0.00"))
+    credited_lines = credits.credited_quantities(db, ctx.organization_id, [row.id for row in lines])
+    returnable = {}
+    if invoice.status == InvoiceStatus.ISSUED:
+        for answer in registry.call_hooks("stock.returnable", db, ctx.organization_id, [row.source_line_id for row in lines]):
+            returnable.update(answer)
     return InvoiceRead(
-        **summary_fields(invoice, len(transactions), paid),
+        **summary_fields(invoice, len(transactions), paid, credited),
         payments=payments.list_payments(db, ctx, invoice.id),
+        credit_notes=credits.credit_note_summaries(db, ctx, invoice.id),
+        returns=(cases := returns.list_returns(db, ctx, invoice.id)),
+        open_returns=sum(1 for case in cases if case.state in ("requested", "goods_received", "approved")),
         issued_by=invoice.issued_by,
         created_by=invoice.created_by,
         updated_by=invoice.updated_by,
         customer_snapshot=invoice.customer_snapshot,
         issuer_snapshot=invoice.issuer_snapshot,
         transactions=[InvoiceTransactionRead.model_validate(row) for row in transactions],
-        lines=[InvoiceLineRead.model_validate(row) for row in lines],
+        lines=[
+            InvoiceLineRead.model_validate(row).model_copy(
+                update={
+                    "credited_quantity": credited_lines.get(row.id, Decimal("0.000")),
+                    "creditable_quantity": row.quantity - credited_lines.get(row.id, Decimal("0.000")),
+                    "stock_returnable": returnable.get(row.source_line_id),
+                }
+            )
+            for row in lines
+        ],
         vat_breakdown=[VatRowRead.model_validate(row) for row in vat_rows],
     )
 
 
-def summary_fields(invoice: Invoice, transaction_count: int, paid: Decimal = Decimal("0.00")) -> dict[str, Any]:
+def summary_fields(invoice: Invoice, transaction_count: int, paid: Decimal = Decimal("0.00"), credited: Decimal = Decimal("0.00")) -> dict[str, Any]:
     return dict(
-        **payments.payment_fields(invoice, paid),
+        **payments.payment_fields(invoice, paid, credited),
         id=invoice.id,
         status=invoice.status,
         version=invoice.version,

@@ -15,8 +15,10 @@ import { serverRead, serverReadOrNull } from "@/lib/server-api";
 
 const STATUSES = ["draft", "issued"] as const;
 // Exactly the filters GET /api/invoices supports: status, customer, invoice date range, search (customer name or number).
-const PAYMENTS = ["open", "overdue", "not_yet_due", "unpaid", "partially_paid", "paid"] as const;
-const EXTRAS: Record<string, ExtraSpec> = { status: STATUSES, payment: PAYMENTS, date_from: "date", date_to: "date", paid_from: "date", paid_to: "date" };
+const PAYMENTS = ["open", "overdue", "not_yet_due", "unpaid", "partially_paid", "paid", "refund_due"] as const;
+const CREDITS = ["any", "partly_credited", "credited"] as const;
+const RETURNS = ["open", "follow_up_due"] as const;
+const EXTRAS: Record<string, ExtraSpec> = { status: STATUSES, payment: PAYMENTS, credit: CREDITS, returns: RETURNS, date_from: "date", date_to: "date", paid_from: "date", paid_to: "date" };
 const CONTROL = "rounded border border-zinc-400 px-2 py-1 text-sm dark:bg-zinc-900";
 
 /**
@@ -90,6 +92,24 @@ export default async function InvoicesPage({
             <option value="unpaid">Unpaid</option>
             <option value="partially_paid">Partially paid</option>
             <option value="paid">Paid</option>
+            <option value="refund_due">Refund due</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
+          Credit notes
+          <select name="credit" defaultValue={list.extra.credit ?? ""} className={CONTROL}>
+            <option value="">All</option>
+            <option value="any">Credited (all or part)</option>
+            <option value="partly_credited">Partly credited</option>
+            <option value="credited">Fully credited</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
+          Returns
+          <select name="returns" defaultValue={list.extra.returns ?? ""} className={CONTROL}>
+            <option value="">All</option>
+            <option value="open">Return open</option>
+            <option value="follow_up_due">Follow-up due</option>
           </select>
         </label>
         <CustomerFilter key={`customer-${customerId ?? ""}`} name="customer_id" label="Customer" initial={initialCustomer} />
@@ -139,7 +159,12 @@ export default async function InvoicesPage({
                     {invoice.due_date ?? "—"}
                   </td>
                   <td className="py-1 pr-4">
-                    <InvoiceStatusBadge status={invoice.status} paymentStatus={invoice.payment_status} />
+                    <InvoiceStatusBadge status={invoice.status} paymentStatus={invoice.payment_status} creditStatus={invoice.credit_status} openReturns={invoice.open_returns} />
+                    {invoice.refund_due_amount && invoice.refund_due_amount !== "0.00" && (
+                      <span className="block text-xs text-amber-700 dark:text-amber-300" data-testid="refund-due">
+                        Refund due <DecimalText value={invoice.refund_due_amount} />
+                      </span>
+                    )}
                     {invoice.payment_status === "partially_paid" && invoice.outstanding_amount && (
                       <span className="block text-xs text-zinc-500">
                         <DecimalText value={invoice.outstanding_amount} /> left

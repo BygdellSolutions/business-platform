@@ -18,6 +18,7 @@ from enum import StrEnum
 from typing import Any
 
 from sqlalchemy import (
+    Boolean,
     BigInteger,
     LargeBinary,
     CheckConstraint,
@@ -170,6 +171,8 @@ class InvoiceLine(TenantOwned, Base):
     __tablename__ = "invoice_lines"
     __table_args__ = (
         UniqueConstraint("organization_id", "source_line_id", name="uq_invoice_lines_source_line_once"),
+        # Target of composite foreign keys (a credit note line credits a line of an invoice of the same organization).
+        UniqueConstraint("organization_id", "id", name="uq_invoice_lines_organization_id_id"),
         UniqueConstraint("organization_id", "invoice_id", "position", name="uq_invoice_lines_position"),
         ForeignKeyConstraint(
             ["organization_id", "invoice_id", "source_transaction_id"],
@@ -336,9 +339,9 @@ class InvoicePayment(TenantOwned, Base):
             ondelete="RESTRICT",
             name="fk_invoice_payments_reverses",
         ),
-        CheckConstraint(
-            "(reverses_payment_id IS NULL AND amount > 0) OR (reverses_payment_id IS NOT NULL AND amount < 0)", name="ck_invoice_payments_amount_sign"
-        ),
+        # A payment is positive and a refund (money paid back) negative; a reversal has the opposite sign of the row it
+        # cancels (the service sets it, since a CHECK cannot read the other row).
+        CheckConstraint("amount <> 0", name="ck_invoice_payments_amount_sign"),
         CheckConstraint("method IN ('" + "', '".join(PAYMENT_METHODS) + "')", name="ck_invoice_payments_method"),
         Index("uq_invoice_payments_reversed_once", "organization_id", "reverses_payment_id", unique=True, postgresql_where=text("reverses_payment_id IS NOT NULL")),
         Index("ix_invoice_payments_invoice", "organization_id", "invoice_id"),
@@ -351,4 +354,209 @@ class InvoicePayment(TenantOwned, Base):
     reference: Mapped[str | None] = mapped_column(String(255))
     note: Mapped[str | None] = mapped_column(String(500))
     reverses_payment_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
+
+
+
+class CreditNote(TenantOwned, Base):
+    """A credit note (kreditfaktura): cancels all or part of an ISSUED invoice. Created issued, never changed.
+
+    Numbered from the invoice's own series (the same counter, so a credit note and an invoice never share a number).
+    Its figures are POSITIVE amounts that are credited; documents print them as negatives. The parties are copies: the
+    customer as on the invoice, the seller as it is now (with who credited it as "our reference"). Rows of this table and
+    its children are never updated or deleted (a trigger refuses), except while the organization itself is deleted.
+    """
+
+    __tablename__ = "credit_notes"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "id", name="uq_credit_notes_organization_id_id"),
+        UniqueConstraint("organization_id", "series", "number", name="uq_credit_notes_organization_series_number"),
+        ForeignKeyConstraint(
+            ["organization_id", "invoice_id"], ["invoices.organization_id", "invoices.id"], ondelete="RESTRICT", name="fk_credit_notes_invoice"
+        ),
+        CheckConstraint("number >= 1", name="ck_credit_notes_number_positive"),
+        CheckConstraint("length(btrim(reason)) > 0", name="ck_credit_notes_reason"),
+        CheckConstraint(
+            "net_amount > 0 AND vat_amount >= 0 AND gross_amount = net_amount + vat_amount", name="ck_credit_notes_totals"
+        ),
+        CheckConstraint(
+            "jsonb_typeof(customer_snapshot) = 'object' AND jsonb_typeof(issuer_snapshot) = 'object'", name="ck_credit_notes_snapshots"
+        ),
+        Index("ix_credit_notes_invoice", "organization_id", "invoice_id"),
+    )
+
+    invoice_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    series: Mapped[str] = mapped_column(String(32))
+    number: Mapped[int] = mapped_column(Integer)
+    number_text: Mapped[str] = mapped_column(String(64))
+    credit_date: Mapped[date] = mapped_column(Date)
+    reason: Mapped[str] = mapped_column(String(500))
+    currency: Mapped[str] = mapped_column(String(3))
+    customer_snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    issuer_snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    net_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    vat_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    gross_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    issued_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
+
+
+class CreditNoteLine(TenantOwned, Base):
+    """What is credited of one invoice line: a quantity at the invoice line's own unit price and VAT rate."""
+
+    __tablename__ = "credit_note_lines"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "credit_note_id"], ["credit_notes.organization_id", "credit_notes.id"], ondelete="CASCADE", name="fk_credit_note_lines_note"
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "invoice_line_id"], ["invoice_lines.organization_id", "invoice_lines.id"], ondelete="RESTRICT", name="fk_credit_note_lines_invoice_line"
+        ),
+        UniqueConstraint("organization_id", "credit_note_id", "invoice_line_id", name="uq_credit_note_lines_once_per_note"),
+        CheckConstraint("quantity > 0", name="ck_credit_note_lines_quantity_positive"),
+        CheckConstraint("unit_price_ex_vat >= 0", name="ck_credit_note_lines_price_nonnegative"),
+        # Not round(quantity * price): the last credit of a line takes exactly what is left of the line's amounts.
+        CheckConstraint("net_amount >= 0 AND vat_amount >= 0", name="ck_credit_note_lines_amounts_nonnegative"),
+        CheckConstraint("gross_amount = net_amount + vat_amount", name="ck_credit_note_lines_gross_amount"),
+        Index("ix_credit_note_lines_invoice_line", "organization_id", "invoice_line_id"),
+    )
+
+    credit_note_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    invoice_line_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    position: Mapped[int] = mapped_column(Integer)
+    description: Mapped[str] = mapped_column(String(255))
+    unit: Mapped[str] = mapped_column(String(32))
+    quantity: Mapped[Decimal] = mapped_column(Numeric(12, 3))
+    unit_price_ex_vat: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    vat_rate: Mapped[Decimal] = mapped_column(Numeric(5, 2))
+    net_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    vat_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    gross_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    # The person said the goods came back into stock (Inventory recorded a return movement, if it tracks the item).
+    returned_to_stock: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+
+
+class CreditNoteVatRow(TenantOwned, Base):
+    __tablename__ = "credit_note_vat_rows"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "credit_note_id"], ["credit_notes.organization_id", "credit_notes.id"], ondelete="CASCADE", name="fk_credit_note_vat_rows_note"
+        ),
+        UniqueConstraint("organization_id", "credit_note_id", "vat_rate", name="uq_credit_note_vat_rows_rate"),
+    )
+
+    credit_note_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    vat_rate: Mapped[Decimal] = mapped_column(Numeric(5, 2))
+    net_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    vat_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+
+
+class CreditNotePdf(TenantOwned, Base):
+    """A frozen PDF of a credit note, per template version, exactly like `InvoicePdf` (rendered on first download of
+    the current template, never changed or deleted; a trigger refuses both except while the organization is deleted)."""
+
+    __tablename__ = "credit_note_pdfs"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "credit_note_id", "template_version", name="uq_credit_note_pdfs_one_per_template"),
+        ForeignKeyConstraint(
+            ["organization_id", "credit_note_id"], ["credit_notes.organization_id", "credit_notes.id"], ondelete="RESTRICT", name="fk_credit_note_pdfs_note"
+        ),
+        CheckConstraint("byte_size > 0 AND byte_size = octet_length(content)", name="ck_credit_note_pdfs_byte_size"),
+        CheckConstraint("sha256 ~ '^[0-9a-f]{64}$' AND source_sha256 ~ '^[0-9a-f]{64}$'", name="ck_credit_note_pdfs_hash_shape"),
+        CheckConstraint("sha256 = encode(sha256(content), 'hex')", name="ck_credit_note_pdfs_sha256_matches"),
+        CheckConstraint("substring(content from 1 for 5) = decode('255044462d', 'hex')", name="ck_credit_note_pdfs_is_pdf"),
+        CheckConstraint("template_version >= 1 AND renderer <> ''", name="ck_credit_note_pdfs_provenance"),
+    )
+
+    credit_note_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    content: Mapped[bytes] = mapped_column(LargeBinary)
+    byte_size: Mapped[int] = mapped_column(Integer)
+    sha256: Mapped[str] = mapped_column(String(64))
+    renderer: Mapped[str] = mapped_column(String(255))
+    template_version: Mapped[int] = mapped_column(Integer)
+    source_sha256: Mapped[str] = mapped_column(String(64))
+
+
+class ReturnState(StrEnum):
+    REQUESTED = "requested"  # the customer asked to return something; nothing has come back yet
+    GOODS_RECEIVED = "goods_received"  # the goods are here (and, where ticked, back in stock)
+    APPROVED = "approved"  # to be credited: the next credit note made from the case closes it
+    REJECTED = "rejected"  # closed without a credit (a reason is required)
+    CREDITED = "credited"  # closed by its credit note
+
+
+OPEN_RETURN_STATES = (ReturnState.REQUESTED, ReturnState.GOODS_RECEIVED, ReturnState.APPROVED)
+
+
+class InvoiceReturn(TenantOwned, Base):
+    """A return case on an issued invoice: what the customer wants to send back, why, and when to follow it up.
+
+    Separate from credit notes: a case tracks the work (requested, goods received, approved or rejected) so nothing is
+    forgotten; the credit note is the accounting document, made when the case is approved, and it closes the case.
+    """
+
+    __tablename__ = "invoice_returns"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "id", name="uq_invoice_returns_organization_id_id"),
+        ForeignKeyConstraint(
+            ["organization_id", "invoice_id"], ["invoices.organization_id", "invoices.id"], ondelete="RESTRICT", name="fk_invoice_returns_invoice"
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "credit_note_id"], ["credit_notes.organization_id", "credit_notes.id"], ondelete="RESTRICT", name="fk_invoice_returns_credit_note"
+        ),
+        CheckConstraint("state IN ('requested', 'goods_received', 'approved', 'rejected', 'credited')", name="ck_invoice_returns_state"),
+        CheckConstraint("length(btrim(reason)) > 0", name="ck_invoice_returns_reason"),
+        CheckConstraint("(state = 'rejected') = (rejection_reason IS NOT NULL)", name="ck_invoice_returns_rejection"),
+        CheckConstraint("(state = 'credited') = (credit_note_id IS NOT NULL)", name="ck_invoice_returns_credit_note"),
+        Index("ix_invoice_returns_invoice", "organization_id", "invoice_id"),
+        Index("ix_invoice_returns_open", "organization_id", "follow_up_on", postgresql_where=text("state IN ('requested', 'goods_received', 'approved')")),
+    )
+
+    invoice_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    state: Mapped[str] = mapped_column(String(16), default=ReturnState.REQUESTED)
+    reason: Mapped[str] = mapped_column(String(500))
+    follow_up_on: Mapped[date] = mapped_column(Date)
+    rejection_reason: Mapped[str | None] = mapped_column(String(500))
+    credit_note_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
+
+
+class InvoiceReturnLine(TenantOwned, Base):
+    """A quantity of one invoice line the customer wants to return; `returned_to_stock` once the goods came back into stock."""
+
+    __tablename__ = "invoice_return_lines"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "return_id"], ["invoice_returns.organization_id", "invoice_returns.id"], ondelete="CASCADE", name="fk_invoice_return_lines_return"
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "invoice_line_id"], ["invoice_lines.organization_id", "invoice_lines.id"], ondelete="RESTRICT", name="fk_invoice_return_lines_line"
+        ),
+        UniqueConstraint("organization_id", "return_id", "invoice_line_id", name="uq_invoice_return_lines_once"),
+        CheckConstraint("quantity > 0", name="ck_invoice_return_lines_quantity_positive"),
+    )
+
+    return_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    invoice_line_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    quantity: Mapped[Decimal] = mapped_column(Numeric(12, 3))
+    returned_to_stock: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+
+
+class InvoiceReturnEvent(TenantOwned, Base):
+    """The case's log: every step and every note, who and when. Never changed (the history of the case)."""
+
+    __tablename__ = "invoice_return_events"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "return_id"], ["invoice_returns.organization_id", "invoice_returns.id"], ondelete="CASCADE", name="fk_invoice_return_events_return"
+        ),
+        CheckConstraint(
+            "kind IN ('opened', 'note', 'goods_received', 'approved', 'rejected', 'credited', 'follow_up')", name="ck_invoice_return_events_kind"
+        ),
+        Index("ix_invoice_return_events_return", "organization_id", "return_id", "created_at"),
+    )
+
+    return_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    kind: Mapped[str] = mapped_column(String(16))
+    note: Mapped[str | None] = mapped_column(String(2000))
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))

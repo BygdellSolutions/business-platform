@@ -62,6 +62,9 @@ export function line(overrides: Partial<InvoiceLine> = {}): InvoiceLine {
     gross_amount: money("1062.50"),
     service: null,
     fields: [],
+    credited_quantity: quantity("0.000"),
+    creditable_quantity: quantity("1.000"),
+    stock_returnable: null,
     ...overrides,
   };
 }
@@ -81,7 +84,13 @@ export function invoice(overrides: Partial<Invoice> = {}): Invoice {
     paid_amount: null,
     outstanding_amount: null,
     payment_status: null,
+    credited_amount: null,
+    credit_status: null,
+    refund_due_amount: null,
     payments: [],
+    credit_notes: [],
+    returns: [],
+    open_returns: 0,
     invoice_date: "2026-10-01",
     due_date: "2026-10-31",
     description: "October work",

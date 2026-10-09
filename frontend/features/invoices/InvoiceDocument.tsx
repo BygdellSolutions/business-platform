@@ -29,7 +29,7 @@ export function InvoiceDocument({ invoice, orgId }: { invoice: Invoice; orgId: s
             {invoice.number_text}
           </span>
         )}
-        <InvoiceStatusBadge status={invoice.status} paymentStatus={invoice.payment_status} />
+        <InvoiceStatusBadge status={invoice.status} paymentStatus={invoice.payment_status} creditStatus={invoice.credit_status} openReturns={invoice.open_returns} />
         <span data-testid="invoice-currency" className="text-sm text-zinc-600 dark:text-zinc-400">
           {invoice.currency}
         </span>

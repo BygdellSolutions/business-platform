@@ -17,7 +17,7 @@ import { NextResponse } from "next/server";
 /** Matches the backend's renderer limit (a larger file is a bug, not an invoice). */
 export const MAX_PDF_BYTES = 64 * 1024 * 1024;
 
-const FILENAME = /^invoice(?:-[A-Za-z0-9._-]{1,60})?\.pdf$/;
+const FILENAME = /^(?:invoice|credit-note)(?:-[A-Za-z0-9._-]{1,60})?\.pdf$/;
 const DISPOSITION = /^attachment;\s*filename="([^"\\\r\n]*)"$/;
 const ETAG = /^"([0-9a-f]{64})"$/;
 const MAGIC = [0x25, 0x50, 0x44, 0x46, 0x2d]; // "%PDF-"

@@ -29,3 +29,6 @@ def _transaction_effect(db: Session, ctx: TenantContext, event: str, entity_key:
 
 def register(registry: Registry) -> None:
     registry.add_effect(_transaction_effect)
+    # Credit notes: which invoiced lines can go back into stock, and putting them back.
+    registry.add_hook("stock.returnable", service.returnable)
+    registry.add_hook("stock.return", service.return_on_credit)

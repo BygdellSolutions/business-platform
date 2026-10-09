@@ -17,3 +17,10 @@ export function localToday(now: Date = new Date()): string {
   const day = String(now.getDate()).padStart(2, "0");
   return `${now.getFullYear()}-${month}-${day}`;
 }
+
+/** The calendar day `days` after `day` ("YYYY-MM-DD"), as a calendar date (no time zone involved). */
+export function addDays(day: string, days: number): string {
+  const moment = new Date(`${day}T00:00:00Z`);
+  moment.setUTCDate(moment.getUTCDate() + days);
+  return moment.toISOString().slice(0, 10);
+}

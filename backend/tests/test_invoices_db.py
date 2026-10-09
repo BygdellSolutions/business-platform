@@ -283,7 +283,10 @@ def test_invoicing_needs_no_item_horse_or_custom_field_records_to_exist(world):
         )
     ).all()
     referenced = {target for _, target in rows}
-    assert referenced <= {"organizations", "customers", "transactions", "transaction_lines", "users", "invoices", "invoice_transactions", "invoice_payments"}
+    assert referenced <= {
+        "organizations", "customers", "transactions", "transaction_lines", "users", "invoices", "invoice_transactions", "invoice_payments",
+        "invoice_lines", "invoice_returns", "credit_notes",
+    }
     assert not referenced & {"items", "horses", "custom_field_definitions", "custom_field_options", "custom_field_values"}
 
 

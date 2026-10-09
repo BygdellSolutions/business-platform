@@ -97,6 +97,14 @@ class PdfPayment(Frozen):
     reference: str  # the invoice number
 
 
+class PdfCredit(Frozen):
+    """What a credit note credits (template 7): the original invoice's number and date, and the stored reason."""
+
+    invoice_number: str
+    invoice_date: str
+    reason: str
+
+
 class PdfDocument(Frozen):
     number_text: str
     invoice_date: str
@@ -119,6 +127,9 @@ class PdfDocument(Frozen):
     # The seller's details for every page's footer, in four columns (company and address, contact, tax identifiers,
     # payment), each a tuple of lines already labelled in the document's language. Empty columns are left out.
     issuer_footer: tuple[tuple[str, ...], ...] = ()
+    # Template 7: a credit note prints as "Kreditfaktura" / "Credit note", refers to the invoice it credits and has
+    # no payment section. Its figures arrive already signed (negative) from the build step.
+    credit: PdfCredit | None = None
 
 
 # --- text -------------------------------------------------------------------------------------------------------------------
@@ -170,6 +181,8 @@ def iter_strings(document: PdfDocument):
     yield from (document.number_text, document.invoice_date, document.currency, document.net, document.vat, document.gross)
     yield from (value for value in (document.due_date, document.description) if value is not None)
     yield from document.delivery_dates
+    if document.credit is not None:
+        yield from (document.credit.invoice_number, document.credit.invoice_date, document.credit.reason)
     for column in document.issuer_footer:
         yield from column
     if document.payment is not None:

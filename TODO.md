@@ -34,7 +34,10 @@ Found while testing staging (2026-10-08). Small reviewed slices, each validated 
 - [x] Slice 12: invitation audit in the Members UI (invited by, invited at, state)
 - [x] Slice 13: dashboard redesign for the organization owner
 - [x] Payments recorded by hand (record, reverse, paid/outstanding, list filter, dashboard) — 2026-10-08
-- [ ] Payments later: bank file import and automatic matching (bankgiro/OCR), Swish integration, reminders, credit notes
+- [x] Credit notes (partial/full per line, reason, returned to stock, own number, Kreditfaktura PDF) and refunds — 2026-10-10
+- [x] Return cases on the invoice (requested → goods received → approved / rejected, follow-up date, notes, "Returns to handle" on the dashboard; approval opens the credit form prefilled) — 2026-10-10
+- [ ] Credit notes later: a credited line's open backorder is not cancelled automatically (a person handles it on the Inventory page); no "makulera" of an issued invoice (decided 2026-10-10: invoices will be emailed on issue)
+- [ ] Payments later: bank file import and automatic matching (bankgiro/OCR), Swish integration, reminders
 - [ ] Later (email, paused): email infrastructure, **self-service password recovery** (the first email to build: today a locked-out user depends on an operator), invitation email, invoice email with delivery state and resend
 
 ## Now

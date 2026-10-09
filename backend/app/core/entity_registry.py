@@ -97,6 +97,7 @@ class Registry:
         self._reference_guards: list[ReferenceGuard] = []
         self._validators: list[LifecycleValidator] = []
         self._effects: list[LifecycleEffect] = []
+        self._hooks: dict[str, list[Callable[..., Any]]] = {}
         self._currency_guards: list[CurrencyGuard] = []
 
     # --- entity types ---------------------------------------------------------------------
@@ -183,6 +184,19 @@ class Registry:
     @property
     def validators(self) -> list[LifecycleValidator]:
         return list(self._validators)
+
+    # --- named hooks ------------------------------------------------------------------------------
+    #
+    # A capability one module offers to others by NAME, so the caller never imports the provider: Invoicing asks
+    # "stock.tracked_lines" and calls "stock.return" when a credit note says goods came back; Inventory answers.
+    # Without a provider the call does nothing (an organization without Inventory still credits).
+
+    def add_hook(self, name: str, handler: Callable[..., Any]) -> None:
+        self._hooks.setdefault(name, []).append(handler)
+
+    def call_hooks(self, name: str, *args: Any, **kwargs: Any) -> list[Any]:
+        """Every handler's answer, in registration order (an empty list when nobody provides the hook)."""
+        return [handler(*args, **kwargs) for handler in self._hooks.get(name, [])]
 
     # --- lifecycle effects (see app.core.lifecycle.run_effects) ---------------------------------
 

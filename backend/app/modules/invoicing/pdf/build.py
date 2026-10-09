@@ -9,7 +9,7 @@ nothing downstream could look them up.
 
 from typing import Any
 
-from app.modules.invoicing.pdf.document import PdfDocument, PdfField, PdfLine, PdfParty, PdfPayment, PdfSource, PdfVatRow, clean_text
+from app.modules.invoicing.pdf.document import PdfCredit, PdfDocument, PdfField, PdfLine, PdfParty, PdfPayment, PdfSource, PdfVatRow, clean_text
 from app.modules.invoicing.pdf.format import money, trimmed
 from app.modules.invoicing.pdf.labels import decimal_separator, labels
 
@@ -155,4 +155,56 @@ def document_from_invoice(invoice: Any) -> PdfDocument:
         net=_text(data["net_amount"]),
         vat=_text(data["vat_amount"]),
         gross=_text(data["gross_amount"]),
+    )
+
+
+def negative(value: str) -> str:
+    """A stored positive amount printed as credited: the same digits with a minus sign (string work, no arithmetic)."""
+    return value if value.startswith("-") or value.strip("0.") == "" else f"-{value}"
+
+
+def document_from_credit_note(note: Any) -> PdfDocument:
+    """`note` is a CreditNoteRead (or its JSON form). Amounts print negative; quantities and unit prices as stored."""
+    data = note.model_dump(mode="json") if hasattr(note, "model_dump") else note
+    issuer = data["issuer_snapshot"]
+    language = issuer.get("document_language") or "en"
+    words = labels(language)
+    return PdfDocument(
+        language=language if language in ("en", "sv") else "en",
+        approved_for_f_tax=issuer.get("approved_for_f_tax") is True,
+        issuer_footer=_footer(issuer, words),
+        number_text=_text(data["number_text"]),
+        invoice_date=_text(data["credit_date"]),
+        due_date=None,
+        currency=_text(data["currency"]),
+        description=None,
+        issuer=_party(issuer, prefer_legal_name=True, words=words).model_copy(
+            update={"reference": _text(f"{words['our_reference']}: {issuer['our_reference']}") if issuer.get("our_reference") else None}
+        ),
+        customer=_party(data["customer_snapshot"], prefer_legal_name=False, words=words),
+        sources=(),
+        lines=tuple(
+            PdfLine(
+                position=_text(line["position"]),
+                description=_text(line["description"]),
+                unit=_text(line["unit"]),
+                quantity=_text(line["quantity"]),
+                unit_price=_text(line["unit_price_ex_vat"]),
+                vat_rate=_text(line["vat_rate"]),
+                net=negative(_text(line["net_amount"])),
+                vat=negative(_text(line["vat_amount"])),
+                gross=negative(_text(line["gross_amount"])),
+                fields=(),
+            )
+            for line in data["lines"]
+        ),
+        vat_rows=tuple(
+            PdfVatRow(rate=_text(row["vat_rate"]), net=negative(_text(row["net_amount"])), vat=negative(_text(row["vat_amount"]))) for row in data["vat_breakdown"]
+        ),
+        net=negative(_text(data["net_amount"])),
+        vat=negative(_text(data["vat_amount"])),
+        gross=negative(_text(data["gross_amount"])),
+        credit=PdfCredit(
+            invoice_number=_text(data["invoice_number_text"]), invoice_date=_text(data["invoice_date"]), reason=_text(data["reason"])
+        ),
     )

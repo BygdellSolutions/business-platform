@@ -6,6 +6,7 @@ row lock (`lock_items`), so the "before" of a movement is always the latest "aft
 
 import uuid
 from collections.abc import Iterable
+from datetime import datetime
 from decimal import Decimal
 
 from fastapi import HTTPException, status
@@ -187,6 +188,7 @@ def record_movement(
     transaction_id: uuid.UUID | None = None,
     transaction_line_id: uuid.UUID | None = None,
     incoming_stock_id: uuid.UUID | None = None,
+    created_at: datetime | None = None,
 ) -> StockMovement:
     """Append one movement. The caller holds `item`'s row lock; stock never goes below zero (422 `stock.negative`)."""
     before = on_hand(db, ctx.organization_id, [item.id])[item.id]
@@ -209,6 +211,8 @@ def record_movement(
         incoming_stock_id=incoming_stock_id,
         created_by=ctx.user.id,
     )
+    if created_at is not None:
+        movement.created_at = created_at
     db.add(movement)
     db.flush()
     return movement
@@ -380,3 +384,74 @@ def fulfillment_state(row: LineFulfillment, on_hand_now: Decimal) -> str:
     if on_hand_now > 0:
         return "ready_to_fulfill"
     return "partially_fulfilled" if row.fulfilled_later > 0 else "waiting_for_stock"
+
+
+# --- credit notes (Invoicing calls these through named hooks; it never imports Inventory) --------------------------
+
+
+def _active_fulfillments(db: Session, organization_id: uuid.UUID, transaction_line_ids: Iterable[uuid.UUID], *, lock: bool = False) -> list[LineFulfillment]:
+    ids = [line_id for line_id in transaction_line_ids if line_id is not None]
+    if not ids:
+        return []
+    query = select(LineFulfillment).where(
+        LineFulfillment.organization_id == organization_id,
+        LineFulfillment.transaction_line_id.in_(ids),
+        LineFulfillment.cancelled_at.is_(None),
+    )
+    return list(db.scalars(query.with_for_update() if lock else query))
+
+
+def _returned_after_credit(db: Session, organization_id: uuid.UUID, row: LineFulfillment) -> Decimal:
+    """What came back of the line since this delivery through credit notes (returns stamped after the fulfillment;
+    returns of an earlier reopen belong to a cancelled fulfillment and are older)."""
+    return db.scalar(
+        select(func.coalesce(func.sum(StockMovement.quantity_change), 0)).where(
+            StockMovement.organization_id == organization_id,
+            StockMovement.transaction_line_id == row.transaction_line_id,
+            StockMovement.reason == MovementReason.RETURN,
+            StockMovement.created_at >= row.created_at,
+        )
+    )
+
+
+def returnable(db: Session, organization_id: uuid.UUID, transaction_line_ids: Iterable[uuid.UUID]) -> dict[uuid.UUID, Decimal]:
+    """Per stock-tracking line that was delivered: how much can still come back into stock on a credit note (what was
+    handed over, at completion and later, less what credit notes returned already). Lines not tracked are left out."""
+    return {
+        row.transaction_line_id: row.delivered + row.fulfilled_later - _returned_after_credit(db, organization_id, row)
+        for row in _active_fulfillments(db, organization_id, transaction_line_ids)
+    }
+
+
+def return_on_credit(db: Session, ctx: TenantContext, *, transaction_line_id: uuid.UUID | None, quantity: Decimal, note: str) -> None:
+    """Goods of a credited line came back: a return movement, at most what was handed over and not yet returned.
+    A line Inventory does not track (a service, an ad-hoc line, an item without stock tracking) is ignored."""
+    rows = _active_fulfillments(db, ctx.organization_id, [transaction_line_id], lock=True)
+    if not rows:
+        return
+    row = rows[0]
+    items = lock_items(db, ctx, [row.item_id])
+    left = row.delivered + row.fulfilled_later - _returned_after_credit(db, ctx.organization_id, row)
+    if quantity > left:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=[
+                {
+                    "loc": ["body", "lines"],
+                    "msg": f"Only {left.normalize():f} of this line was delivered and not yet returned, so no more can go back into stock",
+                    "type": "stock.return_too_much",
+                }
+            ],
+        )
+    # Stamped from the application clock, like the fulfillment, so the comparison above is between the same clock.
+    record_movement(
+        db,
+        ctx,
+        items[row.item_id],
+        quantity,
+        MovementReason.RETURN,
+        note=note,
+        transaction_id=row.transaction_id,
+        transaction_line_id=row.transaction_line_id,
+        created_at=clock.utcnow(),
+    )

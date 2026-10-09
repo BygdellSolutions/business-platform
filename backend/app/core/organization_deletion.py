@@ -21,6 +21,13 @@ from app.models import Organization, SecurityEvent
 
 # Children before parents. custom_field_definitions is handled separately (definitions refer to each other).
 TABLES_IN_DELETE_ORDER = (
+    "invoice_return_events",
+    "invoice_return_lines",
+    "invoice_returns",
+    "credit_note_pdfs",
+    "credit_note_vat_rows",
+    "credit_note_lines",
+    "credit_notes",
     "invoice_payments",
     "invoice_pdfs",
     "invoice_vat_rows",

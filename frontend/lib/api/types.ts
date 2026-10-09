@@ -527,11 +527,18 @@ export interface InvoiceSummary {
   paid_amount: MoneyString | null;
   outstanding_amount: MoneyString | null;
   payment_status: "unpaid" | "partially_paid" | "paid" | null;
+  /** Issued invoices only: the credited gross, whether all or part is credited, and what was paid beyond what is owed. */
+  credited_amount: MoneyString | null;
+  credit_status: "partly_credited" | "credited" | null;
+  refund_due_amount: MoneyString | null;
+  /** Return cases not closed yet (requested, goods received or approved). */
+  open_returns: number;
 }
 
-/** A payment recorded by hand, or a reversal (negative, naming the payment it cancels). */
+/** A payment recorded by hand, a refund (money paid back, negative), or a reversal of either (naming what it cancels). */
 export interface InvoicePayment {
   id: string;
+  kind: "payment" | "refund" | "reversal";
   amount: MoneyString;
   paid_on: string;
   method: string;
@@ -579,6 +586,12 @@ export interface InvoiceLine {
   fields: FieldSnapshot[];
   /** For a service line: what the invoice keeps of the service (a snapshot; never resolved again). */
   service: InvoiceService | null;
+  /** How much of the line credit notes have credited so far. */
+  credited_quantity: QuantityString;
+  /** What is left to credit of the line (computed by the backend). */
+  creditable_quantity: QuantityString | null;
+  /** How much can still go back into stock on a credit note; null when the line has no stock to return. */
+  stock_returnable: QuantityString | null;
 }
 
 export interface InvoiceSource {
@@ -614,8 +627,39 @@ export interface PartySnapshot {
   our_reference?: string | null;
 }
 
+/** A credit note (kreditfaktura) as listed on its invoice. Amounts are what is credited (positive). */
+export interface CreditNoteSummary {
+  id: string;
+  number_text: string;
+  credit_date: string;
+  reason: string;
+  currency: string;
+  net_amount: MoneyString;
+  vat_amount: MoneyString;
+  gross_amount: MoneyString;
+  issued_at: string;
+  issued_by_name: string | null;
+}
+
+export type ReturnState = "requested" | "goods_received" | "approved" | "rejected" | "credited";
+
+/** A return case on an issued invoice: the work before a credit note (closed by it, or rejected). */
+export interface InvoiceReturn {
+  id: string;
+  state: ReturnState;
+  reason: string;
+  follow_up_on: string;
+  rejection_reason: string | null;
+  credit_note_id: string | null;
+  created_at: string;
+  lines: { invoice_line_id: string; description: string; unit: string; quantity: QuantityString; returned_to_stock: boolean }[];
+  events: { kind: "opened" | "note" | "goods_received" | "approved" | "rejected" | "credited" | "follow_up"; note: string | null; created_at: string; created_by_name: string | null }[];
+}
+
 export interface Invoice extends InvoiceSummary {
   payments: InvoicePayment[];
+  credit_notes: CreditNoteSummary[];
+  returns: InvoiceReturn[];
   issued_by: string | null;
   created_by: string | null;
   updated_by: string | null;
@@ -769,6 +813,11 @@ export interface InvoicingSummary {
   unpaid: CountAndAmounts;
   not_yet_due: CountAndAmounts;
   partially_paid: CountAndAmounts;
+  /** Paid beyond what is owed after credit notes (the amounts are what is to be paid back). */
+  refund_due: CountAndAmounts;
+  /** Return cases still open, and of those the ones whose follow-up date has come. */
+  returns_open: number;
+  returns_follow_up_due: number;
   issued_this_month: CountAndAmounts;
   /** Issued, past the due date and not fully paid (the amounts are what is outstanding). */
   past_due: CountAndAmounts;

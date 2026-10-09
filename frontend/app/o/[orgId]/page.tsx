@@ -90,6 +90,29 @@ export default async function Dashboard({
             testId="card-past-due"
             tone="attention"
           />
+          <SummaryCard
+            title="Returns to handle"
+            count={invoicing.returns_open}
+            href={`${base}/invoices?returns=${invoicing.returns_follow_up_due > 0 ? "follow_up_due" : "open"}`}
+            note={
+              invoicing.returns_follow_up_due > 0
+                ? `${invoicing.returns_follow_up_due} to follow up today or earlier.`
+                : "Open return cases (requested, goods received or approved, not yet credited)."
+            }
+            testId="card-returns"
+            tone={invoicing.returns_follow_up_due > 0 ? "attention" : undefined}
+          />
+          {invoicing.refund_due.count > 0 && (
+            <SummaryCard
+              title="Refunds due"
+              count={invoicing.refund_due.count}
+              amounts={invoicing.refund_due.amounts}
+              href={`${base}/invoices?payment=refund_due`}
+              note="Paid beyond what is owed after credit notes: money to pay back."
+              testId="card-refund-due"
+              tone="attention"
+            />
+          )}
         </div>
       </section>
 

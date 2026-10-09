@@ -18,8 +18,9 @@ from app.core.org_time import organization_today
 from app.core.tenant import TenantContext
 from app.core.tenant_scope import get_scoped_or_404, reference_error
 from app.models import User
+from app.modules.invoicing.credits import credited_amounts, credited_sum_expression
 from app.modules.invoicing.models import Invoice, InvoicePayment, InvoiceStatus
-from app.modules.invoicing.schemas import InvoicePaymentRead, PaymentCreate
+from app.modules.invoicing.schemas import InvoicePaymentRead, PaymentCreate, RefundCreate
 
 ZERO = Decimal("0.00")
 
@@ -36,12 +37,34 @@ def paid_amounts(db: Session, organization_id: uuid.UUID, invoice_ids: Sequence[
     return {invoice_id: amount for invoice_id, amount in rows}
 
 
-def payment_fields(invoice: Invoice, paid: Decimal) -> dict:
-    """Paid, outstanding and the payment state of an issued invoice; nothing for a draft (it cannot be paid)."""
+def payment_fields(invoice: Invoice, paid: Decimal, credited: Decimal = ZERO) -> dict:
+    """Paid, outstanding, credited and the states of an issued invoice; nothing for a draft (it cannot be paid).
+
+    What the customer owes is the gross less its credit notes. Paid beyond that is a refund due (a payment made
+    before the credit), never a negative outstanding.
+    """
     if invoice.status != InvoiceStatus.ISSUED:
-        return dict(paid_amount=None, outstanding_amount=None, payment_status=None)
-    state = "paid" if paid >= invoice.gross_amount else "partially_paid" if paid > 0 else "unpaid"
-    return dict(paid_amount=paid, outstanding_amount=invoice.gross_amount - paid, payment_status=state)
+        return dict(paid_amount=None, outstanding_amount=None, payment_status=None, credited_amount=None, credit_status=None, refund_due_amount=None)
+    owed = invoice.gross_amount - credited
+    state = "paid" if paid >= owed else "partially_paid" if paid > 0 else "unpaid"
+    credit_state = None if credited <= 0 else "credited" if owed <= 0 else "partly_credited"
+    return dict(
+        paid_amount=paid,
+        outstanding_amount=max(owed - paid, ZERO),
+        payment_status=state,
+        credited_amount=credited,
+        credit_status=credit_state,
+        refund_due_amount=max(paid - owed, ZERO),
+    )
+
+
+def owed_expression():
+    """What the customer owes on the invoice in the surrounding query: the gross less its credit notes."""
+    return Invoice.gross_amount - credited_sum_expression()
+
+
+def owed(db: Session, invoice: Invoice) -> Decimal:
+    return invoice.gross_amount - credited_amounts(db, invoice.organization_id, [invoice.id]).get(invoice.id, ZERO)
 
 
 def paid_sum_expression():
@@ -67,6 +90,7 @@ def list_payments(db: Session, ctx: TenantContext, invoice_id: uuid.UUID) -> lis
     ).all()
     return [
         InvoicePaymentRead(
+            kind="reversal" if row.reverses_payment_id is not None else "refund" if row.amount < 0 else "payment",
             id=row.id,
             amount=row.amount,
             paid_on=row.paid_on,
@@ -100,7 +124,7 @@ def record_payment(db: Session, ctx: TenantContext, invoice_id: uuid.UUID, paylo
     if payload.paid_on > organization_today(db, ctx.organization_id):
         reference_error("paid_on", "A payment date cannot be in the future", "payment.future_date")
     paid = paid_amounts(db, ctx.organization_id, [invoice.id]).get(invoice.id, ZERO)
-    outstanding = invoice.gross_amount - paid
+    outstanding = owed(db, invoice) - paid
     if payload.amount > outstanding:
         reference_error("amount", f"Only {_money(outstanding)} {invoice.currency} is outstanding on this invoice", "payment.overpaid")
     # Stamped from the application clock: the list is in the order payments were recorded, even within one transaction.
@@ -116,6 +140,33 @@ def record_payment(db: Session, ctx: TenantContext, invoice_id: uuid.UUID, paylo
         changes={
             "payment": {"from": None, "to": f"{_money(payload.amount)} {invoice.currency}, {payload.method}, {payload.paid_on.isoformat()}"},
             "outstanding": {"from": _money(outstanding), "to": _money(outstanding - payload.amount)},
+        },
+    )
+    db.commit()
+
+
+def record_refund(db: Session, ctx: TenantContext, invoice_id: uuid.UUID, payload: RefundCreate) -> None:
+    """Money paid back: never more than was paid beyond what is owed after credit notes."""
+    invoice = _locked_issued(db, ctx, invoice_id)
+    if payload.paid_on > organization_today(db, ctx.organization_id):
+        reference_error("paid_on", "A refund date cannot be in the future", "payment.future_date")
+    paid = paid_amounts(db, ctx.organization_id, [invoice.id]).get(invoice.id, ZERO)
+    due = max(paid - owed(db, invoice), ZERO)
+    if payload.amount > due:
+        reference_error("amount", f"Only {_money(due)} {invoice.currency} is to be paid back on this invoice", "refund.too_much")
+    values = payload.model_dump()
+    values["amount"] = -payload.amount
+    db.add(InvoicePayment(organization_id=ctx.organization_id, invoice_id=invoice.id, created_by=ctx.user.id, created_at=clock.utcnow(), **values))
+    db.flush()
+    audit.record(
+        db,
+        ctx,
+        entity_type="invoice",
+        entity_id=invoice.id,
+        action="refund_recorded",
+        changes={
+            "refund": {"from": None, "to": f"{_money(payload.amount)} {invoice.currency}, {payload.method}, {payload.paid_on.isoformat()}"},
+            "refund_due": {"from": _money(due), "to": _money(due - payload.amount)},
         },
     )
     db.commit()
@@ -138,6 +189,12 @@ def reverse_payment(db: Session, ctx: TenantContext, invoice_id: uuid.UUID, paym
     if already is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, detail={"code": "payment_already_reversed", "message": "This payment was already reversed."})
     paid = paid_amounts(db, ctx.organization_id, [invoice.id]).get(invoice.id, ZERO)
+    if paid - payment.amount < 0:
+        # The money was paid back already: undo the refund first, or the invoice would show less than nothing paid.
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, detail={"code": "payment_refunded", "message": "This payment was paid back. Reverse the refund first."}
+        )
+    owed_now = owed(db, invoice)
     db.add(
         InvoicePayment(
             organization_id=ctx.organization_id,
@@ -160,8 +217,11 @@ def reverse_payment(db: Session, ctx: TenantContext, invoice_id: uuid.UUID, paym
         entity_id=invoice.id,
         action="payment_reversed",
         changes={
-            "payment": {"from": f"{_money(payment.amount)} {invoice.currency}, {payment.method}, {payment.paid_on.isoformat()}", "to": None},
-            "outstanding": {"from": _money(invoice.gross_amount - paid), "to": _money(invoice.gross_amount - paid + payment.amount)},
+            ("refund" if payment.amount < 0 else "payment"): {
+                "from": f"{_money(abs(payment.amount))} {invoice.currency}, {payment.method}, {payment.paid_on.isoformat()}",
+                "to": None,
+            },
+            "outstanding": {"from": _money(max(owed_now - paid, ZERO)), "to": _money(max(owed_now - paid + payment.amount, ZERO))},
         },
     )
     db.commit()

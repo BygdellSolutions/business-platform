@@ -20,17 +20,22 @@ const DATE = "rounded border border-zinc-400 px-2 py-1 font-normal dark:bg-zinc-
 
 const METHOD_LABELS = Object.fromEntries(PAYMENT_METHODS.map((method) => [method.value, method.label]));
 
+const ZERO = /^0*(?:\.0*)?$/;
+
 /**
- * Payments of an issued invoice, recorded by hand: what is paid and outstanding, every payment (and reversal) with who
- * recorded it, and, for those who keep the books, a form to record one. A payment recorded by mistake is reversed, never
- * deleted. The backend refuses more than is outstanding and a date in the future.
+ * Payments of an issued invoice, recorded by hand: what is paid and outstanding (after credit notes), every payment,
+ * refund and reversal with who recorded it, and, for those who keep the books, a form to record a payment, or a refund
+ * when more was paid than is owed after a credit. A row recorded by mistake is reversed, never deleted. The backend
+ * refuses more than is outstanding (or due back) and a date in the future.
  */
 export function PaymentsPanel({ invoice, canRecord, today, timeZone }: { invoice: Invoice; canRecord: boolean; today: string; timeZone: string | null }) {
   const orgId = useOrgId();
   const router = useRouter();
   const { pending, error, run } = useMutation();
   const outstanding = invoice.outstanding_amount ?? "0.00";
-  const [form, setForm] = useState({ amount: outstanding, paid_on: today, method: "bankgiro", reference: "", note: "" });
+  const refundDue = invoice.refund_due_amount ?? "0.00";
+  const owesRefund = !ZERO.test(refundDue);
+  const [form, setForm] = useState({ amount: owesRefund ? refundDue : outstanding, paid_on: today, method: owesRefund ? "bank_transfer" : "bankgiro", reference: "", note: "" });
   const problems = problemsFrom(error, CONTROLS);
   const set = (key: keyof typeof form) => (value: string) => setForm((current) => ({ ...current, [key]: value }));
 
@@ -39,7 +44,7 @@ export function PaymentsPanel({ invoice, canRecord, today, timeZone }: { invoice
   async function record(event: FormEvent) {
     event.preventDefault();
     const body = { amount: form.amount.trim(), paid_on: form.paid_on, method: form.method, reference: blankToNull(form.reference), note: blankToNull(form.note) };
-    const saved = await run(() => apiFetch<Invoice>(orgId, `/invoices/${invoice.id}/payments`, { method: "POST", body }));
+    const saved = await run(() => apiFetch<Invoice>(orgId, `/invoices/${invoice.id}/${owesRefund ? "refunds" : "payments"}`, { method: "POST", body }));
     if (saved === null) return;
     setForm({ amount: saved.outstanding_amount ?? "0.00", paid_on: today, method: form.method, reference: "", note: "" });
     router.refresh();
@@ -62,7 +67,21 @@ export function PaymentsPanel({ invoice, canRecord, today, timeZone }: { invoice
           <DecimalText value={outstanding} />
         </span>{" "}
         {invoice.currency}
+        {invoice.credited_amount && !ZERO.test(invoice.credited_amount) && (
+          <>
+            {" "}
+            · credited{" "}
+            <span data-testid="payment-credited">
+              <DecimalText value={invoice.credited_amount} />
+            </span>
+          </>
+        )}
       </p>
+      {owesRefund && (
+        <p className="text-sm font-semibold text-amber-800 dark:text-amber-300" data-testid="refund-due-amount">
+          Refund due: <DecimalText value={refundDue} /> {invoice.currency} was paid beyond what is owed after credit notes.
+        </p>
+      )}
       {invoice.payments.length > 0 && (
         <table className="text-left text-sm">
           <thead>
@@ -83,7 +102,7 @@ export function PaymentsPanel({ invoice, canRecord, today, timeZone }: { invoice
                   <DecimalText value={payment.amount} />
                 </td>
                 <td className="py-1 pr-4">
-                  {payment.reverses_payment_id ? "Reversal" : METHOD_LABELS[payment.method] ?? payment.method}
+                  {payment.kind === "reversal" ? "Reversal" : payment.kind === "refund" ? `Refund · ${METHOD_LABELS[payment.method] ?? payment.method}` : METHOD_LABELS[payment.method] ?? payment.method}
                   {payment.reversed && <span className="block text-xs text-zinc-500">reversed</span>}
                 </td>
                 <td className="py-1 pr-4">
@@ -95,10 +114,10 @@ export function PaymentsPanel({ invoice, canRecord, today, timeZone }: { invoice
                   {payment.created_by_name && ` by ${payment.created_by_name}`}
                 </td>
                 <td className="py-1">
-                  {canRecord && !payment.reversed && !payment.reverses_payment_id && (
+                  {canRecord && !payment.reversed && payment.kind !== "reversal" && (
                     <ConfirmButton
                       label="Reverse"
-                      question="Reverse this payment? A reversal is recorded; nothing is deleted."
+                      question={`Reverse this ${payment.kind}? A reversal is recorded; nothing is deleted.`}
                       confirmLabel="Yes, reverse"
                       disabled={pending}
                       onConfirm={() => void reverse(payment.id)}
@@ -111,12 +130,12 @@ export function PaymentsPanel({ invoice, canRecord, today, timeZone }: { invoice
           </tbody>
         </table>
       )}
-      {canRecord && invoice.payment_status !== "paid" && (
-        <form onSubmit={record} noValidate aria-label="Record payment" className="flex flex-col gap-3">
-          <h3 className="font-medium">Record a payment</h3>
+      {canRecord && (invoice.payment_status !== "paid" || owesRefund) && (
+        <form onSubmit={record} noValidate aria-label={owesRefund ? "Record refund" : "Record payment"} className="flex flex-col gap-3">
+          <h3 className="font-medium">{owesRefund ? "Record a refund (money paid back)" : "Record a payment"}</h3>
           <DecimalField label={`Amount (${invoice.currency})`} name="amount" value={form.amount} onChange={set("amount")} error={problems.byField.amount} />
           <label className="flex flex-col gap-1 text-sm font-medium">
-            Paid on
+            {owesRefund ? "Paid back on" : "Paid on"}
             <input type="date" name="paid_on" value={form.paid_on} max={today} onChange={(event) => set("paid_on")(event.target.value)} className={DATE} />
             {problems.byField.paid_on && (
               <span className="text-sm font-normal text-red-700 dark:text-red-300" data-testid="error-paid_on">
@@ -129,8 +148,8 @@ export function PaymentsPanel({ invoice, canRecord, today, timeZone }: { invoice
           <TextField label="Note (optional)" name="note" value={form.note} onChange={set("note")} error={problems.byField.note} autoComplete="off" />
           <ErrorSummary messages={problems.general} />
           <div>
-            <Button type="submit" disabled={pending} data-testid="record-payment">
-              {pending ? "Saving…" : "Record payment"}
+            <Button type="submit" disabled={pending} data-testid={owesRefund ? "record-refund" : "record-payment"}>
+              {pending ? "Saving…" : owesRefund ? "Record refund" : "Record payment"}
             </Button>
           </div>
         </form>

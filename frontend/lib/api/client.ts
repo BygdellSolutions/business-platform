@@ -120,7 +120,7 @@ export interface DownloadedFile {
   filename: string;
 }
 
-const PDF_FILENAME = /^invoice(?:-[A-Za-z0-9._-]{1,60})?\.pdf$/;
+const PDF_FILENAME = /^(?:invoice|credit-note)(?:-[A-Za-z0-9._-]{1,60})?\.pdf$/;
 
 /** The filename from the BFF's Content-Disposition, only if it has the one expected shape. */
 export function downloadFilename(disposition: string | null): string {

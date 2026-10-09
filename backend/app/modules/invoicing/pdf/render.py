@@ -42,7 +42,9 @@ from app.modules.invoicing.pdf.labels import decimal_separator, labels
 # 4: the sender labelled From / Från, and a four-column seller footer on every page.
 # 5: "Our reference" / "Vår referens" under the seller's name: who issued the invoice.
 # 6: sources are called orders ("Order of {date}" / "Order {date}").
-TEMPLATE_VERSION = 6
+# 7: credit notes ("Kreditfaktura" / "Credit note"): the invoice they credit, the reason, negative figures, no payment
+#    section. An invoice prints as in 6.
+TEMPLATE_VERSION = 7
 ACCENT = colors.HexColor("#1f4e5f")
 ACCENT_LIGHT = colors.HexColor("#e8f0f2")
 # Room for the footer columns (up to five lines each) above the page number.
@@ -185,6 +187,8 @@ def _build(document: PdfDocument, fonts: font_layer.Registered) -> bytes:
 
     words = labels(document.language)
     sep = decimal_separator(document.language)
+    credit = document.credit
+    title = words["credit_note"] if credit else words["invoice"]
 
     def footer(page: canvas.Canvas, number: int, total: int) -> None:
         # A standard invoice footer: the seller's details in columns under a rule, then the page number.
@@ -204,7 +208,7 @@ def _build(document: PdfDocument, fonts: font_layer.Registered) -> bytes:
             )
             _, height = table.wrap(width, FOOTER_HEIGHT)
             table.drawOn(page, margin, 13 * mm)
-        text = printer.p(words["page"].format(number=document.number_text, page=number, total=total), "foot")
+        text = printer.p(words["credit_page" if credit else "page"].format(number=document.number_text, page=number, total=total), "foot")
         text.wrap(width, 10 * mm)
         text.drawOn(page, margin, 7 * mm)
 
@@ -217,16 +221,23 @@ def _build(document: PdfDocument, fonts: font_layer.Registered) -> bytes:
         bottomMargin=(18 * mm + FOOTER_HEIGHT) if document.issuer_footer else 20 * mm,
         invariant=1,
         pageCompression=1,
-        title=f"{words['invoice']} {document.number_text}",
+        title=f"{title} {document.number_text}",
         author=document.issuer.name,
-        subject=f"{words['invoice']} {document.number_text} · {document.customer.name}",
+        subject=f"{title} {document.number_text} · {document.customer.name}",
         creator="business-platform",
     )
 
     story: list = []
 
     # Header: the issuer on the left, the invoice title and details on the right.
-    details = [(words["invoice_no"], document.number_text), (words["invoice_date"], document.invoice_date)]
+    if credit:
+        details = [
+            (words["credit_note_no"], document.number_text),
+            (words["credit_date"], document.invoice_date),
+            (words["credits_invoice"], words["invoice_of"].format(number=credit.invoice_number, date=credit.invoice_date)),
+        ]
+    else:
+        details = [(words["invoice_no"], document.number_text), (words["invoice_date"], document.invoice_date)]
     if document.due_date is not None:
         details.append((words["due_date"], document.due_date))
     if document.delivery_dates:
@@ -235,7 +246,7 @@ def _build(document: PdfDocument, fonts: font_layer.Registered) -> bytes:
     detail_table = Table([[printer.p(label, "label"), printer.p(value, "body")] for label, value in details], colWidths=[28 * mm, 36 * mm], hAlign="RIGHT")
     detail_table.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0), ("TOPPADDING", (0, 0), (-1, -1), 1), ("BOTTOMPADDING", (0, 0), (-1, -1), 1)]))
     sender = [printer.p(words["from"], "from_label"), Spacer(1, 2), *_party_flowables(printer, document.issuer, "issuer")]
-    header = Table([[sender, [printer.p(words["invoice"], "title"), Spacer(1, 4), detail_table]]], colWidths=[width * 0.52, width * 0.48])
+    header = Table([[sender, [printer.p(title, "title"), Spacer(1, 4), detail_table]]], colWidths=[width * 0.52, width * 0.48])
     header.setStyle(
         TableStyle(
             [
@@ -250,10 +261,13 @@ def _build(document: PdfDocument, fonts: font_layer.Registered) -> bytes:
     story += [header, Spacer(1, 7 * mm)]
 
     # The customer, and beside it what is to be paid and by when (always: the stored total and due date).
-    due = [printer.p(words["amount_due"], "due_label"), printer.p(f"{money(document.gross, sep)} {document.currency}", "due_value")]
+    due = [printer.p(words["amount_credited" if credit else "amount_due"], "due_label"), printer.p(f"{money(document.gross, sep)} {document.currency}", "due_value")]
     if document.due_date is not None:
         due.append(printer.p(f"{words['due_date']} {document.due_date}", "due_note"))
-    due.append(printer.p(f"{words['reference']} {document.number_text}", "due_note"))
+    if credit:
+        due.append(printer.p(f"{words['credits_invoice']} {credit.invoice_number}", "due_note"))
+    else:
+        due.append(printer.p(f"{words['reference']} {document.number_text}", "due_note"))
     parties = Table(
         [[[printer.p(words["billed_to"], "box_label"), Spacer(1, 2), *_party_flowables(printer, document.customer, "bold")], due]],
         colWidths=[width * 0.58, width * 0.42],
@@ -273,6 +287,8 @@ def _build(document: PdfDocument, fonts: font_layer.Registered) -> bytes:
     )
     story += [parties, Spacer(1, 7 * mm)]
 
+    if credit:
+        story += [printer.p(words["reason"], "label"), printer.p(credit.reason), Spacer(1, 5 * mm)]
     if document.description:
         story += [printer.p(words["description"], "label"), printer.p(document.description), Spacer(1, 5 * mm)]
 
@@ -366,7 +382,7 @@ def _build(document: PdfDocument, fonts: font_layer.Registered) -> bytes:
         [
             [printer.p(words["net_total"].format(currency=document.currency), "total_label"), printer.p(money(document.net, sep), "total_value")],
             [printer.p(words["vat_total"].format(currency=document.currency), "total_label"), printer.p(money(document.vat, sep), "total_value")],
-            [printer.p(words["gross_total"].format(currency=document.currency), "total_label"), printer.p(money(document.gross, sep), "total_value")],
+            [printer.p(words["credit_gross_total" if credit else "gross_total"].format(currency=document.currency), "total_label"), printer.p(money(document.gross, sep), "total_value")],
         ],
         colWidths=[110, _column_width([money(document.net, sep), money(document.vat, sep), money(document.gross, sep)], "total_value", 80)],
         hAlign="RIGHT",
@@ -386,6 +402,10 @@ def _build(document: PdfDocument, fonts: font_layer.Registered) -> bytes:
 
     # How to pay, on every invoice: the reference (the invoice number) and due date always, then whatever the issuer
     # snapshot stores (bankgiro, plusgiro, IBAN, BIC, terms). Nothing that is not stored is printed.
+    if credit:
+        # A credit note asks for no payment: what is to be paid back is settled on the invoice.
+        doc.build(story, canvasmaker=_numbered_canvas(footer))
+        return _checked(buffer.getvalue())
     payment = document.payment
     rows: list[tuple[str, str]] = [(words["reference"], document.number_text)]
     if document.due_date is not None:
@@ -409,7 +429,10 @@ def _build(document: PdfDocument, fonts: font_layer.Registered) -> bytes:
     story.append(KeepTogether([Spacer(1, 8 * mm), printer.p(words["payment"], "box_label"), Spacer(1, 2), pay_table]))
 
     doc.build(story, canvasmaker=_numbered_canvas(footer))
-    data = buffer.getvalue()
+    return _checked(buffer.getvalue())
+
+
+def _checked(data: bytes) -> bytes:
     if len(data) > MAX_OUTPUT_BYTES:
         raise DocumentTooLarge("The rendered PDF would be larger than the service allows.")
     return data
