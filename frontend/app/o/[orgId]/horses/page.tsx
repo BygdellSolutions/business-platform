@@ -72,46 +72,48 @@ export default async function HorsesPage({
       {horses.length === 0 ? (
         <p data-testid="empty">{filtered ? "No horses match." : "No horses yet."}</p>
       ) : (
-        <table data-testid="horses-table" className="w-full max-w-5xl text-left text-sm">
-          <thead>
-            <tr className="border-b border-zinc-300 dark:border-zinc-700">
-              <SortHeader label="No." sortKey="number" current={list.sort} dir={list.dir} href={sortHref(base, list, "number")} align="right" />
-              <SortHeader label="Name" sortKey="name" current={list.sort} dir={list.dir} href={sortHref(base, list, "name")} />
-              <SortHeader label="Owner" sortKey="owner" current={list.sort} dir={list.dir} href={sortHref(base, list, "owner")} />
-              <SortHeader label="Stable" sortKey="stable" current={list.sort} dir={list.dir} href={sortHref(base, list, "stable")} />
-              <SortHeader label="Birth year" sortKey="birth_year" current={list.sort} dir={list.dir} href={sortHref(base, list, "birth_year")} />
-              <SortHeader label="Sex" sortKey="sex" current={list.sort} dir={list.dir} href={sortHref(base, list, "sex")} />
-              <SortHeader label="Breed" sortKey="breed" current={list.sort} dir={list.dir} href={sortHref(base, list, "breed")} />
-              <SortHeader label="Status" sortKey="active" current={list.sort} dir={list.dir} href={sortHref(base, list, "active")} last />
-            </tr>
-          </thead>
-          <tbody>
-            {horses.map((horse) => (
-              <tr key={horse.id} data-testid="horse-row" className="border-b border-zinc-200 dark:border-zinc-800">
-                <td className="py-1 pr-4 text-right" data-testid="record-number">
-                  {horse.number}
-                </td>
-                <td className="py-1 pr-4">
-                  <Link href={`${base}/${horse.id}`} className="underline">
-                    {horse.name}
-                  </Link>
-                </td>
-                <td className="py-1 pr-4" data-testid="horse-owner">
-                  <CustomerLink orgId={orgId} customer={horse.owner} />
-                </td>
-                <td className="py-1 pr-4" data-testid="horse-stable">
-                  <CustomerLink orgId={orgId} customer={horse.stable} />
-                </td>
-                <td className="py-1 pr-4">{horse.birth_year}</td>
-                <td className="py-1 pr-4">{horse.sex}</td>
-                <td className="py-1 pr-4">{horse.breed}</td>
-                <td className="py-1">
-                  <StatusBadge active={horse.active} />
-                </td>
+        <div className="overflow-x-auto">
+          <table data-testid="horses-table" className="w-full max-w-5xl text-left text-sm whitespace-nowrap">
+            <thead>
+              <tr className="border-b border-zinc-300 dark:border-zinc-700">
+                <SortHeader label="No." sortKey="number" current={list.sort} dir={list.dir} href={sortHref(base, list, "number")} align="right" />
+                <SortHeader label="Name" sortKey="name" current={list.sort} dir={list.dir} href={sortHref(base, list, "name")} />
+                <SortHeader label="Owner" sortKey="owner" current={list.sort} dir={list.dir} href={sortHref(base, list, "owner")} />
+                <SortHeader label="Stable" sortKey="stable" current={list.sort} dir={list.dir} href={sortHref(base, list, "stable")} />
+                <SortHeader label="Birth year" sortKey="birth_year" current={list.sort} dir={list.dir} href={sortHref(base, list, "birth_year")} />
+                <SortHeader label="Sex" sortKey="sex" current={list.sort} dir={list.dir} href={sortHref(base, list, "sex")} />
+                <SortHeader label="Breed" sortKey="breed" current={list.sort} dir={list.dir} href={sortHref(base, list, "breed")} />
+                <SortHeader label="Status" sortKey="active" current={list.sort} dir={list.dir} href={sortHref(base, list, "active")} last />
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {horses.map((horse) => (
+                <tr key={horse.id} data-testid="horse-row" className="border-b border-zinc-200 dark:border-zinc-800">
+                  <td className="py-1 pr-4 text-right" data-testid="record-number">
+                    {horse.number}
+                  </td>
+                  <td className="py-1 pr-4">
+                    <Link href={`${base}/${horse.id}`} className="underline">
+                      {horse.name}
+                    </Link>
+                  </td>
+                  <td className="py-1 pr-4" data-testid="horse-owner">
+                    <CustomerLink orgId={orgId} customer={horse.owner} />
+                  </td>
+                  <td className="py-1 pr-4" data-testid="horse-stable">
+                    <CustomerLink orgId={orgId} customer={horse.stable} />
+                  </td>
+                  <td className="py-1 pr-4">{horse.birth_year}</td>
+                  <td className="py-1 pr-4">{horse.sex}</td>
+                  <td className="py-1 pr-4">{horse.breed}</td>
+                  <td className="py-1">
+                    <StatusBadge active={horse.active} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       <Pagination page={list.page} hasNext={hasNext} hrefFor={(page) => listHref(base, list, { page })} />

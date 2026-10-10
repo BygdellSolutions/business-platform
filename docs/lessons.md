@@ -156,3 +156,9 @@ I showed new order numbers as "Order 1001 · 2026-10-10" inside the existing dat
 asked for separate columns everywhere. Rule: a new field in a table gets its own column (sortable, scannable, and
 tests read cells, not substrings), never a prefix to an existing cell. `lib/order-number-columns.test.ts` guards the
 order case.
+
+## A table row is one line, on every list (2026-10-10)
+
+Wrapping rows came back on the invoice list after the catalog fix, because the rule was fixed in one component
+(stock badges) instead of on the tables. Rule: every main list table is `whitespace-nowrap` inside `overflow-x-auto`,
+and badge groups never `flex-wrap`; `lib/list-rows-one-line.test.ts` checks the lists.

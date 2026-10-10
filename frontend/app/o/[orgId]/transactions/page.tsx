@@ -87,7 +87,7 @@ export default async function TransactionsPage({
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table data-testid="transactions-table" className="w-full max-w-5xl text-left text-sm">
+          <table data-testid="transactions-table" className="w-full max-w-5xl text-left text-sm whitespace-nowrap">
             <thead>
               <tr className="border-b border-zinc-300 dark:border-zinc-700">
                 <SortHeader label="Order no." sortKey="number" current={list.sort} dir={list.dir} href={sortHref(base, list, "number")} align="right" />

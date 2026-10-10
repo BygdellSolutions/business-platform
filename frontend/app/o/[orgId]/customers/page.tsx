@@ -46,38 +46,40 @@ export default async function CustomersPage({
       {customers.length === 0 ? (
         <p data-testid="empty">{filtered ? "No customers match." : "No customers yet."}</p>
       ) : (
-        <table data-testid="customers-table" className="w-full max-w-4xl text-left text-sm">
-          <thead>
-            <tr className="border-b border-zinc-300 dark:border-zinc-700">
-              <SortHeader label="No." sortKey="number" current={list.sort} dir={list.dir} href={sortHref(base, list, "number")} align="right" />
-              <SortHeader label="Name" sortKey="name" current={list.sort} dir={list.dir} href={sortHref(base, list, "name")} />
-              <SortHeader label="Type" sortKey="type" current={list.sort} dir={list.dir} href={sortHref(base, list, "type")} />
-              <SortHeader label="Email" sortKey="email" current={list.sort} dir={list.dir} href={sortHref(base, list, "email")} />
-              <SortHeader label="Phone" sortKey="phone" current={list.sort} dir={list.dir} href={sortHref(base, list, "phone")} />
-              <SortHeader label="Status" sortKey="active" current={list.sort} dir={list.dir} href={sortHref(base, list, "active")} last />
-            </tr>
-          </thead>
-          <tbody>
-            {customers.map((customer) => (
-              <tr key={customer.id} data-testid="customer-row" className="border-b border-zinc-200 dark:border-zinc-800">
-                <td className="py-1 pr-4 text-right" data-testid="record-number">
-                  {customer.number}
-                </td>
-                <td className="py-1 pr-4">
-                  <Link href={`${base}/${customer.id}`} className="underline">
-                    {customer.name}
-                  </Link>
-                </td>
-                <td className="py-1 pr-4">{customer.customer_type}</td>
-                <td className="py-1 pr-4">{customer.email}</td>
-                <td className="py-1 pr-4">{customer.phone}</td>
-                <td className="py-1">
-                  <StatusBadge active={customer.active} />
-                </td>
+        <div className="overflow-x-auto">
+          <table data-testid="customers-table" className="w-full max-w-4xl text-left text-sm whitespace-nowrap">
+            <thead>
+              <tr className="border-b border-zinc-300 dark:border-zinc-700">
+                <SortHeader label="No." sortKey="number" current={list.sort} dir={list.dir} href={sortHref(base, list, "number")} align="right" />
+                <SortHeader label="Name" sortKey="name" current={list.sort} dir={list.dir} href={sortHref(base, list, "name")} />
+                <SortHeader label="Type" sortKey="type" current={list.sort} dir={list.dir} href={sortHref(base, list, "type")} />
+                <SortHeader label="Email" sortKey="email" current={list.sort} dir={list.dir} href={sortHref(base, list, "email")} />
+                <SortHeader label="Phone" sortKey="phone" current={list.sort} dir={list.dir} href={sortHref(base, list, "phone")} />
+                <SortHeader label="Status" sortKey="active" current={list.sort} dir={list.dir} href={sortHref(base, list, "active")} last />
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {customers.map((customer) => (
+                <tr key={customer.id} data-testid="customer-row" className="border-b border-zinc-200 dark:border-zinc-800">
+                  <td className="py-1 pr-4 text-right" data-testid="record-number">
+                    {customer.number}
+                  </td>
+                  <td className="py-1 pr-4">
+                    <Link href={`${base}/${customer.id}`} className="underline">
+                      {customer.name}
+                    </Link>
+                  </td>
+                  <td className="py-1 pr-4">{customer.customer_type}</td>
+                  <td className="py-1 pr-4">{customer.email}</td>
+                  <td className="py-1 pr-4">{customer.phone}</td>
+                  <td className="py-1">
+                    <StatusBadge active={customer.active} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       <Pagination page={list.page} hasNext={hasNext} hrefFor={(page) => listHref(base, list, { page })} />

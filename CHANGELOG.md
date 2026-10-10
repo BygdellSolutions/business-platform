@@ -4,6 +4,9 @@ All notable changes to `business-platform` will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Invoice rows no longer break onto two lines (the status badges wrapped and "Refund due" sat on its own line); every main list keeps its rows on one line and scrolls sideways when wide (`lib/list-rows-one-line.test.ts`).
+
 ### Changed
 - **Invoice numbers start at 1001**, like orders (credit notes continue the same series). Existing counters below 1001 move up to 1001 (migration `f6b8d0e2a346`); issued invoices keep their numbers. Decided before any production data existed.
 

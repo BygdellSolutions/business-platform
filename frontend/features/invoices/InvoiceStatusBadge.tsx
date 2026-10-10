@@ -29,7 +29,7 @@ export function InvoiceStatusBadge({
 }) {
   const look = status === "draft" ? DRAFT : creditStatus === "credited" ? CREDITED : paymentStatus ? PAYMENT[paymentStatus] : ISSUED;
   return (
-    <span className="inline-flex flex-wrap gap-1">
+    <span className="inline-flex gap-1 whitespace-nowrap">
       <span
         data-testid="invoice-status"
         data-status={status}

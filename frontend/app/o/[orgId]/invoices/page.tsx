@@ -130,7 +130,7 @@ export default async function InvoicesPage({
         <p data-testid="empty">{filtered ? "No invoices match." : "No invoices yet."}</p>
       ) : (
         <div className="overflow-x-auto">
-          <table data-testid="invoices-table" className="w-full max-w-6xl text-left text-sm">
+          <table data-testid="invoices-table" className="w-full max-w-6xl text-left text-sm whitespace-nowrap">
             <thead>
               <tr className="border-b border-zinc-300 dark:border-zinc-700">
                 <SortHeader label="Number" sortKey="number" current={list.sort} dir={list.dir} href={sortHref(base, list, "number")} />
@@ -168,7 +168,7 @@ export default async function InvoicesPage({
                   <td className="py-1 pr-4">
                     <InvoiceStatusBadge status={invoice.status} paymentStatus={invoice.payment_status} creditStatus={invoice.credit_status} openReturns={invoice.open_returns} />
                     {invoice.refund_due_amount && invoice.refund_due_amount !== "0.00" && (
-                      <span className="block text-xs text-amber-700 dark:text-amber-300" data-testid="refund-due">
+                      <span className="ml-2 text-xs text-amber-700 dark:text-amber-300" data-testid="refund-due">
                         Refund due <DecimalText value={invoice.refund_due_amount} />
                       </span>
                     )}
