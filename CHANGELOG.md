@@ -4,6 +4,9 @@ All notable changes to `business-platform` will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Settings shows the **Organization ID** (the permanent identifier, the one in the address) with a Copy button, for support and other references.
+
 ### Changed
 - **Catalog prices read at a glance.** Columns Product, Base price, Promotion ("−25%" or "—"), Promotion duration ("10 Oct – 17 Oct", or "no end date"), Current price, VAT ("25%") and Incl. VAT; every price is excl. VAT except Incl. VAT, which comes from the current price. The base price never changes during a promotion. The item page shows the same fields in the same order. The backend provides `current_price_ex_vat` / `current_price_inc_vat` on items (sort keys `current_price`, `promotion_ends`).
 

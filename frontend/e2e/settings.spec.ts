@@ -194,6 +194,7 @@ test.describe("tenant isolation", () => {
       const response = await page.goto(settings(other.orgId));
       expect(response?.status()).toBe(404);
       await page.goto(settings(world.orgId));
+      await expect(page.getByTestId("organization-id")).toHaveText(world.orgId); // its own id, never the other's
       await expect(page.getByLabel("Legal name", { exact: true })).toHaveValue("");
       await expect(page.getByLabel("VAT number", { exact: true })).toHaveValue("");
       expect(orgRow(other.orgId, "legal_name || '|' || vat_number")).toBe("Secret Theirs AB|SE-THEIRS");

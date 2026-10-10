@@ -1,4 +1,5 @@
 
+import { CopyableValue } from "@/components/ui/CopyableValue";
 import { DangerZone } from "@/features/settings/DangerZone";
 import { EarlierTransactions } from "@/features/settings/EarlierTransactions";
 import { OrganizationSettings } from "@/features/settings/OrganizationSettings";
@@ -29,6 +30,12 @@ export default async function SettingsPage({ params }: { params: Promise<{ orgId
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold">Settings</h1>
+      <CopyableValue
+        label="Organization ID"
+        value={organization.id}
+        testId="organization-id"
+        hint="The organization's permanent identifier: give it to support when asking about this organization."
+      />
       <OrganizationSettings key={organization.id} organization={organization} canEdit={canEdit} />
       <EarlierTransactions status={status} canEdit={canEdit} />
       <DangerZone organizationName={organization.name} role={role} members={members} passwordChecked={authMode() === "session"} />
