@@ -3,12 +3,15 @@ import Link from "next/link";
 import { ListFilters } from "@/components/ui/ListFilters";
 import { Pagination } from "@/components/ui/Pagination";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { SortHeader } from "@/components/ui/SortHeader";
 import { CustomerFilter } from "@/features/customers/CustomerFilter";
 import { readActiveRole } from "@/lib/active-role";
 import type { Customer, CustomerRef, Horse } from "@/lib/api/types";
-import { backendQuery, listHref, pageOf, parseListParams } from "@/lib/list-params";
+import { backendQuery, listHref, sortHref, pageOf, parseListParams } from "@/lib/list-params";
 import { canWriteRecords } from "@/lib/roles";
 import { serverRead, serverReadOrNull } from "@/lib/server-api";
+
+const SORTS = ["number", "name", "owner", "stable", "birth_year", "sex", "breed", "active"] as const;
 
 const REFS = ["owner_customer_id", "stable_customer_id"] as const;
 
@@ -40,7 +43,7 @@ export default async function HorsesPage({
 }) {
   const { orgId } = await params;
   const canWrite = canWriteRecords(await readActiveRole(orgId));
-  const list = parseListParams(await searchParams, [], REFS);
+  const list = parseListParams(await searchParams, [], REFS, {}, SORTS);
   const [rows, owner, stable] = await Promise.all([
     serverRead<Horse[]>(orgId, "/api/horses", backendQuery(list)),
     filterEntity(orgId, list.refs.owner_customer_id),
@@ -72,14 +75,14 @@ export default async function HorsesPage({
         <table data-testid="horses-table" className="w-full max-w-5xl text-left text-sm">
           <thead>
             <tr className="border-b border-zinc-300 dark:border-zinc-700">
-              <th className="py-1 pr-4 text-right">No.</th>
-              <th className="py-1 pr-4">Name</th>
-              <th className="py-1 pr-4">Owner</th>
-              <th className="py-1 pr-4">Stable</th>
-              <th className="py-1 pr-4">Birth year</th>
-              <th className="py-1 pr-4">Sex</th>
-              <th className="py-1 pr-4">Breed</th>
-              <th className="py-1">Status</th>
+              <SortHeader label="No." sortKey="number" current={list.sort} dir={list.dir} href={sortHref(base, list, "number")} align="right" />
+              <SortHeader label="Name" sortKey="name" current={list.sort} dir={list.dir} href={sortHref(base, list, "name")} />
+              <SortHeader label="Owner" sortKey="owner" current={list.sort} dir={list.dir} href={sortHref(base, list, "owner")} />
+              <SortHeader label="Stable" sortKey="stable" current={list.sort} dir={list.dir} href={sortHref(base, list, "stable")} />
+              <SortHeader label="Birth year" sortKey="birth_year" current={list.sort} dir={list.dir} href={sortHref(base, list, "birth_year")} />
+              <SortHeader label="Sex" sortKey="sex" current={list.sort} dir={list.dir} href={sortHref(base, list, "sex")} />
+              <SortHeader label="Breed" sortKey="breed" current={list.sort} dir={list.dir} href={sortHref(base, list, "breed")} />
+              <SortHeader label="Status" sortKey="active" current={list.sort} dir={list.dir} href={sortHref(base, list, "active")} last />
             </tr>
           </thead>
           <tbody>

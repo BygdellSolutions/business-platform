@@ -14,6 +14,19 @@ import { formatTimestamp } from "@/lib/timestamps";
 
 import { StockBadges } from "./StockBadges";
 import { trimQuantity } from "@/lib/decimal";
+import { SortHeader } from "@/components/ui/SortHeader";
+import type { SortValue } from "@/lib/table-sort";
+import { useSortedRows } from "@/lib/use-sorted-rows";
+
+/** What each sortable column sorts by (display only). */
+const SORT_COLUMNS: Record<string, (r: StockMovement) => SortValue> = {
+  when: (r) => ({ text: r.created_at }),
+  what: (r) => ({ text: r.reason }),
+  change: (r) => ({ decimal: r.quantity_change }),
+  after: (r) => ({ decimal: r.quantity_after }),
+  note: (r) => ({ text: r.note }),
+  by: (r) => ({ text: r.created_by_name }),
+};
 
 const CONTROLS = ["kind", "quantity", "note"] as const;
 
@@ -71,6 +84,7 @@ export function StockPanel({
     router.refresh();
   }
 
+  const sorted = useSortedRows(stock.movements, SORT_COLUMNS);
   return (
     <section aria-label="Stock" data-testid="stock-panel" className="flex max-w-3xl flex-col gap-3">
       <h2 className="flex items-center gap-2 text-lg font-semibold">
@@ -96,16 +110,16 @@ export function StockPanel({
           <table className="text-left text-sm">
             <thead>
               <tr className="border-b border-zinc-300 dark:border-zinc-700">
-                <th className="py-1 pr-4">When</th>
-                <th className="py-1 pr-4">What</th>
-                <th className="py-1 pr-4 text-right">Change</th>
-                <th className="py-1 pr-4 text-right">On hand after</th>
-                <th className="py-1 pr-4">Note</th>
-                <th className="py-1 pr-4">By</th>
+                <SortHeader label="When" {...sorted.header("when")} />
+                <SortHeader label="What" {...sorted.header("what")} />
+                <SortHeader label="Change" {...sorted.header("change")} align="right" />
+                <SortHeader label="On hand after" {...sorted.header("after")} align="right" />
+                <SortHeader label="Note" {...sorted.header("note")} />
+                <SortHeader label="By" {...sorted.header("by")} />
               </tr>
             </thead>
             <tbody>
-              {stock.movements.map((movement) => (
+              {sorted.rows.map((movement) => (
                 <tr key={movement.id} data-testid="stock-movement" className="border-b border-zinc-200 dark:border-zinc-800">
                   <td className="py-1 pr-4">{formatTimestamp(movement.created_at, timeZone)}</td>
                   <td className="py-1 pr-4">{REASONS[movement.reason]}</td>

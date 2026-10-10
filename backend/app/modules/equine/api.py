@@ -1,10 +1,10 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, aliased
 
-from app.api.deps import Pagination, pagination
+from app.api.deps import Pagination, Sorting, pagination, sorted_by, sorting
 from app.core import audit
 from app.core.authz import record_writer
 from app.core.db import get_db
@@ -27,6 +27,11 @@ REFERENCE_FIELDS = ("owner_customer_id", "stable_customer_id")
 
 Owner = aliased(Customer)
 Stable = aliased(Customer)
+# The columns the horse list sorts by (?sort=...&dir=...).
+HORSE_SORTS = {
+    "number": Horse.number, "name": func.lower(Horse.name), "owner": func.lower(Owner.name), "stable": func.lower(Stable.name),
+    "birth_year": Horse.birth_year, "sex": Horse.sex, "breed": func.lower(Horse.breed), "active": Horse.active,
+}
 
 
 def _horse_rows(ctx: TenantContext):
@@ -101,6 +106,7 @@ def list_horses(
     stable_customer_id: uuid.UUID | None = None,
     active: bool | None = None,
     page: Pagination = Depends(pagination),
+    sort: Sorting = Depends(sorting),
     ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
 ) -> list[HorseRead]:
@@ -114,7 +120,7 @@ def list_horses(
         query = query.where(Horse.stable_customer_id == stable_customer_id)
     if active is not None:
         query = query.where(Horse.active == active)
-    query = query.order_by(Horse.name, Horse.id).limit(page.limit).offset(page.offset)
+    query = sorted_by(query, sort, HORSE_SORTS, (Horse.name, Horse.id)).limit(page.limit).offset(page.offset)
     return [_to_read(*row) for row in db.execute(query).all()]
 
 

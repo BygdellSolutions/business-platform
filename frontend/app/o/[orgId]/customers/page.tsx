@@ -3,11 +3,14 @@ import Link from "next/link";
 import { ListFilters } from "@/components/ui/ListFilters";
 import { Pagination } from "@/components/ui/Pagination";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { SortHeader } from "@/components/ui/SortHeader";
 import { readActiveRole } from "@/lib/active-role";
 import type { Customer } from "@/lib/api/types";
-import { backendQuery, listHref, pageOf, parseListParams } from "@/lib/list-params";
+import { backendQuery, listHref, sortHref, pageOf, parseListParams } from "@/lib/list-params";
 import { canWriteRecords } from "@/lib/roles";
 import { serverRead } from "@/lib/server-api";
+
+const SORTS = ["number", "name", "type", "email", "phone", "active"] as const;
 
 /**
  * The initial read happens on the server: the organization comes from the URL, FastAPI decides
@@ -22,7 +25,7 @@ export default async function CustomersPage({
 }) {
   const { orgId } = await params;
   const canWrite = canWriteRecords(await readActiveRole(orgId));
-  const list = parseListParams(await searchParams);
+  const list = parseListParams(await searchParams, [], [], {}, SORTS);
   const { rows: customers, hasNext } = pageOf(await serverRead<Customer[]>(orgId, "/api/customers", backendQuery(list)));
   const base = `/o/${orgId}/customers`;
   const filtered = list.q !== "" || list.active !== "all";
@@ -46,12 +49,12 @@ export default async function CustomersPage({
         <table data-testid="customers-table" className="w-full max-w-4xl text-left text-sm">
           <thead>
             <tr className="border-b border-zinc-300 dark:border-zinc-700">
-              <th className="py-1 pr-4 text-right">No.</th>
-              <th className="py-1 pr-4">Name</th>
-              <th className="py-1 pr-4">Type</th>
-              <th className="py-1 pr-4">Email</th>
-              <th className="py-1 pr-4">Phone</th>
-              <th className="py-1">Status</th>
+              <SortHeader label="No." sortKey="number" current={list.sort} dir={list.dir} href={sortHref(base, list, "number")} align="right" />
+              <SortHeader label="Name" sortKey="name" current={list.sort} dir={list.dir} href={sortHref(base, list, "name")} />
+              <SortHeader label="Type" sortKey="type" current={list.sort} dir={list.dir} href={sortHref(base, list, "type")} />
+              <SortHeader label="Email" sortKey="email" current={list.sort} dir={list.dir} href={sortHref(base, list, "email")} />
+              <SortHeader label="Phone" sortKey="phone" current={list.sort} dir={list.dir} href={sortHref(base, list, "phone")} />
+              <SortHeader label="Status" sortKey="active" current={list.sort} dir={list.dir} href={sortHref(base, list, "active")} last />
             </tr>
           </thead>
           <tbody>

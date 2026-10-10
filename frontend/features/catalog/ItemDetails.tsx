@@ -2,6 +2,8 @@ import { DecimalText } from "@/components/ui/DecimalText";
 import { DetailList } from "@/components/ui/DetailList";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { Item } from "@/lib/api/types";
+import { formatShortDate } from "@/lib/dates";
+import { trimQuantity } from "@/lib/decimal";
 
 import { ITEM_TYPE_LABELS } from "./item-types";
 
@@ -16,45 +18,31 @@ export function ItemDetails({ item }: { item: Item }) {
         { label: "Name", value: item.name },
         { label: "Description", value: item.description },
         { label: "Unit", value: item.unit },
+        // The same order and meaning as the catalog's price columns: every price excl. VAT except "Incl. VAT".
+        { label: "Base price", value: <DecimalText value={item.price_ex_vat} />, testId: "detail-price" },
         {
-          label: "Price excl. VAT",
-          value: <DecimalText value={item.price_ex_vat} />,
-          testId: "detail-price",
-        },
-        {
-          label: "Price incl. VAT",
-          value: <DecimalText value={item.price_inc_vat} />,
-          testId: "detail-price-inc-vat",
-        },
-        { label: "VAT %", value: <DecimalText value={item.vat_rate} /> },
-        {
-          label: "Discount today",
-          value: item.current_discount ? (
-            <>
-              −<DecimalText value={item.current_discount.percent} /> %{" "}
-              {item.current_discount.ends_on
-                ? `until ${item.current_discount.ends_on}`
-                : "(no end date)"}
-            </>
-          ) : null,
+          label: "Promotion",
+          value: item.current_discount ? `−${trimQuantity(item.current_discount.percent)}%` : "—",
           testId: "detail-current-discount",
         },
-        ...(item.promotion_price_ex_vat !== null &&
-        item.promotion_price_inc_vat !== null
-          ? [
-              {
-                label: "Promotion price",
-                value: (
-                  <>
-                    <DecimalText value={item.promotion_price_ex_vat} /> excl.
-                    VAT, <DecimalText value={item.promotion_price_inc_vat} />{" "}
-                    incl. VAT
-                  </>
-                ),
-                testId: "detail-promotion-price",
-              },
-            ]
-          : []),
+        {
+          label: "Promotion duration",
+          value: item.current_discount
+            ? `${formatShortDate(item.current_discount.starts_on)} – ${item.current_discount.ends_on ? formatShortDate(item.current_discount.ends_on) : "no end date"}`
+            : "—",
+          testId: "detail-promotion-duration",
+        },
+        {
+          label: "Current price",
+          value: item.current_price_ex_vat !== null ? <DecimalText value={item.current_price_ex_vat} /> : null,
+          testId: "detail-current-price",
+        },
+        { label: "VAT", value: `${trimQuantity(item.vat_rate)}%` },
+        {
+          label: "Incl. VAT",
+          value: item.current_price_inc_vat !== null ? <DecimalText value={item.current_price_inc_vat} /> : null,
+          testId: "detail-price-inc-vat",
+        },
         ...(item.type === "product"
           ? [
               {

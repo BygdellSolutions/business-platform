@@ -11,9 +11,21 @@ import { ErrorSummary } from "@/components/ui/ErrorSummary";
 import { DecimalField, SelectField, TextField } from "@/components/ui/Field";
 import { PAYMENT_METHODS, PAYMENT_STATES } from "@/features/invoices/payment-labels";
 import { apiFetch } from "@/lib/api/client";
-import type { Invoice } from "@/lib/api/types";
+import type { Invoice, InvoicePayment } from "@/lib/api/types";
 import { blankToNull, problemsFrom, useMutation } from "@/lib/forms";
 import { formatTimestamp } from "@/lib/timestamps";
+import { SortHeader } from "@/components/ui/SortHeader";
+import type { SortValue } from "@/lib/table-sort";
+import { useSortedRows } from "@/lib/use-sorted-rows";
+
+/** What each sortable column sorts by (display only). */
+const SORT_COLUMNS: Record<string, (r: InvoicePayment) => SortValue> = {
+  paid_on: (r) => ({ text: r.paid_on }),
+  amount: (r) => ({ decimal: r.amount }),
+  method: (r) => ({ text: r.method }),
+  reference: (r) => ({ text: r.reference }),
+  recorded: (r) => ({ text: r.created_at }),
+};
 
 const CONTROLS = ["amount", "paid_on", "method", "reference", "note"] as const;
 const DATE = "rounded border border-zinc-400 px-2 py-1 font-normal dark:bg-zinc-900";
@@ -39,6 +51,7 @@ export function PaymentsPanel({ invoice, canRecord, today, timeZone }: { invoice
   const problems = problemsFrom(error, CONTROLS);
   const set = (key: keyof typeof form) => (value: string) => setForm((current) => ({ ...current, [key]: value }));
 
+  const sorted = useSortedRows(invoice.payments, SORT_COLUMNS);
   if (invoice.status !== "issued" || invoice.payment_status === null) return null;
 
   async function record(event: FormEvent) {
@@ -86,16 +99,16 @@ export function PaymentsPanel({ invoice, canRecord, today, timeZone }: { invoice
         <table className="text-left text-sm">
           <thead>
             <tr className="border-b border-zinc-300 dark:border-zinc-700">
-              <th className="py-1 pr-4">Paid on</th>
-              <th className="py-1 pr-4 text-right">Amount</th>
-              <th className="py-1 pr-4">Method</th>
-              <th className="py-1 pr-4">Reference</th>
-              <th className="py-1 pr-4">Recorded</th>
+              <SortHeader label="Paid on" {...sorted.header("paid_on")} />
+              <SortHeader label="Amount" {...sorted.header("amount")} align="right" />
+              <SortHeader label="Method" {...sorted.header("method")} />
+              <SortHeader label="Reference" {...sorted.header("reference")} />
+              <SortHeader label="Recorded" {...sorted.header("recorded")} />
               <th />
             </tr>
           </thead>
           <tbody>
-            {invoice.payments.map((payment) => (
+            {sorted.rows.map((payment) => (
               <tr key={payment.id} data-testid="payment-row" className="border-b border-zinc-200 align-top dark:border-zinc-800">
                 <td className="py-1 pr-4">{payment.paid_on}</td>
                 <td className="py-1 pr-4 text-right">

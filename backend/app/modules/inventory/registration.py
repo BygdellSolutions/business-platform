@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.entity_registry import Registry
 from app.core.lifecycle import CANCEL, COMPLETE, REOPEN
 from app.core.tenant import TenantContext
-from app.modules.inventory import service
+from app.modules.inventory import service, sorting
 
 TRANSACTION = "transaction"
 
@@ -32,3 +32,5 @@ def register(registry: Registry) -> None:
     # Credit notes: which invoiced lines can go back into stock, and putting them back.
     registry.add_hook("stock.returnable", service.returnable)
     registry.add_hook("stock.return", service.return_on_credit)
+    # The catalog list sorts by stock columns through these expressions (core never imports Inventory).
+    registry.add_hook("item.sort", sorting.item_sorts)

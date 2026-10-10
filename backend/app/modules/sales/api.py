@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, 
 from sqlalchemy import and_, func, select, update
 from sqlalchemy.orm import Session
 
-from app.api.deps import Pagination, pagination
+from app.api.deps import Pagination, Sorting, pagination, sorted_by, sorting
 from app.core import audit, clock, discounts, subjects
 from app.core.authz import record_writer, roles_required
 from app.core.currency import default_currency_for_new_record
@@ -374,6 +374,29 @@ def create_transaction(
     return _read_one(db, ctx, tx.id)
 
 
+def _transaction_sorts() -> dict:
+    """The order list's sort columns; the amounts are sums of the stored line amounts, as the list shows them."""
+    def line_sum(column):
+        return func.coalesce(
+            select(func.sum(column))
+            .where(TransactionLine.organization_id == Transaction.organization_id, TransactionLine.transaction_id == Transaction.id)
+            .scalar_subquery(),
+            0,
+        )
+
+    return {
+        "number": Transaction.number,
+        "date": Transaction.transaction_date,
+        "customer": func.lower(Customer.name),
+        "status": Transaction.status,
+        "currency": Transaction.currency,
+        "lines": line_sum(1),
+        "net": line_sum(TransactionLine.net_amount),
+        "vat": line_sum(TransactionLine.vat_amount),
+        "gross": line_sum(TransactionLine.gross_amount),
+    }
+
+
 @router.get("", response_model=list[TransactionSummary])
 def list_transactions(
     status_filter: TransactionStatus | None = Query(default=None, alias="status"),
@@ -382,6 +405,7 @@ def list_transactions(
     date_to: date | None = None,
     number: int | None = Query(default=None, ge=1, le=2**63 - 1, description="The order number"),
     page: Pagination = Depends(pagination),
+    sort: Sorting = Depends(sorting),
     ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
 ) -> list[TransactionSummary]:
@@ -397,10 +421,9 @@ def list_transactions(
         query = query.where(Transaction.transaction_date <= date_to)
     if number is not None:
         query = query.where(Transaction.number == number)
+    newest_first = (Transaction.transaction_date.desc(), Transaction.created_at.desc(), Transaction.id)
     query = (
-        query.order_by(
-            Transaction.transaction_date.desc(), Transaction.created_at.desc(), Transaction.id
-        )
+        sorted_by(query, sort, _transaction_sorts(), newest_first)
         .limit(page.limit)
         .offset(page.offset)
     )

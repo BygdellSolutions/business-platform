@@ -1,10 +1,10 @@
 import uuid
 
 from fastapi import APIRouter, Depends, Query, Response, status
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from app.api.deps import Pagination, pagination
+from app.api.deps import Pagination, Sorting, pagination, sorted_by, sorting
 from app.core import audit
 from app.core.authz import record_writer, require_role
 from app.core.db import get_db
@@ -15,6 +15,11 @@ from app.models import Customer, Role
 from app.schemas.customer import CustomerCreate, CustomerRead, CustomerUpdate
 
 router = APIRouter(prefix="/api/customers", tags=["customers"])
+
+# The columns the list sorts by (?sort=...&dir=...); names compare without case.
+CUSTOMER_SORTS = {
+    "number": Customer.number, "name": func.lower(Customer.name), "type": Customer.customer_type, "email": func.lower(Customer.email), "phone": Customer.phone, "active": Customer.active,
+}
 
 # A customer's permanent discount is a pricing decision: owners and admins only, whoever else may edit the customer.
 DISCOUNT_ROLES = (Role.OWNER, Role.ADMIN)
@@ -44,6 +49,7 @@ def list_customers(
     q: str | None = Query(default=None, max_length=255, description="Name or email contains"),
     active: bool | None = None,
     page: Pagination = Depends(pagination),
+    sort: Sorting = Depends(sorting),
     ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
 ) -> list[Customer]:
@@ -59,7 +65,7 @@ def list_customers(
         )
     if active is not None:
         query = query.where(Customer.active == active)
-    query = query.order_by(Customer.name, Customer.id).limit(page.limit).offset(page.offset)
+    query = sorted_by(query, sort, CUSTOMER_SORTS, (Customer.name, Customer.id)).limit(page.limit).offset(page.offset)
     return list(db.scalars(query))
 
 

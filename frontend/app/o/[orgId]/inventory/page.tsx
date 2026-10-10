@@ -6,6 +6,8 @@ import { SupplierName } from "@/features/suppliers/SupplierName";
 import type { Backorder, Incoming, StockItem } from "@/lib/api/types";
 import { serverRead } from "@/lib/server-api";
 import { trimQuantity } from "@/lib/decimal";
+import { SortHeader } from "@/components/ui/SortHeader";
+import { sortRows, tableSort, type SortValue } from "@/lib/table-sort";
 
 const STATES = [
   { value: "", label: "All" },
@@ -15,6 +17,26 @@ const STATES = [
   { value: "backordered", label: "Backordered" },
   { value: "incoming", label: "Incoming" },
 ] as const;
+const PRODUCT_SORTS = ["name", "sku", "unit", "on_hand", "allocated", "committed", "available", "incoming", "low_stock_threshold"];
+const BACKLOG_SORTS: Record<string, (r: Backorder) => SortValue> = {
+  number: (r) => ({ number: r.transaction_number }),
+  date: (r) => ({ text: r.transaction_date }),
+  customer: (r) => ({ text: r.customer_name }),
+  product: (r) => ({ text: r.item_name }),
+  unit: (r) => ({ text: r.item_unit }),
+  waiting: (r) => ({ decimal: r.remaining }),
+  state: (r) => ({ text: r.state }),
+};
+const INCOMING_SORTS: Record<string, (r: Incoming) => SortValue> = {
+  expected: (r) => ({ text: r.expected_on }),
+  product: (r) => ({ text: r.item_name }),
+  unit: (r) => ({ text: r.item_unit }),
+  quantity: (r) => ({ decimal: r.quantity }),
+  received: (r) => ({ decimal: r.received }),
+  remaining: (r) => ({ decimal: r.remaining }),
+  supplier: (r) => ({ text: r.supplier?.name ?? null }),
+  reference: (r) => ({ text: r.reference }),
+};
 const CONTROL = "rounded border border-zinc-400 px-2 py-1 text-sm dark:bg-zinc-900";
 
 function one(value: string | string[] | undefined): string {
@@ -37,7 +59,16 @@ export default async function InventoryPage({
   const raw = await searchParams;
   const q = one(raw.q).trim();
   const state = STATES.some((entry) => entry.value === one(raw.state)) ? one(raw.state) : "";
-  const query = new URLSearchParams({ ...(q ? { q } : {}), ...(state ? { state } : {}) }).toString();
+  const base = `/o/${orgId}/inventory`;
+  // Products are sorted by the backend (their figures are computed there); the two smaller tables on the page.
+  const productSort = tableSort(raw, base, PRODUCT_SORTS, "sort");
+  const backlogSort = tableSort(raw, base, Object.keys(BACKLOG_SORTS), "backlog");
+  const incomingSort = tableSort(raw, base, Object.keys(INCOMING_SORTS), "incoming");
+  const query = new URLSearchParams({
+    ...(q ? { q } : {}),
+    ...(state ? { state } : {}),
+    ...(productSort.sort ? { sort: productSort.sort, dir: productSort.dir } : {}),
+  }).toString();
   const [items, backorders, incoming] = await Promise.all([
     serverRead<StockItem[]>(orgId, "/api/inventory/items", query ? `?${query}` : ""),
     serverRead<Backorder[]>(orgId, "/api/inventory/backorders"),
@@ -68,6 +99,8 @@ export default async function InventoryPage({
               ))}
             </select>
           </label>
+          {productSort.sort && <input type="hidden" name="sort" value={productSort.sort} />}
+          {productSort.sort && productSort.dir === "desc" && <input type="hidden" name="sort_dir" value="desc" />}
           <button type="submit" className="rounded border border-zinc-400 px-3 py-1 text-sm">
             Show
           </button>
@@ -80,19 +113,15 @@ export default async function InventoryPage({
           <table className="w-full max-w-6xl text-left text-sm" data-testid="stock-table">
             <thead>
               <tr className="border-b border-zinc-300 dark:border-zinc-700">
-                <th className="py-1 pr-4">Product</th>
-                <th className="py-1 pr-4">SKU</th>
-                <th className="py-1 pr-4">Unit</th>
-                <th className="py-1 pr-4 text-right">On hand</th>
-                <th className="py-1 pr-4 text-right" title="On open draft sales: meant for a customer, not final yet">
-                  Allocated
-                </th>
-                <th className="py-1 pr-4 text-right" title="Completed sales still waiting for stock (backorders)">
-                  Committed
-                </th>
-                <th className="py-1 pr-4 text-right">Available</th>
-                <th className="py-1 pr-4 text-right">Incoming</th>
-                <th className="py-1 pr-4 text-right">Low below</th>
+                <SortHeader label="Product" sortKey="name" current={productSort.sort} dir={productSort.dir} href={productSort.hrefs.name} />
+                <SortHeader label="SKU" sortKey="sku" current={productSort.sort} dir={productSort.dir} href={productSort.hrefs.sku} />
+                <SortHeader label="Unit" sortKey="unit" current={productSort.sort} dir={productSort.dir} href={productSort.hrefs.unit} />
+                <SortHeader label="On hand" sortKey="on_hand" current={productSort.sort} dir={productSort.dir} href={productSort.hrefs.on_hand} align="right" />
+                <SortHeader label="Allocated" sortKey="allocated" current={productSort.sort} dir={productSort.dir} href={productSort.hrefs.allocated} align="right" title="On open draft sales: meant for a customer, not final yet" />
+                <SortHeader label="Committed" sortKey="committed" current={productSort.sort} dir={productSort.dir} href={productSort.hrefs.committed} align="right" title="Completed sales still waiting for stock (backorders)" />
+                <SortHeader label="Available" sortKey="available" current={productSort.sort} dir={productSort.dir} href={productSort.hrefs.available} align="right" />
+                <SortHeader label="Incoming" sortKey="incoming" current={productSort.sort} dir={productSort.dir} href={productSort.hrefs.incoming} align="right" />
+                <SortHeader label="Low below" sortKey="low_stock_threshold" current={productSort.sort} dir={productSort.dir} href={productSort.hrefs.low_stock_threshold} align="right" />
                 <th className="py-1">State</th>
               </tr>
             </thead>
@@ -141,17 +170,17 @@ export default async function InventoryPage({
           <table className="text-left text-sm">
             <thead>
               <tr className="border-b border-zinc-300 dark:border-zinc-700">
-                <th className="py-1 pr-4 text-right">Order no.</th>
-                <th className="py-1 pr-4">Completed</th>
-                <th className="py-1 pr-4">Customer</th>
-                <th className="py-1 pr-4">Product</th>
-                <th className="py-1 pr-4">Unit</th>
-                <th className="py-1 pr-4 text-right">Waiting</th>
-                <th className="py-1 pr-4">State</th>
+                <SortHeader label="Order no." sortKey="number" current={backlogSort.sort} dir={backlogSort.dir} href={backlogSort.hrefs.number} align="right" />
+                <SortHeader label="Completed" sortKey="date" current={backlogSort.sort} dir={backlogSort.dir} href={backlogSort.hrefs.date} />
+                <SortHeader label="Customer" sortKey="customer" current={backlogSort.sort} dir={backlogSort.dir} href={backlogSort.hrefs.customer} />
+                <SortHeader label="Product" sortKey="product" current={backlogSort.sort} dir={backlogSort.dir} href={backlogSort.hrefs.product} />
+                <SortHeader label="Unit" sortKey="unit" current={backlogSort.sort} dir={backlogSort.dir} href={backlogSort.hrefs.unit} />
+                <SortHeader label="Waiting" sortKey="waiting" current={backlogSort.sort} dir={backlogSort.dir} href={backlogSort.hrefs.waiting} align="right" />
+                <SortHeader label="State" sortKey="state" current={backlogSort.sort} dir={backlogSort.dir} href={backlogSort.hrefs.state} />
               </tr>
             </thead>
             <tbody>
-              {backorders.map((backorder) => (
+              {sortRows(backorders, backlogSort, BACKLOG_SORTS).map((backorder) => (
                 <tr key={backorder.fulfillment_id} data-testid="backlog-row" className="border-b border-zinc-200 dark:border-zinc-800">
                   <td className="py-1 pr-4 text-right" data-testid="order-number">
                     <Link href={`/o/${orgId}/transactions/${backorder.transaction_id}`} className="underline">
@@ -188,18 +217,18 @@ export default async function InventoryPage({
           <table className="text-left text-sm">
             <thead>
               <tr className="border-b border-zinc-300 dark:border-zinc-700">
-                <th className="py-1 pr-4">Expected</th>
-                <th className="py-1 pr-4">Product</th>
-                <th className="py-1 pr-4">Unit</th>
-                <th className="py-1 pr-4 text-right">Ordered</th>
-                <th className="py-1 pr-4 text-right">Received</th>
-                <th className="py-1 pr-4 text-right">Still expected</th>
-                <th className="py-1 pr-4">Supplier</th>
-                <th className="py-1 pr-4">Reference</th>
+                <SortHeader label="Expected" sortKey="expected" current={incomingSort.sort} dir={incomingSort.dir} href={incomingSort.hrefs.expected} />
+                <SortHeader label="Product" sortKey="product" current={incomingSort.sort} dir={incomingSort.dir} href={incomingSort.hrefs.product} />
+                <SortHeader label="Unit" sortKey="unit" current={incomingSort.sort} dir={incomingSort.dir} href={incomingSort.hrefs.unit} />
+                <SortHeader label="Ordered" sortKey="quantity" current={incomingSort.sort} dir={incomingSort.dir} href={incomingSort.hrefs.quantity} align="right" />
+                <SortHeader label="Received" sortKey="received" current={incomingSort.sort} dir={incomingSort.dir} href={incomingSort.hrefs.received} align="right" />
+                <SortHeader label="Still expected" sortKey="remaining" current={incomingSort.sort} dir={incomingSort.dir} href={incomingSort.hrefs.remaining} align="right" />
+                <SortHeader label="Supplier" sortKey="supplier" current={incomingSort.sort} dir={incomingSort.dir} href={incomingSort.hrefs.supplier} />
+                <SortHeader label="Reference" sortKey="reference" current={incomingSort.sort} dir={incomingSort.dir} href={incomingSort.hrefs.reference} />
               </tr>
             </thead>
             <tbody>
-              {incoming.map((row) => (
+              {sortRows(incoming, incomingSort, INCOMING_SORTS).map((row) => (
                 <tr key={row.id} data-testid="incoming-overview-row" className="border-b border-zinc-200 dark:border-zinc-800">
                   <td className="py-1 pr-4">{row.expected_on ?? <span className="text-zinc-500">not given</span>}</td>
                   <td className="py-1 pr-4">

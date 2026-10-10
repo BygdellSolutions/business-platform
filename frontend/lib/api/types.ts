@@ -230,6 +230,9 @@ export interface Item {
   price_inc_vat: MoneyString;
   promotion_price_ex_vat: MoneyString | null;
   promotion_price_inc_vat: MoneyString | null;
+  /** What is charged today: the promotion price while one runs, otherwise the base price (excl. and incl. VAT). */
+  current_price_ex_vat: MoneyString | null;
+  current_price_inc_vat: MoneyString | null;
   created_at: string;
   updated_at: string;
   /** Who created it and who changed it last (user ids); null = not recorded (before authors were kept). */

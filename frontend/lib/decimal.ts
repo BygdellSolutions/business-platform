@@ -66,3 +66,27 @@ export function trimQuantity(value: string): string {
   const fraction = (found[2] ?? "").replace(/0+$/, "");
   return fraction === "" ? found[1] : `${found[1]}.${fraction}`;
 }
+
+/**
+ * Orders two decimal strings exactly ("9.5" before "10.00", "-2" before "1") by comparing their digits as text:
+ * no conversion to a JavaScript number, so nothing is rounded. For sorting a table only.
+ */
+export function compareDecimal(a: string, b: string): number {
+  const negative = (value: string) => value.startsWith("-");
+  if (negative(a) !== negative(b)) return negative(a) ? -1 : 1;
+  const magnitude = compareMagnitude(a.replace(/^-/, ""), b.replace(/^-/, ""));
+  return negative(a) ? -magnitude : magnitude;
+}
+
+function compareMagnitude(a: string, b: string): number {
+  const [aWhole, aPart = ""] = a.split(".");
+  const [bWhole, bPart = ""] = b.split(".");
+  const aInt = aWhole.replace(/^0+(?=\d)/, "");
+  const bInt = bWhole.replace(/^0+(?=\d)/, "");
+  if (aInt.length !== bInt.length) return aInt.length < bInt.length ? -1 : 1;
+  if (aInt !== bInt) return aInt < bInt ? -1 : 1;
+  const width = aPart.length > bPart.length ? aPart.length : bPart.length;
+  const aFrac = aPart.padEnd(width, "0");
+  const bFrac = bPart.padEnd(width, "0");
+  return aFrac === bFrac ? 0 : aFrac < bFrac ? -1 : 1;
+}

@@ -4,19 +4,23 @@ import { DecimalText } from "@/components/ui/DecimalText";
 import { ListFilters } from "@/components/ui/ListFilters";
 import { Pagination } from "@/components/ui/Pagination";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { SortHeader } from "@/components/ui/SortHeader";
 import { StockBadges } from "@/features/catalog/StockBadges";
 import { ITEM_TYPES, ITEM_TYPE_LABELS } from "@/features/catalog/item-types";
 import { readActiveRole } from "@/lib/active-role";
 import type { Item, ItemAvailability } from "@/lib/api/types";
 import {
   backendQuery,
-  listHref,
+  listHref, sortHref,
   pageOf,
   parseListParams,
 } from "@/lib/list-params";
 import { canWriteRecords } from "@/lib/roles";
 import { serverRead } from "@/lib/server-api";
 import { trimQuantity } from "@/lib/decimal";
+import { formatShortDate } from "@/lib/dates";
+
+const SORTS = ["number", "name", "sku", "type", "unit", "price", "promotion", "promotion_ends", "current_price", "price_inc_vat", "vat_rate", "on_hand", "allocated", "available", "committed", "incoming", "active"] as const;
 
 const TYPES = ITEM_TYPES;
 
@@ -54,7 +58,7 @@ export default async function CatalogPage({
 }) {
   const { orgId } = await params;
   const canWrite = canWriteRecords(await readActiveRole(orgId));
-  const list = parseListParams(await searchParams, TYPES);
+  const list = parseListParams(await searchParams, TYPES, [], {}, SORTS);
   const { rows: items, hasNext } = pageOf(
     await serverRead<Item[]>(orgId, "/api/items", backendQuery(list)),
   );
@@ -119,30 +123,24 @@ export default async function CatalogPage({
           >
             <thead>
               <tr className="border-b border-zinc-300 dark:border-zinc-700">
-                <th className="py-1 pr-4 text-right">No.</th>
-                <th className="py-1 pr-4">Name</th>
-                <th className="py-1 pr-4">SKU</th>
-                <th className="py-1 pr-4">Type</th>
-                <th className="py-1 pr-4">Unit</th>
-                <th className="py-1 pr-4 text-right">Base price excl. VAT</th>
-                <th className="py-1 pr-4">Promotion</th>
-                <th className="py-1 pr-4 text-right">
-                  Promotion price excl. VAT
-                </th>
-                <th
-                  className="py-1 pr-4 text-right"
-                  title="What a customer pays today, promotion included (customer discounts not included)"
-                >
-                  Price incl. VAT today
-                </th>
-                <th className="py-1 pr-4 text-right">VAT %</th>
-                <th className="py-1 pr-4 text-right">On hand</th>
-                <th className="py-1 pr-4 text-right">Allocated</th>
-                <th className="py-1 pr-4 text-right">Available</th>
-                <th className="py-1 pr-4 text-right">Backordered</th>
-                <th className="py-1 pr-4 text-right">Incoming</th>
+                <SortHeader label="No." sortKey="number" current={list.sort} dir={list.dir} href={sortHref(base, list, "number")} align="right" />
+                <SortHeader label="Product" sortKey="name" current={list.sort} dir={list.dir} href={sortHref(base, list, "name")} />
+                <SortHeader label="SKU" sortKey="sku" current={list.sort} dir={list.dir} href={sortHref(base, list, "sku")} />
+                <SortHeader label="Type" sortKey="type" current={list.sort} dir={list.dir} href={sortHref(base, list, "type")} />
+                <SortHeader label="Unit" sortKey="unit" current={list.sort} dir={list.dir} href={sortHref(base, list, "unit")} />
+                <SortHeader label="Base price" sortKey="price" current={list.sort} dir={list.dir} href={sortHref(base, list, "price")} align="right" title="The normal price, excl. VAT (a promotion never changes it)" />
+                <SortHeader label="Promotion" sortKey="promotion" current={list.sort} dir={list.dir} href={sortHref(base, list, "promotion")} />
+                <SortHeader label="Promotion duration" sortKey="promotion_ends" current={list.sort} dir={list.dir} href={sortHref(base, list, "promotion_ends")} />
+                <SortHeader label="Current price" sortKey="current_price" current={list.sort} dir={list.dir} href={sortHref(base, list, "current_price")} align="right" title="What is charged today, excl. VAT (customer discounts not included)" />
+                <SortHeader label="VAT" sortKey="vat_rate" current={list.sort} dir={list.dir} href={sortHref(base, list, "vat_rate")} align="right" />
+                <SortHeader label="Incl. VAT" sortKey="price_inc_vat" current={list.sort} dir={list.dir} href={sortHref(base, list, "price_inc_vat")} align="right" title="The current price incl. VAT: what a customer pays today" />
+                <SortHeader label="On hand" sortKey="on_hand" current={list.sort} dir={list.dir} href={sortHref(base, list, "on_hand")} align="right" />
+                <SortHeader label="Allocated" sortKey="allocated" current={list.sort} dir={list.dir} href={sortHref(base, list, "allocated")} align="right" />
+                <SortHeader label="Available" sortKey="available" current={list.sort} dir={list.dir} href={sortHref(base, list, "available")} align="right" />
+                <SortHeader label="Backordered" sortKey="committed" current={list.sort} dir={list.dir} href={sortHref(base, list, "committed")} align="right" />
+                <SortHeader label="Incoming" sortKey="incoming" current={list.sort} dir={list.dir} href={sortHref(base, list, "incoming")} align="right" />
                 <th className="py-1 pr-4">Stock</th>
-                <th className="py-1">Status</th>
+                <SortHeader label="Status" sortKey="active" current={list.sort} dir={list.dir} href={sortHref(base, list, "active")} last />
               </tr>
             </thead>
             <tbody>
@@ -170,33 +168,25 @@ export default async function CatalogPage({
                     <DecimalText value={item.price_ex_vat} />
                   </td>
                   <td className="py-1 pr-4" data-testid="current-discount">
-                    {item.current_discount && (
-                      <span className="text-red-700 dark:text-red-400">
-                        −<DecimalText value={item.current_discount.percent} /> %
-                        {item.current_discount.ends_on
-                          ? ` until ${item.current_discount.ends_on}`
-                          : ""}
-                      </span>
+                    {item.current_discount ? (
+                      <span className="text-red-700 dark:text-red-400">−{trimQuantity(item.current_discount.percent)}%</span>
+                    ) : (
+                      "—"
                     )}
                   </td>
-                  <td
-                    className="py-1 pr-4 text-right"
-                    data-testid="item-promotion-price"
-                  >
-                    {item.promotion_price_ex_vat !== null && (
-                      <DecimalText value={item.promotion_price_ex_vat} />
-                    )}
+                  <td className="py-1 pr-4" data-testid="promotion-duration">
+                    {item.current_discount
+                      ? `${formatShortDate(item.current_discount.starts_on)} – ${item.current_discount.ends_on ? formatShortDate(item.current_discount.ends_on) : "no end date"}`
+                      : "—"}
                   </td>
-                  <td
-                    className="py-1 pr-4 text-right"
-                    data-testid="item-price-inc-vat"
-                  >
-                    <DecimalText
-                      value={item.promotion_price_inc_vat ?? item.price_inc_vat}
-                    />
+                  <td className="py-1 pr-4 text-right" data-testid="item-current-price">
+                    {item.current_price_ex_vat !== null && <DecimalText value={item.current_price_ex_vat} />}
                   </td>
                   <td className="py-1 pr-4 text-right" data-testid="item-vat">
-                    <DecimalText value={item.vat_rate} />
+                    {trimQuantity(item.vat_rate)}%
+                  </td>
+                  <td className="py-1 pr-4 text-right" data-testid="item-price-inc-vat">
+                    {item.current_price_inc_vat !== null && <DecimalText value={item.current_price_inc_vat} />}
                   </td>
                   <StockCells figures={stock.get(item.id)} />
                   <td className="py-1">

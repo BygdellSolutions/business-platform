@@ -18,6 +18,23 @@ import type { Incoming } from "@/lib/api/types";
 import { blankToNull, problemsFrom, useMutation } from "@/lib/forms";
 import { trimQuantity } from "@/lib/decimal";
 import { formatDay } from "@/lib/timestamps";
+import { SortHeader } from "@/components/ui/SortHeader";
+import type { SortValue } from "@/lib/table-sort";
+import { useSortedRows } from "@/lib/use-sorted-rows";
+
+/** What each sortable column sorts by (display only). */
+const SORT_COLUMNS: Record<string, (r: Incoming) => SortValue> = {
+  ordered: (r) => ({ text: r.created_at }),
+  expected: (r) => ({ text: r.expected_on }),
+  unit: (r) => ({ text: r.item_unit }),
+  quantity: (r) => ({ decimal: r.quantity }),
+  received: (r) => ({ decimal: r.received }),
+  remaining: (r) => ({ decimal: r.remaining }),
+  supplier: (r) => ({ text: r.supplier?.name ?? null }),
+  reference: (r) => ({ text: r.reference }),
+  unit_cost: (r) => ({ decimal: r.unit_cost }),
+  state: (r) => ({ text: r.state }),
+};
 
 const CONTROLS = [
   "quantity",
@@ -148,6 +165,7 @@ export function IncomingPanel({
     if (cancelled !== null) router.refresh();
   }
 
+  const sorted = useSortedRows(incoming, SORT_COLUMNS);
   return (
     <section
       aria-label="Incoming stock"
@@ -163,21 +181,21 @@ export function IncomingPanel({
         <table className="text-left text-sm">
           <thead>
             <tr className="border-b border-zinc-300 dark:border-zinc-700">
-              <th className="py-1 pr-4">Order date</th>
-              <th className="py-1 pr-4">Expected</th>
-              <th className="py-1 pr-4">Unit</th>
-              <th className="py-1 pr-4 text-right">Ordered</th>
-              <th className="py-1 pr-4 text-right">Received</th>
-              <th className="py-1 pr-4 text-right">Still expected</th>
-              <th className="py-1 pr-4">Supplier</th>
-              <th className="py-1 pr-4">Reference</th>
-              <th className="py-1 pr-4 text-right">Unit cost excl. VAT</th>
-              <th className="py-1 pr-4">State</th>
+              <SortHeader label="Order date" {...sorted.header("ordered")} />
+              <SortHeader label="Expected" {...sorted.header("expected")} />
+              <SortHeader label="Unit" {...sorted.header("unit")} />
+              <SortHeader label="Ordered" {...sorted.header("quantity")} align="right" />
+              <SortHeader label="Received" {...sorted.header("received")} align="right" />
+              <SortHeader label="Still expected" {...sorted.header("remaining")} align="right" />
+              <SortHeader label="Supplier" {...sorted.header("supplier")} />
+              <SortHeader label="Reference" {...sorted.header("reference")} />
+              <SortHeader label="Unit cost excl. VAT" {...sorted.header("unit_cost")} align="right" />
+              <SortHeader label="State" {...sorted.header("state")} />
               {canWrite && <th className="py-1">Actions</th>}
             </tr>
           </thead>
           <tbody>
-            {incoming.map((row) => (
+            {sorted.rows.map((row) => (
               <tr
                 key={row.id}
                 data-testid="incoming-row"

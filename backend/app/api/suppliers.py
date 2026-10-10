@@ -1,10 +1,10 @@
 import uuid
 
 from fastapi import APIRouter, Depends, Query, Response, status
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from app.api.deps import Pagination, pagination
+from app.api.deps import Pagination, Sorting, pagination, sorted_by, sorting
 from app.core import audit
 from app.core.authz import record_writer
 from app.core.db import get_db
@@ -15,6 +15,11 @@ from app.models import Supplier
 from app.schemas.supplier import SupplierCreate, SupplierRead, SupplierUpdate
 
 router = APIRouter(prefix="/api/suppliers", tags=["suppliers"])
+
+# The columns the list sorts by (?sort=...&dir=...); names compare without case.
+SUPPLIER_SORTS = {
+    "number": Supplier.number, "name": func.lower(Supplier.name), "contact_person": func.lower(Supplier.contact_person), "email": func.lower(Supplier.email), "phone": Supplier.phone, "active": Supplier.active,
+}
 
 
 @router.post("", response_model=SupplierRead, status_code=status.HTTP_201_CREATED)
@@ -30,6 +35,7 @@ def list_suppliers(
     q: str | None = Query(default=None, max_length=255, description="Name, contact person or email contains"),
     active: bool | None = None,
     page: Pagination = Depends(pagination),
+    sort: Sorting = Depends(sorting),
     ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
 ) -> list[Supplier]:
@@ -46,7 +52,7 @@ def list_suppliers(
         )
     if active is not None:
         query = query.where(Supplier.active == active)
-    query = query.order_by(Supplier.name, Supplier.id).limit(page.limit).offset(page.offset)
+    query = sorted_by(query, sort, SUPPLIER_SORTS, (Supplier.name, Supplier.id)).limit(page.limit).offset(page.offset)
     return list(db.scalars(query))
 
 

@@ -12,6 +12,17 @@ import { DecimalField, TextField } from "@/components/ui/Field";
 import { apiFetch } from "@/lib/api/client";
 import type { ItemDiscount } from "@/lib/api/types";
 import { blankToNull, problemsFrom, useMutation } from "@/lib/forms";
+import { SortHeader } from "@/components/ui/SortHeader";
+import type { SortValue } from "@/lib/table-sort";
+import { useSortedRows } from "@/lib/use-sorted-rows";
+
+/** What each sortable column sorts by (display only). */
+const SORT_COLUMNS: Record<string, (r: ItemDiscount) => SortValue> = {
+  percent: (r) => ({ decimal: r.percent }),
+  from: (r) => ({ text: r.starts_on }),
+  to: (r) => ({ text: r.ends_on }),
+  note: (r) => ({ text: r.note }),
+};
 
 const CONTROLS = ["percent", "starts_on", "ends_on", "note"] as const;
 const DATE = "rounded border border-zinc-400 px-2 py-1 font-normal dark:bg-zinc-900";
@@ -48,6 +59,7 @@ export function ItemDiscounts({ itemId, discounts, canManage }: { itemId: string
     if (removed !== null) router.refresh();
   }
 
+  const sorted = useSortedRows(discounts, SORT_COLUMNS);
   return (
     <section aria-label="Discounts" data-testid="item-discounts" className="flex max-w-3xl flex-col gap-3">
       <h2 className="text-lg font-semibold">Campaign discounts</h2>
@@ -59,15 +71,15 @@ export function ItemDiscounts({ itemId, discounts, canManage }: { itemId: string
         <table className="text-left text-sm">
           <thead>
             <tr className="border-b border-zinc-300 dark:border-zinc-700">
-              <th className="py-1 pr-4">Discount</th>
-              <th className="py-1 pr-4">From</th>
-              <th className="py-1 pr-4">To</th>
-              <th className="py-1 pr-4">Note</th>
+              <SortHeader label="Discount" {...sorted.header("percent")} />
+              <SortHeader label="From" {...sorted.header("from")} />
+              <SortHeader label="To" {...sorted.header("to")} />
+              <SortHeader label="Note" {...sorted.header("note")} />
               <th />
             </tr>
           </thead>
           <tbody>
-            {discounts.map((discount) => (
+            {sorted.rows.map((discount) => (
               <tr key={discount.id} data-testid="discount-row" className="border-b border-zinc-200 dark:border-zinc-800">
                 <td className="py-1 pr-4">
                   −<DecimalText value={discount.percent} /> %

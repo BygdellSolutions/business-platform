@@ -14,12 +14,26 @@ import { readRecordHistory } from "@/lib/history-server";
 import { formatDay } from "@/lib/timestamps";
 import { canWriteRecords } from "@/lib/roles";
 import { requireUuid, serverRead } from "@/lib/server-api";
+import { SortHeader } from "@/components/ui/SortHeader";
+import { sortRows, tableSort, type SortValue } from "@/lib/table-sort";
 
 const DELIVERY_STATES: Record<Incoming["state"], string> = {
   expected: "Expected",
   partially_received: "Partly received",
   received: "Received",
   cancelled: "Cancelled",
+};
+
+const DELIVERY_SORTS: Record<string, (r: Incoming) => SortValue> = {
+  ordered: (r) => ({ text: r.created_at }),
+  product: (r) => ({ text: r.item_name }),
+  unit: (r) => ({ text: r.item_unit }),
+  quantity: (r) => ({ decimal: r.quantity }),
+  received: (r) => ({ decimal: r.received }),
+  expected: (r) => ({ text: r.expected_on }),
+  reference: (r) => ({ text: r.reference }),
+  unit_cost: (r) => ({ decimal: r.unit_cost }),
+  state: (r) => ({ text: r.state }),
 };
 
 /** Another organization's supplier, a random id and a malformed id all end in the same generic not-found page. */
@@ -31,7 +45,8 @@ export default async function SupplierPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { orgId, id } = await params;
-  const { created } = await searchParams;
+  const raw = await searchParams;
+  const { created } = raw;
   const recordId = requireUuid(id);
   const [supplier, role, organization, history, deliveries] = await Promise.all(
     [
@@ -46,6 +61,8 @@ export default async function SupplierPage({
       ),
     ],
   );
+
+  const deliverySort = tableSort(raw, `/o/${orgId}/suppliers/${recordId}`, Object.keys(DELIVERY_SORTS), "deliveries");
 
   return (
     <div className="flex flex-col gap-4">
@@ -89,19 +106,19 @@ export default async function SupplierPage({
           >
             <thead>
               <tr className="border-b border-zinc-300 dark:border-zinc-700">
-                <th className="py-1 pr-4">Order date</th>
-                <th className="py-1 pr-4">Product</th>
-                <th className="py-1 pr-4">Unit</th>
-                <th className="py-1 pr-4 text-right">Ordered</th>
-                <th className="py-1 pr-4 text-right">Received</th>
-                <th className="py-1 pr-4">Expected</th>
-                <th className="py-1 pr-4">Reference</th>
-                <th className="py-1 pr-4 text-right">Unit cost excl. VAT</th>
-                <th className="py-1">State</th>
+                <SortHeader label="Order date" sortKey="ordered" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.ordered} />
+                <SortHeader label="Product" sortKey="product" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.product} />
+                <SortHeader label="Unit" sortKey="unit" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.unit} />
+                <SortHeader label="Ordered" sortKey="quantity" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.quantity} align="right" />
+                <SortHeader label="Received" sortKey="received" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.received} align="right" />
+                <SortHeader label="Expected" sortKey="expected" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.expected} />
+                <SortHeader label="Reference" sortKey="reference" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.reference} />
+                <SortHeader label="Unit cost excl. VAT" sortKey="unit_cost" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.unit_cost} align="right" />
+                <SortHeader label="State" sortKey="state" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.state} last />
               </tr>
             </thead>
             <tbody>
-              {deliveries.map((row) => (
+              {sortRows(deliveries, deliverySort, DELIVERY_SORTS).map((row) => (
                 <tr
                   key={row.id}
                   data-testid="supplier-delivery"

@@ -41,6 +41,7 @@ Found while testing staging (2026-10-08). Small reviewed slices, each validated 
 - [x] Staging feedback 2026-10-10: order date on a supplier's deliveries; catalog stock badges no longer wrap rows; catalog prices split (base, promotion, promotion price, incl. VAT) and entry incl. VAT; editable expected date and a unit cost on incoming stock
 - [x] Catalog type "Charge" for travel, mileage and fees (owner chose it 2026-10-10)
 - [x] Record numbers: orders from 1001; customers, suppliers, horses and catalog items from 1 (owner, 2026-10-10)
+- [x] Sort every table by a column (server-side for paged lists, in place for the rest) — 2026-10-10
 - [ ] Suppliers later: purchase orders, a supplier's article numbers and prices per item; an explicit order date if deliveries are often recorded after ordering; cost history per item (average, last paid) and margin
 - [ ] Payments later: bank file import and automatic matching (bankgiro/OCR), Swish integration, reminders
 - [ ] Later (email, paused): email infrastructure, **self-service password recovery** (the first email to build: today a locked-out user depends on an operator), invitation email, invoice email with delivery state and resend

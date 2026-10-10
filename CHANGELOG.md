@@ -5,6 +5,12 @@ All notable changes to `business-platform` will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- **Catalog prices read at a glance.** Columns Product, Base price, Promotion ("−25%" or "—"), Promotion duration ("10 Oct – 17 Oct", or "no end date"), Current price, VAT ("25%") and Incl. VAT; every price is excl. VAT except Incl. VAT, which comes from the current price. The base price never changes during a promotion. The item page shows the same fields in the same order. The backend provides `current_price_ex_vat` / `current_price_inc_vat` on items (sort keys `current_price`, `promotion_ends`).
+
+### Added
+- **Sort any table by a column.** Click a heading to sort (▲), again to turn it around (▼); empty values go last either way. The paged lists (Catalog, Customers, Suppliers, Horses, Orders, Invoices, New invoice, Inventory products) sort on the server, so a sort covers every page; the order is kept in the address, by paging and by the filters. The catalog sorts by its stock columns too (SQL from the Inventory module through the `item.sort` hook) and by price incl. VAT today and the promotion price. Tables on a record's page (deliveries, incoming stock, backorders, stock history, discounts, payments, credit notes, a customer's orders, products bought and services, members, invitations) sort in place. An unknown sort key is a 422 (`sort.unknown`). Not sortable on purpose: an invoice's or order's lines, totals and VAT rows, and the credit and return forms (their order is the document's).
+
+### Changed
 - An order's number and date are separate columns in every table that lists orders (new invoice, a customer's orders and products bought, a product's backorders, the Inventory backlog); the number links to the order. `lib/order-number-columns.test.ts` refuses the combined form.
 
 ### Added

@@ -39,6 +39,8 @@ const item: Item = {
   price_inc_vat: "1062.50" as MoneyString,
   promotion_price_ex_vat: null,
   promotion_price_inc_vat: null,
+  current_price_ex_vat: "850.00" as MoneyString,
+  current_price_inc_vat: "1062.50" as MoneyString,
   current_discount: null,
   sku: null,
   track_stock: false,
@@ -110,7 +112,10 @@ describe("read-only records offer no controls", () => {
 
     expectNoControls();
     expect(screen.getByTestId("detail-price")).toHaveTextContent("850.00");
-    expect(valueOf("VAT %")).toHaveTextContent("25.00");
+    expect(valueOf("VAT")).toHaveTextContent("25%"); // trailing zeros trimmed, nothing rounded
+    expect(screen.getByTestId("detail-current-discount")).toHaveTextContent("—"); // no promotion
+    expect(screen.getByTestId("detail-current-price")).toHaveTextContent("850.00"); // = the base price
+    expect(screen.getByTestId("detail-price-inc-vat")).toHaveTextContent("1062.50");
     expect(valueOf("Description")).toHaveTextContent("Not set");
   });
 

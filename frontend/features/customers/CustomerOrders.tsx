@@ -1,8 +1,22 @@
+"use client";
+
 import Link from "next/link";
 
 import { DecimalText } from "@/components/ui/DecimalText";
 import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import type { InvoiceStateOfOrder, TransactionStatus, TransactionSummary } from "@/lib/api/types";
+import { SortHeader } from "@/components/ui/SortHeader";
+import type { SortValue } from "@/lib/table-sort";
+import { useSortedRows } from "@/lib/use-sorted-rows";
+
+/** What each sortable column sorts by (display only). */
+const SORT_COLUMNS: Record<string, (r: TransactionSummary) => SortValue> = {
+  number: (r) => ({ number: r.number }),
+  date: (r) => ({ text: r.transaction_date }),
+  status: (r) => ({ text: r.status }),
+  lines: (r) => ({ number: r.line_count }),
+  total: (r) => ({ decimal: r.totals.gross_amount }),
+};
 
 const STATUS: Record<TransactionStatus, string> = { draft: "Draft", completed: "Completed", cancelled: "Cancelled" };
 
@@ -26,6 +40,7 @@ export function CustomerOrders({
   const invoiceOf = new Map(invoices.map((state) => [state.transaction_id, state]));
   const allOrders = `/o/${orgId}/transactions?billing_customer_id=${customerId}`;
 
+  const sorted = useSortedRows(orders, SORT_COLUMNS);
   return (
     <CollapsibleSection title={hasMore ? "Latest orders" : "Orders"} count={orders.length} testId="customer-orders" toggleTestId="orders-toggle">
       {orders.length === 0 ? (
@@ -36,16 +51,16 @@ export function CustomerOrders({
         <table className="text-left text-sm">
           <thead>
             <tr className="border-b border-zinc-300 dark:border-zinc-700">
-              <th className="py-1 pr-4 text-right">Order no.</th>
-              <th className="py-1 pr-4">Date</th>
-              <th className="py-1 pr-4">Status</th>
-              <th className="py-1 pr-4 text-right">Lines</th>
-              <th className="py-1 pr-4 text-right">Total</th>
+              <SortHeader label="Order no." {...sorted.header("number")} align="right" />
+              <SortHeader label="Date" {...sorted.header("date")} />
+              <SortHeader label="Status" {...sorted.header("status")} />
+              <SortHeader label="Lines" {...sorted.header("lines")} align="right" />
+              <SortHeader label="Total" {...sorted.header("total")} align="right" />
               <th className="py-1">Invoice</th>
             </tr>
           </thead>
           <tbody>
-            {orders.map((order) => {
+            {sorted.rows.map((order) => {
               const invoice = invoiceOf.get(order.id);
               return (
                 <tr key={order.id} data-testid="customer-order" className="border-b border-zinc-200 dark:border-zinc-800">

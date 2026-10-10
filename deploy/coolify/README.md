@@ -40,3 +40,17 @@ Exact-head readiness is the backstop if the order is broken: a backend whose dat
 by default names containers with a per-deployment suffix (all observed). The backend resource therefore has "Consistent Container
 Names" enabled, which names the container `backend-<resource uuid>`, and the frontend's `BACKEND_URL` is
 `http://backend-<resource uuid>:8000` (a single-label name, as the BFF requires). Both live on Coolify's shared `coolify` network.
+
+## Deploying through the Coolify API
+
+The operator's keys are in the repo-root `.env` (git-ignored; names in `.env.example`): `COOLIFY_URL`, `COOLIFY_TOKEN`,
+`CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET`. Coolify is behind Cloudflare Access, so every call sends
+`Authorization: Bearer $COOLIFY_TOKEN` plus `CF-Access-Client-Id` / `CF-Access-Client-Secret` (without them the answer
+is a redirect to the Access login page).
+
+1. `GET /api/v1/applications` lists the resources (find the migrate, backend and frontend uuids for the branch).
+2. `POST /api/v1/deploy?uuid=<uuid>&force=false` queues a deployment and returns its `deployment_uuid`.
+3. `GET /api/v1/deployments/<deployment_uuid>` until `status` is `finished` or `failed`; `logs` is a JSON list.
+
+Deploy in the order above and start the next only after the previous finished. A failed one-shot migration's own output
+is not available through the API; reproduce it against a scratch database (`tests/test_migration_*.py`).

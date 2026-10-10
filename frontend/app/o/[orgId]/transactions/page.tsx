@@ -3,13 +3,16 @@ import Link from "next/link";
 import { DecimalText } from "@/components/ui/DecimalText";
 import { ListFilters } from "@/components/ui/ListFilters";
 import { Pagination } from "@/components/ui/Pagination";
+import { SortHeader } from "@/components/ui/SortHeader";
 import { CustomerFilter } from "@/features/customers/CustomerFilter";
 import { TransactionStatusBadge } from "@/features/transactions/TransactionStatusBadge";
 import { readActiveRole } from "@/lib/active-role";
 import type { Customer, TransactionSummary } from "@/lib/api/types";
-import { backendQuery, listHref, pageOf, parseListParams, type ExtraSpec } from "@/lib/list-params";
+import { backendQuery, listHref, sortHref, pageOf, parseListParams, type ExtraSpec } from "@/lib/list-params";
 import { canWriteRecords } from "@/lib/roles";
 import { serverRead, serverReadOrNull } from "@/lib/server-api";
+
+const SORTS = ["number", "date", "customer", "status", "currency", "lines", "net", "vat", "gross"] as const;
 
 const STATUSES = ["draft", "completed", "cancelled"] as const;
 const EXTRAS: Record<string, ExtraSpec> = { status: STATUSES, date_from: "date", date_to: "date" };
@@ -29,7 +32,7 @@ export default async function TransactionsPage({
 }) {
   const { orgId } = await params;
   const canWrite = canWriteRecords(await readActiveRole(orgId));
-  const list = parseListParams(await searchParams, [], ["billing_customer_id"], EXTRAS);
+  const list = parseListParams(await searchParams, [], ["billing_customer_id"], EXTRAS, SORTS);
   const customerId = list.refs.billing_customer_id;
   const [rows, filterCustomer] = await Promise.all([
     serverRead<TransactionSummary[]>(orgId, "/api/transactions", backendQuery(list)),
@@ -87,15 +90,15 @@ export default async function TransactionsPage({
           <table data-testid="transactions-table" className="w-full max-w-5xl text-left text-sm">
             <thead>
               <tr className="border-b border-zinc-300 dark:border-zinc-700">
-                <th className="py-1 pr-4 text-right">Order no.</th>
-                <th className="py-1 pr-4">Date</th>
-                <th className="py-1 pr-4">Customer</th>
-                <th className="py-1 pr-4">Status</th>
-                <th className="py-1 pr-4">Currency</th>
-                <th className="py-1 pr-4 text-right">Lines</th>
-                <th className="py-1 pr-4 text-right">Net</th>
-                <th className="py-1 pr-4 text-right">VAT</th>
-                <th className="py-1 text-right">Gross</th>
+                <SortHeader label="Order no." sortKey="number" current={list.sort} dir={list.dir} href={sortHref(base, list, "number")} align="right" />
+                <SortHeader label="Date" sortKey="date" current={list.sort} dir={list.dir} href={sortHref(base, list, "date")} />
+                <SortHeader label="Customer" sortKey="customer" current={list.sort} dir={list.dir} href={sortHref(base, list, "customer")} />
+                <SortHeader label="Status" sortKey="status" current={list.sort} dir={list.dir} href={sortHref(base, list, "status")} />
+                <SortHeader label="Currency" sortKey="currency" current={list.sort} dir={list.dir} href={sortHref(base, list, "currency")} />
+                <SortHeader label="Lines" sortKey="lines" current={list.sort} dir={list.dir} href={sortHref(base, list, "lines")} align="right" />
+                <SortHeader label="Net" sortKey="net" current={list.sort} dir={list.dir} href={sortHref(base, list, "net")} align="right" />
+                <SortHeader label="VAT" sortKey="vat" current={list.sort} dir={list.dir} href={sortHref(base, list, "vat")} align="right" />
+                <SortHeader label="Gross" sortKey="gross" current={list.sort} dir={list.dir} href={sortHref(base, list, "gross")} align="right" last />
               </tr>
             </thead>
             <tbody>

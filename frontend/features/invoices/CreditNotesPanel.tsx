@@ -14,6 +14,18 @@ import type { CreditNoteSummary, Invoice, InvoiceLine, InvoiceReturn } from "@/l
 import { trimQuantity } from "@/lib/decimal";
 import { problemsFrom, useMutation } from "@/lib/forms";
 import { formatTimestamp } from "@/lib/timestamps";
+import { SortHeader } from "@/components/ui/SortHeader";
+import type { SortValue } from "@/lib/table-sort";
+import { useSortedRows } from "@/lib/use-sorted-rows";
+
+/** What each sortable column sorts by (display only). */
+const SORT_COLUMNS: Record<string, (r: CreditNoteSummary) => SortValue> = {
+  number: (r) => ({ text: r.number_text }),
+  date: (r) => ({ text: r.credit_date }),
+  reason: (r) => ({ text: r.reason }),
+  gross: (r) => ({ decimal: r.gross_amount }),
+  created: (r) => ({ text: r.issued_at }),
+};
 
 const CELL = "rounded border border-zinc-400 px-2 py-1 text-right dark:bg-zinc-900";
 const ZERO = /^0*(?:\.0*)?$/;
@@ -62,6 +74,7 @@ export function CreditNotesPanel({
   const [rows, setRows] = useState<Record<string, Row>>(start ? fromReturn(start) : {});
   const [created, setCreated] = useState<string | null>(null);
 
+  const sorted = useSortedRows(invoice.credit_notes, SORT_COLUMNS);
   if (invoice.status !== "issued") return null;
   const creditable = invoice.lines.filter((line) => !nothing(line.creditable_quantity));
   const submitted = creditable.filter((line) => !nothing(rows[line.id]?.quantity ?? ""));
@@ -122,16 +135,16 @@ export function CreditNotesPanel({
         <table className="text-left text-sm">
           <thead>
             <tr className="border-b border-zinc-300 dark:border-zinc-700">
-              <th className="py-1 pr-4">Number</th>
-              <th className="py-1 pr-4">Date</th>
-              <th className="py-1 pr-4">Reason</th>
-              <th className="py-1 pr-4 text-right">Credited</th>
-              <th className="py-1 pr-4">Created</th>
+              <SortHeader label="Number" {...sorted.header("number")} />
+              <SortHeader label="Date" {...sorted.header("date")} />
+              <SortHeader label="Reason" {...sorted.header("reason")} />
+              <SortHeader label="Credited" {...sorted.header("gross")} align="right" />
+              <SortHeader label="Created" {...sorted.header("created")} />
               <th />
             </tr>
           </thead>
           <tbody>
-            {invoice.credit_notes.map((note) => (
+            {sorted.rows.map((note) => (
               <tr key={note.id} data-testid="credit-note-row" className="border-b border-zinc-200 align-top dark:border-zinc-800">
                 <td className="py-1 pr-4" data-testid="credit-note-number">
                   {note.number_text}

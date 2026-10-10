@@ -107,6 +107,9 @@ class ItemRead(BaseModel):
     price_inc_vat: MoneyOut | None = None
     promotion_price_ex_vat: MoneyOut | None = None
     promotion_price_inc_vat: MoneyOut | None = None
+    # What is charged today: the promotion price while one runs, otherwise the base price (excl. and incl. VAT).
+    current_price_ex_vat: MoneyOut | None = None
+    current_price_inc_vat: MoneyOut | None = None
 
 
 class ItemDiscountCreate(BaseModel):

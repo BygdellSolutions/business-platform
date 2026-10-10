@@ -129,6 +129,8 @@ export function item(id: string, name: string, overrides: Partial<Item> = {}): I
     price_inc_vat: money("1062.50"),
     promotion_price_ex_vat: null,
     promotion_price_inc_vat: null,
+    current_price_ex_vat: "850.00" as MoneyString,
+    current_price_inc_vat: "1062.50" as MoneyString,
     current_discount: null,
     sku: null,
     track_stock: false,

@@ -30,14 +30,15 @@ async function fillItem(page: Page, fields: { name: string; unit?: string; price
 const isCreate = (url: string, method: string) => method === "POST" && url.endsWith(`/api/o/${ORG_A.id}/items`);
 
 test.describe("decimal values survive the whole round trip unchanged", () => {
-  // Typed value, what the backend answers (two decimals, as stored), and a VAT that is valid for it.
+  // Typed value, what the backend answers (two decimals, as stored), and a VAT that is valid for it. The list shows
+  // the VAT as a percentage with trailing zeros dropped ("25%"): trimmed text, never rounded.
   const CASES = [
-    { price: "0.10", vat: "0.10", vatOut: "0.10" },
-    { price: "4.35", vat: "4.35", vatOut: "4.35" },
-    { price: "8.20", vat: "8.20", vatOut: "8.20" },
-    { price: "9999999999.99", vat: "100", vatOut: "100.00" },
-    { price: "1.15", vat: "6.5", vatOut: "6.50" },
-    { price: "0.30", vat: "25", vatOut: "25.00" },
+    { price: "0.10", vat: "0.10", vatOut: "0.10", vatShown: "0.1%" },
+    { price: "4.35", vat: "4.35", vatOut: "4.35", vatShown: "4.35%" },
+    { price: "8.20", vat: "8.20", vatOut: "8.20", vatShown: "8.2%" },
+    { price: "9999999999.99", vat: "100", vatOut: "100.00", vatShown: "100%" },
+    { price: "1.15", vat: "6.5", vatOut: "6.50", vatShown: "6.5%" },
+    { price: "0.30", vat: "25", vatOut: "25.00", vatShown: "25%" },
   ];
 
   for (const value of CASES) {
@@ -79,7 +80,7 @@ test.describe("decimal values survive the whole round trip unchanged", () => {
       await expect(vat(page)).toHaveValue(value.vatOut);
       await page.goto(`${list}?q=${encodeURIComponent(name)}`);
       await expect(page.getByTestId("item-price")).toHaveText(value.price);
-      await expect(page.getByTestId("item-vat")).toHaveText(value.vatOut);
+      await expect(page.getByTestId("item-vat")).toHaveText(value.vatShown);
 
       // 6. And again after a reload, straight from the database.
       await page.reload();
@@ -109,7 +110,10 @@ test.describe("decimal values survive the whole round trip unchanged", () => {
   test("the seeded 850.00 / 25.00 service is listed exactly like that", async ({ page }) => {
     await page.goto(`${list}?q=Horse massage`);
     await expect(page.getByTestId("item-price")).toHaveText("850.00");
-    await expect(page.getByTestId("item-vat")).toHaveText("25.00");
+    await expect(page.getByTestId("item-vat")).toHaveText("25%");
+    await expect(page.getByTestId("item-current-price")).toHaveText("850.00"); // no promotion: the base price
+    await expect(page.getByTestId("current-discount")).toHaveText("—");
+    await expect(page.getByTestId("promotion-duration")).toHaveText("—");
     await expect(page.getByTestId("item-price-inc-vat")).toHaveText("1062.50"); // computed by the backend
   });
 
@@ -122,9 +126,10 @@ test.describe("decimal values survive the whole round trip unchanged", () => {
 
     await page.goto(`${list}?q=${encodeURIComponent(created.name)}`);
     await expect(page.getByTestId("item-price")).toHaveText("1000.00");
-    await expect(page.getByTestId("current-discount")).toContainText("20.00 %");
-    await expect(page.getByTestId("item-promotion-price")).toHaveText("800.00");
-    await expect(page.getByTestId("item-price-inc-vat")).toHaveText("1000.00");
+    await expect(page.getByTestId("current-discount")).toHaveText("−20%");
+    await expect(page.getByTestId("promotion-duration")).toHaveText(/^\d{1,2} [A-Z][a-z]{2}( \d{4})? – no end date$/);
+    await expect(page.getByTestId("item-current-price")).toHaveText("800.00"); // the base price stays 1000.00
+    await expect(page.getByTestId("item-price-inc-vat")).toHaveText("1000.00"); // from the current price, not the base
   });
 
   test("a price can be entered incl. VAT and is stored excl. VAT", async ({ page }) => {

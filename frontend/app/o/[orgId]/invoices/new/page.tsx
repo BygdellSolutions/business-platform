@@ -2,11 +2,13 @@
 import { InvoiceCreateForm } from "@/features/invoices/InvoiceCreateForm";
 import type { Invoiceable } from "@/lib/api/types";
 import { requireCredential } from "@/lib/auth/credential";
-import { backendQuery, pageOf, parseListParams } from "@/lib/list-params";
+import { backendQuery, pageOf, parseListParams, sortHref } from "@/lib/list-params";
 import { getMemberships } from "@/lib/orgs";
 import { canMutateInvoices } from "@/lib/roles";
 import { serverRead } from "@/lib/server-api";
 import { Notice } from "@/components/ui/Notice";
+
+const SORTS = ["number", "date", "customer", "currency", "lines", "net", "vat", "gross"] as const;
 
 /**
  * Create a draft invoice from completed transactions. What can be chosen is whatever
@@ -21,7 +23,10 @@ export default async function NewInvoicePage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { orgId } = await params;
-  const list = parseListParams(await searchParams, [], ["customer_id"], {});
+  const list = parseListParams(await searchParams, [], ["customer_id"], {}, SORTS);
+  const base = `/o/${orgId}/invoices/new`;
+  // Sorted by the backend (the list is paged); the form gets the heading links.
+  const sort = { sort: list.sort, dir: list.dir, hrefs: Object.fromEntries(SORTS.map((key) => [key, sortHref(base, list, key)])) };
   const credential = await requireCredential(`/o/${orgId}`);
   const [rows, memberships] = await Promise.all([
     serverRead<Invoiceable[]>(orgId, "/api/invoiceable-transactions", backendQuery({ ...list, q: "" })),
@@ -39,7 +44,7 @@ export default async function NewInvoicePage({
       ) : (
         <Notice testId="read-only">Only owners, admins and accountants can create invoices. You can see what is waiting to be invoiced.</Notice>
       )}
-      <InvoiceCreateForm key={orgId} rows={eligible} hasNext={hasNext} base={`/o/${orgId}/invoices/new`} page={list.page} customerFilter={list.refs.customer_id ?? null} canMutate={canMutate} />
+      <InvoiceCreateForm key={orgId} rows={eligible} hasNext={hasNext} base={base} page={list.page} sort={sort} customerFilter={list.refs.customer_id ?? null} canMutate={canMutate} />
     </div>
   );
 }

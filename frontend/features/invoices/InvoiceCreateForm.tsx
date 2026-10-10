@@ -16,6 +16,8 @@ import { apiFetch } from "@/lib/api/client";
 import type { Invoice, Invoiceable } from "@/lib/api/types";
 import { isDateShape } from "@/lib/dates";
 import { useMutation } from "@/lib/forms";
+import { SortHeader } from "@/components/ui/SortHeader";
+import type { TableSort } from "@/lib/table-sort";
 
 const INPUT = "rounded border border-zinc-400 px-2 py-1 font-normal dark:bg-zinc-900 aria-[invalid=true]:border-red-600";
 const NOT_A_DATE = "Enter a date such as 2026-10-03.";
@@ -41,6 +43,7 @@ export function InvoiceCreateForm({
   page,
   customerFilter,
   canMutate = true,
+  sort,
 }: {
   rows: Invoiceable[];
   hasNext: boolean;
@@ -49,6 +52,8 @@ export function InvoiceCreateForm({
   customerFilter: string | null;
   /** The user's role may create invoices. Without it the list is shown read-only: no selection, no form. Presentation only; FastAPI decides. */
   canMutate?: boolean;
+  /** The list's order (the backend sorts; this is the headings' links). Without it the headings are plain. */
+  sort?: TableSort;
 }) {
   const orgId = useOrgId();
   const router = useRouter();
@@ -206,14 +211,14 @@ export function InvoiceCreateForm({
                       <span className="sr-only">Select</span>
                     </th>
                   )}
-                  <th className="py-1 pr-4 text-right">Order no.</th>
-                  <th className="py-1 pr-4">Date</th>
-                  <th className="py-1 pr-4">Billing customer</th>
-                  <th className="py-1 pr-4">Currency</th>
-                  <th className="py-1 pr-4 text-right">Lines</th>
-                  <th className="py-1 pr-4 text-right">Net</th>
-                  <th className="py-1 pr-4 text-right">VAT</th>
-                  <th className="py-1 text-right">Gross</th>
+                  <SortHeader label="Order no." sortKey="number" current={sort?.sort ?? ""} dir={sort?.dir ?? "asc"} href={sort?.hrefs.number} align="right" />
+                  <SortHeader label="Date" sortKey="date" current={sort?.sort ?? ""} dir={sort?.dir ?? "asc"} href={sort?.hrefs.date} />
+                  <SortHeader label="Billing customer" sortKey="customer" current={sort?.sort ?? ""} dir={sort?.dir ?? "asc"} href={sort?.hrefs.customer} />
+                  <SortHeader label="Currency" sortKey="currency" current={sort?.sort ?? ""} dir={sort?.dir ?? "asc"} href={sort?.hrefs.currency} />
+                  <SortHeader label="Lines" sortKey="lines" current={sort?.sort ?? ""} dir={sort?.dir ?? "asc"} href={sort?.hrefs.lines} align="right" />
+                  <SortHeader label="Net" sortKey="net" current={sort?.sort ?? ""} dir={sort?.dir ?? "asc"} href={sort?.hrefs.net} align="right" />
+                  <SortHeader label="VAT" sortKey="vat" current={sort?.sort ?? ""} dir={sort?.dir ?? "asc"} href={sort?.hrefs.vat} align="right" />
+                  <SortHeader label="Gross" sortKey="gross" current={sort?.sort ?? ""} dir={sort?.dir ?? "asc"} href={sort?.hrefs.gross} align="right" last />
                 </tr>
               </thead>
               <tbody>
@@ -266,12 +271,12 @@ export function InvoiceCreateForm({
         )}
         <nav aria-label="Pages" className="mt-2 flex gap-4 text-sm">
           {page > 1 && (
-            <Link href={pageHref(base, customerFilter, page - 1)} className="underline" data-testid="prev-page">
+            <Link href={pageHref(base, customerFilter, page - 1, sort)} className="underline" data-testid="prev-page">
               Previous
             </Link>
           )}
           {hasNext && (
-            <Link href={pageHref(base, customerFilter, page + 1)} className="underline" data-testid="next-page">
+            <Link href={pageHref(base, customerFilter, page + 1, sort)} className="underline" data-testid="next-page">
               Next
             </Link>
           )}
@@ -309,9 +314,13 @@ export function InvoiceCreateForm({
   );
 }
 
-function pageHref(base: string, customer: string | null, page: number): string {
+function pageHref(base: string, customer: string | null, page: number, sort?: TableSort): string {
   const query = new URLSearchParams();
   if (customer !== null) query.set("customer_id", customer);
+  if (sort?.sort) {
+    query.set("sort", sort.sort);
+    if (sort.dir === "desc") query.set("dir", "desc");
+  }
   if (page > 1) query.set("page", String(page));
   const text = query.toString();
   return text ? `${base}?${text}` : base;

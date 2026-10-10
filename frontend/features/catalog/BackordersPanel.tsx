@@ -12,7 +12,19 @@ import { apiFetch } from "@/lib/api/client";
 import type { AllocationProposal, Backorder } from "@/lib/api/types";
 import { problemsFrom, useMutation } from "@/lib/forms";
 import { trimQuantity } from "@/lib/decimal";
+import { SortHeader } from "@/components/ui/SortHeader";
+import type { SortValue } from "@/lib/table-sort";
+import { useSortedRows } from "@/lib/use-sorted-rows";
 
+/** What each sortable column sorts by (display only). */
+const SORT_COLUMNS: Record<string, (r: Backorder) => SortValue> = {
+  number: (r) => ({ number: r.transaction_number }),
+  date: (r) => ({ text: r.transaction_date }),
+  customer: (r) => ({ text: r.customer_name }),
+  unit: (r) => ({ text: r.item_unit }),
+  waiting: (r) => ({ decimal: r.remaining }),
+  state: (r) => ({ text: r.state }),
+};
 
 /**
  * The open backorders of one product, oldest first. When stock is on hand, "Propose" asks the backend how it would be
@@ -45,6 +57,7 @@ export function BackordersPanel({ itemId, unit, backorders, canAllocate }: { ite
     router.refresh();
   }
 
+  const sorted = useSortedRows(backorders, SORT_COLUMNS);
   if (backorders.length === 0) return null;
   return (
     <section aria-label="Backorders" data-testid="backorders-panel" className="flex max-w-3xl flex-col gap-3">
@@ -52,17 +65,17 @@ export function BackordersPanel({ itemId, unit, backorders, canAllocate }: { ite
       <table className="text-left text-sm">
         <thead>
           <tr className="border-b border-zinc-300 dark:border-zinc-700">
-            <th className="py-1 pr-4 text-right">Order no.</th>
-            <th className="py-1 pr-4">Completed</th>
-            <th className="py-1 pr-4">Customer</th>
-            <th className="py-1 pr-4">Unit</th>
-            <th className="py-1 pr-4 text-right">Waiting</th>
-            <th className="py-1 pr-4">State</th>
+            <SortHeader label="Order no." {...sorted.header("number")} align="right" />
+            <SortHeader label="Completed" {...sorted.header("date")} />
+            <SortHeader label="Customer" {...sorted.header("customer")} />
+            <SortHeader label="Unit" {...sorted.header("unit")} />
+            <SortHeader label="Waiting" {...sorted.header("waiting")} align="right" />
+            <SortHeader label="State" {...sorted.header("state")} />
             {canAllocate && <th className="py-1">Deliver now</th>}
           </tr>
         </thead>
         <tbody>
-          {backorders.map((backorder) => (
+          {sorted.rows.map((backorder) => (
             <tr key={backorder.fulfillment_id} data-testid="backorder-row" className="border-b border-zinc-200 dark:border-zinc-800">
               <td className="py-1 pr-4 text-right" data-testid="order-number">
                 <Link href={`/o/${orgId}/transactions/${backorder.transaction_id}`} className="underline">

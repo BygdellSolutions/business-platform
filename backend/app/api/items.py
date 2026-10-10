@@ -1,15 +1,17 @@
 import uuid
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy import or_
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import Pagination, pagination
+from app.api.deps import Pagination, Sorting, pagination, sorted_by, sorting
 from app.core import audit, discounts
 from app.core.prices import discounted_unit_price, price_ex_vat_from_inc, price_inc_vat
 from app.core.authz import record_writer, roles_required
 from app.core.currency import share_lock_organization
 from app.core.db import get_db
+from app.core.entity_registry import registry
 from app.core.org_time import organization_today
 from app.core.query import commit_and_refresh, contains_pattern, delete_or_409, number_matches
 from app.core.tenant import TenantContext, get_tenant_context
@@ -47,6 +49,7 @@ def list_items(
     type: ItemType | None = None,
     active: bool | None = None,
     page: Pagination = Depends(pagination),
+    sort: Sorting = Depends(sorting),
     ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
 ) -> list[ItemRead]:
@@ -60,7 +63,8 @@ def list_items(
         query = query.where(Item.type == type)
     if active is not None:
         query = query.where(Item.active == active)
-    query = query.order_by(Item.name, Item.id).limit(page.limit).offset(page.offset)
+    columns = _item_sorts(organization_today(db, ctx.organization_id)) if sort.key else {}
+    query = sorted_by(query, sort, columns, (func.lower(Item.name), Item.id)).limit(page.limit).offset(page.offset)
     return _with_discounts(db, ctx, list(db.scalars(query)))
 
 
@@ -104,6 +108,45 @@ def delete_item(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+def _item_sorts(today) -> dict:
+    """The catalog list's sort columns. Prices are computed exactly as `app.core.prices` does (PostgreSQL's round()
+    is half away from zero, which equals ROUND_HALF_UP for these non-negative values); stock columns come from
+    whichever module answers the "item.sort" hook (Inventory), as NULL for items that track no stock."""
+    def active(column):
+        return (
+            select(column)
+            .where(
+                ItemDiscount.organization_id == Item.organization_id,
+                ItemDiscount.item_id == Item.id,
+                ItemDiscount.starts_on <= today,
+                or_(ItemDiscount.ends_on.is_(None), ItemDiscount.ends_on >= today),
+            )
+            .limit(1)
+            .scalar_subquery()
+        )
+
+    percent = active(ItemDiscount.percent)
+    promotion = func.round(Item.price_ex_vat * (100 - percent) / 100, 2)  # NULL without a promotion
+    today_price = func.coalesce(promotion, Item.price_ex_vat)
+    columns = {
+        "number": Item.number,
+        "name": func.lower(Item.name),
+        "sku": func.lower(Item.sku),
+        "type": Item.type,
+        "unit": func.lower(Item.unit),
+        "price": Item.price_ex_vat,
+        "promotion": percent,
+        "promotion_ends": active(func.coalesce(ItemDiscount.ends_on, date.max)),  # open-ended promotions last
+        "current_price": today_price,
+        "price_inc_vat": today_price + func.round(today_price * Item.vat_rate / 100, 2),
+        "vat_rate": Item.vat_rate,
+        "active": Item.active,
+    }
+    for answer in registry.call_hooks("item.sort"):
+        columns.update(answer)
+    return columns
+
+
 def _ensure_sku_free(db: Session, ctx: TenantContext, sku: str | None, item_id: uuid.UUID | None) -> None:
     """An article number names one item of the organization (the unique index is the backstop for a race)."""
     if sku is None:
@@ -129,6 +172,8 @@ def _priced(item: Item, discount: ItemDiscount | None) -> ItemRead:
             "price_inc_vat": price_inc_vat(item.price_ex_vat, item.vat_rate),
             "promotion_price_ex_vat": promotion,
             "promotion_price_inc_vat": price_inc_vat(promotion, item.vat_rate) if promotion is not None else None,
+            "current_price_ex_vat": promotion if promotion is not None else item.price_ex_vat,
+            "current_price_inc_vat": price_inc_vat(promotion if promotion is not None else item.price_ex_vat, item.vat_rate),
         }
     )
 

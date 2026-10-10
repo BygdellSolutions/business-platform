@@ -12,6 +12,17 @@ import type { ApiError, ApiResult } from "@/lib/api/errors";
 import type { Invitation, InvitationCreated, Role } from "@/lib/api/types";
 import { inviteLink } from "@/lib/invite";
 import { ADMIN_MANAGEABLE, ALL_ROLES, ROLE_LABELS } from "@/lib/members";
+import { SortHeader } from "@/components/ui/SortHeader";
+import type { SortValue } from "@/lib/table-sort";
+import { useSortedRows } from "@/lib/use-sorted-rows";
+
+/** What each sortable column sorts by (display only). */
+const SORT_COLUMNS: Record<string, (r: Invitation) => SortValue> = {
+  email: (r) => ({ text: r.email }),
+  role: (r) => ({ text: r.role }),
+  invited_by: (r) => ({ text: r.invited_by_name ?? null }),
+  expires: (r) => ({ text: r.expires_at }),
+};
 
 /** The roles an inviter is OFFERED (presentation only: FastAPI re-decides from fresh rows). */
 export function invitableRoles(actorRole: Role): readonly Role[] {
@@ -107,6 +118,7 @@ export function InvitationsAdmin({ invitations, actorRole }: { invitations: Invi
     }
   }
 
+  const sorted = useSortedRows(invitations, SORT_COLUMNS);
   return (
     <section className="flex flex-col gap-4" aria-labelledby="invitations-heading" data-testid="invitations">
       <h2 id="invitations-heading" className="text-xl font-semibold">
@@ -165,17 +177,17 @@ export function InvitationsAdmin({ invitations, actorRole }: { invitations: Invi
         <table className="w-full max-w-3xl text-left text-sm" data-testid="invitations-table">
           <thead>
             <tr className="border-b border-zinc-300 dark:border-zinc-700">
-              <th className="py-2 pr-4 font-medium">Email</th>
-              <th className="py-2 pr-4 font-medium">Role</th>
-              <th className="py-2 pr-4 font-medium">Invited by</th>
-              <th className="py-2 pr-4 font-medium">Expires</th>
+              <SortHeader label="Email" {...sorted.header("email")} />
+              <SortHeader label="Role" {...sorted.header("role")} />
+              <SortHeader label="Invited by" {...sorted.header("invited_by")} />
+              <SortHeader label="Expires" {...sorted.header("expires")} />
               <th className="py-2 font-medium">
                 <span className="sr-only">Actions</span>
               </th>
             </tr>
           </thead>
           <tbody>
-            {invitations.map((invitation) => (
+            {sorted.rows.map((invitation) => (
               <tr key={invitation.id} data-testid="invitation-row" data-email={invitation.email} className="border-b border-zinc-200 dark:border-zinc-800">
                 <td className="py-2 pr-4">{invitation.email}</td>
                 <td className="py-2 pr-4">{ROLE_LABELS[invitation.role]}</td>

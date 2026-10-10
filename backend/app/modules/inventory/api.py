@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from app.api.deps import Sorting, refuse_sort, sorting
 from app.core import clock
 from app.core.authz import record_writer
 from app.core.db import get_db
@@ -81,6 +82,7 @@ def list_stock_items(
     q: str | None = Query(default=None, max_length=255, description="Name or article number contains"),
     state: Literal["out_of_stock", "low_stock", "backordered", "incoming", "in_stock"] | None = None,
     include_inactive: bool = False,
+    sort: Sorting = Depends(sorting),
     ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
 ) -> list[StockItemRead]:
@@ -124,7 +126,32 @@ def list_stock_items(
                 states=states,
             )
         )
-    return rows
+    return _sorted_stock(rows, sort)
+
+
+# The Inventory list's sort columns. The figures are computed per product, so the rows (at most STOCK_ITEMS_SHOWN)
+# are sorted here, exactly (Decimals); empty values last either way, then by name as the list's default.
+STOCK_SORTS = {
+    "name": lambda row: row.name.lower(),
+    "sku": lambda row: (row.sku or "").lower() or None,
+    "unit": lambda row: row.unit.lower(),
+    "on_hand": lambda row: row.on_hand,
+    "allocated": lambda row: row.allocated,
+    "committed": lambda row: row.committed,
+    "available": lambda row: row.available,
+    "incoming": lambda row: row.incoming,
+    "low_stock_threshold": lambda row: row.low_stock_threshold,
+}
+
+
+def _sorted_stock(rows: list[StockItemRead], sort: Sorting) -> list[StockItemRead]:
+    if sort.key is None:
+        return rows
+    value = STOCK_SORTS.get(sort.key)
+    if value is None:
+        refuse_sort(sort.key)
+    present = sorted((row for row in rows if value(row) is not None), key=value, reverse=sort.descending)  # stable: name order kept on ties
+    return present + [row for row in rows if value(row) is None]
 
 
 @availability_router.get("/availability", response_model=list[ItemAvailability])

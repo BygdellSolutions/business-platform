@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, 
 from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import Pagination, pagination
+from app.api.deps import Pagination, Sorting, pagination, sorted_by, sorting
 from app.core.authz import roles_required
 from app.core.db import get_db
 from app.core.org_time import MONTH_PATTERN, month_range, organization_today, year_range
@@ -57,12 +57,35 @@ mutators = roles_required(Role.OWNER, Role.ADMIN, Role.ACCOUNTANT)
 # --- what can be invoiced ----------------------------------------------------------------------------------------
 
 
+def _invoiceable_sorts() -> dict:
+    """The new-invoice list's sort columns; amounts are sums of the stored line amounts, as the list shows them."""
+    def line_sum(column):
+        return func.coalesce(
+            select(func.sum(column))
+            .where(TransactionLine.organization_id == Transaction.organization_id, TransactionLine.transaction_id == Transaction.id)
+            .scalar_subquery(),
+            0,
+        )
+
+    return {
+        "number": Transaction.number,
+        "date": Transaction.transaction_date,
+        "customer": func.lower(Customer.name),
+        "currency": Transaction.currency,
+        "lines": line_sum(1),
+        "net": line_sum(TransactionLine.net_amount),
+        "vat": line_sum(TransactionLine.vat_amount),
+        "gross": line_sum(TransactionLine.gross_amount),
+    }
+
+
 @invoiceable_router.get("", response_model=list[InvoiceableTransaction])
 def list_invoiceable_transactions(
     customer_id: uuid.UUID | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
     page: Pagination = Depends(pagination),
+    sort: Sorting = Depends(sorting),
     ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
 ) -> list[InvoiceableTransaction]:
@@ -86,8 +109,9 @@ def list_invoiceable_transactions(
         query = query.where(Transaction.transaction_date >= date_from)
     if date_to is not None:
         query = query.where(Transaction.transaction_date <= date_to)
+    newest_first = (Transaction.transaction_date.desc(), Transaction.created_at.desc(), Transaction.id)
     rows = db.execute(
-        query.order_by(Transaction.transaction_date.desc(), Transaction.created_at.desc(), Transaction.id)
+        sorted_by(query, sort, _invoiceable_sorts(), newest_first)
         .limit(page.limit)
         .offset(page.offset)
     ).all()
@@ -263,6 +287,20 @@ def create_invoice(
     return service.read_invoice(db, ctx, invoice_id)
 
 
+# The invoice list's sort columns (amounts as issued; a draft has no number and sorts last by number).
+INVOICE_SORTS = {
+    "number": Invoice.number,
+    "customer": func.lower(Invoice.customer_name),
+    "invoice_date": Invoice.invoice_date,
+    "due_date": Invoice.due_date,
+    "status": Invoice.status,
+    "currency": Invoice.currency,
+    "net": Invoice.net_amount,
+    "vat": Invoice.vat_amount,
+    "gross": Invoice.gross_amount,
+}
+
+
 @router.get("", response_model=list[InvoiceSummary])
 def list_invoices(
     status_filter: InvoiceStatus | None = Query(default=None, alias="status"),
@@ -283,6 +321,7 @@ def list_invoices(
     paid_from: date | None = Query(default=None, description="Invoices with a payment dated on or after this day"),
     paid_to: date | None = Query(default=None, description="Invoices with a payment dated on or before this day"),
     page: Pagination = Depends(pagination),
+    sort: Sorting = Depends(sorting),
     ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
 ) -> list[InvoiceSummary]:
@@ -345,7 +384,7 @@ def list_invoices(
         query = query.where(or_(Invoice.customer_name.ilike(pattern, escape="\\"), Invoice.number_text.ilike(pattern, escape="\\")))
     invoices: Sequence[Invoice] = list(
         db.scalars(
-            query.order_by(Invoice.invoice_date.desc(), Invoice.created_at.desc(), Invoice.id).limit(page.limit).offset(page.offset)
+            sorted_by(query, sort, INVOICE_SORTS, (Invoice.invoice_date.desc(), Invoice.created_at.desc(), Invoice.id)).limit(page.limit).offset(page.offset)
         )
     )
     counts = service.transaction_counts(db, ctx, [invoice.id for invoice in invoices])

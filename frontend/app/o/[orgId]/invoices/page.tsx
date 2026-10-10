@@ -4,14 +4,17 @@ import { DecimalText } from "@/components/ui/DecimalText";
 import { ListFilters } from "@/components/ui/ListFilters";
 import { Notice } from "@/components/ui/Notice";
 import { Pagination } from "@/components/ui/Pagination";
+import { SortHeader } from "@/components/ui/SortHeader";
 import { CustomerFilter } from "@/features/customers/CustomerFilter";
 import { InvoiceStatusBadge } from "@/features/invoices/InvoiceStatusBadge";
 import type { Customer, InvoiceSummary } from "@/lib/api/types";
 import { requireCredential } from "@/lib/auth/credential";
-import { backendQuery, listHref, pageOf, parseListParams, type ExtraSpec } from "@/lib/list-params";
+import { backendQuery, listHref, sortHref, pageOf, parseListParams, type ExtraSpec } from "@/lib/list-params";
 import { getMemberships } from "@/lib/orgs";
 import { canMutateInvoices } from "@/lib/roles";
 import { serverRead, serverReadOrNull } from "@/lib/server-api";
+
+const SORTS = ["number", "customer", "invoice_date", "due_date", "status", "currency", "net", "vat", "gross"] as const;
 
 const STATUSES = ["draft", "issued"] as const;
 // Exactly the filters GET /api/invoices supports: status, customer, invoice date range, search (customer name or number).
@@ -36,7 +39,7 @@ export default async function InvoicesPage({
 }) {
   const { orgId } = await params;
   const raw = await searchParams;
-  const list = parseListParams(raw, [], ["customer_id"], EXTRAS);
+  const list = parseListParams(raw, [], ["customer_id"], EXTRAS, SORTS);
   const customerId = list.refs.customer_id;
   const credential = await requireCredential(`/o/${orgId}`);
 
@@ -130,15 +133,15 @@ export default async function InvoicesPage({
           <table data-testid="invoices-table" className="w-full max-w-6xl text-left text-sm">
             <thead>
               <tr className="border-b border-zinc-300 dark:border-zinc-700">
-                <th className="py-1 pr-4">Number</th>
-                <th className="py-1 pr-4">Customer</th>
-                <th className="py-1 pr-4">Invoice date</th>
-                <th className="py-1 pr-4">Due date</th>
-                <th className="py-1 pr-4">Status</th>
-                <th className="py-1 pr-4">Currency</th>
-                <th className="py-1 pr-4 text-right">Net</th>
-                <th className="py-1 pr-4 text-right">VAT</th>
-                <th className="py-1 text-right">Gross</th>
+                <SortHeader label="Number" sortKey="number" current={list.sort} dir={list.dir} href={sortHref(base, list, "number")} />
+                <SortHeader label="Customer" sortKey="customer" current={list.sort} dir={list.dir} href={sortHref(base, list, "customer")} />
+                <SortHeader label="Invoice date" sortKey="invoice_date" current={list.sort} dir={list.dir} href={sortHref(base, list, "invoice_date")} />
+                <SortHeader label="Due date" sortKey="due_date" current={list.sort} dir={list.dir} href={sortHref(base, list, "due_date")} />
+                <SortHeader label="Status" sortKey="status" current={list.sort} dir={list.dir} href={sortHref(base, list, "status")} />
+                <SortHeader label="Currency" sortKey="currency" current={list.sort} dir={list.dir} href={sortHref(base, list, "currency")} />
+                <SortHeader label="Net" sortKey="net" current={list.sort} dir={list.dir} href={sortHref(base, list, "net")} align="right" />
+                <SortHeader label="VAT" sortKey="vat" current={list.sort} dir={list.dir} href={sortHref(base, list, "vat")} align="right" />
+                <SortHeader label="Gross" sortKey="gross" current={list.sort} dir={list.dir} href={sortHref(base, list, "gross")} align="right" last />
               </tr>
             </thead>
             <tbody>

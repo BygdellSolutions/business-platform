@@ -260,10 +260,12 @@ def test_the_items_current_discount_is_the_one_active_today(client: TestClient, 
     assert listed["current_discount"]["ends_on"] == str(date(2026, 10, 7))
     # The backend splits the prices: base, promotion price, each incl. VAT (25 %).
     assert (read["price_inc_vat"], read["promotion_price_ex_vat"], read["promotion_price_inc_vat"]) == ("1250.00", "800.00", "1000.00")
+    assert (read["price_ex_vat"], read["current_price_ex_vat"], read["current_price_inc_vat"]) == ("1000.00", "800.00", "1000.00")  # base untouched
 
     monkeypatch.setattr(clock, "utcnow", lambda: datetime(2026, 10, 9, 12, 0, tzinfo=timezone.utc))  # after the period
     read = client.get(f"/api/items/{item.id}", headers=owner).json()
     assert (read["price_inc_vat"], read["promotion_price_ex_vat"], read["promotion_price_inc_vat"]) == ("1250.00", None, None)
+    assert (read["current_price_ex_vat"], read["current_price_inc_vat"]) == ("1000.00", "1250.00")  # no promotion: the base price
 
 
 # --- the line's own discount (the last layer) --------------------------------------------------------------------------
