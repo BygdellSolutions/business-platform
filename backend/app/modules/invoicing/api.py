@@ -403,7 +403,10 @@ def list_invoices(
     refunded = payments.refunded_amounts(db, ctx.organization_id, [invoice.id for invoice in invoices])
     open_returns = returns.open_counts(db, ctx.organization_id, [invoice.id for invoice in invoices])
     follow_ups = returns.next_follow_ups(db, ctx.organization_id, [invoice.id for invoice in invoices])
-    today = organization_today(db, ctx.organization_id)
+    # "Due today?" is a reminder about a return case, not part of any invoice document; the organization's day (its
+    # time zone, a live record) is read only when a listed invoice has an open return, so reading invoices without
+    # one touches no live table (tests/test_invoices_historical.py).
+    today = organization_today(db, ctx.organization_id) if follow_ups else None
     return [
         InvoiceSummary(
             **service.summary_fields(
@@ -411,7 +414,7 @@ def list_invoices(
             ),
             open_returns=open_returns.get(invoice.id, 0),
             return_follow_up_on=follow_ups.get(invoice.id),
-            return_follow_up_due=invoice.id in follow_ups and follow_ups[invoice.id] <= today,
+            return_follow_up_due=today is not None and invoice.id in follow_ups and follow_ups[invoice.id] <= today,
         )
         for invoice in invoices
     ]
