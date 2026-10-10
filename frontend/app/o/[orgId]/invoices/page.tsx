@@ -143,7 +143,7 @@ export default async function InvoicesPage({
                 <SortHeader label="VAT" sortKey="vat" current={list.sort} dir={list.dir} href={sortHref(base, list, "vat")} align="right" />
                 <SortHeader label="Gross" sortKey="gross" current={list.sort} dir={list.dir} href={sortHref(base, list, "gross")} align="right" />
                 <SortHeader label="Paid" sortKey="paid" current={list.sort} dir={list.dir} href={sortHref(base, list, "paid")} align="right" title="Payments received, less refunds" />
-                <SortHeader label="Outstanding" sortKey="outstanding" current={list.sort} dir={list.dir} href={sortHref(base, list, "outstanding")} align="right" title="Still to be paid, after credit notes" />
+                <SortHeader label="Remaining" sortKey="outstanding" current={list.sort} dir={list.dir} href={sortHref(base, list, "outstanding")} align="right" title="Still to be paid, after credit notes" />
                 <SortHeader label="Credited" sortKey="credited" current={list.sort} dir={list.dir} href={sortHref(base, list, "credited")} align="right" title="Credit notes, incl. VAT" />
                 <SortHeader label="Refunded" sortKey="refunded" current={list.sort} dir={list.dir} href={sortHref(base, list, "refunded")} align="right" title="Money paid back to the customer" last />
               </tr>

@@ -86,7 +86,7 @@ export default async function Dashboard({
             count={invoicing.past_due.count}
             amounts={invoicing.past_due.amounts}
             href={`${base}/invoices?payment=overdue`}
-            note="Issued, past the due date and not fully paid: what is still outstanding."
+            note="Issued, past the due date and not fully paid: what is still remaining."
             testId="card-past-due"
             tone="attention"
           />
@@ -143,7 +143,7 @@ export default async function Dashboard({
             count={invoicing.unpaid.count}
             amounts={invoicing.unpaid.amounts}
             href={`${base}/invoices?payment=open`}
-            note="Issued and not fully paid: what is still outstanding."
+            note="Issued and not fully paid: what is still remaining."
             testId="card-unpaid"
           />
           <SummaryCard
@@ -151,7 +151,7 @@ export default async function Dashboard({
             count={invoicing.not_yet_due.count}
             amounts={invoicing.not_yet_due.amounts}
             href={`${base}/invoices?payment=not_yet_due`}
-            note="Outstanding, due date not passed (or none)."
+            note="Remaining, due date not passed (or none)."
             testId="card-not-yet-due"
           />
           <SummaryCard

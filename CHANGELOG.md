@@ -4,6 +4,9 @@ All notable changes to `business-platform` will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- "Outstanding" is called **"Remaining"** wherever people read it (invoice list, the invoice's payments, dashboard notes, history, the overpayment message). The API field stays `outstanding_amount`.
+
 ### Added
 - **Operator step for TEST databases: renumber issued invoices and credit notes from 1001** (`app/scripts/renumber_invoices.py`), run by the migration job only when `RENUMBER_INVOICES` is the exact confirmation phrase (any other value stops the job before it migrates). Keeps the order of the shared series, updates the counter, removes the stored PDFs (rendered again on the next download), switches the immutability triggers back on before committing, and does nothing the second time. Never for a real database: issued invoices must not change.
 

@@ -75,7 +75,7 @@ export function PaymentsPanel({ invoice, canRecord, today, timeZone }: { invoice
         <span className="font-semibold" data-testid="payment-status">
           {PAYMENT_STATES[invoice.payment_status]}
         </span>{" "}
-        · paid <DecimalText value={invoice.paid_amount ?? "0.00"} /> · outstanding{" "}
+        · paid <DecimalText value={invoice.paid_amount ?? "0.00"} /> · remaining{" "}
         <span data-testid="payment-outstanding">
           <DecimalText value={outstanding} />
         </span>{" "}

@@ -33,7 +33,7 @@ export const FIELD_LABELS: Record<string, Record<string, string>> = {
   },
   invoice: {
     payment: "Payment",
-    outstanding: "Outstanding",
+    outstanding: "Remaining",
     refund: "Refund",
     refund_due: "Refund due",
     credit_note: "Credit note",

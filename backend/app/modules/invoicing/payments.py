@@ -158,7 +158,7 @@ def record_payment(db: Session, ctx: TenantContext, invoice_id: uuid.UUID, paylo
     paid = paid_amounts(db, ctx.organization_id, [invoice.id]).get(invoice.id, ZERO)
     outstanding = owed(db, invoice) - paid
     if payload.amount > outstanding:
-        reference_error("amount", f"Only {_money(outstanding)} {invoice.currency} is outstanding on this invoice", "payment.overpaid")
+        reference_error("amount", f"Only {_money(outstanding)} {invoice.currency} remains to be paid on this invoice", "payment.overpaid")
     # Stamped from the application clock: the list is in the order payments were recorded, even within one transaction.
     row = InvoicePayment(organization_id=ctx.organization_id, invoice_id=invoice.id, created_by=ctx.user.id, created_at=clock.utcnow(), **payload.model_dump())
     db.add(row)
