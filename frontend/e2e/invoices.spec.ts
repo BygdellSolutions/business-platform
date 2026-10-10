@@ -310,7 +310,9 @@ test.describe("an issued invoice is a stored document", () => {
     const issued = await issueInvoiceApi(context, world.orgId, await createInvoiceApi(context, world.orgId, [completedTx.id]));
 
     await page.goto(`${list(world)}/${issued.id}`);
-    const before = await page.getByTestId("invoice-document").innerText();
+    // textContent, not innerText: innerText depends on layout, and right after a load in CI it can come back without
+    // line breaks (same text, one line), which failed this comparison on every CI run.
+    const before = (await page.getByTestId("invoice-document").textContent()) ?? "";
     await expect(page.getByTestId("party-customer-name")).toHaveText("Umeå HK");
     await expect(page.getByTestId("line-fields")).toContainText("Handle with care");
     await expect(page.getByTestId("line-fields")).toContainText("Anna Andersson");
@@ -328,7 +330,7 @@ test.describe("an issued invoice is a stored document", () => {
     await context.request.patch(bffUrl(world.orgId, `/items/${item.id}`), { data: { name: "Renamed again" } });
 
     await page.reload();
-    expect(await page.getByTestId("invoice-document").innerText()).toBe(before); // the very same document
+    await expect(page.getByTestId("invoice-document")).toHaveText(before); // the very same document
     await expect(page.getByTestId("party-customer-name")).toHaveText("Umeå HK");
     await expect(page.getByTestId("line-description")).toHaveText("Horse massage");
     await expect(page.getByTestId("line-fields")).toContainText("Remark");
