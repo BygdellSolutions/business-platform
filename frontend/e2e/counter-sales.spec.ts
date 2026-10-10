@@ -44,9 +44,13 @@ test("invoice: the order goes onto the customer's draft invoice, and the next on
     await page.getByTestId("invoice-order").click();
     await expect(page.getByTestId("tx-status")).toHaveText("Completed");
     await expect(page.getByTestId("open-draft-invoice")).toBeVisible();
+    await expect(page.getByTestId("order-invoice")).toHaveText("Draft invoice"); // the link stays at the top of the order
   }
   await page.getByTestId("open-draft-invoice").click();
   await expect(page.getByTestId("source")).toHaveCount(2); // both orders, one draft
+  await expect(page.getByTestId("invoice-orders")).toHaveText("Orders 1001, 1002");
+  await page.getByTestId("invoice-order-link").first().click();
+  await expect(page.getByTestId("record-name")).toContainText("Order 1001");
   expect(testRow(`select count(*) from invoices where organization_id = ${sql(world.orgId)} and status = 'draft'`)).toBe("1");
 });
 

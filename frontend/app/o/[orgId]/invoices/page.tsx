@@ -11,8 +11,6 @@ import type { Customer, InvoiceSummary } from "@/lib/api/types";
 import { requireCredential } from "@/lib/auth/credential";
 import { formatShortDate } from "@/lib/dates";
 import { backendQuery, listHref, sortHref, pageOf, parseListParams, type ExtraSpec } from "@/lib/list-params";
-import { getMemberships } from "@/lib/orgs";
-import { canMutateInvoices } from "@/lib/roles";
 import { serverRead, serverReadOrNull } from "@/lib/server-api";
 
 const SORTS = ["number", "customer", "invoice_date", "due_date", "status", "returns", "currency", "net", "vat", "gross", "paid", "outstanding", "credited", "refunded"] as const;
@@ -42,14 +40,12 @@ export default async function InvoicesPage({
   const raw = await searchParams;
   const list = parseListParams(raw, [], ["customer_id"], EXTRAS, SORTS);
   const customerId = list.refs.customer_id;
-  const credential = await requireCredential(`/o/${orgId}`);
+  await requireCredential(`/o/${orgId}`);
 
-  const [rows, filterCustomer, memberships] = await Promise.all([
+  const [rows, filterCustomer] = await Promise.all([
     serverRead<InvoiceSummary[]>(orgId, "/api/invoices", backendQuery(list)),
     customerId === undefined ? null : serverReadOrNull<Customer>(orgId, `/api/customers/${customerId}`),
-    getMemberships(credential),
   ]);
-  const role = memberships.status === "ok" ? memberships.memberships.find((membership) => membership.id === orgId)?.role : undefined;
   const { rows: invoices, hasNext } = pageOf(rows);
   const base = `/o/${orgId}/invoices`;
   const filtered = list.q !== "" || Object.keys(list.refs).length > 0 || Object.keys(list.extra).length > 0;
@@ -60,11 +56,6 @@ export default async function InvoicesPage({
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold">Invoices</h1>
-        {canMutateInvoices(role) && (
-          <Link href={`${base}/new`} className="underline" data-testid="new-invoice">
-            New invoice
-          </Link>
-        )}
       </div>
       {first(raw.deleted) === "1" && <Notice testId="deleted">Draft deleted. Its orders can be invoiced again.</Notice>}
 

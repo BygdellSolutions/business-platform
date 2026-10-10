@@ -42,6 +42,7 @@ test("the month can be chosen, and pending shows what is not yet paid", async ({
   await page.goto(`/o/${world.orgId}`);
   await expect(page.getByTestId("card-unpaid-count")).toHaveText("1");
   await expect(page.getByTestId("card-not-yet-due-count")).toHaveText("1");
+  await expect(page.getByTestId("card-ready")).toHaveCount(0); // the order is invoiced: nothing waits
   await expect(page.getByTestId("card-invoiced-count")).toHaveText("1");
   await expect(page.getByTestId("month-heading")).toContainText("This month");
   await expect(page.getByTestId("next-month")).toHaveCount(0);

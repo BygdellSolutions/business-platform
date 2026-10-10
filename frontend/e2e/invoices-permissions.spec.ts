@@ -45,7 +45,6 @@ for (const role of ["employee", "viewer"] as RoleName[]) {
 
       await page.goto(`/o/${world.orgId}/invoices`);
       await expect(page.getByTestId("invoice-row")).toHaveCount(2);
-      await expect(page.getByTestId("new-invoice")).toHaveCount(0);
     });
 
     test("sees what is waiting to be invoiced but cannot select or create", async ({ page, context }) => {

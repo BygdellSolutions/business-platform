@@ -4,11 +4,11 @@ import { SummaryCard } from "@/features/dashboard/SummaryCard";
 import type { InventorySummary, InvoicingSummary, Organization, SalesSummary } from "@/lib/api/types";
 import { getCredential } from "@/lib/auth/credential";
 import { getMemberships } from "@/lib/orgs";
-import { canMutateInvoices, canWriteRecords } from "@/lib/roles";
+import { canWriteRecords } from "@/lib/roles";
 import { serverRead } from "@/lib/server-api";
 
 /**
- * The organization at a glance: what needs doing (drafts, sales ready to invoice, invoices past their due date, stock
+ * The organization at a glance: what needs doing (draft orders and invoices, invoices past their due date, returns, stock
  * problems) and how the month is going. Each figure comes from the module that owns it and counts this organization
  * only; amounts are per currency. Every card links to the list where the work is done.
  */
@@ -60,11 +60,6 @@ export default async function Dashboard({
               </Link>
             </>
           )}
-          {canMutateInvoices(role) && (
-            <Link href={`${base}/invoices/new`} className="rounded border border-zinc-400 px-3 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-800">
-              New invoice
-            </Link>
-          )}
         </div>
       </div>
 
@@ -72,14 +67,19 @@ export default async function Dashboard({
         <h2 className="text-lg font-semibold">To do</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <SummaryCard title="Draft orders" count={sales.drafts} href={`${base}/transactions?status=draft`} testId="card-drafts" />
-          <SummaryCard
-            title="Ready to invoice"
-            count={invoicing.ready_to_invoice.count}
-            amounts={invoicing.ready_to_invoice.amounts}
-            href={`${base}/invoices/new`}
-            testId="card-ready"
-            tone="attention"
-          />
+          {/* Orders are invoiced from the order itself; this only fills when a role that may not invoice completed one,
+              or the invoice step was refused. */}
+          {invoicing.ready_to_invoice.count > 0 && (
+            <SummaryCard
+              title="Completed, not invoiced"
+              count={invoicing.ready_to_invoice.count}
+              amounts={invoicing.ready_to_invoice.amounts}
+              href={`${base}/invoices/new`}
+              note="Completed orders that are on no invoice yet."
+              testId="card-ready"
+              tone="attention"
+            />
+          )}
           <SummaryCard title="Draft invoices" count={invoicing.draft_invoices} href={`${base}/invoices?status=draft`} testId="card-draft-invoices" />
           <SummaryCard
             title="Past due date"

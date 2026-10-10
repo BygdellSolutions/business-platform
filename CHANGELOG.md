@@ -13,6 +13,8 @@ All notable changes to `business-platform` will be documented in this file.
   - Migration `a7c9e1f3b457`. Receipts are rendered on demand from the (final) order with the organization's current details; returns and refunds of counter sales are not built yet.
 
 ### Changed
+- Dashboard follows the order flow (paid now or invoiced from the order): "Ready to invoice" is now **"Completed, not invoiced"** and shows only when an order waits (completed by a role that may not invoice, or the invoice step was refused); the **New invoice** button is gone from the dashboard and the invoice list (the new-invoice page stays, reached from that card).
+- An order shows a link to its invoice ("Invoice 1005" or "Draft invoice") under its title, and an invoice lists its orders ("Orders 1001, 1002") under its title, each linking to the other.
 - The invoice list has a **Return** column after Status: "—", "Open · follow up 17 Oct", or "Follow-up due" (warning colour) when the earliest open return's follow-up date has come; sortable by that date. "Return open" left the Status column. Invoices carry `return_follow_up_on` and `return_follow_up_due`.
 - The order list opens an order from its **Order no.** (the date is plain text now).
 - "Outstanding" is called **"Remaining"** wherever people read it (invoice list, the invoice's payments, dashboard notes, history, the overpayment message). The API field stays `outstanding_amount`.
