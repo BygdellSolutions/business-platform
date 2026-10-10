@@ -132,6 +132,7 @@ class IncomingStock(TenantOwned, Base):
         ),
         CheckConstraint("quantity > 0 AND received >= 0 AND received <= quantity", name="ck_incoming_stock_quantities"),
         CheckConstraint("(cancelled_at IS NULL) = (cancelled_by IS NULL)", name="ck_incoming_stock_cancellation"),
+        CheckConstraint("unit_cost IS NULL OR unit_cost >= 0", name="ck_incoming_stock_unit_cost"),
         Index("ix_incoming_stock_open_item", "organization_id", "item_id", postgresql_where=text("cancelled_at IS NULL AND received < quantity")),
         ForeignKeyConstraint(
             ["organization_id", "supplier_id"], ["suppliers.organization_id", "suppliers.id"], ondelete="RESTRICT", name="fk_incoming_stock_supplier"
@@ -146,6 +147,8 @@ class IncomingStock(TenantOwned, Base):
     # The supplier from the register (optional). Earlier free-text names were turned into suppliers by migration.
     supplier_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     reference: Mapped[str | None] = mapped_column(String(255))
+    # What the organization pays per unit, excl. VAT, in its currency (null: not recorded).
+    unit_cost: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cancelled_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))

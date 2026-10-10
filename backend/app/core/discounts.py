@@ -1,7 +1,7 @@
 """Which discounts apply to a catalog sale (decided 2026-10-08).
 
 Two layers, applied in this order and never added together: the item's temporary discount active on the sale's
-date, then the billing customer's permanent discount. The arithmetic lives in Sales (`pricing.discounted_unit_price`)
+date, then the billing customer's permanent discount. The arithmetic lives in `app.core.prices.discounted_unit_price`
 and is repeated by a CHECK on every line; this module only answers "which percentages".
 """
 

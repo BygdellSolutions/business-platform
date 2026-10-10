@@ -26,6 +26,7 @@ from app.modules.inventory.schemas import (
     StockItemRead,
     LineFulfillmentRead,
     ProposedAllocation,
+    IncomingUpdate,
     Receipt,
     StockAdjustment,
     StockMovementRead,
@@ -373,6 +374,23 @@ def create_incoming(payload: IncomingCreate, ctx: TenantContext = Depends(record
     return _incoming_read(row, item.name, item.unit, ctx.user.name, supplier)
 
 
+@availability_router.patch("/incoming/{incoming_id}", response_model=IncomingRead)
+def update_incoming(
+    incoming_id: uuid.UUID, payload: IncomingUpdate, ctx: TenantContext = Depends(record_writer), db: Session = Depends(get_db)
+) -> IncomingRead:
+    """Change the expected date or the unit cost. The date only while something is still expected; the cost any time
+    (an invoice from the supplier often comes after the goods)."""
+    row = get_scoped_or_404(db, ctx, IncomingStock, incoming_id, for_update=True)
+    values = payload.model_dump(exclude_unset=True)
+    if "expected_on" in values and (row.cancelled_at is not None or row.received >= row.quantity):
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="This delivery is no longer expected")
+    for key, value in values.items():
+        setattr(row, key, value)
+    db.commit()
+    item = db.get(Item, row.item_id)
+    return _incoming_read(row, item.name, item.unit, _author(db, row.created_by), _supplier(db, row))
+
+
 @availability_router.post("/incoming/{incoming_id}/receive", response_model=IncomingRead)
 def receive_incoming(
     incoming_id: uuid.UUID, payload: Receipt, ctx: TenantContext = Depends(record_writer), db: Session = Depends(get_db)
@@ -433,6 +451,7 @@ def _incoming_read(row: IncomingStock, item_name: str, item_unit: str, author: s
         expected_on=row.expected_on,
         supplier=SupplierRef.model_validate(supplier) if supplier is not None else None,
         reference=row.reference,
+        unit_cost=row.unit_cost,
         state=state,
         created_at=row.created_at,
         created_by_name=author,

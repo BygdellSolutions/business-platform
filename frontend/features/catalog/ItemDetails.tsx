@@ -17,6 +17,7 @@ export function ItemDetails({ item }: { item: Item }) {
         { label: "Description", value: item.description },
         { label: "Unit", value: item.unit },
         { label: "Price excl. VAT", value: <DecimalText value={item.price_ex_vat} />, testId: "detail-price" },
+        { label: "Price incl. VAT", value: <DecimalText value={item.price_inc_vat} />, testId: "detail-price-inc-vat" },
         { label: "VAT %", value: <DecimalText value={item.vat_rate} /> },
         {
           label: "Discount today",
@@ -27,6 +28,19 @@ export function ItemDetails({ item }: { item: Item }) {
           ) : null,
           testId: "detail-current-discount",
         },
+        ...(item.promotion_price_ex_vat !== null && item.promotion_price_inc_vat !== null
+          ? [
+              {
+                label: "Promotion price",
+                value: (
+                  <>
+                    <DecimalText value={item.promotion_price_ex_vat} /> excl. VAT, <DecimalText value={item.promotion_price_inc_vat} /> incl. VAT
+                  </>
+                ),
+                testId: "detail-promotion-price",
+              },
+            ]
+          : []),
         ...(item.type === "product" ? [{ label: "Stock", value: item.track_stock ? "Tracked" : "Not tracked" }] : []),
         ...(item.track_stock ? [{ label: "Low-stock threshold", value: item.low_stock_threshold }] : []),
         { label: "Status", value: <StatusBadge active={item.active} /> },

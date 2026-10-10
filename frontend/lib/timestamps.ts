@@ -13,3 +13,13 @@ export function formatTimestamp(iso: string, timeZone: string | null): string {
   }).format(new Date(iso));
   return timeZone ? shown : `${shown} UTC`;
 }
+
+/** The calendar day of a stored timestamp in the organization's time zone ("2026-10-08"; UTC without a zone). */
+export function formatDay(iso: string, timeZone: string | null): string {
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: timeZone ?? "UTC",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(iso));
+}

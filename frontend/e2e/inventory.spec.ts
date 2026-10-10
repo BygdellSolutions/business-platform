@@ -102,12 +102,26 @@ test("a delivery on its way is recorded, received in part, and the rest cancelle
   await incoming.getByLabel(/^Quantity/).fill("10");
   await pick(page, "supplier_id", supplier.name); // chosen from the register, never typed
   await incoming.getByLabel("Reference (optional)").fill("PO-17");
+  await incoming.getByLabel("Unit cost excl. VAT (optional)").fill("61.50");
   await incoming.getByTestId("submit-incoming").click();
   await expect(incoming.getByTestId("incoming-row")).toContainText("Expected");
+  await expect(incoming.getByTestId("incoming-unit-cost")).toHaveText("61.50");
+  await expect(incoming.getByTestId("incoming-ordered-on")).toHaveText(/^\d{4}-\d{2}-\d{2}$/);
+
+  // The supplier moved the date and the invoice said another price: both change on the row.
+  await incoming.getByTestId("edit-incoming").click();
+  const edit = incoming.getByTestId("incoming-edit");
+  await edit.getByLabel("Expected on").fill("2026-12-24");
+  await edit.getByLabel("Unit cost excl. VAT").fill("63");
+  await incoming.getByTestId("save-incoming").click();
+  await expect(incoming.getByTestId("incoming-expected")).toHaveText("2026-12-24");
+  await expect(incoming.getByTestId("incoming-unit-cost")).toHaveText("63.00");
   await expect(incoming.getByTestId("supplier-link")).toHaveText("Horse Supplies AB");
   await incoming.getByTestId("supplier-link").click();
   await page.getByRole("heading", { name: "Deliveries from this supplier (1)" }).click();
   await expect(page.getByTestId("supplier-delivery")).toContainText("Fly spray");
+  await expect(page.getByTestId("delivery-unit-cost")).toHaveText("63.00");
+  await expect(page.getByTestId("delivery-ordered-on")).toHaveText(/^\d{4}-\d{2}-\d{2}$/);
   await page.goto(`/o/${world.orgId}/catalog/${item.id}`);
   await expect(page.getByTestId("stock-figures")).toContainText("incoming 10");
   await expect(page.getByTestId("on-hand")).toHaveText("0");
@@ -126,7 +140,9 @@ test("a delivery on its way is recorded, received in part, and the rest cancelle
 
   await incoming.getByTestId("cancel-incoming").click();
   await page.getByRole("button", { name: "Yes, cancel the rest" }).click();
-  await expect(incoming.getByTestId("no-incoming")).toBeVisible();
+  // It stays listed (what was paid is history), with no receive or cancel any more.
+  await expect(incoming.getByTestId("incoming-row")).toContainText("Cancelled");
+  await expect(incoming.getByTestId("receive-incoming")).toHaveCount(0);
   await expect(page.getByTestId("on-hand")).toHaveText("4");
   await expect(page.getByTestId("stock-figures")).toContainText("incoming 0");
 });

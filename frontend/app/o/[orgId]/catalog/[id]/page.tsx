@@ -32,7 +32,7 @@ export default async function ItemPage({
     serverRead<ItemDiscount[]>(orgId, `/api/items/${recordId}/discounts`),
     serverRead<Stock>(orgId, `/api/items/${recordId}/stock`),
     serverRead<ItemAvailability[]>(orgId, "/api/inventory/availability", `?${new URLSearchParams({ item_id: recordId })}`),
-    serverRead<Incoming[]>(orgId, "/api/inventory/incoming", `?${new URLSearchParams({ item_id: recordId })}`),
+    serverRead<Incoming[]>(orgId, "/api/inventory/incoming", `?${new URLSearchParams({ item_id: recordId, open_only: "false" })}`),
     serverRead<Backorder[]>(orgId, "/api/inventory/backorders", `?${new URLSearchParams({ item_id: recordId })}`),
   ]);
 
@@ -52,7 +52,7 @@ export default async function ItemPage({
         <>
           <StockPanel itemId={item.id} unit={item.unit} stock={stock} figures={availability[0] ?? null} canAdjust={canWriteRecords(role)} timeZone={organization.timezone} />
           <BackordersPanel itemId={item.id} unit={item.unit} backorders={backorders} canAllocate={canWriteRecords(role)} />
-          <IncomingPanel itemId={item.id} unit={item.unit} incoming={incoming} canWrite={canWriteRecords(role)} />
+          <IncomingPanel itemId={item.id} unit={item.unit} incoming={incoming} canWrite={canWriteRecords(role)} timeZone={organization.timezone} />
         </>
       )}
       <ItemDiscounts itemId={item.id} discounts={discounts} canManage={role === "owner" || role === "admin"} />

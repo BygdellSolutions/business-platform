@@ -4,7 +4,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
-from app.schemas.money import CountIn, QuantityIn, QuantityOut
+from app.schemas.money import CountIn, MoneyIn, MoneyOut, QuantityIn, QuantityOut
 from app.schemas.supplier import SupplierRef
 
 Note = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
@@ -104,6 +104,16 @@ class IncomingCreate(BaseModel):
     expected_on: date | None = None
     supplier_id: uuid.UUID | None = None
     reference: Text255 | None = None
+    unit_cost: MoneyIn | None = None  # per unit, excl. VAT, in the organization's currency
+
+
+class IncomingUpdate(BaseModel):
+    """Partial update of a delivery on its way: the expected date moves, the cost becomes known (null clears)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_on: date | None = None
+    unit_cost: MoneyIn | None = None
 
 
 class Receipt(BaseModel):
@@ -126,6 +136,7 @@ class IncomingRead(BaseModel):
     expected_on: date | None
     supplier: SupplierRef | None
     reference: str | None
+    unit_cost: MoneyOut | None
     state: Literal["expected", "partially_received", "received", "cancelled"]
     created_at: datetime
     created_by_name: str | None

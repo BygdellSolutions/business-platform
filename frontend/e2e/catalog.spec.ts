@@ -110,6 +110,34 @@ test.describe("decimal values survive the whole round trip unchanged", () => {
     await page.goto(`${list}?q=Horse massage`);
     await expect(page.getByTestId("item-price")).toHaveText("850.00");
     await expect(page.getByTestId("item-vat")).toHaveText("25.00");
+    await expect(page.getByTestId("item-price-inc-vat")).toHaveText("1062.50"); // computed by the backend
+  });
+
+  test("a running promotion shows the base price, the promotion and the promotion price, each incl. VAT too", async ({ page, context }) => {
+    const created = await createItem(context, ORG_A.id, { name: unique("Promo"), price_ex_vat: "1000.00", vat_rate: "25" });
+    // A day before of today in UTC, so the organization's own "today" is inside the open-ended period whatever its zone.
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    const response = await context.request.post(bffUrl(ORG_A.id, `/items/${created.id}/discounts`), { data: { percent: "20", starts_on: yesterday } });
+    expect(response.status()).toBe(201);
+
+    await page.goto(`${list}?q=${encodeURIComponent(created.name)}`);
+    await expect(page.getByTestId("item-price")).toHaveText("1000.00");
+    await expect(page.getByTestId("current-discount")).toContainText("20.00 %");
+    await expect(page.getByTestId("item-promotion-price")).toHaveText("800.00");
+    await expect(page.getByTestId("item-price-inc-vat")).toHaveText("1000.00");
+  });
+
+  test("a price can be entered incl. VAT and is stored excl. VAT", async ({ page }) => {
+    const name = unique("Inc VAT");
+    await page.goto(`${list}/new`);
+    await page.getByLabel("Name").fill(name);
+    await page.getByLabel("Unit").fill("hour");
+    await page.getByLabel("Price is entered").selectOption("inc");
+    await page.getByLabel("Price including VAT").fill("1000");
+    await page.getByLabel("VAT rate (%)").fill("25");
+    await page.getByTestId("submit").click();
+    await expect(page.getByTestId("created")).toBeVisible();
+    expect(testRow(`select price_ex_vat::text from items where name = ${sql(name)}`)).toBe("800.00");
   });
 });
 

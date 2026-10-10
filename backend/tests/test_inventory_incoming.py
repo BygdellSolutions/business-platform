@@ -158,3 +158,36 @@ def test_the_inventory_lists_every_stock_tracking_product_with_its_figures(clien
     assert [r["item_id"] for r in by_sku] == [str(shelf.id)]
     assert [r["name"] for r in client.get("/api/inventory/items", headers=other_owner).json()] == ["Theirs"]
     assert empty.id
+
+
+def test_the_expected_date_and_unit_cost_can_change_but_only_this_organization_s(client: TestClient, db_session: Session):
+    org, owner = _world(db_session)
+    item = _product(db_session, org)
+    created = client.post(
+        "/api/inventory/incoming", json={"item_id": str(item.id), "quantity": "4", "expected_on": "2026-10-20", "unit_cost": "55.50"}, headers=owner
+    ).json()
+    assert created["unit_cost"] == "55.50"
+
+    moved = client.patch(f"/api/inventory/incoming/{created['id']}", json={"expected_on": "2026-11-02"}, headers=owner)
+    assert moved.status_code == 200 and (moved.json()["expected_on"], moved.json()["unit_cost"]) == ("2026-11-02", "55.50")
+    assert client.patch(f"/api/inventory/incoming/{created['id']}", json={"unit_cost": 19.5}, headers=owner).status_code == 422  # no floats
+
+    # Received: the date is history now, the cost can still be filled in from the supplier's invoice.
+    client.post(f"/api/inventory/incoming/{created['id']}/receive", json={}, headers=owner)
+    assert client.patch(f"/api/inventory/incoming/{created['id']}", json={"expected_on": "2026-12-01"}, headers=owner).status_code == 409
+    costed = client.patch(f"/api/inventory/incoming/{created['id']}", json={"unit_cost": "60"}, headers=owner)
+    assert costed.status_code == 200 and costed.json()["unit_cost"] == "60.00"
+
+    _, outsider = _world(db_session)
+    assert client.patch(f"/api/inventory/incoming/{created['id']}", json={"unit_cost": "1"}, headers=outsider).status_code == 404
+    assert client.get("/api/inventory/incoming", params={"open_only": "false"}, headers=owner).json()[0]["unit_cost"] == "60.00"
+
+
+def test_a_viewer_cannot_change_a_delivery(client: TestClient, db_session: Session):
+    org, owner = _world(db_session)
+    item = _product(db_session, org)
+    viewer = make_user(db_session)
+    add_member(db_session, org, viewer, Role.VIEWER)
+    incoming_id = client.post("/api/inventory/incoming", json={"item_id": str(item.id), "quantity": "1"}, headers=owner).json()["id"]
+    refused = client.patch(f"/api/inventory/incoming/{incoming_id}", json={"expected_on": "2026-11-02"}, headers={"X-Dev-User-Email": viewer.email})
+    assert refused.status_code == 403

@@ -4,7 +4,17 @@ All notable changes to `business-platform` will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Catalog prices split up and shown incl. VAT.** The catalog list shows Base price excl. VAT, Promotion (percent and end date), Promotion price excl. VAT and Price incl. VAT today (promotion included, customer discounts not); the item page shows the price incl. VAT and the promotion price. Every amount is computed by FastAPI (`price_inc_vat`, `promotion_price_ex_vat`, `promotion_price_inc_vat` on items, rounded half-up as a line of quantity 1), never in the browser.
+- **A price can be entered incl. VAT** ("Price is entered: Excluding / Including VAT" on the item form; `price_inc_vat` on create and update, exactly one of the two prices). It is stored as the nearest price excl. VAT at the item's (or the newly sent) VAT rate, and the form shows both stored values.
+- **Incoming stock: a unit cost and an editable expected date.** A delivery records what is paid per unit excl. VAT (optional, fillable later); `PATCH /api/inventory/incoming/{id}` changes the expected date (only while something is still expected, else 409) and the unit cost (any time). Migration `c2e4a6b8d013` adds `incoming_stock.unit_cost` (nullable, CHECK >= 0).
+- **Order date and unit cost on deliveries.** "Deliveries from this supplier" and the product's Incoming table show the order date (the day the delivery was recorded, in the organization's time zone) and the unit cost; the product's table now keeps received and cancelled deliveries, so the price paid can be followed over time.
+
+### Fixed
+- Catalog rows no longer look doubled: stock badges ("Out of stock", "Backordered"...) never wrap, and the wide catalog table scrolls sideways instead of squeezing its cells (Inventory page too, same badges).
+
 ### Changed
+- The discount layer rule `discounted_unit_price` moved from `app.modules.sales.pricing` to `app.core.prices` (still re-exported by Sales), so the catalog and Sales share one rounding rule.
 - **Lists on a record's page fold under their heading.** Orders, Products and other lines bought, Services (customer and horse), Deliveries from this supplier and History start closed; each heading (with its count, e.g. "Orders (12)") opens and closes its own section, so a record's page stays short. A horse's notes and a product's stock history keep their own "Show …" toggle (the new-note box and the stock form stay open).
 - **"Transactions" are called "Orders" everywhere people read them** (menu, pages, buttons, messages, history, custom-field settings, invoice texts and the invoice PDF: "Order of <date>" / "Order <date>", template 6). Labels only: what an order does is unchanged, and the web addresses and API paths stay `/transactions`.
 - **Editing a line follows the rules of adding it.** A catalog line edits its item (catalog picker), quantity and discount; a service line its service (services only), for whom, by whom, when, quantity, notes and discount; an ad-hoc line its description, unit, quantity, price, VAT and discount. Description, unit, price and VAT of a catalog or service line always come from the catalog (its price changes through the discount), and a line never changes kind. FastAPI enforces the same rules when a line is added or changed (422 `line.catalog_value`, `line.kind_change`), so a typed price on a catalog line is no longer accepted anywhere.

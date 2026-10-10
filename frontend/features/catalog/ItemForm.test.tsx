@@ -25,6 +25,9 @@ function item(overrides: Partial<Item> = {}): Item {
     description: null,
     unit: "hour",
     price_ex_vat: "850.00" as MoneyString,
+    price_inc_vat: "1062.50" as MoneyString,
+    promotion_price_ex_vat: null,
+    promotion_price_inc_vat: null,
     current_discount: null,
     sku: null,
     track_stock: false,
@@ -105,6 +108,32 @@ describe("decimals are strings from the input to the request body", () => {
     const body = mocked.mock.calls[0][2]?.body as Record<string, unknown>;
     expect(Object.values(body).filter((value) => typeof value === "number")).toEqual([]);
     expect(body).toEqual({ type: "service", name: "Saddle fitting", description: null, unit: "hour", price_ex_vat: "8.20", vat_rate: "25", active: true, sku: null, track_stock: false });
+  });
+
+  it("sends a price typed incl. VAT as price_inc_vat and shows what the backend stored", async () => {
+    mocked.mockResolvedValue(ok(item({ price_ex_vat: "800.00" as MoneyString, price_inc_vat: "1000.00" as MoneyString })));
+    mount(A, item());
+
+    await userEvent.selectOptions(screen.getByLabelText("Price is entered"), "inc");
+    expect(screen.getByLabelText("Price including VAT")).toHaveValue("1062.50"); // the stored price, shown incl. VAT
+    await userEvent.clear(screen.getByLabelText("Price including VAT"));
+    await userEvent.type(screen.getByLabelText("Price including VAT"), "1000");
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(mocked.mock.calls[0][2]?.body).toEqual({ price_inc_vat: "1000" });
+    await waitFor(() => expect(screen.getByLabelText("Price including VAT")).toHaveValue("1000.00"));
+  });
+
+  it("resends the price incl. VAT when the VAT rate changes in that mode", async () => {
+    mocked.mockResolvedValue(ok(item()));
+    mount(A, item());
+
+    await userEvent.selectOptions(screen.getByLabelText("Price is entered"), "inc");
+    await userEvent.clear(screen.getByLabelText("VAT rate (%)"));
+    await userEvent.type(screen.getByLabelText("VAT rate (%)"), "12");
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(mocked.mock.calls[0][2]?.body).toEqual({ vat_rate: "12", price_inc_vat: "1062.50" });
   });
 
   it("shows the saved record exactly as the backend formatted it", async () => {

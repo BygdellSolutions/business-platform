@@ -218,6 +218,11 @@ export interface Item {
   low_stock_threshold: QuantityString | null;
   /** The temporary discount active today, if any (the price above never changes). */
   current_discount: ItemDiscount | null;
+  /** Computed by the backend (never here): the base price incl. VAT, and while a temporary discount runs, the
+   * promotion price excl. and incl. VAT (null without one). Customer discounts are not included. */
+  price_inc_vat: MoneyString;
+  promotion_price_ex_vat: MoneyString | null;
+  promotion_price_inc_vat: MoneyString | null;
   created_at: string;
   updated_at: string;
   /** Who created it and who changed it last (user ids); null = not recorded (before authors were kept). */
@@ -230,7 +235,9 @@ export interface ItemCreate {
   name: string;
   description: string | null;
   unit: string;
-  price_ex_vat: MoneyString;
+  /** Exactly one of the two; a price incl. VAT is stored as the nearest price excl. VAT. */
+  price_ex_vat?: MoneyString;
+  price_inc_vat?: MoneyString;
   vat_rate: PercentString;
   active: boolean;
   sku?: string | null;
@@ -317,7 +324,10 @@ export interface Incoming {
   expected_on: string | null;
   supplier: SupplierRef | null;
   reference: string | null;
+  /** Per unit, excl. VAT, in the organization's currency (null: not recorded). */
+  unit_cost: MoneyString | null;
   state: "expected" | "partially_received" | "received" | "cancelled";
+  /** When the delivery was recorded: shown as its order date. */
   created_at: string;
   created_by_name: string | null;
   cancelled_at: string | null;

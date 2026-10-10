@@ -9,11 +9,12 @@ const BADGES: Record<ItemAvailability["states"][number], { label: string; tone: 
 
 /** A product's stock states as the backend decided them; several can show at once ("Low stock", "Incoming"). */
 export function StockBadges({ states }: { states: ItemAvailability["states"] }) {
-  if (states.length === 0) return <span className="text-xs text-zinc-500">In stock</span>;
+  if (states.length === 0) return <span className="text-xs whitespace-nowrap text-zinc-500">In stock</span>;
   return (
-    <span className="inline-flex flex-wrap gap-1">
+    // One line, never wrapped: a wrapped "Out of / stock" pair made a table row look like two rows.
+    <span className="inline-flex gap-1 whitespace-nowrap">
       {states.map((state) => (
-        <span key={state} data-testid={`stock-state-${state}`} className={`rounded px-1.5 py-0.5 text-xs ${BADGES[state].tone}`}>
+        <span key={state} data-testid={`stock-state-${state}`} className={`rounded px-1.5 py-0.5 text-xs whitespace-nowrap ${BADGES[state].tone}`}>
           {BADGES[state].label}
         </span>
       ))}

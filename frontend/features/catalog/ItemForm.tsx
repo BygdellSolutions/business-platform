@@ -16,7 +16,12 @@ import type { Item, ItemCreate, ItemType, ItemUpdate } from "@/lib/api/types";
 import { parseMoney, parsePercent, type QuantityString } from "@/lib/decimal";
 import { NOT_A_DECIMAL, blankToNull, problemsFrom, useMutation } from "@/lib/forms";
 
-const CONTROLS = ["type", "name", "description", "unit", "price_ex_vat", "vat_rate", "active", "sku", "track_stock", "low_stock_threshold", "opening_stock"] as const;
+const CONTROLS = ["type", "name", "description", "unit", "price_ex_vat", "price_inc_vat", "vat_rate", "active", "sku", "track_stock", "low_stock_threshold", "opening_stock"] as const;
+
+const PRICE_MODES = [
+  { value: "ex", label: "Excluding VAT" },
+  { value: "inc", label: "Including VAT" },
+];
 
 const TYPES = [
   { value: "service", label: "Service" },
@@ -34,7 +39,9 @@ interface FormState {
   name: string;
   description: string;
   unit: string;
-  price_ex_vat: string;
+  /** Whether `price` is typed excl. or incl. VAT; the backend turns a price incl. VAT into the stored price excl. */
+  price_mode: "ex" | "inc";
+  price: string;
   vat_rate: string;
   active: boolean;
   sku: string;
@@ -50,7 +57,8 @@ function toState(item?: Item): FormState {
     name: item?.name ?? "",
     description: item?.description ?? "",
     unit: item?.unit ?? "",
-    price_ex_vat: item?.price_ex_vat ?? "",
+    price_mode: "ex",
+    price: item?.price_ex_vat ?? "",
     vat_rate: item?.vat_rate ?? "",
     active: item?.active ?? true,
     sku: item?.sku ?? "",
@@ -71,15 +79,16 @@ export function ItemForm({ item }: { item?: Item }) {
 
   const problems = problemsFrom(error, CONTROLS);
   const errorsFor = (name: string) => local[name] ?? problems.byField[name];
+  const priceField = state.price_mode === "inc" ? "price_inc_vat" : "price_ex_vat";
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => setState((current) => ({ ...current, [key]: value }));
 
   /** The two decimal fields as typed, or the shape errors that stop the request. */
   function decimals() {
-    const price = parseMoney(state.price_ex_vat.trim());
+    const price = parseMoney(state.price.trim());
     const vat = parsePercent(state.vat_rate.trim());
     if (price !== null && vat !== null) return { ok: true as const, price, vat };
     const errors: FieldErrors = {};
-    if (price === null) errors.price_ex_vat = [NOT_A_DECIMAL];
+    if (price === null) errors[priceField] = [NOT_A_DECIMAL];
     if (vat === null) errors.vat_rate = [NOT_A_DECIMAL];
     return { ok: false as const, errors };
   }
@@ -95,7 +104,7 @@ export function ItemForm({ item }: { item?: Item }) {
       name: state.name,
       description: blankToNull(state.description),
       unit: state.unit,
-      price_ex_vat: parsed.price,
+      [priceField]: parsed.price,
       vat_rate: parsed.vat,
       active: state.active,
       sku: blankToNull(state.sku),
@@ -130,8 +139,10 @@ export function ItemForm({ item }: { item?: Item }) {
     if (state.name !== current.name) body.name = state.name;
     if (blankToNull(state.description) !== current.description) body.description = blankToNull(state.description);
     if (state.unit !== current.unit) body.unit = state.unit;
-    if (parsed.price !== current.price_ex_vat) body.price_ex_vat = parsed.price;
     if (parsed.vat !== current.vat_rate) body.vat_rate = parsed.vat;
+    // Incl. VAT, the typed amount is what counts, so a new VAT rate resends it (and the price excl. VAT follows).
+    if (state.price_mode === "inc" && (parsed.price !== current.price_inc_vat || body.vat_rate)) body.price_inc_vat = parsed.price;
+    if (state.price_mode === "ex" && parsed.price !== current.price_ex_vat) body.price_ex_vat = parsed.price;
     if (blankToNull(state.sku) !== current.sku) body.sku = blankToNull(state.sku);
     const trackStock = state.type === "product" && state.track_stock;
     if (trackStock !== current.track_stock) body.track_stock = trackStock;
@@ -144,7 +155,8 @@ export function ItemForm({ item }: { item?: Item }) {
     const saved = await run(() => apiFetch<Item>(orgId, `/items/${current.id}`, { method: "PATCH", body }));
     if (saved === null) return;
     setRecord(saved);
-    setState(toState(saved)); // what the backend stored, exactly as it formatted it
+    // What the backend stored, exactly as it formatted it, in the mode the person chose.
+    setState({ ...toState(saved), price_mode: state.price_mode, price: state.price_mode === "inc" ? saved.price_inc_vat : saved.price_ex_vat });
     setNotice("saved");
     router.refresh();
   }
@@ -172,7 +184,31 @@ export function ItemForm({ item }: { item?: Item }) {
         <TextField label="Name" name="name" value={state.name} onChange={(value) => set("name", value)} error={errorsFor("name")} autoComplete="off" />
         <TextAreaField label="Description" name="description" value={state.description} onChange={(value) => set("description", value)} error={errorsFor("description")} />
         <TextField label="Unit" name="unit" value={state.unit} onChange={(value) => set("unit", value)} error={errorsFor("unit")} hint="For example hour, piece or kg." autoComplete="off" />
-        <DecimalField label="Price excluding VAT" name="price_ex_vat" value={state.price_ex_vat} onChange={(value) => set("price_ex_vat", value)} error={errorsFor("price_ex_vat")} />
+        <SelectField
+          label="Price is entered"
+          name="price_mode"
+          value={state.price_mode}
+          onChange={(value) => {
+            const mode = value as FormState["price_mode"];
+            // A saved item shows its stored price in the chosen form; a new one keeps what was typed.
+            setState((current) => ({ ...current, price_mode: mode, price: record ? (mode === "inc" ? record.price_inc_vat : record.price_ex_vat) : current.price }));
+          }}
+          options={PRICE_MODES}
+        />
+        <DecimalField
+          label={state.price_mode === "inc" ? "Price including VAT" : "Price excluding VAT"}
+          name={priceField}
+          value={state.price}
+          onChange={(value) => set("price", value)}
+          error={errorsFor(priceField)}
+          hint={
+            record
+              ? `Saved: ${record.price_ex_vat} excl. VAT, ${record.price_inc_vat} incl. VAT.`
+              : state.price_mode === "inc"
+                ? "Stored as the nearest price excluding VAT; the item page shows both."
+                : undefined
+          }
+        />
         <DecimalField label="VAT rate (%)" name="vat_rate" value={state.vat_rate} onChange={(value) => set("vat_rate", value)} error={errorsFor("vat_rate")} />
         {state.type === "product" && (
           <CheckboxField label="Track stock" name="track_stock" checked={state.track_stock} onChange={(checked) => set("track_stock", checked)} error={errorsFor("track_stock")} />

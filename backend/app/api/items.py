@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import Pagination, pagination
 from app.core import audit, discounts
+from app.core.prices import discounted_unit_price, price_ex_vat_from_inc, price_inc_vat
 from app.core.authz import record_writer, roles_required
 from app.core.currency import share_lock_organization
 from app.core.db import get_db
@@ -31,7 +32,10 @@ def create_item(
     # intent explicitly instead of relying on how foreign-key locking happens to work.
     share_lock_organization(db, ctx.organization_id)
     _ensure_sku_free(db, ctx, payload.sku, None)
-    item = create_scoped(db, ctx, Item, **payload.model_dump())
+    values = payload.model_dump()
+    if values.pop("price_inc_vat") is not None:
+        values["price_ex_vat"] = price_ex_vat_from_inc(payload.price_inc_vat, payload.vat_rate)
+    item = create_scoped(db, ctx, Item, **values)
     audit.created(db, ctx, item, "item")
     commit_and_refresh(db, item)
     return _with_discounts(db, ctx, [item])[0]
@@ -83,6 +87,8 @@ def update_item(
         reference_error("track_stock", "Only a product can track stock", "item.track_stock_service")
     if "sku" in values:
         _ensure_sku_free(db, ctx, values["sku"], item.id)
+    if "price_inc_vat" in values:
+        values["price_ex_vat"] = price_ex_vat_from_inc(values.pop("price_inc_vat"), values.get("vat_rate", item.vat_rate))
     audit.apply_audited_update(db, ctx, item, "item", values)
     return _with_discounts(db, ctx, [item])[0]
 
@@ -112,12 +118,19 @@ def _ensure_sku_free(db: Session, ctx: TenantContext, sku: str | None, item_id: 
 def _with_discounts(db: Session, ctx: TenantContext, items: list[Item]) -> list[ItemRead]:
     """Items as read, each with the temporary discount active today in the organization's time zone."""
     active = discounts.active_item_discounts(db, ctx.organization_id, [item.id for item in items], organization_today(db, ctx.organization_id))
-    return [
-        ItemRead.model_validate(item).model_copy(
-            update={"current_discount": ItemDiscountRead.model_validate(active[item.id]) if item.id in active else None}
-        )
-        for item in items
-    ]
+    return [_priced(item, active.get(item.id)) for item in items]
+
+
+def _priced(item: Item, discount: ItemDiscount | None) -> ItemRead:
+    promotion = discounted_unit_price(item.price_ex_vat, discount.percent, None) if discount is not None else None
+    return ItemRead.model_validate(item).model_copy(
+        update={
+            "current_discount": ItemDiscountRead.model_validate(discount) if discount is not None else None,
+            "price_inc_vat": price_inc_vat(item.price_ex_vat, item.vat_rate),
+            "promotion_price_ex_vat": promotion,
+            "promotion_price_inc_vat": price_inc_vat(promotion, item.vat_rate) if promotion is not None else None,
+        }
+    )
 
 
 # --- temporary discounts: reading for every member, changing for owners and admins (a pricing decision) ------------
