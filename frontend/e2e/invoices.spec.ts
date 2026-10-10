@@ -209,8 +209,8 @@ test.describe("issuing", () => {
     await page.getByTestId("issue-confirm").click();
 
     await expect(page.getByTestId("invoice-status")).toHaveAttribute("data-status", "issued");
-    await expect(page.getByTestId("invoice-heading")).toHaveText("Invoice 1");
-    await expect(page.getByTestId("invoice-number")).toHaveText("1");
+    await expect(page.getByTestId("invoice-heading")).toHaveText("Invoice 1001");
+    await expect(page.getByTestId("invoice-number")).toHaveText("1001");
     await expect(page.getByTestId("issued-note")).toContainText("cannot be edited or deleted");
     for (const control of ["issue", "delete-draft", "edit-details", "save-details"]) await expect(page.getByTestId(control)).toHaveCount(0);
     // The only control left is the PDF download: nothing that changes the invoice.
@@ -218,7 +218,7 @@ test.describe("issuing", () => {
     await expect(page.getByTestId("download-pdf")).toBeVisible();
 
     const stored = await getInvoiceApi(context, world.orgId, invoice.id);
-    expect(stored).toMatchObject({ status: "issued", number: 1, number_text: "1" });
+    expect(stored).toMatchObject({ status: "issued", number: 1001, number_text: "1001" });
     await expect(page.getByTestId("total-gross")).toHaveText(stored.gross_amount);
 
     // Reloading (and a direct request) show the same read-only document; the API refuses every change.
@@ -229,7 +229,7 @@ test.describe("issuing", () => {
     const edit = await context.request.patch(bffUrl(world.orgId, `/invoices/${invoice.id}`), { data: { description: "x" }, headers: ifMatch(stored.version) });
     const remove = await context.request.delete(bffUrl(world.orgId, `/invoices/${invoice.id}`), { headers: ifMatch(stored.version) });
     expect([edit.status(), remove.status()]).toEqual([409, 409]);
-    expect(testRow(`select next_number from invoice_counters where organization_id = ${sql(world.orgId)}`)).toBe("2");
+    expect(testRow(`select next_number from invoice_counters where organization_id = ${sql(world.orgId)}`)).toBe("1002");
   });
 
   test("Sales stays blocked after issue: reopen and cancel are refused for good", async ({ page, context }) => {
@@ -336,7 +336,7 @@ test.describe("an issued invoice is a stored document", () => {
     await expect(page.getByTestId("line-fields")).toContainText("Remark");
     await expect(page.getByTestId("line-fields")).toContainText("Anna Andersson");
     for (const live of ["Renamed", "Elsewhere", "CHANGED", "Relabelled", "changed text"]) await expect(page.getByTestId("invoice-document")).not.toContainText(live);
-    await expect(page.getByTestId("record-name")).toHaveText("Invoice 1 · Umeå HK"); // the page heading is the invoice's too
+    await expect(page.getByTestId("record-name")).toHaveText("Invoice 1001 · Umeå HK"); // the page heading is the invoice's too
     await page.goto(list(world));
     await expect(page.getByTestId("invoice-customer")).toHaveText("Umeå HK"); // the list too, from the snapshot
     expect(await getInvoiceApi(context, world.orgId, issued.id)).toEqual(issued);

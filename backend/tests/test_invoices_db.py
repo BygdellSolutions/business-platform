@@ -184,7 +184,7 @@ def test_numbers_may_repeat_across_organizations(client, db_session):
     two = Two(db_session)
     a = issue(client, two.a, draft_invoice(client, two.a, two.a_tx))
     b = issue(client, two.b, draft_invoice(client, two.b, two.b_tx))
-    assert a["number"] == b["number"] == 1 and a["number_text"] == b["number_text"]
+    assert a["number"] == b["number"] == 1001 and a["number_text"] == b["number_text"]
 
 
 @pytest.mark.parametrize(

@@ -450,7 +450,7 @@ def test_invoice_state_by_transaction_is_derived_from_invoicing_records_only(cli
     assert [(r["transaction_id"], r["state"], r["invoice_id"], r["number_text"]) for r in rows] == [
         (str(free.id), "none", None, None),
         (str(drafted.id), "draft", draft["id"], None),
-        (str(issued.id), "invoiced", done["id"], "1"),
+        (str(issued.id), "invoiced", done["id"], "1001"),
         (str(unknown), "none", None, None),
     ]
     # Sales' own responses carry no invoicing state at all.

@@ -134,7 +134,7 @@ def test_an_invoice_records_its_creation_and_issuance(client: TestClient, db_ses
     events = _history(client, t.h, "invoice", invoice["id"])["events"]
     assert [e["action"] for e in events] == ["issued", "created"]
     assert events[0]["changes"]["status"] == {"from": "draft", "to": "issued"}
-    assert events[0]["changes"]["number_text"] == {"from": None, "to": "1"}
+    assert events[0]["changes"]["number_text"] == {"from": None, "to": "1001"}
     assert "customer_snapshot" not in events[1]["changes"]  # the frozen documents are not history
     read = client.get(f"/api/invoices/{invoice['id']}", headers=t.h).json()
     assert read["created_by"] == read["issued_by"] == str(t.owner.id)

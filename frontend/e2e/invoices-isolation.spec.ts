@@ -37,10 +37,10 @@ async function build(context: Parameters<typeof signIn>[0]) {
 
 test("identical invoice numbers exist independently in both organizations", async ({ page, context }) => {
   const m = await build(context);
-  expect(m.a.issued.number_text).toBe("1");
-  expect(m.b.issued.number_text).toBe("1");
+  expect(m.a.issued.number_text).toBe("1001");
+  expect(m.b.issued.number_text).toBe("1001");
   expect(m.a.issued.id).not.toBe(m.b.issued.id);
-  expect(testRow(`select string_agg(organization_id::text || ':' || next_number, ',' order by organization_id) from invoice_counters where organization_id in (${sql(a.orgId)}, ${sql(b.orgId)})`).split(",").map((part) => part.split(":")[1])).toEqual(["2", "2"]);
+  expect(testRow(`select string_agg(organization_id::text || ':' || next_number, ',' order by organization_id) from invoice_counters where organization_id in (${sql(a.orgId)}, ${sql(b.orgId)})`).split(",").map((part) => part.split(":")[1])).toEqual(["1002", "1002"]);
 
   await page.goto(`/o/${a.orgId}/invoices`);
   const rows = page.getByTestId("invoice-row");
@@ -149,7 +149,7 @@ test("a request for one organization's invoice through the other organization's 
   const viaB = await context.request.get(bffUrl(b.orgId, `/invoices/${m.b.issued.id}`));
   expect(viaA.status()).toBe(404);
   expect(viaB.status()).toBe(200);
-  expect(((await viaB.json()) as InvoiceJson).number_text).toBe("1");
+  expect(((await viaB.json()) as InvoiceJson).number_text).toBe("1001");
 });
 
 test("a request that is still running when the user switches organization cannot touch the other organization's screen", async ({ page, context }) => {
