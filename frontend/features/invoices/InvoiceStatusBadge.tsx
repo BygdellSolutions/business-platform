@@ -1,5 +1,8 @@
 import type { Invoice, InvoiceStatus } from "@/lib/api/types";
 
+/** An open return case: one look wherever it is shown (the invoice's badges, the invoice list's Return column). */
+export const RETURN_OPEN_CLASS = "rounded bg-orange-100 px-2 py-0.5 text-sm font-medium text-orange-900 dark:bg-orange-950 dark:text-orange-200";
+
 const DRAFT = { label: "Draft", className: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200" };
 const ISSUED = { label: "Issued", className: "bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200" };
 const PAYMENT: Record<NonNullable<Invoice["payment_status"]>, { label: string; className: string }> = {
@@ -45,7 +48,7 @@ export function InvoiceStatusBadge({
         </span>
       )}
       {status === "issued" && openReturns > 0 && (
-        <span data-testid="return-open" className="rounded bg-orange-100 px-2 py-0.5 text-sm font-medium text-orange-900 dark:bg-orange-950 dark:text-orange-200">
+        <span data-testid="return-open" className={RETURN_OPEN_CLASS}>
           Return open
         </span>
       )}

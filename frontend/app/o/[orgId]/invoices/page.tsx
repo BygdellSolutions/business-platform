@@ -6,7 +6,7 @@ import { Notice } from "@/components/ui/Notice";
 import { Pagination } from "@/components/ui/Pagination";
 import { SortHeader } from "@/components/ui/SortHeader";
 import { CustomerFilter } from "@/features/customers/CustomerFilter";
-import { InvoiceStatusBadge } from "@/features/invoices/InvoiceStatusBadge";
+import { InvoiceStatusBadge, RETURN_OPEN_CLASS } from "@/features/invoices/InvoiceStatusBadge";
 import type { Customer, InvoiceSummary } from "@/lib/api/types";
 import { requireCredential } from "@/lib/auth/credential";
 import { formatShortDate } from "@/lib/dates";
@@ -183,7 +183,10 @@ export default async function InvoicesPage({
                         Follow-up due{invoice.return_follow_up_on ? ` ${formatShortDate(invoice.return_follow_up_on)}` : ""}
                       </span>
                     ) : (
-                      <span>Open{invoice.return_follow_up_on ? ` · follow up ${formatShortDate(invoice.return_follow_up_on)}` : ""}</span>
+                      <span>
+                        <span className={RETURN_OPEN_CLASS}>Open</span>
+                        {invoice.return_follow_up_on ? ` · follow up ${formatShortDate(invoice.return_follow_up_on)}` : ""}
+                      </span>
                     )}
                   </td>
                   <td className="py-1 pr-4" data-testid="invoice-currency">
