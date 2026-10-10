@@ -42,6 +42,8 @@ Found while testing staging (2026-10-08). Small reviewed slices, each validated 
 - [x] Catalog type "Charge" for travel, mileage and fees (owner chose it 2026-10-10)
 - [x] Record numbers: orders from 1001; customers, suppliers, horses and catalog items from 1 (owner, 2026-10-10)
 - [x] Sort every table by a column (server-side for paged lists, in place for the rest) — 2026-10-10
+- [x] Counter sales: "Paid now" (Swish/card/cash, receipt) or "Invoice" (onto the customer's open draft) from a draft order; walk-in customer; dashboard — 2026-10-10
+- [ ] Counter sales later: returns and refunds of a paid-now sale; a stored (frozen) receipt PDF; a receipt printer; check the Kassaregister requirement with Skatteverket before relying on it for cash/card sales
 - [ ] Suppliers later: purchase orders, a supplier's article numbers and prices per item; an explicit order date if deliveries are often recorded after ordering; cost history per item (average, last paid) and margin
 - [ ] Payments later: bank file import and automatic matching (bankgiro/OCR), Swish integration, reminders
 - [ ] Later (email, paused): email infrastructure, **self-service password recovery** (the first email to build: today a locked-out user depends on an operator), invitation email, invoice email with delivery state and resend

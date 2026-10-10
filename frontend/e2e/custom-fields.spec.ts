@@ -111,7 +111,7 @@ test.describe("the real workflow", () => {
 
       // 5. Completion is attempted with the required fields empty: the BACKEND blocks it, and each
       // problem is shown at the right line and the right field.
-      await page.getByTestId("complete").click();
+      await page.getByTestId("invoice-order").click();
       await expect(page.getByTestId("editor-notice")).toContainText("blocked");
       await expect(page.getByTestId("tx-status")).toHaveText("Draft");
       await expect(page.getByTestId("editor-problems")).toContainText("Line 1 · Owner: Owner is required");
@@ -127,7 +127,7 @@ test.describe("the real workflow", () => {
       const fromHere = requests.length; // everything the page asks from now on belongs to the custom fields form
       await expect(horseBox(page)).toBeDisabled();
       await expect(page.getByText("Choose Owner first.")).toBeVisible();
-      await expect(page.getByTestId("complete")).toBeDisabled(); // an open editor
+      await expect(page.getByTestId("invoice-order")).toBeDisabled(); // an open editor
 
       // Select Anna.
       await pick(page, "owner", "Anna Andersson");
@@ -157,7 +157,7 @@ test.describe("the real workflow", () => {
       expect((await getTransaction(context, ORG_A.id, txId)).version).toBe(versionBefore); // custom fields do not touch Sales versions
 
       // 9. Complete.
-      await page.getByTestId("complete").click();
+      await page.getByTestId("invoice-order").click();
       await expect(page.getByTestId("tx-status")).toHaveText("Completed");
       await expect(page.getByTestId("editor-notice")).toHaveCount(0);
 
@@ -363,7 +363,7 @@ test.describe("the six value types", () => {
       await page.goto(url);
       await expect(txPanel(page).getByTestId(`cf-${key}`).locator("dt")).toHaveAttribute("data-required", "true");
 
-      await page.getByTestId("complete").click();
+      await page.getByTestId("invoice-order").click();
       await expect(txPanel(page).getByTestId(`cf-${key}`).getByTestId(`error-${key}`)).toHaveText("Project T is required");
       await expect(page.getByTestId("editor-problems")).toContainText("Order · Project T: Project T is required");
       await expect(page.getByTestId("editor-problems").getByRole("link").first()).toHaveAttribute("href", "#transaction-fields");
@@ -373,7 +373,7 @@ test.describe("the six value types", () => {
       await txPanel(page).getByTestId("save-fields").click();
       await expect(txPanel(page).getByTestId(`error-${key}`)).toHaveCount(0);
 
-      await page.getByTestId("complete").click();
+      await page.getByTestId("invoice-order").click();
       await expect(page.getByTestId("tx-status")).toHaveText("Completed");
       await expect(txPanel(page).getByTestId(`cf-${key}`)).toContainText("Supplied");
       await expect(page.getByTestId("edit-fields")).toHaveCount(0);
@@ -507,7 +507,7 @@ test.describe("completing and writing at the same time", () => {
           await pick(writer, "owner", owner.name);
           await pick(writer, "horse", horse.name);
 
-          await Promise.all([writer.getByTestId("save-fields").click(), completer.getByTestId("complete").click()]);
+          await Promise.all([writer.getByTestId("save-fields").click(), completer.getByTestId("invoice-order").click()]);
 
           // Whichever came first, the end state is consistent: the write always lands (a blocked completion does
           // not lock the record), and a completion only ever succeeded with both required values already there.

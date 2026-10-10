@@ -46,7 +46,9 @@ from app.modules.invoicing.pdf.labels import decimal_separator, labels
 #    section. An invoice prints as in 6.
 # 8: the source orders' numbers ("Order no." / "Ordernr" in the header, "Order 1001 of {date}"); invoices from
 #    before order numbers print as in 7.
-TEMPLATE_VERSION = 8
+# 9: receipts ("Kvitto" / "Receipt") of orders paid at the counter: receipt number and date, "Amount paid", how it was
+#    paid, no due date and no payment section. Invoices and credit notes print as in 8.
+TEMPLATE_VERSION = 9
 ACCENT = colors.HexColor("#1f4e5f")
 ACCENT_LIGHT = colors.HexColor("#e8f0f2")
 # Room for the footer columns (up to five lines each) above the page number.
@@ -190,7 +192,8 @@ def _build(document: PdfDocument, fonts: font_layer.Registered) -> bytes:
     words = labels(document.language)
     sep = decimal_separator(document.language)
     credit = document.credit
-    title = words["credit_note"] if credit else words["invoice"]
+    receipt = document.receipt
+    title = words["receipt"] if receipt else words["credit_note"] if credit else words["invoice"]
 
     def footer(page: canvas.Canvas, number: int, total: int) -> None:
         # A standard invoice footer: the seller's details in columns under a rule, then the page number.
@@ -210,7 +213,7 @@ def _build(document: PdfDocument, fonts: font_layer.Registered) -> bytes:
             )
             _, height = table.wrap(width, FOOTER_HEIGHT)
             table.drawOn(page, margin, 13 * mm)
-        text = printer.p(words["credit_page" if credit else "page"].format(number=document.number_text, page=number, total=total), "foot")
+        text = printer.p(words["receipt_page" if receipt else "credit_page" if credit else "page"].format(number=document.number_text, page=number, total=total), "foot")
         text.wrap(width, 10 * mm)
         text.drawOn(page, margin, 7 * mm)
 
@@ -232,7 +235,9 @@ def _build(document: PdfDocument, fonts: font_layer.Registered) -> bytes:
     story: list = []
 
     # Header: the issuer on the left, the invoice title and details on the right.
-    if credit:
+    if receipt:
+        details = [(words["receipt_no"], document.number_text), (words["receipt_date"], receipt.paid_on)]
+    elif credit:
         details = [
             (words["credit_note_no"], document.number_text),
             (words["credit_date"], document.invoice_date),
@@ -265,15 +270,18 @@ def _build(document: PdfDocument, fonts: font_layer.Registered) -> bytes:
     story += [header, Spacer(1, 7 * mm)]
 
     # The customer, and beside it what is to be paid and by when (always: the stored total and due date).
-    due = [printer.p(words["amount_credited" if credit else "amount_due"], "due_label"), printer.p(f"{money(document.gross, sep)} {document.currency}", "due_value")]
+    due_label = "amount_paid" if receipt else "amount_credited" if credit else "amount_due"
+    due = [printer.p(words[due_label], "due_label"), printer.p(f"{money(document.gross, sep)} {document.currency}", "due_value")]
     if document.due_date is not None:
         due.append(printer.p(f"{words['due_date']} {document.due_date}", "due_note"))
-    if credit:
+    if receipt:
+        due.append(printer.p(words["paid_by"].format(method=receipt.method, date=receipt.paid_on), "due_note"))
+    elif credit:
         due.append(printer.p(f"{words['credits_invoice']} {credit.invoice_number}", "due_note"))
     else:
         due.append(printer.p(f"{words['reference']} {document.number_text}", "due_note"))
     parties = Table(
-        [[[printer.p(words["billed_to"], "box_label"), Spacer(1, 2), *_party_flowables(printer, document.customer, "bold")], due]],
+        [[[printer.p(words["customer" if receipt else "billed_to"], "box_label"), Spacer(1, 2), *_party_flowables(printer, document.customer, "bold")], due]],
         colWidths=[width * 0.58, width * 0.42],
     )
     parties.setStyle(
@@ -407,8 +415,8 @@ def _build(document: PdfDocument, fonts: font_layer.Registered) -> bytes:
 
     # How to pay, on every invoice: the reference (the invoice number) and due date always, then whatever the issuer
     # snapshot stores (bankgiro, plusgiro, IBAN, BIC, terms). Nothing that is not stored is printed.
-    if credit:
-        # A credit note asks for no payment: what is to be paid back is settled on the invoice.
+    if credit or receipt:
+        # A credit note asks for no payment (what is to be paid back is settled on the invoice); a receipt is paid.
         doc.build(story, canvasmaker=_numbered_canvas(footer))
         return _checked(buffer.getvalue())
     payment = document.payment

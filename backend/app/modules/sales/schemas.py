@@ -210,6 +210,18 @@ class TransactionSummary(BaseModel):
     # Who created it and who changed it last (null: not recorded, e.g. before authors were kept).
     created_by: uuid.UUID | None
     updated_by: uuid.UUID | None
+    # Paid at the counter (with a receipt) instead of invoiced; all null for every other order.
+    paid_at: datetime | None = None
+    payment_method: Literal["swish", "card", "cash"] | None = None
+    receipt_number_text: str | None = None
+
+
+class PayNow(BaseModel):
+    """Complete a draft and record that it was paid at the counter: how (the amount is the order's total)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    method: Literal["swish", "card", "cash"]
 
 
 class TransactionRead(TransactionSummary):

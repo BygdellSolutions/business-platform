@@ -40,6 +40,14 @@ class InvoiceCreate(BaseModel):
         return self
 
 
+class InvoiceForOrder(BaseModel):
+    """Invoice one completed order: onto the customer's open draft (same currency) or a new draft."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    transaction_id: uuid.UUID
+
+
 class InvoiceUpdate(BaseModel):
     """Draft header data only. Sources and amounts are never editable: delete the draft and
     create another one to choose different transactions."""
@@ -280,9 +288,12 @@ class InvoicingSummary(BaseModel):
     # The chosen month: issued invoices (gross) and payments dated in it (reversals subtracted).
     issued_this_month: CountAndAmounts
     paid_this_month: CountAndAmounts
+    # Orders paid at the counter in the month / year (also included in "paid").
+    counter_sales_this_month: CountAndAmounts
     # The same for the year of the month shown (to today for the current year).
     issued_this_year: CountAndAmounts
     paid_this_year: CountAndAmounts
+    counter_sales_this_year: CountAndAmounts
 
 
 # --- credit notes ----------------------------------------------------------------------------------------------------

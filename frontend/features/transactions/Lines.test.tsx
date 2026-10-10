@@ -102,7 +102,7 @@ describe("adding a line from the catalog", () => {
 
     await waitFor(() => expect(screen.getAllByTestId("line-row")).toHaveLength(3));
     expect(screen.queryByTestId("add-line-form")).toBeNull();
-    expect(screen.getByTestId("complete")).toBeEnabled();
+    expect(screen.getByTestId("invoice-order")).toBeEnabled();
   });
 
   it("without an item nothing is sent: 'Choose an item.' on the picker", async () => {

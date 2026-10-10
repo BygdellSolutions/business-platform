@@ -4,6 +4,14 @@ All notable changes to `business-platform` will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Counter sales: a draft order is either "Paid now" or "Invoice"** (decided 2026-10-10; there is no plain "Complete" on the order screen any more).
+  - **Paid now** (Swish, card or cash): completes the order and records the payment in one step (`POST /api/transactions/{id}/pay-now`), with a receipt number from its own series (`record_counters` "receipts", from 1001) and a receipt PDF (`GET /api/invoices/receipts/{id}/pdf`, "Kvitto" / "Receipt", invoice template 9). A paid order is never invoiced and can never be reopened or cancelled (also a database CHECK); the order list shows it as "Paid".
+  - **Invoice**: completes the order and puts it on the customer's open draft invoice in the same currency (rebuilt with it, keeping its dates and description), or on a new draft (`POST /api/invoices/for-order`); the page links to that draft. A role that may not make invoices completes the order for an owner, admin or accountant to invoice.
+  - **Walk-in customer**: one per organization (`POST /api/customers/walk-in`, `customers.walk_in`), chosen in one click on the new-order form; it can only pay now, never be invoiced.
+  - **Dashboard**: Paid includes counter sales, and a "Counter sales" card per month and year. "Ready to invoice" never counts paid or walk-in orders.
+  - Migration `a7c9e1f3b457`. Receipts are rendered on demand from the (final) order with the organization's current details; returns and refunds of counter sales are not built yet.
+
 ### Changed
 - The invoice list has a **Return** column after Status: "—", "Open · follow up 17 Oct", or "Follow-up due" (warning colour) when the earliest open return's follow-up date has come; sortable by that date. "Return open" left the Status column. Invoices carry `return_follow_up_on` and `return_follow_up_due`.
 - The order list opens an order from its **Order no.** (the date is plain text now).

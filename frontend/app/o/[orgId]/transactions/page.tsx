@@ -120,7 +120,7 @@ export default async function TransactionsPage({
                     {!transaction.billing_customer.active && <span className="ml-1 text-xs text-zinc-500">(inactive)</span>}
                   </td>
                   <td className="py-1 pr-4">
-                    <TransactionStatusBadge status={transaction.status} />
+                    <TransactionStatusBadge status={transaction.status} paid={transaction.paid_at !== null} />
                   </td>
                   <td className="py-1 pr-4" data-testid="transaction-currency">
                     {transaction.currency ?? <span className="text-zinc-500">none</span>}

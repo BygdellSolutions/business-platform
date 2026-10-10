@@ -106,6 +106,13 @@ class PdfCredit(Frozen):
     reason: str
 
 
+class PdfReceipt(Frozen):
+    """An order paid at the counter (template 9): when and how it was paid. No payment is asked for."""
+
+    paid_on: str
+    method: str  # already in the document's language ("Swish", "kort", ...)
+
+
 class PdfDocument(Frozen):
     number_text: str
     invoice_date: str
@@ -133,6 +140,8 @@ class PdfDocument(Frozen):
     # Template 7: a credit note prints as "Kreditfaktura" / "Credit note", refers to the invoice it credits and has
     # no payment section. Its figures arrive already signed (negative) from the build step.
     credit: PdfCredit | None = None
+    # Template 9: a receipt ("Kvitto" / "Receipt") of an order paid at the counter.
+    receipt: PdfReceipt | None = None
 
 
 # --- text -------------------------------------------------------------------------------------------------------------------
@@ -187,6 +196,8 @@ def iter_strings(document: PdfDocument):
     yield from document.order_numbers
     if document.credit is not None:
         yield from (document.credit.invoice_number, document.credit.invoice_date, document.credit.reason)
+    if document.receipt is not None:
+        yield from (document.receipt.paid_on, document.receipt.method)
     for column in document.issuer_footer:
         yield from column
     if document.payment is not None:

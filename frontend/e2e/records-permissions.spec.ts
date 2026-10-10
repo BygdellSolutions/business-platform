@@ -96,7 +96,7 @@ test("employee: is offered the controls and its writes go through (control for t
   await page.goto(`/o/${world.orgId}/customers/${s.customer.id}`);
   await expect(page.getByTestId("submit")).toBeVisible();
   await page.goto(`/o/${world.orgId}/transactions/${s.draft.id}`);
-  await expect(page.getByTestId("complete")).toBeVisible();
+  await expect(page.getByTestId("invoice-order")).toBeVisible();
   await expect(page.getByTestId("role-note")).toHaveCount(0);
 
   const renamed = await context.request.patch(bffUrl(world.orgId, `/customers/${s.customer.id}`), { data: { name: "Anna A." } });

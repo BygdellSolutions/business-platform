@@ -44,6 +44,7 @@ from app.modules.invoicing.models import (
     InvoiceVatRow,
 )
 from app.modules.invoicing.schemas import (
+    MAX_TRANSACTIONS_PER_INVOICE,
     InvoiceCreate,
     InvoiceLineRead,
     InvoiceRead,
@@ -140,8 +141,16 @@ def _check_invoiceable(db: Session, ctx: TenantContext, sources: Sequence[Transa
     not_completed = [t.id for t in sources if t.status != TransactionStatus.COMPLETED]
     if not_completed:
         raise conflict("transactions_not_completed", "Only completed orders can be invoiced", not_completed)
+    paid = [t.id for t in sources if t.paid_at is not None]
+    if paid:
+        raise conflict("paid_at_counter", "An order paid at the counter has a receipt and is never invoiced", paid)
     if len({t.billing_customer_id for t in sources}) > 1:
         raise conflict("mixed_customers", "All orders on an invoice must have the same billing customer", ids)
+    walk_in = db.scalar(
+        select(Customer.id).where(Customer.organization_id == ctx.organization_id, Customer.id == sources[0].billing_customer_id, Customer.walk_in.is_(True))
+    )
+    if walk_in is not None:
+        raise conflict("walk_in_customer", "An invoice needs a named customer; the walk-in customer pays at the counter", ids)
     without_currency = [t.id for t in sources if t.currency is None]
     if without_currency:
         raise conflict(
@@ -244,6 +253,44 @@ def create_draft(db: Session, ctx: TenantContext, payload: InvoiceCreate) -> uui
     invoice_id = invoice.id
     db.commit()  # 14
     return invoice_id
+
+
+def invoice_order(db: Session, ctx: TenantContext, transaction_id: uuid.UUID) -> uuid.UUID:
+    """Put a completed order on an invoice ("Invoice" on the order, 2026-10-10): onto the customer's open draft in the
+    same currency, so a customer's orders can be collected and issued together, or onto a new draft. Commits.
+
+    A draft's sources never change in place (its lines, totals and VAT rows are built from them once), so the open
+    draft is rebuilt: deleted and created again with its orders plus this one, keeping its dates and description, in
+    this one database transaction. If anything is refused, the old draft stays as it was.
+    """
+    order = get_scoped(db, ctx, Transaction, transaction_id)
+    if order is None:
+        reference_error("transaction_id", "Order not found", "reference.not_found")
+    draft = db.scalar(
+        scoped_select(Invoice, ctx)
+        .where(Invoice.status == InvoiceStatus.DRAFT, Invoice.customer_id == order.billing_customer_id, Invoice.currency == order.currency)
+        .order_by(Invoice.created_at.desc(), Invoice.id)
+        .limit(1)
+        .with_for_update()
+    )
+    sources = (
+        list(
+            db.scalars(
+                select(InvoiceTransaction.transaction_id).where(
+                    InvoiceTransaction.organization_id == ctx.organization_id, InvoiceTransaction.invoice_id == draft.id
+                )
+            )
+        )
+        if draft is not None
+        else []
+    )
+    if draft is None or len(sources) >= MAX_TRANSACTIONS_PER_INVOICE or transaction_id in sources:
+        return create_draft(db, ctx, InvoiceCreate(transaction_ids=[transaction_id]))
+    header = InvoiceCreate(transaction_ids=[*sources, transaction_id], invoice_date=draft.invoice_date, due_date=draft.due_date, description=draft.description)
+    audit.deleted(db, ctx, draft, "invoice", fields=AUDITED_FIELDS)
+    db.delete(draft)
+    db.flush()
+    return create_draft(db, ctx, header)
 
 
 def _violated(error: IntegrityError) -> str | None:

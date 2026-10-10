@@ -2,6 +2,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy import func, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import Pagination, Sorting, pagination, sorted_by, sorting
@@ -40,6 +41,27 @@ def create_customer(
     _require_discount_authority(ctx, payload.model_dump(exclude_unset=True))
     customer = create_scoped(db, ctx, Customer, **payload.model_dump())
     audit.created(db, ctx, customer, "customer")
+    commit_and_refresh(db, customer)
+    return customer
+
+
+@router.post("/walk-in", response_model=CustomerRead)
+def walk_in_customer(ctx: TenantContext = Depends(record_writer), db: Session = Depends(get_db)) -> Customer:
+    """The organization's "Walk-in customer" (created the first time it is asked for): the customer of a counter sale
+    to someone who is not registered. At most one per organization (a partial unique index backs a concurrent first
+    request); it can never be invoiced."""
+    found = db.scalar(scoped_select(Customer, ctx).where(Customer.walk_in.is_(True)))
+    if found is not None:
+        return found
+    try:
+        with db.begin_nested():
+            customer = create_scoped(db, ctx, Customer, customer_type="person", name="Walk-in customer", walk_in=True)
+            audit.created(db, ctx, customer, "customer")
+    except IntegrityError:
+        found = db.scalar(scoped_select(Customer, ctx).where(Customer.walk_in.is_(True)))
+        if found is None:
+            raise
+        return found
     commit_and_refresh(db, customer)
     return customer
 

@@ -538,7 +538,7 @@ test.describe("lifecycle", () => {
     const { transaction, url } = await newDraft(context);
     await page.goto(url);
 
-    await page.getByTestId("complete").click();
+    await page.getByTestId("invoice-order").click();
 
     await expect(page.getByTestId("editor-notice")).toContainText("at least one line");
     await expect(page.getByTestId("tx-status")).toHaveText("Draft");
@@ -548,12 +548,13 @@ test.describe("lifecycle", () => {
   test("complete → read-only → reopen → editable → cancel (after confirming) → final", async ({ page, context }) => {
     const { transaction, url } = await newDraft(context);
     await addLine(context, ORG_A.id, transaction.id, { description: "Billable", unit: "u", quantity: "1", unit_price_ex_vat: "10.00", vat_rate: "25" });
+    // Completed without an invoice (the API's own step): "Invoice" would put it on a draft invoice, which reserves it
+    // and so rightly refuses the reopen below.
+    await lifecycle(context, ORG_A.id, transaction.id, "complete");
     await page.goto(url);
-
-    await page.getByTestId("complete").click();
     await expect(page.getByTestId("tx-status")).toHaveText("Completed");
     expect(testRow(`select status from transactions where id = ${sql(transaction.id)}`)).toBe("completed");
-    for (const id of ["edit-header", "add-line", "edit-line", "delete-line", "complete"]) await expect(page.getByTestId(id)).toHaveCount(0);
+    for (const id of ["edit-header", "add-line", "edit-line", "delete-line", "invoice-order", "pay-now"]) await expect(page.getByTestId(id)).toHaveCount(0);
     await expect(page.getByRole("textbox")).toHaveCount(0);
     await expect(rows(page)).toHaveCount(1); // still shown in full, read-only
     await page.reload();
@@ -597,7 +598,7 @@ test.describe("lifecycle", () => {
 
     await withRequiredTransactionField(context, ORG_A.id, async (label) => {
       await page.goto(url);
-      await page.getByTestId("complete").click();
+      await page.getByTestId("invoice-order").click();
 
       await expect(page.getByTestId("editor-notice")).toContainText("blocked");
       await expect(page.getByTestId("editor-problems")).toContainText(`Order · ${label}`);
@@ -607,7 +608,7 @@ test.describe("lifecycle", () => {
 
     // With the field switched off again the same transaction completes.
     await page.reload();
-    await page.getByTestId("complete").click();
+    await page.getByTestId("invoice-order").click();
     await expect(page.getByTestId("tx-status")).toHaveText("Completed");
   });
 

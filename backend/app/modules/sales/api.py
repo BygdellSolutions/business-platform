@@ -21,6 +21,7 @@ from app.core.lifecycle import (
 )
 from app.core.org_time import MONTH_PATTERN, as_instant, month_range, organization_today, year_range
 from app.core.query import commit_and_refresh
+from app.core.record_numbers import next_number
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import (
     create_scoped,
@@ -40,6 +41,7 @@ from app.modules.sales.pricing import (
     discounted_unit_price,
 )
 from app.modules.sales.schemas import (
+    PayNow,
     BoughtLine,
     SalesSummary,
     ServiceRecord,
@@ -61,6 +63,10 @@ from app.schemas.customer import CustomerRef
 from app.schemas.money import CountAndAmounts, CurrencyAmount
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
+
+# Receipts of orders paid at the counter: their own number series per organization, from 1001 like orders.
+RECEIPT_SERIES = "receipts"
+FIRST_RECEIPT_NUMBER = 1001
 
 DRAFT = TransactionStatus.DRAFT
 COMPLETED = TransactionStatus.COMPLETED
@@ -135,6 +141,9 @@ def _summary_fields(tx: Transaction, customer: Customer, lines: Sequence[Transac
         updated_at=tx.updated_at,
         created_by=tx.created_by,
         updated_by=tx.updated_by,
+        paid_at=tx.paid_at,
+        payment_method=tx.payment_method,
+        receipt_number_text=tx.receipt_number_text,
     )
 
 
@@ -704,11 +713,19 @@ def _transition(
     allowed_from: tuple[TransactionStatus, ...],
     to: TransactionStatus,
     if_match: str | None,
+    payment: PayNow | None = None,
 ) -> TransactionRead:
     tx = _lock(db, ctx, transaction_id)
     if tx.status not in allowed_from:
         raise HTTPException(
             status.HTTP_409_CONFLICT, detail=f"A {tx.status} order cannot be {verb}"
+        )
+    if tx.paid_at is not None:
+        # Paid at the counter: the customer has the receipt. The way back is a refund, never a status change
+        # (the database refuses it too: ck_transactions_paid_is_completed).
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={"code": "paid_at_counter", "message": "This order was paid at the counter and cannot be reopened or cancelled."},
         )
     # A lifecycle step is a decision about everything the caller was looking at: the header,
     # the lines and the totals. It is refused if any of that changed since.
@@ -732,8 +749,16 @@ def _transition(
     # cancel. The row is locked, so what the validators see cannot change underneath us before
     # the status is written.
     ensure_valid(db, ctx, event, "transaction", tx.id)
+    if payment is not None and tx.currency is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="An order without a currency cannot be paid; assign its currency first")
     before = audit.snapshot(tx)
     tx.status = to
+    if payment is not None:
+        number = next_number(db, ctx.organization_id, RECEIPT_SERIES, FIRST_RECEIPT_NUMBER)
+        tx.paid_at = clock.utcnow()
+        tx.payment_method = payment.method
+        tx.receipt_number = number
+        tx.receipt_number_text = str(number)
     tx.version += 1
     audit.updated(db, ctx, tx, "transaction", before, action=verb)
     db.flush()
@@ -753,6 +778,22 @@ def complete_transaction(
 ) -> TransactionRead:
     return _transition(
         db, ctx, transaction_id, verb="completed", event=EVENT_COMPLETE, allowed_from=(DRAFT,), to=COMPLETED, if_match=if_match
+    )
+
+
+@router.post("/{transaction_id}/pay-now", response_model=TransactionRead)
+def pay_now(
+    transaction_id: uuid.UUID,
+    payload: PayNow,
+    if_match: str | None = Header(default=None),
+    ctx: TenantContext = Depends(record_writer),
+    db: Session = Depends(get_db),
+) -> TransactionRead:
+    """Complete a draft and record that it was paid at the counter, in one step: everything completion does (stock
+    is delivered, required fields are checked), plus the payment method and a receipt number. Never invoiced."""
+    return _transition(
+        db, ctx, transaction_id, verb="completed", event=EVENT_COMPLETE, allowed_from=(DRAFT,), to=COMPLETED, if_match=if_match,
+        payment=payload,
     )
 
 

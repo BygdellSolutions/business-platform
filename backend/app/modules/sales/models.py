@@ -4,6 +4,7 @@ from decimal import Decimal
 from enum import StrEnum
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     Date,
@@ -89,6 +90,16 @@ class Transaction(TenantOwned, Numbered, Authored, Base):
         CheckConstraint("version >= 1 AND header_version >= 1", name="ck_transactions_versions_positive"),
         CheckConstraint("currency IS NULL OR currency ~ '^[A-Z]{3}$'", name="ck_transactions_currency_shape"),
         Index("ix_transactions_organization_status_date", "organization_id", "status", "transaction_date"),
+        # Paid at the counter (2026-10-10): payment and receipt come together, only on a completed order, and a paid
+        # order can therefore never be reopened or cancelled (a refund is the way back, not a status change).
+        CheckConstraint(
+            "(paid_at IS NULL) = (payment_method IS NULL) AND (paid_at IS NULL) = (receipt_number IS NULL)"
+            " AND (receipt_number IS NULL) = (receipt_number_text IS NULL)",
+            name="ck_transactions_paid_fields_together",
+        ),
+        CheckConstraint("paid_at IS NULL OR status = 'completed'", name="ck_transactions_paid_is_completed"),
+        CheckConstraint("payment_method IS NULL OR payment_method IN ('swish', 'card', 'cash')", name="ck_transactions_payment_method"),
+        UniqueConstraint("organization_id", "receipt_number", name="uq_transactions_organization_receipt_number"),
         Index("ix_transactions_organization_billing_customer", "organization_id", "billing_customer_id"),
     )
 
@@ -110,6 +121,11 @@ class Transaction(TenantOwned, Numbered, Authored, Base):
     # explicit action, never automatically). Once set it never changes (a database trigger enforces
     # it), whatever happens to the organization's setting.
     currency: Mapped[str | None] = mapped_column(String(3))
+    # Paid at the counter instead of invoiced: when, how, and the receipt's number (its own series, from 1001).
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    payment_method: Mapped[str | None] = mapped_column(String(16))
+    receipt_number: Mapped[int | None] = mapped_column(BigInteger)
+    receipt_number_text: Mapped[str | None] = mapped_column(String(32))
 
 
 class TransactionLine(TenantOwned, Authored, Base):

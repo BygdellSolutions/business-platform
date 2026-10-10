@@ -68,6 +68,8 @@ export type ProfileField = keyof Profile;
 
 export interface Customer extends Profile {
   id: string;
+  /** The organization's Walk-in customer (one per organization; never invoiced). */
+  walk_in?: boolean;
   /** Per organization, handed out by the database (orders from 1001, the rest from 1); never changes. */
   number: number;
   customer_type: CustomerType;
@@ -381,7 +383,12 @@ export interface CustomerRef {
   name: string;
   /** False when the customer was deactivated after the reference was made. */
   active: boolean;
+  /** The organization's Walk-in customer: its orders are paid at the counter, never invoiced. */
+  walk_in?: boolean;
 }
+
+/** How an order paid at the counter was paid. */
+export type PaymentMethod = "swish" | "card" | "cash";
 
 export type HorseSex = "mare" | "stallion" | "gelding";
 
@@ -509,6 +516,10 @@ export interface TransactionSummary {
   /** Who created it and who changed it last (user ids); null = not recorded (before authors were kept). */
   created_by: string | null;
   updated_by: string | null;
+  /** Paid at the counter (with a receipt) instead of invoiced; all null for every other order. */
+  paid_at: string | null;
+  payment_method: PaymentMethod | null;
+  receipt_number_text: string | null;
 }
 
 export interface Transaction extends TransactionSummary {
@@ -915,8 +926,11 @@ export interface InvoicingSummary {
   past_due: CountAndAmounts;
   /** Payments dated this month (reversals subtracted). */
   paid_this_month: CountAndAmounts;
+  /** Orders paid at the counter (also included in paid). */
+  counter_sales_this_month: CountAndAmounts;
   issued_this_year: CountAndAmounts;
   paid_this_year: CountAndAmounts;
+  counter_sales_this_year: CountAndAmounts;
 }
 
 /** GET /api/inventory/summary: active products that track stock. */

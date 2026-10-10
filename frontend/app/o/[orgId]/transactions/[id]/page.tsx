@@ -8,7 +8,7 @@ import { readActiveRole } from "@/lib/active-role";
 import { readEntityFields } from "@/lib/custom-fields/server";
 import type { LineFulfillment, Organization, StockDemand, Transaction } from "@/lib/api/types";
 import { readRecordHistory } from "@/lib/history-server";
-import { canWriteRecords } from "@/lib/roles";
+import { canMutateInvoices, canWriteRecords } from "@/lib/roles";
 import { requireUuid, serverRead } from "@/lib/server-api";
 
 /**
@@ -62,6 +62,7 @@ export default async function TransactionPage({
         key={transaction.id}
         transaction={transaction}
         canEdit={canWriteRecords(role)}
+        canInvoice={canMutateInvoices(role)}
         timeZone={organization.timezone}
         stock={stock}
         fulfillment={fulfillment}

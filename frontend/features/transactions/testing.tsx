@@ -108,6 +108,9 @@ export function tx(overrides: Partial<Transaction> = {}): Transaction {
     updated_at: "2026-10-01T10:00:00Z",
     created_by: null,
     updated_by: null,
+    paid_at: null,
+    payment_method: null,
+    receipt_number_text: null,
     lines: [line(), second()],
     ...overrides,
   };
@@ -187,6 +190,9 @@ export function Harness({
   orgId = ORG_A,
   fields = NO_FIELDS,
   canEdit = true,
+  // Off by default: "Invoice" then only completes (one request), which is what the lifecycle tests check. The
+  // tests of the invoicing step turn it on.
+  canInvoice = false,
   timeZone = null,
   stock = [],
   fulfillment = [],
@@ -195,6 +201,7 @@ export function Harness({
   orgId?: string;
   fields?: TransactionFields;
   canEdit?: boolean;
+  canInvoice?: boolean;
   timeZone?: string | null;
   stock?: StockDemand[];
   fulfillment?: LineFulfillment[];
@@ -210,7 +217,7 @@ export function Harness({
     <>
       <Gate />
       <OrgScope orgId={orgId}>
-        <TransactionEditor transaction={current} fields={fields} canEdit={canEdit} timeZone={timeZone} stock={stock} fulfillment={fulfillment} />
+        <TransactionEditor transaction={current} fields={fields} canEdit={canEdit} canInvoice={canInvoice} timeZone={timeZone} stock={stock} fulfillment={fulfillment} />
       </OrgScope>
     </>
   );

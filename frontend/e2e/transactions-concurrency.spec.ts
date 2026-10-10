@@ -191,12 +191,12 @@ test.describe("stale lifecycle", () => {
     const { b, transaction } = await twoTabs(context);
     await addLine(context, ORG_A.id, transaction.id, { ...LINE, description: "Added elsewhere" });
 
-    await b.getByTestId("complete").click();
+    await b.getByTestId("invoice-order").click();
 
     await expect(b.getByTestId("editor-notice")).toContainText("changed elsewhere, so nothing was changed");
     expect(testRow(`select status from transactions where id = ${sql(transaction.id)}`)).toBe("draft");
     await expect(rows(b)).toHaveCount(3); // the screen now shows what FastAPI has
-    await b.getByTestId("complete").click();
+    await b.getByTestId("invoice-order").click();
     await expect(b.getByTestId("tx-status")).toHaveText("Completed");
   });
 
@@ -232,7 +232,7 @@ test.describe("stale lifecycle", () => {
     const { b, transaction } = await twoTabs(context);
     await lifecycle(context, ORG_A.id, transaction.id, "complete");
 
-    await b.getByTestId("complete").click();
+    await b.getByTestId("invoice-order").click();
 
     await expect(b.getByTestId("editor-notice")).toContainText("completed order cannot be completed");
     await expect(b.getByTestId("tx-status")).toHaveText("Completed");

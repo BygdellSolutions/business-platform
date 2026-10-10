@@ -143,8 +143,8 @@ export interface BackendRequest {
  * The ONE binary resource the BFF passes through: the frozen PDF of an invoice. Everything else it
  * relays is JSON text.
  */
-// An invoice's PDF, or a credit note's (served under the invoices area).
-const INVOICE_PDF_PATH = /^\/api\/invoices\/(?:credit-notes\/)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/pdf$/i;
+// An invoice's PDF, a credit note's, or a receipt's (all served under the invoices area).
+const INVOICE_PDF_PATH = /^\/api\/invoices\/(?:credit-notes\/|receipts\/)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/pdf$/i;
 
 export function isInvoicePdfPath(apiPath: string): boolean {
   return INVOICE_PDF_PATH.test(apiPath);

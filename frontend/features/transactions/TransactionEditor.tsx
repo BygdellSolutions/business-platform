@@ -43,6 +43,7 @@ export function TransactionEditor({
   transaction,
   fields,
   canEdit,
+  canInvoice = true,
   timeZone = null,
   stock = NO_STOCK,
   fulfillment = NO_FULFILLMENT,
@@ -50,6 +51,8 @@ export function TransactionEditor({
   transaction: Transaction;
   fields: Fields;
   canEdit: boolean;
+  /** The role may make invoices ("Invoice" also puts the order on a draft invoice); presentation only. */
+  canInvoice?: boolean;
   timeZone?: string | null;
   stock?: StockDemand[];
   fulfillment?: LineFulfillment[];
@@ -191,8 +194,14 @@ export function TransactionEditor({
     <EditorContext.Provider value={api}>
       <div data-testid="transaction-editor" data-status={transaction.status} data-busy={busy || undefined} className="flex flex-col gap-5">
         <div className="flex flex-wrap items-center gap-3">
-          <TransactionStatusBadge status={transaction.status} />
-          {transaction.status === "completed" && <span data-testid="status-note">Completed: finalized and read-only. Reopen it to make changes.</span>}
+          <TransactionStatusBadge status={transaction.status} paid={transaction.paid_at !== null} />
+          {transaction.status === "completed" && (
+            <span data-testid="status-note">
+              {transaction.paid_at !== null
+                ? "Paid at the counter: finalized. A paid order cannot be reopened."
+                : "Completed: finalized and read-only. Reopen it to make changes."}
+            </span>
+          )}
           {transaction.status === "cancelled" && <span data-testid="status-note">Cancelled: final, kept for the record. It cannot be changed.</span>}
           {!canEdit && <span data-testid="role-note">Your role in this organization can view orders but not change them.</span>}
         </div>
@@ -218,7 +227,7 @@ export function TransactionEditor({
           </Notice>
         )}
 
-        {canEdit && <LifecycleBar />}
+        {canEdit && <LifecycleBar canInvoice={canInvoice} />}
         <HeaderEditor />
         <TransactionFields />
         <LinesTable />

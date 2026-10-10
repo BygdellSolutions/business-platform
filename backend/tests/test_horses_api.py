@@ -49,8 +49,8 @@ def test_create_read_list_update_delete_roundtrip(client: TestClient, setup):
     assert horse["breed"] == "Swedish Warmblood"  # trimmed
     assert horse["active"] is True
     assert horse["owner_customer_id"] == str(owner.id)
-    assert horse["owner"] == {"id": str(owner.id), "name": "Anna Andersson", "active": True}
-    assert horse["stable"] == {"id": str(stable.id), "name": "Umeå HK", "active": True}
+    assert horse["owner"] == {"id": str(owner.id), "name": "Anna Andersson", "active": True, "walk_in": False}
+    assert horse["stable"] == {"id": str(stable.id), "name": "Umeå HK", "active": True, "walk_in": False}
     assert "organization_id" not in horse
 
     assert client.get(f"/api/horses/{horse['id']}", headers=headers).json() == horse

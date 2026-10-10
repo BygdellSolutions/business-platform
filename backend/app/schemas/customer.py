@@ -54,11 +54,14 @@ class CustomerRef(BaseModel):
     id: uuid.UUID
     name: str
     active: bool  # lets a UI flag a record whose customer was deactivated
+    walk_in: bool = False  # the organization's Walk-in customer (its orders are paid at the counter, never invoiced)
 
 
 class CustomerRead(ProfileRead):
     id: uuid.UUID
     number: int  # per organization, from the database (app.models.mixins.Numbered)
+    # The organization's "Walk-in customer" for counter sales without a named customer (never invoiced).
+    walk_in: bool = False
     customer_type: CustomerType
     name: str
     email: str | None

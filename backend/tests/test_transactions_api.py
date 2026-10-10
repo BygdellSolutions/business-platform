@@ -48,7 +48,7 @@ def test_milestone_example_billing_customer_item_quantity_price_vat(client: Test
     assert response.status_code == 201, response.text
     tx = response.json()
     assert tx["status"] == "draft"
-    assert tx["billing_customer"] == {"id": str(sales.billing.id), "name": "Umeå HK", "active": True}
+    assert tx["billing_customer"] == {"id": str(sales.billing.id), "name": "Umeå HK", "active": True, "walk_in": False}
     assert tx["line_count"] == 1
     [line] = tx["lines"]
     assert line["item_id"] == str(sales.item.id)

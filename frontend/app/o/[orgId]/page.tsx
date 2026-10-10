@@ -213,8 +213,15 @@ export default async function Dashboard({
             count={invoicing.paid_this_month.count}
             amounts={invoicing.paid_this_month.amounts}
             href={`${base}/invoices?paid_from=${sales.month_start}&paid_to=${sales.month_end}`}
-            note="Payments with a payment date in this month."
+            note="Invoice payments and counter sales in this month."
             testId="card-paid"
+          />
+          <SummaryCard
+            title="Counter sales"
+            count={invoicing.counter_sales_this_month.count}
+            amounts={invoicing.counter_sales_this_month.amounts}
+            note="Orders paid now (Swish, card, cash), including VAT."
+            testId="card-counter-sales"
           />
         </div>
       </section>
@@ -246,8 +253,15 @@ export default async function Dashboard({
             count={invoicing.paid_this_year.count}
             amounts={invoicing.paid_this_year.amounts}
             href={`${base}/invoices?paid_from=${sales.year_start}&paid_to=${sales.year_end}`}
-            note="Payments with a payment date in this year."
+            note="Invoice payments and counter sales in this year."
             testId="card-year-paid"
+          />
+          <SummaryCard
+            title="Counter sales"
+            count={invoicing.counter_sales_this_year.count}
+            amounts={invoicing.counter_sales_this_year.amounts}
+            note="Orders paid now (Swish, card, cash), including VAT."
+            testId="card-year-counter-sales"
           />
         </div>
       </section>

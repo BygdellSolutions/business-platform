@@ -1,6 +1,7 @@
+import hashlib
 import uuid
 from collections.abc import Sequence
-from datetime import date
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Literal
 
@@ -11,16 +12,20 @@ from sqlalchemy.orm import Session
 from app.api.deps import Pagination, Sorting, pagination, sorted_by, sorting
 from app.core.authz import roles_required
 from app.core.db import get_db
-from app.core.org_time import MONTH_PATTERN, month_range, organization_today, year_range
+from app.core.org_time import MONTH_PATTERN, month_range, organization_today, organization_zone, year_range
 from app.core.query import contains_pattern
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import scoped_select
 from app.models import Customer, Role
-from app.modules.invoicing import credits, payments, returns, service
+from app.modules.invoicing import credits, payments, receipts, returns, service
 from app.modules.invoicing.pdf import service as pdf_service
+from app.modules.invoicing.pdf.document import DocumentTooLarge
+from app.modules.invoicing.pdf.fonts import UnsupportedCharacters
+from app.modules.invoicing.pdf.service import StoredPdf
 from app.modules.invoicing.pdf.filename import content_disposition
 from app.modules.invoicing.models import OPEN_RETURN_STATES, Invoice, InvoicePayment, InvoiceReturn, InvoiceStatus, InvoiceTransaction
 from app.modules.invoicing.schemas import (
+    InvoiceForOrder,
     GoodsReceived,
     ReturnCreate,
     ReturnFollowUp,
@@ -101,7 +106,13 @@ def list_invoiceable_transactions(
             Customer,
             and_(Customer.organization_id == Transaction.organization_id, Customer.id == Transaction.billing_customer_id),
         )
-        .where(Transaction.status == TransactionStatus.COMPLETED, Transaction.currency.is_not(None), ~reserved)
+        .where(
+            Transaction.status == TransactionStatus.COMPLETED,
+            Transaction.currency.is_not(None),
+            ~reserved,
+            Transaction.paid_at.is_(None),  # paid at the counter: a receipt, never an invoice
+            Customer.walk_in.is_(False),
+        )
     )
     if customer_id is not None:
         query = query.where(Transaction.billing_customer_id == customer_id)
@@ -155,7 +166,15 @@ def invoicing_summary(
     month_start, month_end = month_range(month, today)
     year_start, year_end = year_range(month_start, today)
     reserved = exists().where(InvoiceTransaction.organization_id == Transaction.organization_id, InvoiceTransaction.transaction_id == Transaction.id)
-    ready = (Transaction.organization_id == ctx.organization_id, Transaction.status == TransactionStatus.COMPLETED, Transaction.currency.is_not(None), ~reserved)
+    walk_in = exists().where(Customer.organization_id == Transaction.organization_id, Customer.id == Transaction.billing_customer_id, Customer.walk_in.is_(True))
+    ready = (
+        Transaction.organization_id == ctx.organization_id,
+        Transaction.status == TransactionStatus.COMPLETED,
+        Transaction.currency.is_not(None),
+        ~reserved,
+        Transaction.paid_at.is_(None),  # paid at the counter: never invoiced
+        ~walk_in,
+    )
     ready_count = db.scalar(select(func.count()).select_from(Transaction).where(*ready))
     ready_amounts = db.execute(
         select(Transaction.currency, func.sum(TransactionLine.gross_amount))
@@ -194,8 +213,10 @@ def invoicing_summary(
             .where(InvoiceReturn.organization_id == ctx.organization_id, InvoiceReturn.state.in_(OPEN_RETURN_STATES), InvoiceReturn.follow_up_on <= today)
         ),
         paid_this_month=_paid_between(db, ctx, month_start, month_end),
+        counter_sales_this_month=_counter_sales_between(db, ctx, month_start, month_end),
         issued_this_year=invoices(Invoice.status == InvoiceStatus.ISSUED, Invoice.invoice_date >= year_start, Invoice.invoice_date <= year_end),
         paid_this_year=_paid_between(db, ctx, year_start, year_end),
+        counter_sales_this_year=_counter_sales_between(db, ctx, year_start, year_end),
     )
 
 
@@ -224,8 +245,27 @@ def _refund_due(db: Session, ctx: TenantContext) -> CountAndAmounts:
     return CountAndAmounts(count=count, amounts=[CurrencyAmount(currency=c, amount=a) for c, a in amounts])
 
 
+def _counter_sales_between(db: Session, ctx: TenantContext, start: date, end: date) -> CountAndAmounts:
+    """Orders paid at the counter in the period (by the day they were paid, in the organization's time zone): how many,
+    and their totals incl. VAT per currency."""
+    zone = organization_zone(db, ctx.organization_id)
+    since = datetime.combine(start, time.min, zone)
+    before = datetime.combine(end + timedelta(days=1), time.min, zone)
+    paid = (Transaction.organization_id == ctx.organization_id, Transaction.paid_at >= since, Transaction.paid_at < before)
+    count = db.scalar(select(func.count()).select_from(Transaction).where(*paid))
+    amounts = db.execute(
+        select(Transaction.currency, func.sum(TransactionLine.gross_amount))
+        .join(TransactionLine, and_(TransactionLine.organization_id == Transaction.organization_id, TransactionLine.transaction_id == Transaction.id))
+        .where(*paid)
+        .group_by(Transaction.currency)
+        .order_by(Transaction.currency)
+    ).all()
+    return CountAndAmounts(count=count, amounts=[CurrencyAmount(currency=c, amount=a) for c, a in amounts])
+
+
 def _paid_between(db: Session, ctx: TenantContext, start: date, end: date) -> CountAndAmounts:
-    """Payments dated in the period, per currency (reversals and refunds subtracted); the count is of payments only."""
+    """Money received in the period, per currency: invoice payments dated in it (reversals and refunds subtracted)
+    plus orders paid at the counter in it. The count is of payments and counter sales."""
     where = (
         InvoicePayment.organization_id == ctx.organization_id,
         InvoicePayment.paid_on >= start,
@@ -233,10 +273,17 @@ def _paid_between(db: Session, ctx: TenantContext, start: date, end: date) -> Co
     )
     joined = and_(Invoice.organization_id == InvoicePayment.organization_id, Invoice.id == InvoicePayment.invoice_id)
     count = db.scalar(select(func.count()).select_from(InvoicePayment).where(*where, InvoicePayment.reverses_payment_id.is_(None), InvoicePayment.amount > 0))
-    amounts = db.execute(
-        select(Invoice.currency, func.sum(InvoicePayment.amount)).join(Invoice, joined).where(*where).group_by(Invoice.currency).order_by(Invoice.currency)
-    ).all()
-    return CountAndAmounts(count=count, amounts=[CurrencyAmount(currency=c, amount=a) for c, a in amounts if a != 0])
+    amounts = dict(
+        db.execute(
+            select(Invoice.currency, func.sum(InvoicePayment.amount)).join(Invoice, joined).where(*where).group_by(Invoice.currency).order_by(Invoice.currency)
+        ).all()
+    )
+    counter = _counter_sales_between(db, ctx, start, end)
+    for row in counter.amounts:
+        amounts[row.currency] = amounts.get(row.currency, ZERO) + row.amount
+    return CountAndAmounts(
+        count=count + counter.count, amounts=[CurrencyAmount(currency=c, amount=a) for c, a in sorted(amounts.items()) if a != 0]
+    )
 
 
 @router.get("/by-transaction", response_model=list[InvoiceStateRead])
@@ -275,6 +322,14 @@ def invoice_state_of_transactions(
         label = "none" if state is None else ("invoiced" if state == InvoiceStatus.ISSUED else "draft")
         result.append(InvoiceStateRead(transaction_id=tx_id, state=label, invoice_id=invoice_id, number_text=number_text))
     return result
+
+
+@router.post("/for-order", response_model=InvoiceRead)
+def invoice_order(payload: InvoiceForOrder, ctx: TenantContext = Depends(mutators), db: Session = Depends(get_db)) -> InvoiceRead:
+    """"Invoice" on a completed order: it goes onto the customer's open draft invoice in its currency (rebuilt with it)
+    or onto a new draft. The answer is that draft."""
+    invoice_id = service.invoice_order(db, ctx, payload.transaction_id)
+    return service.read_invoice(db, ctx, invoice_id)
 
 
 @router.post("", response_model=InvoiceRead, status_code=status.HTTP_201_CREATED)
@@ -523,6 +578,20 @@ def read_credit_note(credit_note_id: uuid.UUID, ctx: TenantContext = Depends(get
 def download_credit_note_pdf(credit_note_id: uuid.UUID, ctx: TenantContext = Depends(get_tenant_context), db: Session = Depends(get_db)) -> Response:
     """The credit note's PDF ("Kreditfaktura"), frozen on first download like an invoice's."""
     return _pdf_response(pdf_service.get_or_create_credit_note_pdf(db, ctx, credit_note_id))
+
+
+@router.get(
+    "/receipts/{transaction_id}/pdf",
+    response_class=Response,
+    responses={200: {"content": {"application/pdf": {}}, "description": "The receipt of an order paid at the counter"}},
+)
+def download_receipt_pdf(transaction_id: uuid.UUID, ctx: TenantContext = Depends(get_tenant_context), db: Session = Depends(get_db)) -> Response:
+    """The receipt ("Kvitto") of an order paid at the counter, rendered with the invoice template (see receipts.py)."""
+    try:
+        content, filename = receipts.receipt_pdf(db, ctx, transaction_id)
+    except (UnsupportedCharacters, DocumentTooLarge) as error:
+        raise pdf_service._refusal(error) from error
+    return _pdf_response(StoredPdf(content, hashlib.sha256(content).hexdigest(), filename))
 
 
 @router.get("/{invoice_id}", response_model=InvoiceRead)
