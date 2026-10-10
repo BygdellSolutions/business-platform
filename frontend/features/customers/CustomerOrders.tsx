@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { DecimalText } from "@/components/ui/DecimalText";
+import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import type { InvoiceStateOfOrder, TransactionStatus, TransactionSummary } from "@/lib/api/types";
 
 const STATUS: Record<TransactionStatus, string> = { draft: "Draft", completed: "Completed", cancelled: "Cancelled" };
@@ -26,8 +27,7 @@ export function CustomerOrders({
   const allOrders = `/o/${orgId}/transactions?billing_customer_id=${customerId}`;
 
   return (
-    <section aria-label="Orders" data-testid="customer-orders" className="flex max-w-4xl flex-col gap-2">
-      <h2 className="text-lg font-semibold">Orders</h2>
+    <CollapsibleSection title={hasMore ? "Latest orders" : "Orders"} count={orders.length} testId="customer-orders" toggleTestId="orders-toggle">
       {orders.length === 0 ? (
         <p className="text-sm text-zinc-500" data-testid="no-orders">
           No orders yet.
@@ -80,6 +80,6 @@ export function CustomerOrders({
           All orders of this customer
         </Link>
       )}
-    </section>
+    </CollapsibleSection>
   );
 }

@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { RecordHistory } from "@/components/history/RecordHistory";
 import { RecordMeta } from "@/components/history/RecordMeta";
+import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { Notice } from "@/components/ui/Notice";
 import { SupplierDetails } from "@/features/suppliers/SupplierDetails";
 import { SupplierForm } from "@/features/suppliers/SupplierForm";
@@ -51,8 +52,7 @@ export default async function SupplierPage({
       {created === "1" && <Notice testId="created">Supplier created.</Notice>}
       <RecordMeta record={supplier} people={history.history.people} timeZone={organization.timezone} />
       {canWriteRecords(role) ? <SupplierForm key={supplier.id} supplier={supplier} /> : <SupplierDetails supplier={supplier} />}
-      <section aria-label="Deliveries" className="flex max-w-4xl flex-col gap-2">
-        <h2 className="text-lg font-semibold">Deliveries from this supplier</h2>
+      <CollapsibleSection title="Deliveries from this supplier" count={deliveries.length} testId="supplier-deliveries-section" toggleTestId="deliveries-toggle">
         {deliveries.length === 0 ? (
           <p className="text-sm text-zinc-500" data-testid="no-deliveries">
             None yet. Choose this supplier when you record incoming stock on a product.
@@ -89,7 +89,7 @@ export default async function SupplierPage({
             </tbody>
           </table>
         )}
-      </section>
+      </CollapsibleSection>
       <RecordHistory data={history} entityType="supplier" timeZone={organization.timezone} />
     </div>
   );

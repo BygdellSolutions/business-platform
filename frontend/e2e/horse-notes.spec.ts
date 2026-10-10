@@ -37,6 +37,6 @@ test("notes are taken on a horse, edited and deleted, and the history keeps ever
   await page.getByRole("button", { name: "Yes, delete" }).click();
   await expect(notes.getByTestId("horse-note")).toHaveCount(1);
 
-  await page.getByTestId("history-toggle").getByText(/Show history/).click();
+  await page.getByTestId("history-toggle").getByRole("heading", { name: /History/ }).click();
   await expect(page.getByTestId("history-event").filter({ hasText: "Note" })).toHaveCount(4); // added twice, changed, deleted
 });

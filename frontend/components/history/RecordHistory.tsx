@@ -1,3 +1,4 @@
+import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import type { HistoryChange, HistoryEvent } from "@/lib/api/types";
 import { ENTITY_LABELS, FIELD_LABELS, REFERENCE_FIELDS, actionLabel } from "@/lib/history-labels";
 import type { RecordHistoryData } from "@/lib/history-server";
@@ -49,22 +50,18 @@ function Entry({ event, ownType, timeZone, names }: { event: HistoryEvent; ownTy
  * opened, so a long history never pushes the record itself out of view. */
 export function RecordHistory({ data, entityType, timeZone }: { data: RecordHistoryData; entityType: string; timeZone: string | null }) {
   return (
-    <section aria-label="History" data-testid="history" className="flex max-w-3xl flex-col gap-1">
-      <h2 className="text-lg font-semibold">History</h2>
+    <CollapsibleSection title="History" count={data.history.events.length} testId="history" toggleTestId="history-toggle" className="max-w-3xl">
       {data.history.events.length === 0 ? (
         <p className="text-sm text-zinc-500" data-testid="history-empty">
           No changes recorded yet. (Changes made before history was kept are not listed.)
         </p>
       ) : (
-        <details data-testid="history-toggle">
-          <summary className="cursor-pointer select-none text-sm text-zinc-700 underline dark:text-zinc-300">Show history ({data.history.events.length})</summary>
-          <ul>
-            {data.history.events.map((event) => (
-              <Entry key={event.id} event={event} ownType={entityType} timeZone={timeZone} names={data.names} />
-            ))}
-          </ul>
-        </details>
+        <ul>
+          {data.history.events.map((event) => (
+            <Entry key={event.id} event={event} ownType={entityType} timeZone={timeZone} names={data.names} />
+          ))}
+        </ul>
       )}
-    </section>
+    </CollapsibleSection>
   );
 }

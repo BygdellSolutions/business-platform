@@ -106,6 +106,7 @@ test("a delivery on its way is recorded, received in part, and the rest cancelle
   await expect(incoming.getByTestId("incoming-row")).toContainText("Expected");
   await expect(incoming.getByTestId("supplier-link")).toHaveText("Horse Supplies AB");
   await incoming.getByTestId("supplier-link").click();
+  await page.getByRole("heading", { name: "Deliveries from this supplier (1)" }).click();
   await expect(page.getByTestId("supplier-delivery")).toContainText("Fly spray");
   await page.goto(`/o/${world.orgId}/catalog/${item.id}`);
   await expect(page.getByTestId("stock-figures")).toContainText("incoming 10");

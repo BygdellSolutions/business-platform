@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { DecimalText } from "@/components/ui/DecimalText";
+import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import type { BoughtLine } from "@/lib/api/types";
 import { trimQuantity } from "@/lib/decimal";
 
@@ -10,8 +11,7 @@ import { trimQuantity } from "@/lib/decimal";
  */
 export function CustomerBought({ orgId, lines }: { orgId: string; lines: BoughtLine[] }) {
   return (
-    <section aria-label="Bought" data-testid="customer-bought" className="flex max-w-4xl flex-col gap-2">
-      <h2 className="text-lg font-semibold">Products and other lines bought</h2>
+    <CollapsibleSection title="Products and other lines bought" count={lines.length} testId="customer-bought" toggleTestId="bought-toggle">
       {lines.length === 0 ? (
         <p className="text-sm text-zinc-500" data-testid="no-bought">
           Nothing yet (services are listed separately).
@@ -59,6 +59,6 @@ export function CustomerBought({ orgId, lines }: { orgId: string; lines: BoughtL
           </tbody>
         </table>
       )}
-    </section>
+    </CollapsibleSection>
   );
 }

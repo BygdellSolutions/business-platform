@@ -28,12 +28,16 @@ test("the customer's orders and the products bought are listed on the customer's
   await page.goto(`/o/${world.orgId}/customers/${customer.id}`);
 
   const orders = page.getByTestId("customer-orders");
+  await expect(orders.getByTestId("orders-toggle")).not.toHaveAttribute("open"); // closed until wanted
+  await orders.getByRole("heading", { name: "Orders (2)" }).click();
   await expect(orders.getByTestId("customer-order")).toHaveCount(2);
   await expect(orders.getByTestId("customer-order").first()).toContainText("2026-10-03");
   await expect(orders.getByTestId("customer-order-invoice").first()).toHaveText("Not invoiced yet");
   await expect(orders.getByTestId("customer-order-invoice").last()).toHaveText(`Invoice ${invoice.number_text}`);
 
   const bought = page.getByTestId("customer-bought");
+  await expect(bought.getByTestId("bought-toggle")).not.toHaveAttribute("open"); // each section opens on its own
+  await bought.getByRole("heading", { name: /Products and other lines bought/ }).click();
   await expect(bought.getByTestId("bought-row")).toHaveCount(2);
   await expect(bought.getByTestId("bought-row").last()).toContainText("Fly spray");
   await bought.getByRole("link", { name: "Fly spray" }).click();

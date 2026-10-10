@@ -24,7 +24,7 @@ test("a customer shows who created it, who changed it and what it was before", a
 
   const latest = page.getByTestId("history-event").first();
   await expect(latest).toBeHidden(); // collapsed until asked for
-  await page.getByTestId("history-toggle").getByText(/Show history \(2\)/).click();
+  await page.getByTestId("history-toggle").getByRole("heading", { name: "History (2)" }).click();
   await expect(latest).toBeVisible();
   await expect(latest).toHaveAttribute("data-action", "updated");
   await expect(latest.getByTestId("history-change")).toHaveText("Name: Anna → Anna Andersson");

@@ -36,6 +36,7 @@ test("a service for a horse is added, listed on the horse and kept on the invoic
   await expect(page.getByTestId("service-notes")).toHaveText("Stiff left shoulder");
 
   await page.goto(`/o/${world.orgId}/horses/${horse.id}`);
+  await page.getByRole("heading", { name: /Services performed on this horse/ }).click();
   await expect(page.getByTestId("service-row")).toHaveCount(1);
   await expect(page.getByTestId("service-row")).toContainText("Massage");
   await expect(page.getByTestId("service-row")).toContainText("2026-10-03 14:00");

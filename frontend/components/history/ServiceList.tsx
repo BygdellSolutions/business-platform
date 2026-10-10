@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { DecimalText } from "@/components/ui/DecimalText";
+import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import type { ServiceRecord } from "@/lib/api/types";
 import { formatTimestamp } from "@/lib/timestamps";
 
@@ -10,8 +11,7 @@ import { formatTimestamp } from "@/lib/timestamps";
  */
 export function ServiceList({ orgId, services, timeZone, title }: { orgId: string; services: ServiceRecord[]; timeZone: string | null; title: string }) {
   return (
-    <section aria-label={title} data-testid="service-list" className="flex max-w-4xl flex-col gap-2">
-      <h2 className="text-lg font-semibold">{title}</h2>
+    <CollapsibleSection title={title} count={services.length} testId="service-list" toggleTestId="services-toggle">
       {services.length === 0 ? (
         <p className="text-sm text-zinc-500" data-testid="no-services">
           No services yet.
@@ -52,6 +52,6 @@ export function ServiceList({ orgId, services, timeZone, title }: { orgId: strin
           </tbody>
         </table>
       )}
-    </section>
+    </CollapsibleSection>
   );
 }
