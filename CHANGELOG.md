@@ -5,6 +5,7 @@ All notable changes to `business-platform` will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- The invoice list has a **Return** column after Status: "—", "Open · follow up 17 Oct", or "Follow-up due" (warning colour) when the earliest open return's follow-up date has come; sortable by that date. "Return open" left the Status column. Invoices carry `return_follow_up_on` and `return_follow_up_due`.
 - The order list opens an order from its **Order no.** (the date is plain text now).
 - "Outstanding" is called **"Remaining"** wherever people read it (invoice list, the invoice's payments, dashboard notes, history, the overpayment message). The API field stays `outstanding_amount`.
 

@@ -307,6 +307,7 @@ INVOICE_SORTS = {
     ),
     "credited": case((Invoice.status == InvoiceStatus.ISSUED, credits.credited_sum_expression())),
     "refunded": case((Invoice.status == InvoiceStatus.ISSUED, payments.refunded_sum_expression())),
+    "returns": returns.next_follow_up_expression(),  # by the next follow-up date; invoices without an open return last
 }
 
 
@@ -401,12 +402,16 @@ def list_invoices(
     credited = credits.credited_amounts(db, ctx.organization_id, [invoice.id for invoice in invoices])
     refunded = payments.refunded_amounts(db, ctx.organization_id, [invoice.id for invoice in invoices])
     open_returns = returns.open_counts(db, ctx.organization_id, [invoice.id for invoice in invoices])
+    follow_ups = returns.next_follow_ups(db, ctx.organization_id, [invoice.id for invoice in invoices])
+    today = organization_today(db, ctx.organization_id)
     return [
         InvoiceSummary(
             **service.summary_fields(
                 invoice, counts.get(invoice.id, 0), paid.get(invoice.id, ZERO), credited.get(invoice.id, ZERO), refunded.get(invoice.id, ZERO)
             ),
             open_returns=open_returns.get(invoice.id, 0),
+            return_follow_up_on=follow_ups.get(invoice.id),
+            return_follow_up_due=invoice.id in follow_ups and follow_ups[invoice.id] <= today,
         )
         for invoice in invoices
     ]

@@ -143,8 +143,11 @@ class InvoiceSummary(BaseModel):
     refund_due_amount: MoneyOut | None = None
     # Paid back to the customer so far (refunds less any reversed): the refunds already made.
     refunded_amount: MoneyOut | None = None
-    # Return cases not closed yet (requested, goods received or approved).
+    # Return cases not closed yet (requested, goods received or approved), the earliest follow-up date among them, and
+    # whether that date has come (today or earlier in the organization's time zone).
     open_returns: int = 0
+    return_follow_up_on: date | None = None
+    return_follow_up_due: bool = False
 
 
 class InvoicePaymentRead(BaseModel):

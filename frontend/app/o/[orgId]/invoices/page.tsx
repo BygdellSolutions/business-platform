@@ -9,12 +9,13 @@ import { CustomerFilter } from "@/features/customers/CustomerFilter";
 import { InvoiceStatusBadge } from "@/features/invoices/InvoiceStatusBadge";
 import type { Customer, InvoiceSummary } from "@/lib/api/types";
 import { requireCredential } from "@/lib/auth/credential";
+import { formatShortDate } from "@/lib/dates";
 import { backendQuery, listHref, sortHref, pageOf, parseListParams, type ExtraSpec } from "@/lib/list-params";
 import { getMemberships } from "@/lib/orgs";
 import { canMutateInvoices } from "@/lib/roles";
 import { serverRead, serverReadOrNull } from "@/lib/server-api";
 
-const SORTS = ["number", "customer", "invoice_date", "due_date", "status", "currency", "net", "vat", "gross", "paid", "outstanding", "credited", "refunded"] as const;
+const SORTS = ["number", "customer", "invoice_date", "due_date", "status", "returns", "currency", "net", "vat", "gross", "paid", "outstanding", "credited", "refunded"] as const;
 
 const STATUSES = ["draft", "issued"] as const;
 // Exactly the filters GET /api/invoices supports: status, customer, invoice date range, search (customer name or number).
@@ -138,6 +139,7 @@ export default async function InvoicesPage({
                 <SortHeader label="Invoice date" sortKey="invoice_date" current={list.sort} dir={list.dir} href={sortHref(base, list, "invoice_date")} />
                 <SortHeader label="Due date" sortKey="due_date" current={list.sort} dir={list.dir} href={sortHref(base, list, "due_date")} />
                 <SortHeader label="Status" sortKey="status" current={list.sort} dir={list.dir} href={sortHref(base, list, "status")} />
+                <SortHeader label="Return" sortKey="returns" current={list.sort} dir={list.dir} href={sortHref(base, list, "returns")} title="An open return case and its follow-up date" />
                 <SortHeader label="Currency" sortKey="currency" current={list.sort} dir={list.dir} href={sortHref(base, list, "currency")} />
                 <SortHeader label="Net" sortKey="net" current={list.sort} dir={list.dir} href={sortHref(base, list, "net")} align="right" />
                 <SortHeader label="VAT" sortKey="vat" current={list.sort} dir={list.dir} href={sortHref(base, list, "vat")} align="right" />
@@ -166,11 +168,22 @@ export default async function InvoicesPage({
                     {invoice.due_date ?? "—"}
                   </td>
                   <td className="py-1 pr-4">
-                    <InvoiceStatusBadge status={invoice.status} paymentStatus={invoice.payment_status} creditStatus={invoice.credit_status} openReturns={invoice.open_returns} />
+                    <InvoiceStatusBadge status={invoice.status} paymentStatus={invoice.payment_status} creditStatus={invoice.credit_status} />
                     {invoice.refund_due_amount && invoice.refund_due_amount !== "0.00" && (
                       <span className="ml-2 text-xs text-amber-700 dark:text-amber-300" data-testid="refund-due">
                         Refund due <DecimalText value={invoice.refund_due_amount} />
                       </span>
+                    )}
+                  </td>
+                  <td className="py-1 pr-4" data-testid="invoice-return">
+                    {invoice.open_returns === 0 ? (
+                      "—"
+                    ) : invoice.return_follow_up_due ? (
+                      <span className="rounded bg-amber-100 px-2 py-0.5 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                        Follow-up due{invoice.return_follow_up_on ? ` ${formatShortDate(invoice.return_follow_up_on)}` : ""}
+                      </span>
+                    ) : (
+                      <span>Open{invoice.return_follow_up_on ? ` · follow up ${formatShortDate(invoice.return_follow_up_on)}` : ""}</span>
                     )}
                   </td>
                   <td className="py-1 pr-4" data-testid="invoice-currency">

@@ -231,6 +231,27 @@ def list_returns(db: Session, ctx: TenantContext, invoice_id: uuid.UUID) -> list
     ]
 
 
+def next_follow_ups(db: Session, organization_id: uuid.UUID, invoice_ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, date]:
+    """The earliest follow-up date of each invoice's open return cases (invoices without one are left out)."""
+    if not invoice_ids:
+        return {}
+    rows = db.execute(
+        select(InvoiceReturn.invoice_id, func.min(InvoiceReturn.follow_up_on))
+        .where(InvoiceReturn.organization_id == organization_id, InvoiceReturn.invoice_id.in_(list(invoice_ids)), InvoiceReturn.state.in_(OPEN_RETURN_STATES))
+        .group_by(InvoiceReturn.invoice_id)
+    )
+    return {invoice_id: follow_up for invoice_id, follow_up in rows}
+
+
+def next_follow_up_expression():
+    """The earliest follow-up date of the invoice's open return cases in the surrounding query (for sorting)."""
+    return (
+        select(func.min(InvoiceReturn.follow_up_on))
+        .where(InvoiceReturn.organization_id == Invoice.organization_id, InvoiceReturn.invoice_id == Invoice.id, InvoiceReturn.state.in_(OPEN_RETURN_STATES))
+        .scalar_subquery()
+    )
+
+
 def open_counts(db: Session, organization_id: uuid.UUID, invoice_ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, int]:
     if not invoice_ids:
         return {}

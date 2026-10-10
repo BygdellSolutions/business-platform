@@ -150,6 +150,13 @@ def test_the_dashboard_and_the_list_find_open_returns_and_those_to_follow_up(cli
 
     assert ids(returns="open") == {due["id"], later["id"]}
     assert ids(returns="follow_up_due") == {due["id"]}
+    # Each row says when its open return is to be followed up and whether that day has come; a closed case says nothing.
+    rows = {row["id"]: row for row in client.get("/api/invoices", headers=sales.headers).json()}
+    assert (rows[due["id"]]["return_follow_up_on"], rows[due["id"]]["return_follow_up_due"]) == (str(today - timedelta(days=1)), True)
+    assert (rows[later["id"]]["return_follow_up_on"], rows[later["id"]]["return_follow_up_due"]) == (str(today + timedelta(days=5)), False)
+    assert (rows[closed["id"]]["return_follow_up_on"], rows[closed["id"]]["return_follow_up_due"]) == (None, False)
+    by_follow_up = [row["id"] for row in client.get("/api/invoices", params={"sort": "returns"}, headers=sales.headers).json()]
+    assert by_follow_up[:2] == [due["id"], later["id"]]  # the earliest follow-up first; without an open return last
     summary = client.get("/api/invoices/summary", headers=sales.headers).json()
     assert (summary["returns_open"], summary["returns_follow_up_due"]) == (2, 1)
 

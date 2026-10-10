@@ -92,6 +92,8 @@ export function invoice(overrides: Partial<Invoice> = {}): Invoice {
     credit_notes: [],
     returns: [],
     open_returns: 0,
+    return_follow_up_on: null,
+    return_follow_up_due: false,
     invoice_date: "2026-10-01",
     due_date: "2026-10-31",
     description: "October work",

@@ -594,6 +594,9 @@ export interface InvoiceSummary {
   refunded_amount: MoneyString | null;
   /** Return cases not closed yet (requested, goods received or approved). */
   open_returns: number;
+  /** The earliest follow-up date of its open return cases, and whether that day has come (organization time zone). */
+  return_follow_up_on: string | null;
+  return_follow_up_due: boolean;
 }
 
 /** A payment recorded by hand, a refund (money paid back, negative), or a reversal of either (naming what it cancels). */

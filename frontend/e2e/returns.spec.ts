@@ -33,6 +33,10 @@ test("a return is opened, received, approved and closed by its credit note", asy
   await expect(page.getByTestId("card-returns")).toContainText("1");
   await page.goto(`/o/${world.orgId}/invoices?returns=open`);
   await expect(page.getByTestId("invoice-row")).toHaveCount(1);
+  await expect(page.getByTestId("invoice-return")).toHaveText(/^Open · follow up \d{1,2} [A-Z][a-z]{2}( \d{4})?$/); // its own column
+  await page.goto(`/o/${world.orgId}/invoices?returns=follow_up_due`);
+  await expect(page.getByTestId("empty")).toBeVisible(); // the follow-up date is in a week
+  await page.goto(`/o/${world.orgId}/invoices?returns=open`);
   await page.getByTestId("invoice-link").click();
 
   await item.getByLabel("Add a note").fill("Parcel on its way");
