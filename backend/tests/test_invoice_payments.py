@@ -50,7 +50,7 @@ def test_a_payment_never_exceeds_what_is_outstanding_and_is_never_dated_in_the_f
     zero = _pay(client, sales.headers, invoice, "0")
 
     assert too_much.status_code == 422 and too_much.json()["detail"][0]["type"] == "payment.overpaid"
-    assert "62.50 SEK is outstanding" in too_much.json()["detail"][0]["msg"]
+    assert "62.50 SEK remains to be paid" in too_much.json()["detail"][0]["msg"]
     assert future.status_code == 422 and future.json()["detail"][0]["type"] == "payment.future_date"
     assert zero.status_code == 422
     assert _pay(client, sales.headers, invoice, "62.50").json()["payment_status"] == "paid"
