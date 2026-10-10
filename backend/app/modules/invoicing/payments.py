@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from decimal import Decimal
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session, aliased
 
 from app.core import audit, clock
@@ -37,14 +37,45 @@ def paid_amounts(db: Session, organization_id: uuid.UUID, invoice_ids: Sequence[
     return {invoice_id: amount for invoice_id, amount in rows}
 
 
-def payment_fields(invoice: Invoice, paid: Decimal, credited: Decimal = ZERO) -> dict:
+def _standing_refunds(*where):
+    """Refund rows (a negative amount that reverses nothing) that were not themselves reversed."""
+    reversal = aliased(InvoicePayment)
+    undone = exists().where(reversal.organization_id == InvoicePayment.organization_id, reversal.reverses_payment_id == InvoicePayment.id)
+    return (*where, InvoicePayment.amount < 0, InvoicePayment.reverses_payment_id.is_(None), ~undone)
+
+
+def refunded_amounts(db: Session, organization_id: uuid.UUID, invoice_ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, Decimal]:
+    """What has been paid back per invoice (positive): its refunds, less any that were reversed."""
+    if not invoice_ids:
+        return {}
+    rows = db.execute(
+        select(InvoicePayment.invoice_id, -func.sum(InvoicePayment.amount))
+        .where(*_standing_refunds(InvoicePayment.organization_id == organization_id, InvoicePayment.invoice_id.in_(list(invoice_ids))))
+        .group_by(InvoicePayment.invoice_id)
+    )
+    return {invoice_id: amount for invoice_id, amount in rows}
+
+
+def refunded_sum_expression():
+    """The refunded amount of the invoice in the surrounding query (for sorting lists)."""
+    return (
+        select(func.coalesce(-func.sum(InvoicePayment.amount), 0))
+        .where(*_standing_refunds(InvoicePayment.organization_id == Invoice.organization_id, InvoicePayment.invoice_id == Invoice.id))
+        .scalar_subquery()
+    )
+
+
+def payment_fields(invoice: Invoice, paid: Decimal, credited: Decimal = ZERO, refunded: Decimal = ZERO) -> dict:
     """Paid, outstanding, credited and the states of an issued invoice; nothing for a draft (it cannot be paid).
 
     What the customer owes is the gross less its credit notes. Paid beyond that is a refund due (a payment made
     before the credit), never a negative outstanding.
     """
     if invoice.status != InvoiceStatus.ISSUED:
-        return dict(paid_amount=None, outstanding_amount=None, payment_status=None, credited_amount=None, credit_status=None, refund_due_amount=None)
+        return dict(
+            paid_amount=None, outstanding_amount=None, payment_status=None, credited_amount=None, credit_status=None, refund_due_amount=None,
+            refunded_amount=None,
+        )
     owed = invoice.gross_amount - credited
     state = "paid" if paid >= owed else "partially_paid" if paid > 0 else "unpaid"
     credit_state = None if credited <= 0 else "credited" if owed <= 0 else "partly_credited"
@@ -55,6 +86,7 @@ def payment_fields(invoice: Invoice, paid: Decimal, credited: Decimal = ZERO) ->
         credited_amount=credited,
         credit_status=credit_state,
         refund_due_amount=max(paid - owed, ZERO),
+        refunded_amount=refunded,
     )
 
 

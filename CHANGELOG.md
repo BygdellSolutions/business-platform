@@ -5,6 +5,7 @@ All notable changes to `business-platform` will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **The invoice list shows the amounts, not only the states:** Paid (payments less refunds), Outstanding (after credit notes), Credited and Refunded columns, each sortable; `refunded_amount` on invoices (refunds less any reversed).
 - Settings shows the **Organization ID** (the permanent identifier, the one in the address) with a Copy button, for support and other references.
 
 ### Changed

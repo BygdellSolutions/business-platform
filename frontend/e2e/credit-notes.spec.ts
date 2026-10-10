@@ -52,6 +52,12 @@ test("a paid invoice is credited in full, the refund is recorded, and the credit
 
   await page.goto(`/o/${world.orgId}/invoices?credit=credited`);
   await expect(page.getByTestId("invoice-row")).toHaveCount(1);
+  // The overview shows how much was credited and paid back, not only that it happened.
+  const gross = await page.getByTestId("invoice-gross").textContent();
+  await expect(page.getByTestId("invoice-credited")).toHaveText(gross ?? "");
+  await expect(page.getByTestId("invoice-refunded")).toHaveText(gross ?? "");
+  await expect(page.getByTestId("invoice-paid")).toHaveText("0.00"); // paid, then all of it paid back
+  await expect(page.getByTestId("invoice-outstanding")).toHaveText("0.00");
   await page.goto(`/o/${world.orgId}/invoices?payment=refund_due`);
   await expect(page.getByTestId("empty")).toBeVisible();
 });

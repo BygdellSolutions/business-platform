@@ -358,13 +358,14 @@ def read_invoice(db: Session, ctx: TenantContext, invoice_id: uuid.UUID) -> Invo
     )
     paid = payments.paid_amounts(db, ctx.organization_id, [invoice.id]).get(invoice.id, Decimal("0.00"))
     credited = credits.credited_amounts(db, ctx.organization_id, [invoice.id]).get(invoice.id, Decimal("0.00"))
+    refunded = payments.refunded_amounts(db, ctx.organization_id, [invoice.id]).get(invoice.id, Decimal("0.00"))
     credited_lines = credits.credited_quantities(db, ctx.organization_id, [row.id for row in lines])
     returnable = {}
     if invoice.status == InvoiceStatus.ISSUED:
         for answer in registry.call_hooks("stock.returnable", db, ctx.organization_id, [row.source_line_id for row in lines]):
             returnable.update(answer)
     return InvoiceRead(
-        **summary_fields(invoice, len(transactions), paid, credited),
+        **summary_fields(invoice, len(transactions), paid, credited, refunded),
         payments=payments.list_payments(db, ctx, invoice.id),
         credit_notes=credits.credit_note_summaries(db, ctx, invoice.id),
         returns=(cases := returns.list_returns(db, ctx, invoice.id)),
@@ -389,9 +390,11 @@ def read_invoice(db: Session, ctx: TenantContext, invoice_id: uuid.UUID) -> Invo
     )
 
 
-def summary_fields(invoice: Invoice, transaction_count: int, paid: Decimal = Decimal("0.00"), credited: Decimal = Decimal("0.00")) -> dict[str, Any]:
+def summary_fields(
+    invoice: Invoice, transaction_count: int, paid: Decimal = Decimal("0.00"), credited: Decimal = Decimal("0.00"), refunded: Decimal = Decimal("0.00")
+) -> dict[str, Any]:
     return dict(
-        **payments.payment_fields(invoice, paid, credited),
+        **payments.payment_fields(invoice, paid, credited, refunded),
         id=invoice.id,
         status=invoice.status,
         version=invoice.version,

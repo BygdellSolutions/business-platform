@@ -143,3 +143,10 @@ def test_the_new_invoice_list_sorts_on_the_server_and_never_shows_another_organi
     listed = client.get("/api/invoiceable-transactions", params={"sort": "gross", "dir": "desc"}, headers=owner).json()
     assert [row["id"] for row in listed] == [str(big.id), str(small.id)]
     assert client.get("/api/invoiceable-transactions", params={"sort": "nope"}, headers=owner).status_code == 422
+
+
+@pytest.mark.parametrize("key", ["paid", "outstanding", "credited", "refunded", "gross"])
+def test_the_invoice_list_sorts_by_its_payment_and_credit_amounts(client: TestClient, db_session: Session, key):
+    org = make_org(db_session)
+    owner = member_of(db_session, org, Role.OWNER)
+    assert client.get("/api/invoices", params={"sort": key, "dir": "desc"}, headers=owner).status_code == 200

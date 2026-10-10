@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
-from sqlalchemy import and_, exists, func, or_, select
+from sqlalchemy import and_, case, exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import Pagination, Sorting, pagination, sorted_by, sorting
@@ -287,6 +287,8 @@ def create_invoice(
     return service.read_invoice(db, ctx, invoice_id)
 
 
+ZERO = Decimal("0.00")
+
 # The invoice list's sort columns (amounts as issued; a draft has no number and sorts last by number).
 INVOICE_SORTS = {
     "number": Invoice.number,
@@ -298,6 +300,13 @@ INVOICE_SORTS = {
     "net": Invoice.net_amount,
     "vat": Invoice.vat_amount,
     "gross": Invoice.gross_amount,
+    # Issued invoices only have these; a draft's are empty and sort last.
+    "paid": case((Invoice.status == InvoiceStatus.ISSUED, payments.paid_sum_expression())),
+    "outstanding": case(
+        (Invoice.status == InvoiceStatus.ISSUED, func.greatest(payments.owed_expression() - payments.paid_sum_expression(), 0))
+    ),
+    "credited": case((Invoice.status == InvoiceStatus.ISSUED, credits.credited_sum_expression())),
+    "refunded": case((Invoice.status == InvoiceStatus.ISSUED, payments.refunded_sum_expression())),
 }
 
 
@@ -390,10 +399,13 @@ def list_invoices(
     counts = service.transaction_counts(db, ctx, [invoice.id for invoice in invoices])
     paid = payments.paid_amounts(db, ctx.organization_id, [invoice.id for invoice in invoices])
     credited = credits.credited_amounts(db, ctx.organization_id, [invoice.id for invoice in invoices])
+    refunded = payments.refunded_amounts(db, ctx.organization_id, [invoice.id for invoice in invoices])
     open_returns = returns.open_counts(db, ctx.organization_id, [invoice.id for invoice in invoices])
     return [
         InvoiceSummary(
-            **service.summary_fields(invoice, counts.get(invoice.id, 0), paid.get(invoice.id, Decimal("0.00")), credited.get(invoice.id, Decimal("0.00"))),
+            **service.summary_fields(
+                invoice, counts.get(invoice.id, 0), paid.get(invoice.id, ZERO), credited.get(invoice.id, ZERO), refunded.get(invoice.id, ZERO)
+            ),
             open_returns=open_returns.get(invoice.id, 0),
         )
         for invoice in invoices

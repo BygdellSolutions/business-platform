@@ -263,6 +263,9 @@ def test_a_refund_pays_back_at_most_what_is_due_and_settles_the_invoice(client: 
     assert response.status_code == 201
     assert (body["paid_amount"], body["refund_due_amount"], body["outstanding_amount"], body["payment_status"]) == ("1000.00", "0.00", "0.00", "paid")
     assert [(p["kind"], p["amount"]) for p in body["payments"]] == [("payment", "1250.00"), ("refund", "-250.00")]
+    assert body["refunded_amount"] == "250.00"
+    listed = [row for row in client.get("/api/invoices", headers=sales.headers).json() if row["id"] == invoice["id"]][0]
+    assert (listed["paid_amount"], listed["refunded_amount"]) == ("1000.00", "250.00")  # the list shows what was paid back
     assert _refund(client, sales.headers, invoice, "0.01").status_code == 422
     summary = client.get("/api/invoices/summary", headers=sales.headers).json()
     assert summary["refund_due"]["count"] == 0
@@ -284,6 +287,8 @@ def test_a_refund_recorded_by_mistake_is_reversed_and_its_payment_only_after_it(
         ("payment", "1062.50", False), ("refund", "-1062.50", True), ("reversal", "1062.50", False)
     ]
     assert body["refund_due_amount"] == "1062.50"
+    assert body["refunded_amount"] == "0.00"  # a reversed refund was never paid back
+    assert body["credited_amount"] == "1062.50"
 
 
 def test_a_refund_needs_money_paid_beyond_what_is_owed(client: TestClient, db_session: Session, sales):

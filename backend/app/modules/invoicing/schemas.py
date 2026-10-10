@@ -141,6 +141,8 @@ class InvoiceSummary(BaseModel):
     credit_status: Literal["partly_credited", "credited"] | None = None
     # Paid beyond what is owed after credits: to be paid back to the customer.
     refund_due_amount: MoneyOut | None = None
+    # Paid back to the customer so far (refunds less any reversed): the refunds already made.
+    refunded_amount: MoneyOut | None = None
     # Return cases not closed yet (requested, goods received or approved).
     open_returns: int = 0
 

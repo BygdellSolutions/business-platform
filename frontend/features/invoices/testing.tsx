@@ -87,6 +87,7 @@ export function invoice(overrides: Partial<Invoice> = {}): Invoice {
     credited_amount: null,
     credit_status: null,
     refund_due_amount: null,
+    refunded_amount: null,
     payments: [],
     credit_notes: [],
     returns: [],

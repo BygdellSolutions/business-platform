@@ -590,6 +590,8 @@ export interface InvoiceSummary {
   credited_amount: MoneyString | null;
   credit_status: "partly_credited" | "credited" | null;
   refund_due_amount: MoneyString | null;
+  /** Paid back to the customer so far (refunds less any reversed); null for a draft. */
+  refunded_amount: MoneyString | null;
   /** Return cases not closed yet (requested, goods received or approved). */
   open_returns: number;
 }

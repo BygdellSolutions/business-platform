@@ -14,7 +14,7 @@ import { getMemberships } from "@/lib/orgs";
 import { canMutateInvoices } from "@/lib/roles";
 import { serverRead, serverReadOrNull } from "@/lib/server-api";
 
-const SORTS = ["number", "customer", "invoice_date", "due_date", "status", "currency", "net", "vat", "gross"] as const;
+const SORTS = ["number", "customer", "invoice_date", "due_date", "status", "currency", "net", "vat", "gross", "paid", "outstanding", "credited", "refunded"] as const;
 
 const STATUSES = ["draft", "issued"] as const;
 // Exactly the filters GET /api/invoices supports: status, customer, invoice date range, search (customer name or number).
@@ -141,7 +141,11 @@ export default async function InvoicesPage({
                 <SortHeader label="Currency" sortKey="currency" current={list.sort} dir={list.dir} href={sortHref(base, list, "currency")} />
                 <SortHeader label="Net" sortKey="net" current={list.sort} dir={list.dir} href={sortHref(base, list, "net")} align="right" />
                 <SortHeader label="VAT" sortKey="vat" current={list.sort} dir={list.dir} href={sortHref(base, list, "vat")} align="right" />
-                <SortHeader label="Gross" sortKey="gross" current={list.sort} dir={list.dir} href={sortHref(base, list, "gross")} align="right" last />
+                <SortHeader label="Gross" sortKey="gross" current={list.sort} dir={list.dir} href={sortHref(base, list, "gross")} align="right" />
+                <SortHeader label="Paid" sortKey="paid" current={list.sort} dir={list.dir} href={sortHref(base, list, "paid")} align="right" title="Payments received, less refunds" />
+                <SortHeader label="Outstanding" sortKey="outstanding" current={list.sort} dir={list.dir} href={sortHref(base, list, "outstanding")} align="right" title="Still to be paid, after credit notes" />
+                <SortHeader label="Credited" sortKey="credited" current={list.sort} dir={list.dir} href={sortHref(base, list, "credited")} align="right" title="Credit notes, incl. VAT" />
+                <SortHeader label="Refunded" sortKey="refunded" current={list.sort} dir={list.dir} href={sortHref(base, list, "refunded")} align="right" title="Money paid back to the customer" last />
               </tr>
             </thead>
             <tbody>
@@ -168,11 +172,6 @@ export default async function InvoicesPage({
                         Refund due <DecimalText value={invoice.refund_due_amount} />
                       </span>
                     )}
-                    {invoice.payment_status === "partially_paid" && invoice.outstanding_amount && (
-                      <span className="block text-xs text-zinc-500">
-                        <DecimalText value={invoice.outstanding_amount} /> left
-                      </span>
-                    )}
                   </td>
                   <td className="py-1 pr-4" data-testid="invoice-currency">
                     {invoice.currency}
@@ -183,8 +182,21 @@ export default async function InvoicesPage({
                   <td className="py-1 pr-4 text-right" data-testid="invoice-vat">
                     <DecimalText value={invoice.vat_amount} />
                   </td>
-                  <td className="py-1 text-right" data-testid="invoice-gross">
+                  <td className="py-1 pr-4 text-right" data-testid="invoice-gross">
                     <DecimalText value={invoice.gross_amount} />
+                  </td>
+                  {/* Issued invoices only (a draft cannot be paid or credited); nothing credited or refunded shows "—". */}
+                  <td className="py-1 pr-4 text-right" data-testid="invoice-paid">
+                    {invoice.paid_amount !== null && <DecimalText value={invoice.paid_amount} />}
+                  </td>
+                  <td className="py-1 pr-4 text-right" data-testid="invoice-outstanding">
+                    {invoice.outstanding_amount !== null && <DecimalText value={invoice.outstanding_amount} />}
+                  </td>
+                  <td className="py-1 pr-4 text-right" data-testid="invoice-credited">
+                    {invoice.credited_amount !== null && (invoice.credited_amount === "0.00" ? "—" : <DecimalText value={invoice.credited_amount} />)}
+                  </td>
+                  <td className="py-1 text-right" data-testid="invoice-refunded">
+                    {invoice.refunded_amount !== null && (invoice.refunded_amount === "0.00" ? "—" : <DecimalText value={invoice.refunded_amount} />)}
                   </td>
                 </tr>
               ))}
