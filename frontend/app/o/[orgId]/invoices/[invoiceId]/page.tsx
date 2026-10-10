@@ -55,12 +55,11 @@ export default async function InvoicePage({
       {created === "1" && <Notice testId="created">Draft invoice created. Its orders are reserved until you issue or delete it.</Notice>}
       <RecordMeta record={invoice} people={history.history.people} timeZone={organization.timezone} />
       <p className="text-sm" data-testid="invoice-orders">
-        {invoice.transactions.length === 1 ? "Order" : "Orders"}{" "}
         {invoice.transactions.map((source, index) => (
           <span key={source.transaction_id}>
             {index > 0 && ", "}
             <Link href={`/o/${orgId}/transactions/${source.transaction_id}`} className="underline" data-testid="invoice-order-link">
-              {source.transaction_number ?? `of ${source.transaction_date}`}
+              {source.transaction_number !== null ? `Order ${source.transaction_number}` : `Order of ${source.transaction_date}`}
             </Link>
           </span>
         ))}
