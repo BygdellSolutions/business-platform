@@ -18,7 +18,7 @@ draft and refuses; creation first, so the validator sees the link and refuses th
 import uuid
 from collections import defaultdict
 from collections.abc import Sequence
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -27,11 +27,15 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core import audit, subjects
+from app.core.entity_registry import registry
+from app.core.org_time import organization_today, organization_zone
 from app.core.tenant import TenantContext
 from app.core.tenant_scope import create_scoped, get_scoped, get_scoped_or_404, reference_error, scoped_select
-from app.models import Customer, Organization
+from app.models import Customer, Organization, User
 from app.modules.custom_fields import service as custom_fields
 from app.modules.invoicing import numbering, snapshots
+from app.modules.invoicing import credits, payments, returns
 from app.modules.invoicing.models import (
     Invoice,
     InvoiceLine,
@@ -40,6 +44,7 @@ from app.modules.invoicing.models import (
     InvoiceVatRow,
 )
 from app.modules.invoicing.schemas import (
+    MAX_TRANSACTIONS_PER_INVOICE,
     InvoiceCreate,
     InvoiceLineRead,
     InvoiceRead,
@@ -62,16 +67,19 @@ ZERO = Decimal("0.00")
 # --- structured refusals -------------------------------------------------------------------------------------
 
 
+# What an invoice's history records: the header a person sees and decides on. The frozen customer/issuer
+# snapshots and the lines are documents of their own, kept unchanged in the invoice itself.
+AUDITED_FIELDS = (
+    "status", "number_text", "customer_name", "currency", "invoice_date", "due_date", "description",
+    "net_amount", "vat_amount", "gross_amount", "issued_at",
+)
+
 def conflict(code: str, message: str, transaction_ids: Sequence[uuid.UUID] = ()) -> HTTPException:
     """A 409 with a machine-readable code and, where relevant, the (own) transactions concerned."""
     detail: dict[str, Any] = {"code": code, "message": message}
     if transaction_ids:
         detail["transaction_ids"] = [str(transaction_id) for transaction_id in transaction_ids]
     return HTTPException(status.HTTP_409_CONFLICT, detail=detail)
-
-
-def _today() -> date:
-    return datetime.now(timezone.utc).date()
 
 
 # --- totals --------------------------------------------------------------------------------------------------
@@ -132,22 +140,30 @@ def _check_invoiceable(db: Session, ctx: TenantContext, sources: Sequence[Transa
     ids = [t.id for t in sources]
     not_completed = [t.id for t in sources if t.status != TransactionStatus.COMPLETED]
     if not_completed:
-        raise conflict("transactions_not_completed", "Only completed transactions can be invoiced", not_completed)
+        raise conflict("transactions_not_completed", "Only completed orders can be invoiced", not_completed)
+    paid = [t.id for t in sources if t.paid_at is not None]
+    if paid:
+        raise conflict("paid_at_counter", "An order paid at the counter has a receipt and is never invoiced", paid)
     if len({t.billing_customer_id for t in sources}) > 1:
-        raise conflict("mixed_customers", "All transactions on an invoice must have the same billing customer", ids)
+        raise conflict("mixed_customers", "All orders on an invoice must have the same billing customer", ids)
+    walk_in = db.scalar(
+        select(Customer.id).where(Customer.organization_id == ctx.organization_id, Customer.id == sources[0].billing_customer_id, Customer.walk_in.is_(True))
+    )
+    if walk_in is not None:
+        raise conflict("walk_in_customer", "An invoice needs a named customer; the walk-in customer pays at the counter", ids)
     without_currency = [t.id for t in sources if t.currency is None]
     if without_currency:
         raise conflict(
             "currency_missing",
-            "A transaction without a currency cannot be invoiced; an owner or admin can assign the "
-            "organization's currency to earlier transactions in the settings",
+            "An order without a currency cannot be invoiced; an owner or admin can assign the "
+            "organization's currency to earlier orders in the settings",
             without_currency,
         )
     if len({t.currency for t in sources}) > 1:
-        raise conflict("mixed_currencies", "All transactions on an invoice must be in the same currency", ids)
+        raise conflict("mixed_currencies", "All orders on an invoice must be in the same currency", ids)
     reserved = _already_invoiced(db, ctx, ids)
     if reserved:
-        raise conflict("already_invoiced", "A transaction is already on a draft or issued invoice", reserved)
+        raise conflict("already_invoiced", "An order is already on a draft or issued invoice", reserved)
 
 
 def _first_by_transaction(rows: Sequence[Any], key: str = "transaction_id") -> dict[uuid.UUID, list[Any]]:
@@ -165,14 +181,17 @@ def create_draft(db: Session, ctx: TenantContext, payload: InvoiceCreate) -> uui
     # mixture of found and not found gives the one answer: the caller learns nothing about which.
     sources = _lock_sources(db, ctx, requested)
     if len(sources) != len(requested):
-        reference_error("transaction_ids", "One or more transactions were not found", "reference.not_found")
+        reference_error("transaction_ids", "One or more orders were not found", "reference.not_found")
 
     # 5-8. Eligibility, under the locks.
     _check_invoiceable(db, ctx, sources)
 
-    invoice_date = payload.invoice_date or _today()
+    invoice_date = payload.invoice_date or organization_today(db, ctx.organization_id)
     if payload.due_date is not None and payload.due_date < invoice_date:
         reference_error("due_date", "The due date cannot be before the invoice date", "value_error")
+    terms = db.scalar(select(Organization.payment_terms_days).where(Organization.id == ctx.organization_id))
+    # Without a due date, the organization's payment terms decide it (none set: no due date, as before).
+    due_date = payload.due_date if payload.due_date is not None or terms is None else invoice_date + timedelta(days=terms)
 
     # 9. Everything that is read, is read while the transaction locks are held. Nothing a Sales
     # writer can touch (lines, header, status, custom values) can change underneath us.
@@ -210,23 +229,24 @@ def create_draft(db: Session, ctx: TenantContext, payload: InvoiceCreate) -> uui
                 customer_id=customer.id,
                 currency=ordered[0].currency,
                 customer_snapshot=snapshot,
-                issuer_snapshot=snapshots.issuer_snapshot(organization),
+                issuer_snapshot=snapshots.issuer_snapshot(organization, ctx.user.name),
                 customer_name=customer.name,
                 invoice_date=invoice_date,
-                due_date=payload.due_date,
+                due_date=due_date,
                 description=payload.description,
                 net_amount=net,
                 vat_amount=vat,
                 gross_amount=gross,
             )
             _insert_children(db, ctx, invoice, ordered, lines_of, transaction_fields, line_fields, by_rate)
+            audit.created(db, ctx, invoice, "invoice", fields=AUDITED_FIELDS)
     except IntegrityError as error:
         # 10. UNIQUE (organization_id, transaction_id) is the last guard: whoever loses a race
         # for a transaction gets the same answer as the ordinary "already reserved" check.
         if _violated(error) == SOURCE_ONCE_CONSTRAINT:
             raise conflict(
                 "already_invoiced",
-                "A transaction is already on a draft or issued invoice",
+                "An order is already on a draft or issued invoice",
                 _already_invoiced(db, ctx, requested),
             ) from error
         raise
@@ -235,9 +255,72 @@ def create_draft(db: Session, ctx: TenantContext, payload: InvoiceCreate) -> uui
     return invoice_id
 
 
+def invoice_order(db: Session, ctx: TenantContext, transaction_id: uuid.UUID) -> uuid.UUID:
+    """Put a completed order on an invoice ("Invoice" on the order, 2026-10-10): onto the customer's open draft in the
+    same currency, so a customer's orders can be collected and issued together, or onto a new draft. Commits.
+
+    A draft's sources never change in place (its lines, totals and VAT rows are built from them once), so the open
+    draft is rebuilt: deleted and created again with its orders plus this one, keeping its dates and description, in
+    this one database transaction. If anything is refused, the old draft stays as it was.
+    """
+    order = get_scoped(db, ctx, Transaction, transaction_id)
+    if order is None:
+        reference_error("transaction_id", "Order not found", "reference.not_found")
+    draft = db.scalar(
+        scoped_select(Invoice, ctx)
+        .where(Invoice.status == InvoiceStatus.DRAFT, Invoice.customer_id == order.billing_customer_id, Invoice.currency == order.currency)
+        .order_by(Invoice.created_at.desc(), Invoice.id)
+        .limit(1)
+        .with_for_update()
+    )
+    sources = (
+        list(
+            db.scalars(
+                select(InvoiceTransaction.transaction_id).where(
+                    InvoiceTransaction.organization_id == ctx.organization_id, InvoiceTransaction.invoice_id == draft.id
+                )
+            )
+        )
+        if draft is not None
+        else []
+    )
+    if draft is None or len(sources) >= MAX_TRANSACTIONS_PER_INVOICE or transaction_id in sources:
+        return create_draft(db, ctx, InvoiceCreate(transaction_ids=[transaction_id]))
+    header = InvoiceCreate(transaction_ids=[*sources, transaction_id], invoice_date=draft.invoice_date, due_date=draft.due_date, description=draft.description)
+    audit.deleted(db, ctx, draft, "invoice", fields=AUDITED_FIELDS)
+    db.delete(draft)
+    db.flush()
+    return create_draft(db, ctx, header)
+
+
 def _violated(error: IntegrityError) -> str | None:
     diag = getattr(error.orig, "diag", None)
     return getattr(diag, "constraint_name", None)
+
+
+def _service_snapshots(db: Session, ctx: TenantContext, lines: list[TransactionLine]) -> dict[uuid.UUID, dict[str, Any]]:
+    """What an invoice shows of each service line, as it reads at invoicing (never resolved again): when, by whom
+    and for whom, in words. The subject's label comes from the registry (Invoicing does not know what it is)."""
+    service_lines = [line for line in lines if line.kind == "service"]
+    if not service_lines:
+        return {}
+    labels = subjects.subject_labels(db, ctx.organization_id, {(line.subject_type, line.subject_id) for line in service_lines})
+    performers = {line.performed_by for line in service_lines if line.performed_by is not None}
+    names = dict(db.execute(select(User.id, User.name).where(User.id.in_(performers))).all()) if performers else {}
+    zone = organization_zone(db, ctx.organization_id)
+    return {
+        line.id: {
+            "schema": 1,
+            "performed_at": line.performed_at.isoformat(),
+            # As a person in the organization reads it, so the document never needs a time zone to be shown.
+            "performed_at_local": line.performed_at.astimezone(zone).strftime("%Y-%m-%d %H:%M"),
+            "performed_by": names.get(line.performed_by),
+            "subject_type": line.subject_type,
+            "subject_label": labels.get((line.subject_type, line.subject_id)),
+            "notes": line.notes,
+        }
+        for line in service_lines
+    }
 
 
 def _insert_children(
@@ -251,6 +334,7 @@ def _insert_children(
     by_rate: dict[Decimal, list[Decimal]],
 ) -> None:
     """Sources, lines (copied verbatim) and the stored VAT breakdown of a new invoice."""
+    services = _service_snapshots(db, ctx, [line for lines in lines_of.values() for line in lines])
     position = 0
     for index, source in enumerate(ordered, start=1):
         # The unique key on the source is checked here, when the link row is flushed.
@@ -263,6 +347,7 @@ def _insert_children(
             customer_id=invoice.customer_id,
             currency=invoice.currency,
             transaction_date=source.transaction_date,
+            transaction_number=source.number,
             source_version=source.version,
             position=index,
             fields=snapshots.custom_field_snapshot(transaction_fields.get(source.id, [])),
@@ -281,11 +366,16 @@ def _insert_children(
                 unit=line.unit,
                 quantity=line.quantity,
                 unit_price_ex_vat=line.unit_price_ex_vat,
+                list_unit_price=line.list_unit_price,
+                catalog_discount_percent=line.catalog_discount_percent,
+                customer_discount_percent=line.customer_discount_percent,
+                line_discount_percent=line.line_discount_percent,
                 vat_rate=line.vat_rate,
                 net_amount=line.net_amount,
                 vat_amount=line.vat_amount,
                 gross_amount=line.gross_amount,
                 fields=snapshots.custom_field_snapshot(line_fields.get(line.id, [])),
+                service=services.get(line.id),
             )
     for rate in sorted(by_rate):
         net, vat = by_rate[rate]
@@ -313,19 +403,45 @@ def read_invoice(db: Session, ctx: TenantContext, invoice_id: uuid.UUID) -> Invo
             scoped_select(InvoiceVatRow, ctx).where(InvoiceVatRow.invoice_id == invoice.id).order_by(InvoiceVatRow.vat_rate)
         )
     )
+    paid = payments.paid_amounts(db, ctx.organization_id, [invoice.id]).get(invoice.id, Decimal("0.00"))
+    credited = credits.credited_amounts(db, ctx.organization_id, [invoice.id]).get(invoice.id, Decimal("0.00"))
+    refunded = payments.refunded_amounts(db, ctx.organization_id, [invoice.id]).get(invoice.id, Decimal("0.00"))
+    credited_lines = credits.credited_quantities(db, ctx.organization_id, [row.id for row in lines])
+    returnable = {}
+    if invoice.status == InvoiceStatus.ISSUED:
+        for answer in registry.call_hooks("stock.returnable", db, ctx.organization_id, [row.source_line_id for row in lines]):
+            returnable.update(answer)
     return InvoiceRead(
-        **summary_fields(invoice, len(transactions)),
+        **summary_fields(invoice, len(transactions), paid, credited, refunded),
+        payments=payments.list_payments(db, ctx, invoice.id),
+        credit_notes=credits.credit_note_summaries(db, ctx, invoice.id),
+        returns=(cases := returns.list_returns(db, ctx, invoice.id)),
+        open_returns=sum(1 for case in cases if case.state in ("requested", "goods_received", "approved")),
         issued_by=invoice.issued_by,
+        created_by=invoice.created_by,
+        updated_by=invoice.updated_by,
         customer_snapshot=invoice.customer_snapshot,
         issuer_snapshot=invoice.issuer_snapshot,
         transactions=[InvoiceTransactionRead.model_validate(row) for row in transactions],
-        lines=[InvoiceLineRead.model_validate(row) for row in lines],
+        lines=[
+            InvoiceLineRead.model_validate(row).model_copy(
+                update={
+                    "credited_quantity": credited_lines.get(row.id, Decimal("0.000")),
+                    "creditable_quantity": row.quantity - credited_lines.get(row.id, Decimal("0.000")),
+                    "stock_returnable": returnable.get(row.source_line_id),
+                }
+            )
+            for row in lines
+        ],
         vat_breakdown=[VatRowRead.model_validate(row) for row in vat_rows],
     )
 
 
-def summary_fields(invoice: Invoice, transaction_count: int) -> dict[str, Any]:
+def summary_fields(
+    invoice: Invoice, transaction_count: int, paid: Decimal = Decimal("0.00"), credited: Decimal = Decimal("0.00"), refunded: Decimal = Decimal("0.00")
+) -> dict[str, Any]:
     return dict(
+        **payments.payment_fields(invoice, paid, credited, refunded),
         id=invoice.id,
         status=invoice.status,
         version=invoice.version,
@@ -376,9 +492,11 @@ def update_draft(db: Session, ctx: TenantContext, invoice_id: uuid.UUID, values:
     if final_due is not None and final_due < final_date:
         reference_error("due_date", "The due date cannot be before the invoice date", "value_error")
     if any(getattr(invoice, field) != value for field, value in values.items()):  # a no-op moves no version
+        before = audit.snapshot(invoice, AUDITED_FIELDS)
         for field, value in values.items():
             setattr(invoice, field, value)
         invoice.version += 1
+        audit.updated(db, ctx, invoice, "invoice", before, fields=AUDITED_FIELDS)
     db.commit()
 
 
@@ -387,6 +505,7 @@ def delete_draft(db: Session, ctx: TenantContext, invoice_id: uuid.UUID, if_matc
     invoice = get_scoped_or_404(db, ctx, Invoice, invoice_id, for_update=True)
     require_draft(invoice, "deleted")
     ensure_current(if_match, invoice.version, "invoice", invoice.id)
+    audit.deleted(db, ctx, invoice, "invoice", fields=AUDITED_FIELDS)
     db.delete(invoice)
     db.commit()
 
@@ -397,7 +516,7 @@ def delete_draft(db: Session, ctx: TenantContext, invoice_id: uuid.UUID, if_matc
 def _source_changed(message: str) -> HTTPException:
     return conflict(
         "source_changed",
-        f"{message}. The draft no longer matches its source transactions and cannot be issued; delete it and create a new one",
+        f"{message}. The draft no longer matches its source orders and cannot be issued; delete it and create a new one",
     )
 
 
@@ -411,20 +530,20 @@ def _verify_unchanged(
 ) -> list[TransactionLine]:
     """Nothing the draft reserved may differ from what it copied. Returns the source lines."""
     if {s.id for s in sources} != {link.transaction_id for link in links} or len(sources) != len(links):
-        raise _source_changed("A source transaction is missing")
+        raise _source_changed("A source order is missing")
     by_id = {s.id: s for s in sources}
     for link in links:
         source = by_id[link.transaction_id]
         if source.status != TransactionStatus.COMPLETED:
-            raise _source_changed("A source transaction is no longer completed")
+            raise _source_changed("A source order is no longer completed")
         if source.version != link.source_version:
-            raise _source_changed("A source transaction was changed")
+            raise _source_changed("A source order was changed")
         if (source.billing_customer_id, source.currency, source.transaction_date) != (
             link.customer_id,
             link.currency,
             link.transaction_date,
         ):
-            raise _source_changed("A source transaction's customer, currency or date was changed")
+            raise _source_changed("A source order's customer, currency or date was changed")
     source_lines = list(
         db.scalars(
             _fresh(
@@ -436,14 +555,17 @@ def _verify_unchanged(
     )
     copied = {line.source_line_id: line for line in lines}
     if {line.id for line in source_lines} != set(copied) or len(source_lines) != len(lines):
-        raise _source_changed("The lines of a source transaction were changed")
-    columns = ("description", "unit", "quantity", "unit_price_ex_vat", "vat_rate", "net_amount", "vat_amount", "gross_amount")
+        raise _source_changed("The lines of a source order were changed")
+    columns = (
+        "description", "unit", "quantity", "unit_price_ex_vat", "list_unit_price", "catalog_discount_percent", "customer_discount_percent",
+        "line_discount_percent", "vat_rate", "net_amount", "vat_amount", "gross_amount",
+    )
     for source_line in source_lines:
         copy = copied[source_line.id]
         if copy.source_transaction_id != source_line.transaction_id or any(
             getattr(copy, column) != getattr(source_line, column) for column in columns
         ):
-            raise _source_changed("A line of a source transaction was changed")
+            raise _source_changed("A line of a source order was changed")
     # The stored header and VAT breakdown must still be the sums of the stored lines.
     net, vat, gross, by_rate = sum_lines(lines)
     if (net, vat, gross) != (invoice.net_amount, invoice.vat_amount, invoice.gross_amount):
@@ -487,7 +609,7 @@ def issue(db: Session, ctx: TenantContext, invoice_id: uuid.UUID, if_match: str 
         assert customer is not None and organization is not None
         invoice.customer_snapshot = snapshots.customer_snapshot(customer)
         invoice.customer_name = customer.name
-        invoice.issuer_snapshot = snapshots.issuer_snapshot(organization)
+        invoice.issuer_snapshot = snapshots.issuer_snapshot(organization, ctx.user.name)
         transaction_fields = custom_fields.read_values(db, ctx, TRANSACTION, [l.transaction_id for l in links], flag=INVOICE_FLAG)
         line_fields = custom_fields.read_values(db, ctx, TRANSACTION_LINE, [l.source_line_id for l in lines], flag=INVOICE_FLAG)
         for link in links:
@@ -498,11 +620,13 @@ def issue(db: Session, ctx: TenantContext, invoice_id: uuid.UUID, if_match: str 
 
         # 6-9. The number is allocated last, after everything that can fail, in this transaction.
         number = numbering.allocate_number(db, ctx.organization_id, invoice.series)
+        before = audit.snapshot(invoice, AUDITED_FIELDS)
         invoice.number = number
         invoice.number_text = numbering.format_number(number)
         invoice.issued_at = datetime.now(timezone.utc)
         invoice.issued_by = ctx.user.id
         invoice.status = InvoiceStatus.ISSUED
         invoice.version += 1
+        audit.updated(db, ctx, invoice, "invoice", before, action="issued", fields=AUDITED_FIELDS)
         db.flush()
     db.commit()  # 10

@@ -6,13 +6,13 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import InterfaceError, OperationalError
 
 from app import registrations
-from app.api import auth, customers, health, invitations, items, me, members, organization, organizations
+from app.api import auth, customers, health, history, invitations, items, me, members, organization, organizations, suppliers
 from app.core.config import settings
 from app.core.entity_registry import registry
 from app.core.internal_auth import InternalAuthMiddleware
 from app.core.logging_config import configure_logging, log
 from app.core.request_context import RequestContextMiddleware
-from app.modules import custom_fields, equine, invoicing, sales
+from app.modules import custom_fields, equine, inventory, invoicing, sales
 
 configure_logging("backend")
 
@@ -54,7 +54,9 @@ app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(me.router)
 app.include_router(customers.router)
+app.include_router(suppliers.router)
 app.include_router(items.router)
+app.include_router(history.router)
 app.include_router(organization.router)
 app.include_router(organizations.router)
 app.include_router(members.router)
@@ -65,6 +67,8 @@ app.include_router(sales.router)
 app.include_router(custom_fields.router)
 app.include_router(invoicing.router)
 app.include_router(invoicing.invoiceable_router)
+app.include_router(inventory.router)
+app.include_router(inventory.availability_router)
 
 # Modules register what they expose to generic capabilities; nothing imports a module
 # except here. validate() fails fast at startup on an inconsistent registration.
@@ -73,4 +77,5 @@ equine.register(registry)
 sales.register(registry)
 custom_fields.register(registry)
 invoicing.register(registry)
+inventory.register(registry)
 registry.validate()

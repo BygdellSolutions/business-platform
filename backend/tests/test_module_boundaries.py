@@ -28,6 +28,7 @@ MODULE_PREFIX = {
     # package and the wiring may import it: the dependency runs invoicing -> sales / custom
     # fields (never the reverse), and everything else meets it through the core registry.
     "invoicing": "app.modules.invoicing",
+    "inventory": "app.modules.inventory",
 }
 
 
@@ -73,6 +74,10 @@ INVOICING_MAY_IMPORT = {
 }
 
 
+# Inventory reads what a transaction asks for: Sales' models only (never its API, schemas or registration).
+INVENTORY_MAY_IMPORT = {"app.modules.sales": ("models",)}
+
+
 @pytest.mark.parametrize("name", MODULE_PREFIX)
 def test_nothing_imports_a_module_except_itself_and_the_wiring_files(name: str):
     allowed = (MODULES / name,)
@@ -80,6 +85,23 @@ def test_nothing_imports_a_module_except_itself_and_the_wiring_files(name: str):
     if MODULE_PREFIX[name] in INVOICING_MAY_IMPORT:
         # Invoicing is let in, but only through the named submodules.
         offenders = [o for o in offenders if Path(o).parts[:3] != ("app", "modules", "invoicing")]
+    if MODULE_PREFIX[name] in INVENTORY_MAY_IMPORT:
+        offenders = [o for o in offenders if Path(o).parts[:3] != ("app", "modules", "inventory")]
+    assert offenders == []
+
+
+def test_inventory_imports_only_what_it_is_allowed_to():
+    allowed_prefixes = ["app.core", "app.models", "app.schemas", "app.api.deps", "app.modules.inventory"]
+    for module, submodules in INVENTORY_MAY_IMPORT.items():
+        allowed_prefixes += [f"{module}.{name}" for name in submodules]
+    offenders = [
+        f"{path.relative_to(BACKEND)} -> {name}"
+        for path in python_files(MODULES / "inventory")
+        for name in imports_of(path)
+        if name.split(".")[0] == "app"
+        and name not in INVENTORY_MAY_IMPORT
+        and not any(name == p or name.startswith(p + ".") for p in allowed_prefixes)
+    ]
     assert offenders == []
 
 
@@ -111,9 +133,9 @@ def test_invoicing_really_uses_its_allowance():
 def test_wiring_files_really_wire_the_modules():
     # If a wiring file stops importing a module, shrink WIRING (keeps the allowlist honest).
     for path in WIRING:
-        for name in ("equine", "sales", "invoicing"):
-            if path.name == "seed_dev.py" and name == "invoicing":
-                continue  # the seed creates no invoices
+        for name in ("equine", "sales", "invoicing", "inventory"):
+            if path.name == "seed_dev.py" and name in ("invoicing", "inventory"):
+                continue  # the seed creates no invoices and no stock
             assert imports_matching(path, MODULE_PREFIX[name]), (path, name)
 
 
@@ -123,9 +145,12 @@ def test_wiring_files_really_wire_the_modules():
 @pytest.mark.parametrize(
     "package,forbidden",
     [
-        ("sales", ["equine", "custom_fields", "invoicing"]),
-        ("equine", ["sales", "custom_fields", "invoicing"]),
-        ("custom_fields", ["sales", "equine", "invoicing"]),
+        ("sales", ["equine", "custom_fields", "invoicing", "inventory"]),
+        ("equine", ["sales", "custom_fields", "invoicing", "inventory"]),
+        ("custom_fields", ["sales", "equine", "invoicing", "inventory"]),
+        ("invoicing", ["equine", "inventory"]),
+        # Inventory reacts to Sales through the core lifecycle seam and reads only Sales' models (checked above).
+        ("inventory", ["equine", "custom_fields", "invoicing"]),
     ],
 )
 def test_modules_do_not_import_each_other(package: str, forbidden: list[str]):
@@ -198,5 +223,5 @@ def test_custom_fields_depends_on_core_only():
 
 def test_alembic_collects_the_models_of_every_module():
     env = (BACKEND / "alembic" / "env.py").read_text(encoding="utf-8")
-    for module in ("equine", "sales", "invoicing"):
+    for module in ("equine", "sales", "invoicing", "inventory"):
         assert f"app.modules.{module}" in env

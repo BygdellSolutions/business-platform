@@ -12,6 +12,11 @@ from fastapi import Depends, HTTPException, status
 from app.core.tenant import TenantContext, get_tenant_context
 from app.models.organization_user import Role
 
+# Who may create, change and delete an organization's business records (customers, items,
+# domain records, transactions and their custom values). A viewer reads only. Narrower rules
+# (invoicing, settings, custom-field definitions) declare their own role sets.
+RECORD_WRITERS = frozenset({Role.OWNER, Role.ADMIN, Role.ACCOUNTANT, Role.EMPLOYEE})
+
 
 def require_role(ctx: TenantContext, allowed_roles: Iterable[Role]) -> None:
     """Raise 403 unless the user's role in the active organization is allowed."""
@@ -33,4 +38,10 @@ def roles_required(*allowed_roles: Role) -> Callable[..., TenantContext]:
         require_role(ctx, allowed_roles)
         return ctx
 
+    # Lets a test walk the routes and prove which roles each write endpoint admits.
+    dependency.allowed_roles = frozenset(allowed_roles)  # type: ignore[attr-defined]
     return dependency
+
+
+# FastAPI dependency for every write to business records: the tenant context of a record writer.
+record_writer = roles_required(*RECORD_WRITERS)

@@ -13,9 +13,11 @@ export interface NavItem {
 export const NAV: NavItem[] = [
   { label: "Dashboard", path: "", enabled: true },
   { label: "Customers", path: "/customers", enabled: true },
+  { label: "Suppliers", path: "/suppliers", enabled: true },
   { label: "Catalog", path: "/catalog", enabled: true },
+  { label: "Inventory", path: "/inventory", enabled: true },
   { label: "Horses", path: "/horses", enabled: true },
-  { label: "Transactions", path: "/transactions", enabled: true },
+  { label: "Orders", path: "/transactions", enabled: true },
   { label: "Invoices", path: "/invoices", enabled: true },
   { label: "Settings", path: "/settings", enabled: true },
   { label: "Members", path: "/members", enabled: true, roles: ["owner", "admin"] },

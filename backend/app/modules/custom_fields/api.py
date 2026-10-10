@@ -4,7 +4,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.core.authz import roles_required
+from app.core.authz import record_writer, roles_required
 from app.core.db import get_db
 from app.core.entity_registry import registry
 from app.core.query import apply_update, commit_and_refresh
@@ -35,7 +35,7 @@ router = APIRouter(prefix="/api/custom-fields", tags=["custom-fields"])
 Flag = Literal["required", "show_in_form", "show_in_table", "show_on_invoice"]
 
 # Defining fields reshapes forms for the whole organization: owners and admins only.
-# Reading definitions and writing values stays open to every member.
+# Reading definitions stays open to every member; writing values is for record writers (not viewers).
 administer = roles_required(Role.OWNER, Role.ADMIN)
 
 
@@ -224,7 +224,7 @@ def write_entity_values(
     entity_type: str,
     entity_id: uuid.UUID,
     payload: ValuesPatch,
-    ctx: TenantContext = Depends(get_tenant_context),
+    ctx: TenantContext = Depends(record_writer),
     db: Session = Depends(get_db),
 ) -> EntityValuesRead:
     service.write_values(db, ctx, entity_type, entity_id, payload.values)

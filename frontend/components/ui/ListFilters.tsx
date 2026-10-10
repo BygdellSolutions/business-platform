@@ -33,6 +33,9 @@ export function ListFilters({
         </label>
       )}
       {children}
+      {/* Filtering keeps the column the list is sorted by. */}
+      {params.sort && <input type="hidden" name="sort" value={params.sort} />}
+      {params.sort && params.dir === "desc" && <input type="hidden" name="dir" value="desc" />}
       {activeStatus && (
         <label className="flex flex-col gap-1 text-sm">
           Status

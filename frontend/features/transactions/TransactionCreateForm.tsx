@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useSyncExternalStore, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 
 import { useOrgId } from "@/components/shell/org-context";
 import { Button } from "@/components/ui/Button";
@@ -10,30 +10,23 @@ import { EntityPicker, type PickerEntity } from "@/components/ui/EntityPicker";
 import { ErrorSummary } from "@/components/ui/ErrorSummary";
 import { customerSearch } from "@/features/customers/customer-picker";
 import { apiFetch } from "@/lib/api/client";
-import type { Transaction, TransactionCreate } from "@/lib/api/types";
-import { isDateShape, localToday } from "@/lib/dates";
+import type { Customer, Transaction, TransactionCreate } from "@/lib/api/types";
+import { isDateShape } from "@/lib/dates";
 import { problemsFrom, useMutation } from "@/lib/forms";
 
 const CONTROLS = ["billing_customer_id", "transaction_date"] as const;
-
-// The browser's calendar date, hydration-safe: the server renders without it, the browser fills
-// it in. (The server's own "today" would be the server's time zone, not the user's.)
-const subscribe = () => () => {};
-const browserToday = () => localToday();
-const serverToday = () => "";
 
 /**
  * A new transaction starts as a draft with only a billing customer and a date; lines are added
  * on the transaction's own page. Only active customers can be billed (the picker offers only
  * those, and FastAPI refuses others). The date is a plain YYYY-MM-DD string, prefilled with the
- * user's local date. No customer chosen means the field is left out and FastAPI says it is
+ * organization's own date (`today`, from FastAPI in the organization's time zone), not the browser's. No customer chosen means the field is left out and FastAPI says it is
  * required, on the picker.
  */
-export function TransactionCreateForm() {
+export function TransactionCreateForm({ today }: { today: string }) {
   const orgId = useOrgId();
   const router = useRouter();
   const { pending, error, run } = useMutation();
-  const today = useSyncExternalStore(subscribe, browserToday, serverToday);
   const [customer, setCustomer] = useState<PickerEntity | null>(null);
   const [typedDate, setTypedDate] = useState<string | null>(null);
   const date = typedDate ?? today;
@@ -41,6 +34,12 @@ export function TransactionCreateForm() {
   const search = useMemo(() => customerSearch(orgId, { activeOnly: true }), [orgId]);
   const problems = problemsFrom(error, CONTROLS);
   const dateError = problems.byField.transaction_date ?? (date !== "" && !isDateShape(date) ? ["Enter a date such as 2026-10-03."] : undefined);
+
+  async function walkIn() {
+    // The organization's one Walk-in customer, created by FastAPI the first time it is asked for.
+    const found = await run(() => apiFetch<Customer>(orgId, "/customers/walk-in", { method: "POST" }));
+    if (found !== null) setCustomer({ id: found.id, label: found.name });
+  }
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -55,8 +54,14 @@ export function TransactionCreateForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} noValidate aria-label="New transaction" className="flex max-w-xl flex-col gap-4">
+    <form onSubmit={onSubmit} noValidate aria-label="New order" className="flex max-w-xl flex-col gap-4">
       <EntityPicker label="Billing customer" name="billing_customer_id" value={customer} onChange={setCustomer} search={search} error={problems.byField.billing_customer_id} />
+      <div className="-mt-2 text-sm">
+        <button type="button" className="underline" disabled={pending} onClick={() => void walkIn()} data-testid="walk-in-customer">
+          Walk-in customer
+        </button>{" "}
+        <span className="text-zinc-500">for a counter sale to someone who is not registered (paid now, never invoiced).</span>
+      </div>
       <label className="flex flex-col gap-1 text-sm font-medium">
         Date
         <input
@@ -76,7 +81,7 @@ export function TransactionCreateForm() {
       <ErrorSummary messages={problems.general} />
       <div className="flex items-center gap-4">
         <Button type="submit" disabled={pending || (date !== "" && !isDateShape(date))} data-testid="submit">
-          {pending ? "Creating…" : "Create transaction"}
+          {pending ? "Creating…" : "Create order"}
         </Button>
         <Link href={`/o/${orgId}/transactions`} className="text-sm underline">
           Cancel

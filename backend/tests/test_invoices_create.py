@@ -118,7 +118,7 @@ def test_a_transaction_cannot_be_invoiced_twice_even_across_a_draft_and_an_issue
         assert response.status_code == 409
         assert response.json()["detail"] == {
             "code": "already_invoiced",
-            "message": "A transaction is already on a draft or issued invoice",
+            "message": "An order is already on a draft or issued invoice",
             "transaction_ids": [str(tx.id)],
         }
     assert counts(db_session)[0] == 2  # nothing new was created
@@ -301,7 +301,8 @@ def test_a_line_that_came_from_an_item_carries_no_item_reference(client, db_sess
     body = draft_invoice(client, sales.headers, tx)
     assert set(body["lines"][0]) == {
         "id", "position", "source_transaction_id", "source_line_id", "description", "unit", "quantity",
-        "unit_price_ex_vat", "vat_rate", "net_amount", "vat_amount", "gross_amount", "fields",
+        "unit_price_ex_vat", "list_unit_price", "catalog_discount_percent", "customer_discount_percent", "line_discount_percent",
+        "vat_rate", "net_amount", "vat_amount", "gross_amount", "fields", "service", "credited_quantity", "creditable_quantity", "stock_returnable",
     }
 
 
@@ -329,9 +330,12 @@ def test_party_snapshots_hold_only_fields_that_exist(client, db_session, sales):
         "postal_code": None, "city": "Umeå", "country_code": "SE", "registration_number": None, "vat_number": "SE1",
     }
     assert body["issuer_snapshot"] == {
-        "schema": 1, "organization_id": str(sales.org.id), "name": "Solo", "legal_name": "Solo AB",
+        "schema": 3, "organization_id": str(sales.org.id), "name": "Solo", "legal_name": "Solo AB",
         "address_line1": None, "address_line2": None, "postal_code": None, "city": "Umeå",
         "country_code": None, "registration_number": None, "vat_number": "SE556000000101",
+        "phone": None, "email": None, "website": None, "bankgiro": None, "plusgiro": None, "iban": None, "bic": None,
+        "payment_terms_days": None, "approved_for_f_tax": None, "document_language": None,
+        "our_reference": body["issuer_snapshot"]["our_reference"],
     }
     assert body["customer_name"] == "Umeå HK"
 
@@ -446,7 +450,7 @@ def test_invoice_state_by_transaction_is_derived_from_invoicing_records_only(cli
     assert [(r["transaction_id"], r["state"], r["invoice_id"], r["number_text"]) for r in rows] == [
         (str(free.id), "none", None, None),
         (str(drafted.id), "draft", draft["id"], None),
-        (str(issued.id), "invoiced", done["id"], "1"),
+        (str(issued.id), "invoiced", done["id"], "1001"),
         (str(unknown), "none", None, None),
     ]
     # Sales' own responses carry no invoicing state at all.

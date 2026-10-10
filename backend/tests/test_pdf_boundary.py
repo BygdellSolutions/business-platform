@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 PDF = Path(__file__).resolve().parents[1] / "app" / "modules" / "invoicing" / "pdf"
-RENDERING_LAYER = ["document.py", "format.py", "fonts.py", "render.py", "build.py", "filename.py"]
+RENDERING_LAYER = ["document.py", "format.py", "fonts.py", "render.py", "build.py", "filename.py", "labels.py"]
 
 FORBIDDEN_IMPORTS = (
     "sqlalchemy", "alembic", "psycopg", "fastapi", "starlette",

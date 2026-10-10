@@ -1,0 +1,27 @@
+# The FastAPI backend as its own Coolify resource: it holds ONLY the runtime (app) role's URL and the web secrets.
+# Not public: no domain, no ports. The frontend reaches it by its FIXED container name on Coolify's `coolify` network: enable
+# "Consistent Container Names" on this resource (name: backend-<resource uuid>). Coolify drops Compose network aliases (observed).
+# See README.md in this directory.
+services:
+  backend:
+    build:
+      context: ./backend
+    environment:
+      APP_ENV: production
+      AUTH_MODE: session
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL (app role)}
+      SECURITY_KEY: ${SECURITY_KEY:?set SECURITY_KEY}
+      BFF_INTERNAL_SECRET: ${BFF_INTERNAL_SECRET:?set BFF_INTERNAL_SECRET}
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?set PUBLIC_ORIGIN}
+      CORS_ORIGINS: "[]"
+      TRUST_CLIENT_IP_HEADER: ${TRUST_CLIENT_IP_HEADER:-false}
+
+  # Makes `docker compose up` (and so the Coolify deployment) FAIL unless the backend becomes READY (its image health check is
+  # readiness: database reachable and at exactly this image's Alembic head).
+  backend-gate:
+    image: busybox:1.37
+    command: ["true"]
+    restart: "no"
+    depends_on:
+      backend:
+        condition: service_healthy

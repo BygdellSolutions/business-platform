@@ -41,11 +41,10 @@ for (const role of ["employee", "viewer"] as RoleName[]) {
       await expect(page.getByTestId("invoice-view").getByRole("button")).toHaveCount(0);
 
       await page.goto(`/o/${world.orgId}/invoices/${s.issued.id}`);
-      await expect(page.getByTestId("invoice-number")).toHaveText("1");
+      await expect(page.getByTestId("invoice-number")).toHaveText("1001");
 
       await page.goto(`/o/${world.orgId}/invoices`);
       await expect(page.getByTestId("invoice-row")).toHaveCount(2);
-      await expect(page.getByTestId("new-invoice")).toHaveCount(0);
     });
 
     test("sees what is waiting to be invoiced but cannot select or create", async ({ page, context }) => {
@@ -89,8 +88,8 @@ for (const role of ["accountant", "admin"] as RoleName[]) {
     for (const control of ["issue", "delete-draft", "edit-details"]) await expect(page.getByTestId(control)).toBeVisible();
     await page.getByTestId("issue").click();
     await page.getByTestId("issue-confirm").click();
-    await expect(page.getByTestId("invoice-status")).toHaveText("Issued");
-    await expect(page.getByTestId("invoice-number")).toHaveText("2");
+    await expect(page.getByTestId("invoice-status")).toHaveAttribute("data-status", "issued");
+    await expect(page.getByTestId("invoice-number")).toHaveText("1002");
 
     await page.goto(`/o/${world.orgId}/invoices/new`);
     await expect(page.getByTestId("select-transaction")).toHaveCount(1);
@@ -104,7 +103,7 @@ test("the role of the user in THIS organization decides, not a role somewhere el
   try {
     // The same person is an owner elsewhere and only an employee here.
     const person = world.addMember("employee");
-    testRow(`insert into organization_users (organization_id, user_id, role) select ${sql(other.orgId)}, id, 'owner' from users where email = ${sql(person)}`);
+    testRow(`update users set max_owned_organizations = max_owned_organizations + 1 where email = ${sql(person)}; insert into organization_users (organization_id, user_id, role) select ${sql(other.orgId)}, id, 'owner' from users where email = ${sql(person)}`); // owning a second organization needs the allowance
     await signIn(context, person);
 
     await page.goto(`/o/${world.orgId}/invoices/${s.draft.id}`);
@@ -123,7 +122,7 @@ test("a forged organization header or cookie does not change which organization 
   const other = createWorld({ label: "InvoiceHeaderTarget" });
   try {
     const otherCustomer = insertCustomer(other.orgId, "Other Co");
-    testRow(`insert into organization_users (organization_id, user_id, role) select ${sql(other.orgId)}, id, 'owner' from users where email = ${sql(world.email)}`);
+    testRow(`update users set max_owned_organizations = max_owned_organizations + 1 where email = ${sql(world.email)}; insert into organization_users (organization_id, user_id, role) select ${sql(other.orgId)}, id, 'owner' from users where email = ${sql(world.email)}`); // owning a second organization needs the allowance
     await signIn(context, world.email);
     const mine = await context.request.get(bffUrl(world.orgId, "/invoices"), { headers: { "x-organization-id": other.orgId, "x-dev-user-email": other.email } });
     expect(mine.status()).toBe(200);

@@ -36,6 +36,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core import ownership
 from app.models import Organization, OrganizationUser, Role, SecurityEvent, User
 
 ADMIN_MANAGEABLE = frozenset({Role.ACCOUNTANT, Role.EMPLOYEE, Role.VIEWER})
@@ -131,6 +132,8 @@ def _commit(db: Session) -> None:
         db.rollback()
         if OWNER_CONSTRAINT in str(error.orig):
             raise LastOwner() from error
+        if ownership.is_limit_violation(error):
+            raise ownership.OwnershipLimitReached() from error
         raise
 
 
@@ -171,6 +174,8 @@ def change_role(db: Session, *, organization_id: uuid.UUID, actor_user_id: uuid.
     if new_role != old_role:
         if old_role == Role.OWNER and _owners(rows) <= 1:  # counted only now, after the locks
             raise LastOwner()
+        if new_role == Role.OWNER:
+            ownership.ensure_can_own_another(db, target.user_id)  # becoming an owner counts against the person's limit
         target.role = new_role
         db.flush()
         _event(db, "member_role_changed", now, actor, f"{target.user_id} {old_role}>{new_role}", source)
@@ -227,7 +232,40 @@ def repair_owner(db: Session, *, organization_id: uuid.UUID, user_id: uuid.UUID,
     if row is None:
         raise NotAMember()
     previous = Role(row.role)
+    ownership.allow_beyond_limit_in_this_transaction(db)  # the operator's repair is the one override of the limit
     row.role = Role.OWNER
     db.flush()
     db.add(SecurityEvent(occurred_at=now, event_type="owner_repaired", actor_user_id=user_id, organization_id=organization_id, detail=f"cli {previous}>owner"))
     _commit(db)
+
+
+def transfer_ownership(
+    db: Session, *, organization_id: uuid.UUID, actor_user_id: uuid.UUID, membership_id: uuid.UUID, now: datetime, source: str | None
+) -> None:
+    """An owner hands ownership to another member: the target becomes an owner and the actor an admin (so they can
+    leave afterwards, or stay). Decided from fresh, locked rows like every membership change; the owner count can
+    never drop, because the target becomes an owner in the same transaction."""
+    rows = _lock_members(db, organization_id)
+    actor = _actor(rows, actor_user_id)
+    if Role(actor.role) != Role.OWNER:
+        raise NotAllowed("not_owner", "Only an owner can transfer ownership.")
+    target = _target(rows, membership_id)
+    if target.id == actor.id:
+        raise NotAllowed("self_transfer", "Choose another member to transfer ownership to.")
+    if Role(target.role) == Role.OWNER:
+        raise NotAllowed("already_owner", "That member is already an owner.")
+    previous = Role(target.role)
+    ownership.ensure_can_own_another(db, target.user_id)  # receiving ownership counts against the person's limit
+    target.role = Role.OWNER
+    actor.role = Role.ADMIN
+    db.flush()
+    _event(db, "ownership_transferred", now, actor, f"{target.user_id} {previous}>owner", source)
+    _commit(db)
+
+
+def lock_as_owner(db: Session, *, organization_id: uuid.UUID, actor_user_id: uuid.UUID) -> list[OrganizationUser]:
+    """Lock the organization's memberships (the usual order) and require the actor to be an owner NOW."""
+    rows = _lock_members(db, organization_id)
+    if Role(_actor(rows, actor_user_id).role) != Role.OWNER:
+        raise NotAllowed("not_owner", "Only an owner can do this.")
+    return rows

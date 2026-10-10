@@ -6,7 +6,7 @@ import type { TransactionFields } from "@/features/transactions/editor-context";
 import { TransactionEditor } from "@/features/transactions/TransactionEditor";
 import { apiFetch } from "@/lib/api/client";
 import { normalizeError, type ApiResult } from "@/lib/api/errors";
-import type { Customer, Item, Transaction, TransactionLine } from "@/lib/api/types";
+import type { Customer, Item, LineFulfillment, StockDemand, Transaction, TransactionLine } from "@/lib/api/types";
 import type { MoneyString, PercentString, QuantityString } from "@/lib/decimal";
 import { EMPTY_PROFILE } from "@/lib/profile";
 
@@ -27,19 +27,35 @@ export function line(overrides: Partial<TransactionLine> = {}): TransactionLine 
   return {
     id: LINE_1,
     transaction_id: TX_ID,
-    item_id: ITEM_ID,
+    item_id: null, // an ad-hoc line: every value is its own (catalog and service lines are built with overrides)
     position: 1,
     version: 1,
     description: "Horse massage",
     unit: "session",
     quantity: "1.000" as QuantityString,
     unit_price_ex_vat: money("850.00"),
+    list_unit_price: null,
+    catalog_discount_percent: null,
+    customer_discount_percent: null,
+    line_discount_percent: null,
+    priced_by_hand: false,
+    price_before_line_discount: null,
     vat_rate: "25.00" as PercentString,
     net_amount: money("850.00"),
     vat_amount: money("212.50"),
     gross_amount: money("1062.50"),
     created_at: "2026-10-01T10:00:00Z",
     updated_at: "2026-10-01T10:00:00Z",
+    kind: "standard",
+    performed_at: null,
+    performed_by: null,
+    subject_type: null,
+    subject_id: null,
+    notes: null,
+    subject_label: null,
+    performed_by_name: null,
+    created_by: null,
+    updated_by: null,
     ...overrides,
   };
 }
@@ -53,6 +69,12 @@ export function second(overrides: Partial<TransactionLine> = {}): TransactionLin
     unit: "km",
     quantity: "12.500" as QuantityString,
     unit_price_ex_vat: money("3.50"),
+    list_unit_price: null,
+    catalog_discount_percent: null,
+    customer_discount_percent: null,
+    line_discount_percent: null,
+    priced_by_hand: false,
+    price_before_line_discount: null,
     vat_rate: "6.00" as PercentString,
     net_amount: money("43.75"),
     vat_amount: money("2.63"),
@@ -64,6 +86,7 @@ export function second(overrides: Partial<TransactionLine> = {}): TransactionLin
 export function tx(overrides: Partial<Transaction> = {}): Transaction {
   return {
     id: TX_ID,
+    number: 1,
     billing_customer_id: ANNA_ID,
     billing_customer: { id: ANNA_ID, name: "Anna Andersson", active: true },
     transaction_date: "2026-10-01",
@@ -83,27 +106,44 @@ export function tx(overrides: Partial<Transaction> = {}): Transaction {
     },
     created_at: "2026-10-01T10:00:00Z",
     updated_at: "2026-10-01T10:00:00Z",
+    created_by: null,
+    updated_by: null,
+    paid_at: null,
+    payment_method: null,
+    receipt_number_text: null,
     lines: [line(), second()],
     ...overrides,
   };
 }
 
 export function customer(id: string, name: string, active = true): Customer {
-  return { id, customer_type: "person", name, email: null, phone: null, active, created_at: "", updated_at: "", ...EMPTY_PROFILE };
+  return { id, number: 1, customer_type: "person", name, email: null, phone: null, active, created_at: "", updated_at: "", created_by: null, updated_by: null, default_discount_percent: null, ...EMPTY_PROFILE };
 }
 
 export function item(id: string, name: string, overrides: Partial<Item> = {}): Item {
   return {
     id,
+    number: 1,
     type: "service",
     name,
     description: null,
     unit: "session",
     price_ex_vat: money("850.00"),
+    price_inc_vat: money("1062.50"),
+    promotion_price_ex_vat: null,
+    promotion_price_inc_vat: null,
+    current_price_ex_vat: "850.00" as MoneyString,
+    current_price_inc_vat: "1062.50" as MoneyString,
+    current_discount: null,
+    sku: null,
+    track_stock: false,
+    low_stock_threshold: null,
     vat_rate: "25.00" as PercentString,
     active: true,
     created_at: "",
     updated_at: "",
+    created_by: null,
+    updated_by: null,
     ...overrides,
   };
 }
@@ -145,7 +185,27 @@ function Gate() {
 
 export const NO_FIELDS: TransactionFields = { transaction: { definitions: [], values: [] }, line: { definitions: [], values: {} } };
 
-export function Harness({ initial, orgId = ORG_A, fields = NO_FIELDS }: { initial: Transaction; orgId?: string; fields?: TransactionFields }) {
+export function Harness({
+  initial,
+  orgId = ORG_A,
+  fields = NO_FIELDS,
+  canEdit = true,
+  // Off by default: "Invoice" then only completes (one request), which is what the lifecycle tests check. The
+  // tests of the invoicing step turn it on.
+  canInvoice = false,
+  timeZone = null,
+  stock = [],
+  fulfillment = [],
+}: {
+  initial: Transaction;
+  orgId?: string;
+  fields?: TransactionFields;
+  canEdit?: boolean;
+  canInvoice?: boolean;
+  timeZone?: string | null;
+  stock?: StockDemand[];
+  fulfillment?: LineFulfillment[];
+}) {
   const [current, setCurrent] = useState(initial);
   useEffect(() => {
     server.apply = setCurrent;
@@ -157,7 +217,7 @@ export function Harness({ initial, orgId = ORG_A, fields = NO_FIELDS }: { initia
     <>
       <Gate />
       <OrgScope orgId={orgId}>
-        <TransactionEditor transaction={current} fields={fields} />
+        <TransactionEditor transaction={current} fields={fields} canEdit={canEdit} canInvoice={canInvoice} timeZone={timeZone} stock={stock} fulfillment={fulfillment} />
       </OrgScope>
     </>
   );
@@ -190,6 +250,7 @@ export const DIRECTORY = {
 export function installBackend(handle: (call: Call) => ApiResult<unknown> | Promise<ApiResult<unknown>>) {
   vi.mocked(apiFetch).mockImplementation((async (orgId: string, path: string, request?: { method?: string; body?: unknown; ifMatch?: number }) => {
     const method = request?.method ?? "GET";
+    if (method === "GET" && path.startsWith("/inventory/availability?")) return ok([]);
     if (method === "GET" && (path.startsWith("/customers?") || path.startsWith("/items?"))) {
       const url = new URL(path, "http://x");
       const q = (url.searchParams.get("q") ?? "").toLowerCase();

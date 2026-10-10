@@ -1,16 +1,57 @@
-import type { InvoiceStatus } from "@/lib/api/types";
+import type { Invoice, InvoiceStatus } from "@/lib/api/types";
 
-const LOOK: Record<InvoiceStatus, { label: string; className: string }> = {
-  draft: { label: "Draft", className: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200" },
-  issued: { label: "Issued", className: "bg-green-100 text-green-900 dark:bg-green-950 dark:text-green-200" },
+/** An open return case: one look wherever it is shown (the invoice's badges, the invoice list's Return column). */
+export const RETURN_OPEN_CLASS = "rounded bg-orange-100 px-2 py-0.5 text-sm font-medium text-orange-900 dark:bg-orange-950 dark:text-orange-200";
+
+const DRAFT = { label: "Draft", className: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200" };
+const ISSUED = { label: "Issued", className: "bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200" };
+const PAYMENT: Record<NonNullable<Invoice["payment_status"]>, { label: string; className: string }> = {
+  unpaid: { label: "Unpaid", className: "bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200" },
+  partially_paid: { label: "Partially paid", className: "bg-violet-100 text-violet-900 dark:bg-violet-950 dark:text-violet-200" },
+  paid: { label: "Paid", className: "bg-green-100 text-green-900 dark:bg-green-950 dark:text-green-200" },
 };
 
-/** The status of an invoice, as the server reports it. Presentation only. */
-export function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
-  const look = LOOK[status];
+const CREDITED = { label: "Credited", className: "bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200" };
+const PARTLY_CREDITED = { label: "Partly credited", className: "bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200" };
+
+/**
+ * Where an invoice stands, as the server reports it: a draft is "Draft"; an issued invoice says how far it is paid
+ * (Unpaid, Partially paid, Paid), or "Credited" when credit notes cancel all of it. A partly credited invoice shows its
+ * payment state and a second "Partly credited" badge. Without a payment state (an older answer) it is "Issued".
+ */
+export function InvoiceStatusBadge({
+  status,
+  paymentStatus = null,
+  creditStatus = null,
+  openReturns = 0,
+}: {
+  status: InvoiceStatus;
+  paymentStatus?: Invoice["payment_status"];
+  creditStatus?: Invoice["credit_status"];
+  openReturns?: number;
+}) {
+  const look = status === "draft" ? DRAFT : creditStatus === "credited" ? CREDITED : paymentStatus ? PAYMENT[paymentStatus] : ISSUED;
   return (
-    <span data-testid="invoice-status" data-status={status} className={`rounded px-2 py-0.5 text-sm font-medium ${look.className}`}>
-      {look.label}
+    <span className="inline-flex gap-1 whitespace-nowrap">
+      <span
+        data-testid="invoice-status"
+        data-status={status}
+        data-payment={paymentStatus ?? undefined}
+        data-credit={creditStatus ?? undefined}
+        className={`rounded px-2 py-0.5 text-sm font-medium ${look.className}`}
+      >
+        {look.label}
+      </span>
+      {status === "issued" && creditStatus === "partly_credited" && (
+        <span data-testid="credit-status" className={`rounded px-2 py-0.5 text-sm font-medium ${PARTLY_CREDITED.className}`}>
+          {PARTLY_CREDITED.label}
+        </span>
+      )}
+      {status === "issued" && openReturns > 0 && (
+        <span data-testid="return-open" className={RETURN_OPEN_CLASS}>
+          Return open
+        </span>
+      )}
     </span>
   );
 }

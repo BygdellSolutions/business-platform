@@ -1,14 +1,25 @@
 """Small query/persistence helpers shared by resource routers (not tenant logic)."""
 
+from collections.abc import Callable
 from typing import Any
 
 from fastapi import HTTPException, status
+from sqlalchemy import false
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.entity_registry import registry
 
 FOREIGN_KEY_VIOLATION = "23503"  # PostgreSQL SQLSTATE
+
+
+def number_matches(column, text: str):
+    """`column == N` when the search text is a record number ("1001", " 7 "), otherwise a condition that is never true,
+    so a list search finds a record by its number as well as by its name."""
+    digits = text.strip()
+    if digits.isascii() and digits.isdigit() and len(digits) <= 18:  # fits a bigint
+        return column == int(digits)
+    return false()
 
 
 def contains_pattern(text: str) -> str:
@@ -27,7 +38,7 @@ def commit_and_refresh(db: Session, record: Any) -> None:
     db.commit()
 
 
-def delete_or_409(db: Session, record: Any, detail: str) -> None:
+def delete_or_409(db: Session, record: Any, detail: str, *, after_delete: Callable[[], None] | None = None) -> None:
     """Delete `record`, or answer 409 if other records still reference it.
 
     The message stays generic on purpose: the module that owns the delete must not
@@ -45,6 +56,8 @@ def delete_or_409(db: Session, record: Any, detail: str) -> None:
         if getattr(exc.orig, "sqlstate", None) == FOREIGN_KEY_VIOLATION:
             raise HTTPException(status.HTTP_409_CONFLICT, detail=detail)
         raise
+    if after_delete is not None:
+        after_delete()  # e.g. the history event: written only for a deletion that really happened
     db.commit()
 
 

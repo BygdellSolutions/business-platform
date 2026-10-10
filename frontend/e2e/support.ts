@@ -39,10 +39,27 @@ export async function createCustomer(context: BrowserContext, orgId: string, nam
   return (await response.json()) as { id: string; name: string };
 }
 
-/** The names the dashboard preview shows right now. */
+export async function createSupplier(context: BrowserContext, orgId: string, name: string) {
+  const response = await context.request.post(bffUrl(orgId, "/suppliers"), { data: { name } });
+  expect(response.status(), await response.text()).toBe(201);
+  return (await response.json()) as { id: string; name: string };
+}
+
+/**
+ * The names of the first customers ("000..." first) that the page can read for the organization in its address, asked
+ * from inside the page through the application's own BFF route, exactly as the page's own code would. Does not
+ * navigate, so browser history and the page's state stay as they are.
+ */
 export async function previewNames(page: Page): Promise<string[]> {
-  await expect(page.getByTestId("customer-preview")).toBeVisible();
-  return page.getByTestId("customer-preview-item").allTextContents();
+  const orgId = /\/o\/([0-9a-f-]{36})/.exec(page.url())?.[1];
+  expect(orgId, "the page is in an organization").toBeTruthy();
+  const names = await page.evaluate(async (id) => {
+    const response = await fetch(`/api/o/${id}/customers?q=000&limit=50`);
+    if (!response.ok) return null;
+    return ((await response.json()) as { name: string }[]).map((customer) => customer.name);
+  }, orgId);
+  expect(names, "the page could read its organization's customers").not.toBeNull();
+  return names ?? [];
 }
 
 export async function expectOrganization(page: Page, org: { name: string }): Promise<void> {
@@ -66,7 +83,7 @@ export const unique = (prefix: string) => `${prefix} ${randomUUID().slice(0, 8)}
 export async function createItem(
   context: BrowserContext,
   orgId: string,
-  data: { name: string; type?: "service" | "product"; unit?: string; price_ex_vat?: string; vat_rate?: string; description?: string; active?: boolean },
+  data: { name: string; type?: "service" | "product"; unit?: string; price_ex_vat?: string; vat_rate?: string; description?: string; active?: boolean; sku?: string; track_stock?: boolean },
 ) {
   const response = await context.request.post(bffUrl(orgId, "/items"), {
     data: { type: "service", unit: "hour", price_ex_vat: "10.00", vat_rate: "25", ...data },
@@ -173,7 +190,12 @@ export async function editLine(context: BrowserContext, orgId: string, txId: str
 }
 
 /** The browser's own idea of today, as YYYY-MM-DD (what the create form prefills). */
-export const browserToday = (page: Page) => page.evaluate(() => new Date().toLocaleDateString("sv-SE"));
+/** The organization's own date (in its time zone) as FastAPI states it: what date fields default to. */
+export async function organizationToday(context: BrowserContext, orgId: string): Promise<string> {
+  const response = await context.request.get(bffUrl(orgId, "/organization"));
+  expect(response.status()).toBe(200);
+  return ((await response.json()) as { today: string }).today;
+}
 
 /** Run `body` while a REQUIRED custom field on transactions exists, and always disable it afterwards. */
 export async function withRequiredTransactionField(context: BrowserContext, orgId: string, body: (label: string) => Promise<void>) {
@@ -332,6 +354,14 @@ export function createWorld(options: { currency?: string | null; label?: string 
       // purpose (immutability triggers, RESTRICT keys), and this is a throwaway organization in the
       // disposable TEST database. Everything the organization can own is removed.
       const tables = [
+        "invoice_return_events",
+        "invoice_return_lines",
+        "invoice_returns",
+        "credit_note_pdfs",
+        "credit_note_vat_rows",
+        "credit_note_lines",
+        "credit_notes",
+        "invoice_payments",
         "invoice_pdfs",
         "invoice_vat_rows",
         "invoice_lines",
@@ -343,12 +373,20 @@ export function createWorld(options: { currency?: string | null; label?: string 
         "custom_field_definitions",
         "transaction_lines",
         "transactions",
+        "horse_notes",
         "horses",
+        "incoming_stock",
+        "suppliers",
+        "line_fulfillments",
+        "stock_movements",
+        "item_discounts",
         "items",
         "customers",
         "organization_creation_requests",
         "organization_invitations",
         "organization_users",
+        "audit_events",
+        "record_counters",
       ];
       const statements = [
         "set local session_replication_role = replica",
@@ -467,6 +505,14 @@ export interface Account {
 }
 
 const ORGANIZATION_TABLES = [
+  "invoice_return_events",
+  "invoice_return_lines",
+  "invoice_returns",
+  "credit_note_pdfs",
+  "credit_note_vat_rows",
+  "credit_note_lines",
+  "credit_notes",
+  "invoice_payments",
   "invoice_pdfs",
   "invoice_vat_rows",
   "invoice_lines",
@@ -478,21 +524,31 @@ const ORGANIZATION_TABLES = [
   "custom_field_definitions",
   "transaction_lines",
   "transactions",
+  "horse_notes",
   "horses",
+  "incoming_stock",
+  "suppliers",
+  "line_fulfillments",
+  "stock_movements",
+  "item_discounts",
   "items",
   "customers",
   "organization_invitations",
+  "record_counters",
 ];
 
 /**
- * A user of its own in the TEST database, with or without the account-level right to create organizations,
+ * A user of its own in the TEST database, with or without room to create organizations (`canCreate: true` = may own
+ * five; `false` = may own exactly the organizations it is made owner of below, so it is at its limit),
  * optionally a member of existing organizations (a world's, say). `cleanup` also removes every organization this
  * account created through the application, with everything inside them.
  */
 export function createAccount(options: { canCreate: boolean; memberships?: { orgId: string; role: RoleName }[]; label?: string }): Account {
   const id = randomUUID();
   const email = `${options.label ?? "newcomer"}-${id.slice(0, 8)}@dev.test`;
-  testRow(`insert into users (id, email, name, can_create_organizations) values (${sql(id)}, ${sql(email)}, ${sql("Newcomer")}, ${options.canCreate})`);
+  const owned = (options.memberships ?? []).filter((membership) => membership.role === "owner").length;
+  const limit = options.canCreate ? 5 : owned;
+  testRow(`insert into users (id, email, name, max_owned_organizations) values (${sql(id)}, ${sql(email)}, ${sql("Newcomer")}, ${limit})`);
   for (const membership of options.memberships ?? []) {
     testRow(`insert into organization_users (organization_id, user_id, role) values (${sql(membership.orgId)}, ${sql(id)}, ${sql(membership.role)})`);
   }

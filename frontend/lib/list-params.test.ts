@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { PAGE_SIZE, backendQuery, listHref, pageOf, parseListParams } from "@/lib/list-params";
+import { PAGE_SIZE, backendQuery, listHref, pageOf, parseListParams, sortHref } from "@/lib/list-params";
 
 describe("parseListParams: the address is untrusted input", () => {
   it("defaults to the first page of everything", () => {
-    expect(parseListParams({})).toEqual({ q: "", active: "all", type: "", refs: {}, extra: {}, page: 1 });
+    expect(parseListParams({})).toEqual({ q: "", active: "all", type: "", refs: {}, extra: {}, page: 1, sort: "", dir: "asc" });
   });
 
   it("reads known values", () => {
@@ -15,7 +15,20 @@ describe("parseListParams: the address is untrusted input", () => {
       refs: {},
       extra: {},
       page: 3,
+      sort: "",
+      dir: "asc",
     });
+  });
+
+  it("accepts only the sort keys the list offers, and keeps the order in its links and backend query", () => {
+    const sorted = parseListParams({ sort: "price", dir: "desc", page: "2" }, [], [], {}, ["price", "name"]);
+    expect([sorted.sort, sorted.dir]).toEqual(["price", "desc"]);
+    expect(backendQuery(sorted)).toContain("sort=price&dir=desc");
+    expect(listHref("/l", sorted)).toBe("/l?sort=price&dir=desc&page=2");
+    expect(sortHref("/l", sorted, "price")).toBe("/l?sort=price"); // turned around, back to page 1
+    expect(sortHref("/l", sorted, "name")).toBe("/l?sort=name");
+    expect(sortHref("/l", { ...sorted, dir: "asc" }, "price")).toBe("/l?sort=price&dir=desc");
+    expect(parseListParams({ sort: "organization_id", dir: "desc" }, [], [], {}, ["price"])).toMatchObject({ sort: "", dir: "asc" });
   });
 
   it("reads a record filter only if the list offers it and the value is a UUID", () => {

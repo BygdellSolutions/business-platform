@@ -26,7 +26,7 @@ export function EarlierTransactions({ status, canEdit }: { status: CurrencyStatu
 
   if (status.transactions_without_currency === 0 && assigned === null) return null;
   const count = status.transactions_without_currency;
-  const noun = count === 1 ? "transaction was" : "transactions were";
+  const noun = count === 1 ? "order was" : "orders were";
 
   async function assign(currency: string) {
     const result = await run(() => apiFetch<AssignCurrencyResult>(orgId, "/transactions/assign-currency", { method: "POST", body: { currency } }));
@@ -36,11 +36,11 @@ export function EarlierTransactions({ status, canEdit }: { status: CurrencyStatu
   }
 
   return (
-    <section aria-label="Earlier transactions" data-testid="earlier-transactions" className="flex max-w-xl flex-col gap-2">
-      <h2 className="text-lg font-medium">Earlier transactions</h2>
+    <section aria-label="Earlier orders" data-testid="earlier-transactions" className="flex max-w-xl flex-col gap-2">
+      <h2 className="text-lg font-medium">Earlier orders</h2>
       {assigned !== null ? (
         <Notice testId="assigned">
-          {assigned.assigned} {assigned.assigned === 1 ? "transaction now has" : "transactions now have"} the currency {assigned.currency}.
+          {assigned.assigned} {assigned.assigned === 1 ? "order now has" : "orders now have"} the currency {assigned.currency}.
         </Notice>
       ) : (
         <>
@@ -56,8 +56,8 @@ export function EarlierTransactions({ status, canEdit }: { status: CurrencyStatu
               </p>
               <div>
                 <ConfirmButton
-                  label={`Assign ${status.default_currency} to these transactions`}
-                  question={`Assign ${status.default_currency} to ${count} ${count === 1 ? "transaction" : "transactions"}? This cannot be undone.`}
+                  label={`Assign ${status.default_currency} to these orders`}
+                  question={`Assign ${status.default_currency} to ${count} ${count === 1 ? "order" : "orders"}? This cannot be undone.`}
                   confirmLabel="Assign"
                   onConfirm={() => void assign(status.default_currency as string)}
                   disabled={pending}

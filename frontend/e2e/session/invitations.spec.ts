@@ -318,6 +318,10 @@ test("revoking removes the invitation, never a membership; an admin cannot revok
   await expect(adminPage.locator(`[data-testid=invitation-row][data-email="${viewerEmail}"]`)).toHaveCount(0);
   expect(invitationRow(w.orgId, viewerEmail)).toMatch(/^\d{4}-/); // revoked, not deleted
   expect(testRow(`select count(*) from organization_users where organization_id = ${sql(w.orgId)}`)).toBe("2"); // nobody was removed
+  // The history keeps it: who invited, and that it was revoked.
+  await adminPage.reload();
+  const history = adminPage.locator(`[data-testid=invitation-history-row][data-email="${viewerEmail}"]`);
+  await expect(history.getByTestId("invitation-outcome")).toContainText("Revoked");
   await adminContext.close();
 });
 

@@ -1,6 +1,8 @@
 import Link from "next/link";
 
 import { DecimalText } from "@/components/ui/DecimalText";
+import { DiscountSteps } from "@/components/ui/DiscountSteps";
+import { ServiceSummary } from "@/components/ui/ServiceSummary";
 import { FieldSnapshots } from "@/components/snapshots/FieldSnapshots";
 import { InvoiceStatusBadge } from "@/features/invoices/InvoiceStatusBadge";
 import type { Invoice, PartySnapshot } from "@/lib/api/types";
@@ -10,7 +12,7 @@ import type { Invoice, PartySnapshot } from "@/lib/api/types";
  * content. Nothing here fetches or looks anything up, and nothing is calculated: amounts, totals
  * and the VAT breakdown are the strings the server stored.
  *
- * The one place a live record is mentioned is the "Source transactions" section: links for
+ * The one place a live record is mentioned is the "Source orders" section: links for
  * navigation and audit, visibly secondary, labelled with the date the invoice itself recorded.
  * Following one shows the live record, which may by now differ from what this invoice says.
  */
@@ -27,7 +29,7 @@ export function InvoiceDocument({ invoice, orgId }: { invoice: Invoice; orgId: s
             {invoice.number_text}
           </span>
         )}
-        <InvoiceStatusBadge status={invoice.status} />
+        <InvoiceStatusBadge status={invoice.status} paymentStatus={invoice.payment_status} creditStatus={invoice.credit_status} openReturns={invoice.open_returns} />
         <span data-testid="invoice-currency" className="text-sm text-zinc-600 dark:text-zinc-400">
           {invoice.currency}
         </span>
@@ -81,6 +83,9 @@ export function InvoiceDocument({ invoice, orgId }: { invoice: Invoice; orgId: s
                     <td className="py-1 pr-3">{line.position}</td>
                     <td className="py-1 pr-3">
                       <div data-testid="line-description">{line.description}</div>
+                      {line.service && (
+                        <ServiceSummary subject={line.service.subject_label} when={line.service.performed_at_local} by={line.service.performed_by} notes={line.service.notes} />
+                      )}
                       <FieldSnapshots fields={line.fields} label={`Fields of line ${line.position}`} testId="line-fields" />
                     </td>
                     <td className="py-1 pr-3">{line.unit}</td>
@@ -89,6 +94,7 @@ export function InvoiceDocument({ invoice, orgId }: { invoice: Invoice; orgId: s
                     </td>
                     <td className="py-1 pr-3 text-right" data-testid="line-unit-price">
                       <DecimalText value={line.unit_price_ex_vat} />
+                      <DiscountSteps list={line.list_unit_price} catalog={line.catalog_discount_percent} customer={line.customer_discount_percent} line={line.line_discount_percent} />
                     </td>
                     <td className="py-1 pr-3 text-right" data-testid="line-vat-rate">
                       <DecimalText value={line.vat_rate} />
@@ -155,16 +161,16 @@ export function InvoiceDocument({ invoice, orgId }: { invoice: Invoice; orgId: s
         )}
       </section>
 
-      <section aria-label="Source transactions" data-testid="sources" className="flex flex-col gap-2 border-t border-zinc-300 pt-3 text-sm text-zinc-600 dark:border-zinc-700 dark:text-zinc-400">
-        <h3 className="text-sm font-medium">Source transactions (navigation and audit only)</h3>
+      <section aria-label="Source orders" data-testid="sources" className="flex flex-col gap-2 border-t border-zinc-300 pt-3 text-sm text-zinc-600 dark:border-zinc-700 dark:text-zinc-400">
+        <h3 className="text-sm font-medium">Source orders (navigation and audit only)</h3>
         <p>These links open the live records, which may have changed since this invoice recorded them. The invoice above is not affected by them.</p>
         <ul className="flex flex-col gap-2">
           {invoice.transactions.map((source) => (
             <li key={source.transaction_id} data-testid="source">
               <Link href={`/o/${orgId}/transactions/${source.transaction_id}`} data-testid="source-link" className="underline">
-                Transaction of {source.transaction_date}
+                {source.transaction_number !== null ? `Order ${source.transaction_number} of ${source.transaction_date}` : `Order of ${source.transaction_date}`}
               </Link>
-              <FieldSnapshots fields={source.fields} label={`Fields of the transaction of ${source.transaction_date}`} testId="transaction-fields" />
+              <FieldSnapshots fields={source.fields} label={`Fields of the order of ${source.transaction_date}`} testId="transaction-fields" />
             </li>
           ))}
         </ul>
@@ -183,6 +189,7 @@ function Party({ title, testId, party }: { title: string; testId: string; party:
       <div data-testid={`party-${testId}-name`} className="font-medium">
         {name}
       </div>
+      {party.our_reference && <div data-testid={`party-${testId}-reference`}>Our reference: {party.our_reference}</div>}
       {lines.map((line) => (
         <div key={line}>{line}</div>
       ))}

@@ -78,7 +78,7 @@ def test_security_events_accept_the_invitation_kinds(scratch_url: str):
 
 
 def test_downgrade_removes_the_table_and_its_events_and_keeps_the_data_and_the_s4_backstop(scratch_url: str):
-    _upgrade(scratch_url, "head")
+    _upgrade(scratch_url, REVISION)  # this migration's own downgrade (later ones replace the users' creation flag)
     ids = _world(scratch_url)
     _execute(scratch_url, "insert into security_events (occurred_at, event_type) values (now(), 'login_failure'), (now(), 'invitation_created')")
     before = _state(scratch_url)

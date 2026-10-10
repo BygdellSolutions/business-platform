@@ -11,7 +11,7 @@ from app.models import User
 from app.schemas.organization import OrganizationCreate, OrganizationRead
 
 # Deliberately NOT tenant-scoped: there is no organization yet. Authentication (`get_current_user`, which also
-# enforces CSRF in session mode) identifies the user; `users.can_create_organizations` decides; nothing in the
+# enforces CSRF in session mode) identifies the user; the owned-organization limit (app.core.ownership) decides; nothing in the
 # request can name an owner, a role or an organization.
 router = APIRouter(prefix="/api/organizations", tags=["organizations"])
 

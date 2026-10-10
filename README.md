@@ -54,7 +54,7 @@ Besides the development identity below, the backend has real authentication: `AU
 cd backend
 uv run python -m app.scripts.admin bootstrap-user --email owner@example.com --name "Ada Owner"
 uv run python -m app.scripts.admin reissue-setup-link --email owner@example.com   # recovery
-uv run python -m app.scripts.admin grant-org-creation --email owner@example.com    # may create organizations (revoke-org-creation takes it away)
+uv run python -m app.scripts.admin set-owned-limit --email owner@example.com --limit 3   # may own up to 3 organizations (default 1)
 uv run python -m app.scripts.admin disable-user --email someone@example.com       # also ends their sessions
 uv run python -m app.scripts.admin enable-user  --email someone@example.com
 uv run python -m app.scripts.admin purge        # expired sessions, used or expired links, old security events

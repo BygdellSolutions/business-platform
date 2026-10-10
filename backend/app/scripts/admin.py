@@ -23,7 +23,7 @@ import sys
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core import clock, auth_service, security_events, sessions
+from app.core import auth_service, clock, ownership, security_events, sessions
 from app.core.config import settings
 from app.core.db import SessionLocal
 from app.models import User
@@ -47,6 +47,7 @@ def setup_link(token: str) -> str:
 
 
 def bootstrap_user(db: Session, *, email: str, name: str, can_create_organizations: bool = True) -> str:
+    # can_create_organizations=False gives the account an owned-organization limit of 0 (it may own none).
     """Create a user WITHOUT a credential and return a single-use set-password link."""
     normalized = security_events.normalize_email(email)
     if not EMAIL.fullmatch(normalized) or len(normalized) > 320:
@@ -55,7 +56,7 @@ def bootstrap_user(db: Session, *, email: str, name: str, can_create_organizatio
         raise OperatorError("A name is required.")
     if db.scalar(select(User.id).where(User.email == normalized)) is not None:
         raise OperatorError("A user with that email already exists. Use reissue-setup-link to recover access.")
-    user = User(email=normalized, name=name.strip(), can_create_organizations=can_create_organizations)
+    user = User(email=normalized, name=name.strip(), max_owned_organizations=1 if can_create_organizations else 0)
     db.add(user)
     db.flush()
     token = auth_service.issue_setup_token(db, user, clock.utcnow(), detail="bootstrap")
@@ -85,8 +86,21 @@ def enable_user(db: Session, *, email: str) -> None:
 
 
 def set_org_creation(db: Session, *, email: str, allowed: bool) -> bool:
-    """Grant or revoke the account-level right to create organizations. Memberships and roles are never touched."""
-    changed = auth_service.set_creation_capability(db, _user_by_email(db, email), allowed, clock.utcnow())
+    """Compatibility with the former yes/no right: grant = room for one more owned organization than the account owns
+    now (never lowering a larger limit); revoke = exactly what it owns now (it keeps them, gains no more)."""
+    user = _user_by_email(db, email)
+    owned = ownership.owned_count(db, user.id)
+    limit = max(user.max_owned_organizations, owned + 1) if allowed else owned
+    changed = auth_service.set_owned_limit(db, user, limit, clock.utcnow())
+    db.commit()
+    return changed
+
+
+def set_owned_limit(db: Session, *, email: str, limit: int) -> bool:
+    """How many organizations the account may own. Memberships and roles are never touched."""
+    if limit < 0:
+        raise OperatorError("The limit cannot be negative.")
+    changed = auth_service.set_owned_limit(db, _user_by_email(db, email), limit, clock.utcnow())
     db.commit()
     return changed
 
@@ -112,11 +126,15 @@ def build_parser() -> argparse.ArgumentParser:
         ("reissue-setup-link", "print a new single-use setup link for an existing user (recovery)"),
         ("disable-user", "disable a user and end all of their sessions"),
         ("enable-user", "enable a user again"),
-        ("grant-org-creation", "allow a user to create organizations (an account property, not a role)"),
-        ("revoke-org-creation", "stop a user from creating organizations (existing organizations and roles are untouched)"),
+        ("grant-org-creation", "let a user own one more organization than now (raises the owned-organization limit if needed)"),
+        ("revoke-org-creation", "stop a user from owning more organizations (the limit becomes what they own now)"),
     ):
         command = commands.add_parser(name, help=help_text)
         command.add_argument("--email", required=True)
+
+    limit = commands.add_parser("set-owned-limit", help="set how many organizations a user may own (an account entitlement, not a role)")
+    limit.add_argument("--email", required=True)
+    limit.add_argument("--limit", required=True, type=int)
 
     commands.add_parser("purge", help="delete expired sessions, used or expired setup tokens and old security events")
     return parser
@@ -140,6 +158,9 @@ def main(argv: list[str] | None = None) -> int:
                 allowed = args.command == "grant-org-creation"
                 changed = set_org_creation(db, email=args.email, allowed=allowed)
                 print(("Organization creation allowed." if allowed else "Organization creation no longer allowed.") + ("" if changed else " (no change)"))
+            elif args.command == "set-owned-limit":
+                changed = set_owned_limit(db, email=args.email, limit=args.limit)
+                print(f"Owned-organization limit set to {args.limit}." + ("" if changed else " (no change)"))
             elif args.command == "purge":
                 print(", ".join(f"{name}: {count}" for name, count in purge(db).items()))
     except OperatorError as error:

@@ -184,7 +184,7 @@ def test_numbers_may_repeat_across_organizations(client, db_session):
     two = Two(db_session)
     a = issue(client, two.a, draft_invoice(client, two.a, two.a_tx))
     b = issue(client, two.b, draft_invoice(client, two.b, two.b_tx))
-    assert a["number"] == b["number"] == 1 and a["number_text"] == b["number_text"]
+    assert a["number"] == b["number"] == 1001 and a["number_text"] == b["number_text"]
 
 
 @pytest.mark.parametrize(
@@ -283,7 +283,10 @@ def test_invoicing_needs_no_item_horse_or_custom_field_records_to_exist(world):
         )
     ).all()
     referenced = {target for _, target in rows}
-    assert referenced <= {"organizations", "customers", "transactions", "transaction_lines", "users", "invoices", "invoice_transactions"}
+    assert referenced <= {
+        "organizations", "customers", "transactions", "transaction_lines", "users", "invoices", "invoice_transactions", "invoice_payments",
+        "invoice_lines", "invoice_returns", "credit_notes",
+    }
     assert not referenced & {"items", "horses", "custom_field_definitions", "custom_field_options", "custom_field_values"}
 
 
@@ -308,7 +311,13 @@ def test_no_trigger_on_a_sales_table_involves_invoicing(world):
             "join pg_proc p on p.oid = t.tgfoid where not t.tgisinternal and c.relname in ('transactions', 'transaction_lines', 'customers', 'items')"
         )
     ).all()
-    assert {(r[0], r[1]) for r in triggers} == {("transactions", "trg_transactions_currency_immutable")}
+    assert {(r[0], r[1]) for r in triggers} == {
+        ("transactions", "trg_transactions_currency_immutable"),
+        # Record numbers (core): handed out on insert, never changed; nothing to do with invoicing.
+        ("transactions", "transactions_record_number"),
+        ("customers", "customers_record_number"),
+        ("items", "items_record_number"),
+    }
     assert all("invoice" not in r[2] for r in triggers)
 
 
@@ -317,7 +326,7 @@ def test_only_invoice_tables_have_invoice_triggers_and_the_functions_know_only_i
     on = db.execute(
         text("select distinct c.relname from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_proc p on p.oid = t.tgfoid where p.proname like 'invoice%' and not t.tgisinternal")
     ).scalars().all()
-    assert sorted(on) == ["invoice_lines", "invoice_pdfs", "invoice_transactions", "invoice_vat_rows", "invoices"]
+    assert sorted(on) == ["invoice_lines", "invoice_payments", "invoice_pdfs", "invoice_transactions", "invoice_vat_rows", "invoices"]
     bodies = db.execute(text("select proname, prosrc from pg_proc where proname in ('invoices_immutability', 'invoice_children_immutability', 'invoice_pdfs_guard')")).all()
     assert len(bodies) == 3
     for name, source in bodies:

@@ -29,7 +29,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core import auth_service, memberships, sessions
+from app.core import auth_service, memberships, ownership, sessions
 from app.core.config import settings
 from app.core.security_events import normalize_email
 from app.core.tokens import hash_token, looks_like_token, new_token
@@ -187,6 +187,24 @@ def list_pending(db: Session, organization_id: uuid.UUID) -> list[OrganizationIn
     )
 
 
+CLOSED_SHOWN = 100
+
+
+def list_closed(db: Session, organization_id: uuid.UUID) -> list[OrganizationInvitation]:
+    """Accepted and revoked invitations (regenerated and superseded ones are revoked), newest first: the audit trail."""
+    return list(
+        db.scalars(
+            select(OrganizationInvitation)
+            .where(
+                OrganizationInvitation.organization_id == organization_id,
+                (OrganizationInvitation.revoked_at.is_not(None)) | (OrganizationInvitation.accepted_at.is_not(None)),
+            )
+            .order_by(OrganizationInvitation.created_at.desc(), OrganizationInvitation.id)
+            .limit(CLOSED_SHOWN)
+        )
+    )
+
+
 def revoke(db: Session, *, organization_id: uuid.UUID, actor_user_id: uuid.UUID, invitation_id: uuid.UUID, now: datetime, source: str | None) -> None:
     rows = memberships.lock_members(db, organization_id)
     actor = memberships.administrator(rows, actor_user_id)
@@ -293,6 +311,10 @@ def accept_existing(db: Session, *, user: User, token: str, now: datetime, sourc
         raise WrongAccount()  # nothing is consumed
 
     joined = False  # an existing membership is NEVER changed by an invitation: its role stays whatever it is
+    if member is None and invitation.role == Role.OWNER:
+        # Becoming an owner counts against the account's limit. Refused WHOLE: no other role instead, nothing
+        # consumed; the invitation stays pending (until a slot frees, the limit grows, or it is changed/revoked).
+        ownership.ensure_can_own_another(db, user.id)
     if member is None:
         try:
             with db.begin_nested():

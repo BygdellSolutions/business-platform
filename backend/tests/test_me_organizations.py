@@ -101,5 +101,5 @@ def test_me_user_works_with_the_development_identity_and_needs_no_membership(cli
     user = make_user(db_session, name="Dev Person")  # no membership at all
     response = client.get("/api/me/user", headers={"X-Dev-User-Email": user.email})
     assert response.status_code == 200
-    assert response.json() == {"id": str(user.id), "email": user.email, "name": "Dev Person", "can_create_organizations": False}
+    assert response.json() == {"id": str(user.id), "email": user.email, "name": "Dev Person", "can_create_organizations": True, "owned_organizations": 0, "max_owned_organizations": 1}
     assert client.get("/api/me/user").status_code == 401

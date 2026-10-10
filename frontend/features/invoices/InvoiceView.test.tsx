@@ -452,11 +452,11 @@ describe("an unknown outcome is checked, not assumed", () => {
 });
 
 describe("deleting a draft", () => {
-  it("asks first, and the question says the transactions become invoiceable again", async () => {
+  it("asks first, and the question says the orders become invoiceable again", async () => {
     render(<Harness initial={invoice()} />);
     await userEvent.click(screen.getByTestId("delete-draft"));
     expect(writes()).toEqual([]);
-    expect(screen.getByRole("group")).toHaveTextContent("transactions become invoiceable again");
+    expect(screen.getByRole("group")).toHaveTextContent("orders become invoiceable again");
   });
 
   it("deletes with the current version and goes back to the list", async () => {

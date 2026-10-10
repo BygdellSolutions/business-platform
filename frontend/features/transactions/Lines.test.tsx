@@ -24,7 +24,7 @@ import {
   tx,
   writes,
 } from "@/features/transactions/testing";
-import type { MoneyString, QuantityString } from "@/lib/decimal";
+import type { MoneyString, PercentString, QuantityString } from "@/lib/decimal";
 
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
 vi.mock("@/lib/api/client", () => ({ apiFetch: vi.fn() }));
@@ -102,7 +102,7 @@ describe("adding a line from the catalog", () => {
 
     await waitFor(() => expect(screen.getAllByTestId("line-row")).toHaveLength(3));
     expect(screen.queryByTestId("add-line-form")).toBeNull();
-    expect(screen.getByTestId("complete")).toBeEnabled();
+    expect(screen.getByTestId("invoice-order")).toBeEnabled();
   });
 
   it("without an item nothing is sent: 'Choose an item.' on the picker", async () => {
@@ -500,5 +500,168 @@ describe("deleting a line", () => {
     await userEvent.click(within(rowOf(LINE_1)).getByTestId("delete-line-confirm"));
     expect(await screen.findByTestId("editor-notice")).toHaveTextContent("no longer exists");
     await waitFor(() => expect(screen.getAllByTestId("line-row")).toHaveLength(1));
+  });
+});
+
+describe("the kinds of line", () => {
+  it("are offered in this order: catalog item, service, ad-hoc", async () => {
+    render(<Harness initial={tx()} />);
+    await userEvent.click(screen.getByTestId("add-line"));
+    const kinds = within(screen.getByRole("group", { name: "Kind of line" })).getAllByRole("radio").map((radio) => radio.parentElement?.textContent?.trim());
+    expect(kinds).toEqual(["Catalog item", "Service", "Ad-hoc line"]);
+  });
+
+  it("a service asks for the service, for whom, by whom, when and notes, and sends nothing without them", async () => {
+    installBackend((call) => (call.path === "/members/people" ? ok([{ user_id: "u1", name: "Tina Therapist" }]) : ok(line())));
+    render(<Harness initial={tx()} />);
+    await userEvent.click(screen.getByTestId("add-line"));
+    await userEvent.click(screen.getByLabelText("Service"));
+    expect(screen.getByTestId("service-fields")).toBeInTheDocument();
+    expect(screen.getByLabelText("Performed for")).toHaveValue("horse");
+    expect(screen.getByLabelText(/Performed at/)).toBeInTheDocument();
+    expect(await within(screen.getByLabelText("Performed by")).findByRole("option", { name: "Tina Therapist" })).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText("Quantity"), "1");
+    await userEvent.click(screen.getByTestId("submit-line"));
+    expect(writes()).toEqual([]);
+    expect(screen.getByText("Choose a service.")).toBeInTheDocument();
+    expect(screen.getByText("Choose who or what the service was for.")).toBeInTheDocument();
+  });
+
+  it("a stored service line shows for whom, when (in the organization's zone), by whom and the notes", () => {
+    const service = line({
+      kind: "service",
+      performed_at: "2026-10-03T12:00:00Z",
+      subject_type: "horse",
+      subject_id: "h1",
+      subject_label: "Kalle",
+      performed_by_name: "Tina Therapist",
+      notes: "Stiff left shoulder",
+    });
+    render(<Harness initial={tx({ lines: [service] })} timeZone="Europe/Stockholm" />);
+    expect(screen.getByTestId("service-summary")).toHaveTextContent("Service for Kalle · 2026-10-03 14:00 · by Tina Therapist");
+    expect(screen.getByTestId("service-notes")).toHaveTextContent("Stiff left shoulder");
+  });
+});
+
+describe("stock on a draft (a warning, never a refusal)", () => {
+  const demand = (shortage: string) => ({
+    item_id: "i1",
+    requested: "8.000" as QuantityString,
+    on_hand: "5.000" as QuantityString,
+    allocated: "0.000" as QuantityString,
+    available: "5.000" as QuantityString,
+    incoming: "0.000" as QuantityString,
+    shortage: shortage as QuantityString,
+  });
+
+  it("warns on each line of an item that the draft asks more of than is available", () => {
+    render(<Harness initial={tx({ lines: [line({ id: "l1", item_id: "i1", unit: "pcs" })] })} stock={[demand("3.000")]} />);
+    expect(screen.getByTestId("stock-warning")).toHaveTextContent("In stock for this line: 5 of 8. 3 will be backordered at completion.");
+  });
+
+  it("says nothing when there is enough, for a line of another item, or once the transaction is completed", () => {
+    const { unmount } = render(<Harness initial={tx({ lines: [line({ id: "l1", item_id: "i1" })] })} stock={[demand("0.000")]} />);
+    expect(screen.queryByTestId("stock-warning")).toBeNull();
+    unmount();
+    render(<Harness initial={tx({ status: "completed", lines: [line({ id: "l1", item_id: "i1" })] })} stock={[demand("3.000")]} />);
+    expect(screen.queryByTestId("stock-warning")).toBeNull();
+  });
+});
+
+describe("stock on a completed transaction", () => {
+  it("shows what was delivered and what is backordered, with the backorder's state", () => {
+    const fulfillment = [
+      { transaction_line_id: "l1", item_id: "i1", ordered: "4.000", delivered: "1.000", backordered: "3.000", fulfilled_later: "0.000", remaining: "3.000", state: "waiting_for_stock" as const },
+      { transaction_line_id: "l2", item_id: "i1", ordered: "2.000", delivered: "2.000", backordered: "0.000", fulfilled_later: "0.000", remaining: "0.000", state: "fulfilled" as const },
+    ].map((entry) => ({ ...entry, ordered: entry.ordered as QuantityString, delivered: entry.delivered as QuantityString, backordered: entry.backordered as QuantityString, fulfilled_later: entry.fulfilled_later as QuantityString, remaining: entry.remaining as QuantityString }));
+    render(<Harness initial={tx({ status: "completed", lines: [line({ id: "l1", item_id: "i1" }), line({ id: "l2", item_id: "i1", position: 2 })] })} fulfillment={fulfillment} />);
+
+    const shown = screen.getAllByTestId("line-fulfillment").map((element) => element.textContent);
+    expect(shown).toEqual(["Delivered 1 · Backordered 3 (waiting for stock)", "Delivered 2"]);
+  });
+});
+
+describe("a discount on the line", () => {
+  it("is sent with a catalog line and with an ad-hoc line, and left out when empty", async () => {
+    installBackend(() => ok(line()));
+    render(<Harness initial={tx()} />);
+    await openAdd();
+    await chooseItem(/Saddle fitting/);
+    await userEvent.type(screen.getByLabelText("Quantity"), "1");
+    await userEvent.type(screen.getByLabelText("Discount % (optional)"), "10");
+    await userEvent.click(screen.getByTestId("submit-line"));
+    await waitFor(() => expect(writes()).toHaveLength(1));
+    expect(writes()[0].body).toEqual({ item_id: SADDLE, quantity: "1", line_discount_percent: "10" });
+  });
+
+  it("is offered in all three kinds of line", async () => {
+    installBackend((call) => (call.path === "/members/people" ? ok([]) : ok(line())));
+    render(<Harness initial={tx()} />);
+    await openAdd();
+    for (const kind of ["Catalog item", "Service", "Ad-hoc line"]) {
+      await userEvent.click(screen.getByLabelText(kind, { exact: true }));
+      expect(screen.getByLabelText("Discount % (optional)")).toBeInTheDocument();
+    }
+  });
+
+  it("is edited next to the price it applies to, and emptying it removes it", async () => {
+    installBackend(() => ok(line()));
+    const discounted = line({
+      id: LINE_1,
+      unit_price_ex_vat: "765.00" as MoneyString,
+      list_unit_price: "850.00" as MoneyString,
+      line_discount_percent: "10.00" as PercentString,
+      price_before_line_discount: "850.00" as MoneyString,
+    });
+    render(<Harness initial={tx({ lines: [discounted] })} />);
+    const editor = await openEditor();
+    expect(editor.getByLabelText("Unit price excluding VAT (before the line discount)")).toHaveValue("850.00");
+    await userEvent.clear(screen.getByLabelText("Discount % (optional)", { exact: true }));
+    await userEvent.click(editor.getByTestId("save-line"));
+    await waitFor(() => expect(writes()).toHaveLength(1));
+    expect(writes()[0].body).toEqual({ line_discount_percent: null });
+  });
+});
+
+describe("editing follows the rules of adding", () => {
+  it("a catalog line offers its item, the quantity and the discount, never description, unit, price or VAT", async () => {
+    installBackend(() => ok(line()));
+    render(<Harness initial={tx({ lines: [line({ item_id: SADDLE, description: "Saddle fitting" }), second()] })} />);
+    await openEditor();
+
+    expect(screen.getByTestId("edit-item-fields")).toBeInTheDocument();
+    expect(within(screen.getByTestId("picker-item_id")).getByRole("combobox")).toHaveValue("Saddle fitting");
+    for (const label of ["Description", "Unit", "Unit price excluding VAT", "VAT rate (%)"]) expect(screen.queryByLabelText(label)).toBeNull();
+    await replace("Discount % (optional)", "10");
+    await userEvent.click(screen.getByTestId("save-line"));
+
+    await waitFor(() => expect(writes()).toHaveLength(1));
+    expect(writes()[0].body).toEqual({ line_discount_percent: "10" });
+  });
+
+  it("a service line offers the service, for whom, by whom, when, quantity, notes and the discount", async () => {
+    installBackend((call) => (call.path === "/members/people" ? ok([{ user_id: "u1", name: "Tina Therapist" }]) : ok(line())));
+    const service = line({
+      item_id: SADDLE,
+      kind: "service",
+      description: "Massage",
+      performed_at: "2026-10-03T12:00:00Z",
+      subject_type: "horse",
+      subject_id: "h1",
+      subject_label: "Kalle",
+      notes: "Stiff",
+    });
+    render(<Harness initial={tx({ lines: [service, second()] })} timeZone="Europe/Stockholm" />);
+    await openEditor();
+
+    expect(screen.getByTestId("edit-service-fields")).toBeInTheDocument();
+    expect(screen.getByLabelText("Performed at")).toHaveValue("2026-10-03T14:00"); // the organization's local time
+    expect(within(screen.getByTestId("picker-subject_id")).getByRole("combobox")).toHaveValue("Kalle");
+    expect(screen.queryByLabelText("Unit price excluding VAT")).toBeNull();
+    await replace("Notes", "Better");
+    await userEvent.click(screen.getByTestId("save-line"));
+
+    await waitFor(() => expect(writes()).toHaveLength(1));
+    expect(writes()[0].body).toEqual({ notes: "Better" });
   });
 });

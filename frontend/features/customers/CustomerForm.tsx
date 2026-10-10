@@ -8,7 +8,7 @@ import { useOrgId } from "@/components/shell/org-context";
 import { ActiveToggle } from "@/components/ui/ActiveToggle";
 import { Button } from "@/components/ui/Button";
 import { ErrorSummary } from "@/components/ui/ErrorSummary";
-import { CheckboxField, SelectField, TextField } from "@/components/ui/Field";
+import { CheckboxField, DecimalField, SelectField, TextField } from "@/components/ui/Field";
 import { Notice } from "@/components/ui/Notice";
 import { PROFILE_CONTROLS, ProfileFields } from "@/components/profile/ProfileFields";
 import { apiFetch } from "@/lib/api/client";
@@ -17,7 +17,7 @@ import { blankToNull, problemsFrom, useMutation } from "@/lib/forms";
 import { profileBody, profileChanges, profileState, type ProfileState } from "@/lib/profile";
 import type { ProfileField } from "@/lib/api/types";
 
-const CONTROLS = ["customer_type", "name", "email", "phone", "active", ...PROFILE_CONTROLS] as const;
+const CONTROLS = ["customer_type", "name", "email", "phone", "active", "default_discount_percent", ...PROFILE_CONTROLS] as const;
 
 const TYPES = [
   { value: "person", label: "Person" },
@@ -30,6 +30,7 @@ interface FormState {
   email: string;
   phone: string;
   active: boolean;
+  discount: string;
   profile: ProfileState;
 }
 
@@ -40,6 +41,7 @@ function toState(customer?: Customer): FormState {
     email: customer?.email ?? "",
     phone: customer?.phone ?? "",
     active: customer?.active ?? true,
+    discount: customer?.default_discount_percent ?? "",
     profile: profileState(customer),
   };
 }
@@ -50,7 +52,7 @@ function toState(customer?: Customer): FormState {
  * control. There is no organization field: the BFF and FastAPI take the organization from
  * the URL.
  */
-export function CustomerForm({ customer }: { customer?: Customer }) {
+export function CustomerForm({ customer, canSetDiscount = false }: { customer?: Customer; canSetDiscount?: boolean }) {
   const orgId = useOrgId();
   const router = useRouter();
   const { pending, error, run } = useMutation();
@@ -70,6 +72,7 @@ export function CustomerForm({ customer }: { customer?: Customer }) {
       phone: blankToNull(state.phone),
       active: state.active,
       ...profileBody(state.profile),
+      ...(canSetDiscount ? { default_discount_percent: blankToNull(state.discount) } : {}),
     };
     const created = await run(() => apiFetch<Customer>(orgId, "/customers", { method: "POST", body }));
     if (created === null) return;
@@ -85,6 +88,7 @@ export function CustomerForm({ customer }: { customer?: Customer }) {
     if (blankToNull(state.email) !== current.email) body.email = blankToNull(state.email);
     if (blankToNull(state.phone) !== current.phone) body.phone = blankToNull(state.phone);
     Object.assign(body, profileChanges(state.profile, current));
+    if (canSetDiscount && blankToNull(state.discount) !== current.default_discount_percent) body.default_discount_percent = blankToNull(state.discount);
     if (Object.keys(body).length === 0) {
       setNotice("unchanged");
       return;
@@ -118,6 +122,21 @@ export function CustomerForm({ customer }: { customer?: Customer }) {
         <TextField label="Name" name="name" value={state.name} onChange={(value) => set("name", value)} error={problems.byField.name} autoComplete="off" />
         <TextField label="Email" name="email" value={state.email} onChange={(value) => set("email", value)} error={problems.byField.email} inputMode="email" autoComplete="off" />
         <TextField label="Phone" name="phone" value={state.phone} onChange={(value) => set("phone", value)} error={problems.byField.phone} inputMode="tel" autoComplete="off" />
+        {canSetDiscount ? (
+          <DecimalField
+            label="Default discount %"
+            name="default_discount_percent"
+            value={state.discount}
+            onChange={(value) => set("discount", value)}
+            error={problems.byField.default_discount_percent}
+            hint="Applied to catalog items for this customer, after any campaign discount. Leave empty for none."
+          />
+        ) : (
+          <p className="text-sm" data-testid="discount-read-only">
+            Default discount: {record?.default_discount_percent ? `${record.default_discount_percent} %` : "none"}{" "}
+            <span className="text-zinc-500">(an owner or admin sets it)</span>
+          </p>
+        )}
         <fieldset className="flex flex-col gap-4">
           <legend className="pb-1 text-sm font-medium">Billing details</legend>
           <ProfileFields state={state.profile} onChange={setProfile} errors={problems.byField} />

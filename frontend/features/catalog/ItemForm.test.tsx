@@ -20,15 +20,27 @@ const mocked = vi.mocked(apiFetch);
 function item(overrides: Partial<Item> = {}): Item {
   return {
     id: "22222222-2222-4222-8222-222222222222",
+    number: 1,
     type: "service",
     name: "Horse massage",
     description: null,
     unit: "hour",
     price_ex_vat: "850.00" as MoneyString,
+    price_inc_vat: "1062.50" as MoneyString,
+    promotion_price_ex_vat: null,
+    promotion_price_inc_vat: null,
+    current_price_ex_vat: "850.00" as MoneyString,
+    current_price_inc_vat: "1062.50" as MoneyString,
+    current_discount: null,
+    sku: null,
+    track_stock: false,
+    low_stock_threshold: null,
     vat_rate: "25.00" as PercentString,
     active: true,
     created_at: "2026-10-01T10:00:00Z",
     updated_at: "2026-10-01T10:00:00Z",
+    created_by: null,
+    updated_by: null,
     ...overrides,
   };
 }
@@ -98,7 +110,33 @@ describe("decimals are strings from the input to the request body", () => {
 
     const body = mocked.mock.calls[0][2]?.body as Record<string, unknown>;
     expect(Object.values(body).filter((value) => typeof value === "number")).toEqual([]);
-    expect(body).toEqual({ type: "service", name: "Saddle fitting", description: null, unit: "hour", price_ex_vat: "8.20", vat_rate: "25", active: true });
+    expect(body).toEqual({ type: "service", name: "Saddle fitting", description: null, unit: "hour", price_ex_vat: "8.20", vat_rate: "25", active: true, sku: null, track_stock: false });
+  });
+
+  it("sends a price typed incl. VAT as price_inc_vat and shows what the backend stored", async () => {
+    mocked.mockResolvedValue(ok(item({ price_ex_vat: "800.00" as MoneyString, price_inc_vat: "1000.00" as MoneyString })));
+    mount(A, item());
+
+    await userEvent.selectOptions(screen.getByLabelText("Price is entered"), "inc");
+    expect(screen.getByLabelText("Price including VAT")).toHaveValue("1062.50"); // the stored price, shown incl. VAT
+    await userEvent.clear(screen.getByLabelText("Price including VAT"));
+    await userEvent.type(screen.getByLabelText("Price including VAT"), "1000");
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(mocked.mock.calls[0][2]?.body).toEqual({ price_inc_vat: "1000" });
+    await waitFor(() => expect(screen.getByLabelText("Price including VAT")).toHaveValue("1000.00"));
+  });
+
+  it("resends the price incl. VAT when the VAT rate changes in that mode", async () => {
+    mocked.mockResolvedValue(ok(item()));
+    mount(A, item());
+
+    await userEvent.selectOptions(screen.getByLabelText("Price is entered"), "inc");
+    await userEvent.clear(screen.getByLabelText("VAT rate (%)"));
+    await userEvent.type(screen.getByLabelText("VAT rate (%)"), "12");
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(mocked.mock.calls[0][2]?.body).toEqual({ vat_rate: "12", price_inc_vat: "1062.50" });
   });
 
   it("shows the saved record exactly as the backend formatted it", async () => {
@@ -260,5 +298,63 @@ describe("organization scope", () => {
 
     expect(screen.getByLabelText("Name")).toHaveValue("");
     expect(screen.getByLabelText("Price excluding VAT")).toHaveValue("");
+  });
+});
+
+describe("article number and stock tracking", () => {
+  it("offers stock tracking only for a product, and sends it with the article number", async () => {
+    mocked.mockResolvedValue(ok(item(), 201));
+    mount(A);
+    expect(screen.queryByLabelText("Track stock")).toBeNull(); // a service never holds stock
+
+    await userEvent.selectOptions(screen.getByLabelText("Type"), "product");
+    await userEvent.type(screen.getByLabelText("Article number (SKU)"), "LIN-01");
+    await userEvent.click(screen.getByLabelText("Track stock"));
+    await fillNew("120", "25");
+    await userEvent.click(screen.getByRole("button", { name: "Create item" }));
+
+    expect(mocked.mock.calls[0][2]?.body).toMatchObject({ type: "product", sku: "LIN-01", track_stock: true });
+  });
+
+  it("turning a stock-tracking product into a service stops tracking in the same save", async () => {
+    mocked.mockResolvedValue(ok(item({ type: "service", track_stock: false })));
+    mount(A, item({ type: "product", track_stock: true, sku: "LIN-01" }));
+
+    await userEvent.selectOptions(screen.getByLabelText("Type"), "service");
+    expect(screen.queryByLabelText("Track stock")).toBeNull();
+    await userEvent.clear(screen.getByLabelText("Article number (SKU)"));
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(mocked.mock.calls[0][2]?.body).toEqual({ type: "service", sku: null, track_stock: false });
+  });
+});
+
+describe("stock on hand when a product is created", () => {
+  it("records what is on hand as the opening count right after creating the item", async () => {
+    mocked.mockResolvedValueOnce(ok(item({ id: "new-item", type: "product", track_stock: true }), 201)).mockResolvedValueOnce(ok({}, 201));
+    mount(A);
+    await userEvent.selectOptions(screen.getByLabelText("Type"), "product");
+    await userEvent.click(screen.getByLabelText("Track stock"));
+    await userEvent.type(screen.getByLabelText("On hand now (optional)"), "12");
+    await fillNew("120", "25");
+    await userEvent.click(screen.getByRole("button", { name: "Create item" }));
+
+    await waitFor(() => expect(mocked).toHaveBeenCalledTimes(2));
+    expect(mocked.mock.calls[0][2]?.body).not.toHaveProperty("opening_stock");
+    expect(mocked.mock.calls[1][1]).toBe("/items/new-item/stock");
+    expect(mocked.mock.calls[1][2]?.body).toEqual({ kind: "count", quantity: "12", note: "Opening stock" });
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith(`/o/${A}/catalog/new-item?created=1`));
+  });
+
+  it("still opens the new item when the count is refused, and says so", async () => {
+    mocked.mockResolvedValueOnce(ok(item({ id: "new-item", type: "product", track_stock: true }), 201)).mockResolvedValueOnce(fail(422, { detail: [] }));
+    mount(A);
+    await userEvent.selectOptions(screen.getByLabelText("Type"), "product");
+    await userEvent.click(screen.getByLabelText("Track stock"));
+    await userEvent.type(screen.getByLabelText("On hand now (optional)"), "12");
+    await fillNew("120", "25");
+    await userEvent.click(screen.getByRole("button", { name: "Create item" }));
+
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith(`/o/${A}/catalog/new-item?created=1&stock=failed`));
   });
 });

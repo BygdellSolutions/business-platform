@@ -9,7 +9,7 @@ from typing import Any
 
 from app.models import Customer, Organization
 from app.modules.custom_fields.schemas import ValueRead
-from app.modules.invoicing.models import SNAPSHOT_SCHEMA
+from app.modules.invoicing.models import ISSUER_SNAPSHOT_SCHEMA, SNAPSHOT_SCHEMA
 
 PROFILE_FIELDS = (
     "address_line1",
@@ -19,6 +19,19 @@ PROFILE_FIELDS = (
     "country_code",
     "registration_number",
     "vat_number",
+)
+# What schema 2 of the issuer snapshot adds: how to reach and pay the seller, and the documents' language.
+ISSUER_FIELDS = (
+    "phone",
+    "email",
+    "website",
+    "bankgiro",
+    "plusgiro",
+    "iban",
+    "bic",
+    "payment_terms_days",
+    "approved_for_f_tax",
+    "document_language",
 )
 
 
@@ -35,15 +48,20 @@ def customer_snapshot(customer: Customer) -> dict[str, Any]:
     }
 
 
-def issuer_snapshot(organization: Organization) -> dict[str, Any]:
+def issuer_snapshot(organization: Organization, our_reference: str | None = None) -> dict[str, Any]:
     """The seller, as it is now (the organization's own profile; its default currency is not
-    part of it: the invoice carries the currency of its sources)."""
+    part of it: the invoice carries the currency of its sources). Schema 2: also contact, payment
+    details, F-tax and the document language, so an issued invoice never depends on today's settings."""
     return {
-        "schema": SNAPSHOT_SCHEMA,
+        "schema": ISSUER_SNAPSHOT_SCHEMA,
         "organization_id": str(organization.id),
         "name": organization.name,
         "legal_name": organization.legal_name,
         **{field: getattr(organization, field) for field in PROFILE_FIELDS},
+        **{field: getattr(organization, field) for field in ISSUER_FIELDS},
+        # Schema 3: the person at the seller the customer can turn to ("Vår referens"): who issued the invoice (who
+        # created the draft until then), by name as it was at that moment.
+        "our_reference": our_reference,
     }
 
 

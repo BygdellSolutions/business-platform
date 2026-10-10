@@ -56,7 +56,7 @@ describe("the list", () => {
 
   it("says so when nothing is waiting to be invoiced", () => {
     mount(ORG_A, { rows: [] });
-    expect(screen.getByTestId("empty")).toHaveTextContent("No completed transactions");
+    expect(screen.getByTestId("empty")).toHaveTextContent("No completed orders");
   });
 
   it("starts with an empty selection and nothing to submit", () => {
@@ -223,7 +223,7 @@ describe("a transaction stops being invoiceable between listing and creating", (
   });
 
   it.each([
-    ["transactions_not_completed", "Only completed transactions can be invoiced"],
+    ["transactions_not_completed", "Only completed orders can be invoiced"],
     ["currency_missing", "A transaction without a currency cannot be invoiced"],
   ])("also handles %s the same way", async (code, message) => {
     installBackend(({ method }) => (method === "POST" ? conflict(code, message, { transaction_ids: [R2] }) : ok(null)));
@@ -358,7 +358,7 @@ describe("paging and the customer filter", () => {
 
   it("does not filter or sort anything in the browser: rows appear in the order the server sent them", () => {
     mount();
-    expect(screen.getAllByTestId("eligible-row").map((row) => row.textContent?.slice(0, 10))).toEqual(["2026-10-05", "2026-10-04", "2026-10-03", "2026-10-02"]);
+    expect(screen.getAllByTestId("eligible-row").map((row) => row.textContent?.match(/\d{4}-\d{2}-\d{2}/)?.[0])).toEqual(["2026-10-05", "2026-10-04", "2026-10-03", "2026-10-02"]);
   });
 });
 

@@ -152,7 +152,8 @@ def test_downgrade_removes_exactly_what_the_upgrade_added_and_reupgrade_restores
 
     _upgrade(scratch_url, "head")
     assert INVOICE_TABLES <= _tables(scratch_url)
-    assert _scalar(scratch_url, "select count(*) from pg_trigger where tgname like 'trg_invoice%' and not tgisinternal") == 5
+    # Five from invoicing and the PDFs, one from payments (append-only).
+    assert _scalar(scratch_url, "select count(*) from pg_trigger where tgname like 'trg_invoice%' and not tgisinternal") == 6
     assert _fingerprint(scratch_url) == before
 
 

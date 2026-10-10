@@ -55,7 +55,7 @@ test.describe("what can be invoiced", () => {
 
     await page.goto(`${list(world)}/new`);
 
-    const dates = await page.getByTestId("eligible-row").locator("td:nth-child(2)").allTextContents();
+    const dates = await page.getByTestId("eligible-row").getByTestId("order-date").allTextContents();
     expect(dates.sort()).toEqual(["2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04"]); // not the draft (10-06) and not the currency-less one (10-05)
     expect(s.none).toBeTruthy();
     await expect(eligibleRow(page, "2026-10-04").getByTestId("eligible-currency")).toHaveText("EUR");
@@ -175,7 +175,7 @@ test.describe("draft invoices", () => {
 
     await page.goto(`${list(world)}/${invoice.id}`);
     await page.getByTestId("delete-draft").click();
-    await expect(page.getByRole("group")).toContainText("transactions become invoiceable again");
+    await expect(page.getByRole("group", { name: /^Delete this draft/ })).toContainText("orders become invoiceable again");
     await page.getByTestId("delete-draft-confirm").click();
 
     await expect(page).toHaveURL(new RegExp(`${list(world)}\\?deleted=1$`));
@@ -201,16 +201,16 @@ test.describe("issuing", () => {
 
     await page.goto(`${list(world)}/${invoice.id}`);
     await page.getByTestId("issue").click();
-    await expect(page.getByRole("group")).toContainText("cannot be edited or deleted");
+    await expect(page.getByRole("group", { name: /^Issue this invoice/ })).toContainText("cannot be edited or deleted");
     await page.getByTestId("issue-keep").click(); // declining changes nothing
     expect((await getInvoiceApi(context, world.orgId, invoice.id)).status).toBe("draft");
 
     await page.getByTestId("issue").click();
     await page.getByTestId("issue-confirm").click();
 
-    await expect(page.getByTestId("invoice-status")).toHaveText("Issued");
-    await expect(page.getByTestId("invoice-heading")).toHaveText("Invoice 1");
-    await expect(page.getByTestId("invoice-number")).toHaveText("1");
+    await expect(page.getByTestId("invoice-status")).toHaveAttribute("data-status", "issued");
+    await expect(page.getByTestId("invoice-heading")).toHaveText("Invoice 1001");
+    await expect(page.getByTestId("invoice-number")).toHaveText("1001");
     await expect(page.getByTestId("issued-note")).toContainText("cannot be edited or deleted");
     for (const control of ["issue", "delete-draft", "edit-details", "save-details"]) await expect(page.getByTestId(control)).toHaveCount(0);
     // The only control left is the PDF download: nothing that changes the invoice.
@@ -218,7 +218,7 @@ test.describe("issuing", () => {
     await expect(page.getByTestId("download-pdf")).toBeVisible();
 
     const stored = await getInvoiceApi(context, world.orgId, invoice.id);
-    expect(stored).toMatchObject({ status: "issued", number: 1, number_text: "1" });
+    expect(stored).toMatchObject({ status: "issued", number: 1001, number_text: "1001" });
     await expect(page.getByTestId("total-gross")).toHaveText(stored.gross_amount);
 
     // Reloading (and a direct request) show the same read-only document; the API refuses every change.
@@ -229,7 +229,7 @@ test.describe("issuing", () => {
     const edit = await context.request.patch(bffUrl(world.orgId, `/invoices/${invoice.id}`), { data: { description: "x" }, headers: ifMatch(stored.version) });
     const remove = await context.request.delete(bffUrl(world.orgId, `/invoices/${invoice.id}`), { headers: ifMatch(stored.version) });
     expect([edit.status(), remove.status()]).toEqual([409, 409]);
-    expect(testRow(`select next_number from invoice_counters where organization_id = ${sql(world.orgId)}`)).toBe("2");
+    expect(testRow(`select next_number from invoice_counters where organization_id = ${sql(world.orgId)}`)).toBe("1002");
   });
 
   test("Sales stays blocked after issue: reopen and cancel are refused for good", async ({ page, context }) => {
@@ -310,7 +310,9 @@ test.describe("an issued invoice is a stored document", () => {
     const issued = await issueInvoiceApi(context, world.orgId, await createInvoiceApi(context, world.orgId, [completedTx.id]));
 
     await page.goto(`${list(world)}/${issued.id}`);
-    const before = await page.getByTestId("invoice-document").innerText();
+    // textContent, not innerText: innerText depends on layout, and right after a load in CI it can come back without
+    // line breaks (same text, one line), which failed this comparison on every CI run.
+    const before = (await page.getByTestId("invoice-document").textContent()) ?? "";
     await expect(page.getByTestId("party-customer-name")).toHaveText("Umeå HK");
     await expect(page.getByTestId("line-fields")).toContainText("Handle with care");
     await expect(page.getByTestId("line-fields")).toContainText("Anna Andersson");
@@ -328,13 +330,13 @@ test.describe("an issued invoice is a stored document", () => {
     await context.request.patch(bffUrl(world.orgId, `/items/${item.id}`), { data: { name: "Renamed again" } });
 
     await page.reload();
-    expect(await page.getByTestId("invoice-document").innerText()).toBe(before); // the very same document
+    await expect(page.getByTestId("invoice-document")).toHaveText(before); // the very same document
     await expect(page.getByTestId("party-customer-name")).toHaveText("Umeå HK");
     await expect(page.getByTestId("line-description")).toHaveText("Horse massage");
     await expect(page.getByTestId("line-fields")).toContainText("Remark");
     await expect(page.getByTestId("line-fields")).toContainText("Anna Andersson");
     for (const live of ["Renamed", "Elsewhere", "CHANGED", "Relabelled", "changed text"]) await expect(page.getByTestId("invoice-document")).not.toContainText(live);
-    await expect(page.getByTestId("record-name")).toHaveText("Invoice 1 · Umeå HK"); // the page heading is the invoice's too
+    await expect(page.getByTestId("record-name")).toHaveText("Invoice 1001 · Umeå HK"); // the page heading is the invoice's too
     await page.goto(list(world));
     await expect(page.getByTestId("invoice-customer")).toHaveText("Umeå HK"); // the list too, from the snapshot
     expect(await getInvoiceApi(context, world.orgId, issued.id)).toEqual(issued);

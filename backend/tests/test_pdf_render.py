@@ -39,7 +39,7 @@ def test_the_invoice_prints_its_stored_content():
 
 def test_nothing_that_is_not_stored_is_invented():
     text = pdf_text(render_pdf(document(due_date=None, description=None, issuer=document().issuer.model_copy(update={"lines": ()}))))
-    for invented in ("IBAN", "Bankgiro", "Plusgiro", "Payment", "Swish", "QR", "Due date", "bank"):
+    for invented in ("IBAN", "Bankgiro", "Plusgiro", "Swish", "QR", "Due date", "bank"):
         assert invented not in text, invented
 
 
@@ -59,7 +59,7 @@ def test_totals_and_the_vat_breakdown_are_printed_exactly_once_each():
     text = pdf_text(data)
     for label in ("Net total (SEK)", "VAT total (SEK)", "Gross total (SEK)", "VAT rate (%)"):
         assert text.count(label) == 1, label
-    assert "1 168.50" in text and text.count("1 168.50") == 1
+    assert text.count("1 168.50") == 2  # the gross total, and the same stored figure as the amount due
     rows = [row for row in text.splitlines() if row.strip() in ("6", "25")]
     assert rows  # both rates were printed in the breakdown
 
@@ -79,7 +79,7 @@ def test_line_level_fields_print_under_their_line_and_transaction_level_fields_i
     ))
     text = pdf_text(data)
     assert "Reference information" in text and "PO number: PO-17" in text
-    assert "Transaction of 2026-09-30" not in text  # one source: no heading needed
+    assert "Order of 2026-09-30" not in text  # one source: no heading needed
     assert text.index("Owner: Anna Andersson") < text.index("Horse massage 2")  # belongs to line 1
     assert text.index("Horse massage 1") < text.index("Owner: Anna Andersson")
     assert "Remark: Handle with care" in text
@@ -91,8 +91,8 @@ def test_several_sources_are_grouped_by_their_stored_dates_and_sources_without_f
         PdfSource(date="2026-10-02", fields=()),
         PdfSource(date="2026-10-03", fields=(field("PO number", "PO-18"),)),
     ))))
-    assert "Transaction of 2026-09-30" in text and "Transaction of 2026-10-03" in text
-    assert "Transaction of 2026-10-02" not in text
+    assert "Order of 2026-09-30" in text and "Order of 2026-10-03" in text
+    assert "Order of 2026-10-02" not in text
 
 
 def test_the_field_code_is_generic_whatever_a_field_is_called():
@@ -381,7 +381,7 @@ def test_a_different_document_renders_to_different_bytes():
 
 
 def test_the_renderer_identifies_itself_with_library_and_font_versions():
-    assert TEMPLATE_VERSION == 1
+    assert TEMPLATE_VERSION == 9
     assert renderer_identity().startswith("reportlab ") and "bundled Noto fonts" in renderer_identity()
 
 
@@ -409,7 +409,7 @@ def test_the_widest_valid_figures_stay_on_the_page_and_never_overlap_each_other(
         for (x1, w1), (x2, _) in zip(cells, cells[1:]):
             assert x1 + w1 <= x2 + 0.5, "two pieces of text overlap"
     text = running_text(data)
-    assert text.count("9999999999999999.99") == 3  # the three invoice totals, whole
+    assert text.count("9999999999999999.99") == 4  # the three invoice totals and the amount due, whole
     assert text.replace("9999999999999999.99", "").count("999999999999.99") == 3  # the three line amounts, whole
     assert "9999999999.99" in text and "999999999.999" in text
 
@@ -481,3 +481,29 @@ def test_the_font_layer_refuses_unsupported_characters_by_itself_not_only_throug
     collected: dict[str, str] = {}
     assert font_layer.runs("aمb", "regular", fonts, found=collected) == [("NotoSans", "ab")]  # collected, not drawn
     assert list(collected) == ["م"]
+
+
+# The layout code as of TEMPLATE_VERSION. A download serves the stored PDF of the CURRENT template version, so a
+# change to what is printed without a new version would leave earlier downloads looking old. When this fails: bump
+# TEMPLATE_VERSION in render.py, then update both values here.
+PINNED_TEMPLATE = (9, "347db40d4d4c6e0c24504f39adc244ce036b3e4934965a51ef3dd1ef970a831a")
+
+
+def test_a_change_to_the_printed_layout_comes_with_a_new_template_version():
+    import hashlib
+
+    names = ("build.py", "document.py", "format.py", "labels.py", "render.py")
+    source = b"".join((BACKEND / "app/modules/invoicing/pdf" / name).read_bytes().replace(b"\r\n", b"\n") for name in names)
+    assert (TEMPLATE_VERSION, hashlib.sha256(source).hexdigest()) == PINNED_TEMPLATE, "the PDF layout changed: bump TEMPLATE_VERSION and re-pin"
+
+
+def test_the_source_orders_numbers_are_printed_and_older_invoices_print_without_them():
+    numbered = document(
+        order_numbers=("1001", "1002"),
+        sources=(PdfSource(date="2026-10-01", number="1001", fields=(field("PO", "A"),)), PdfSource(date="2026-10-02", number="1002", fields=(field("PO", "B"),))),
+    )
+    text = pdf_text(render_pdf(numbered))
+    assert "Order no." in text and "1001, 1002" in text and "Order 1001 of 2026-10-01" in text
+    older = document(sources=(PdfSource(date="2026-10-01", fields=(field("PO", "A"),)), PdfSource(date="2026-10-02", fields=(field("PO", "B"),))))
+    text = pdf_text(render_pdf(older))
+    assert "Order no." not in text and "Order of 2026-10-01" in text

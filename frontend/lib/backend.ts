@@ -32,12 +32,14 @@ export function backendUrl(): string {
 /** Areas of the FastAPI app the browser may reach through the BFF. */
 export const ALLOWED_API_AREAS = [
   "customers",
+  "suppliers",
   "items",
   "horses",
   "transactions",
   "custom-fields",
   "invoices",
   "invoiceable-transactions",
+  "inventory",
   "organization",
   "members",
   "invitations",
@@ -141,7 +143,8 @@ export interface BackendRequest {
  * The ONE binary resource the BFF passes through: the frozen PDF of an invoice. Everything else it
  * relays is JSON text.
  */
-const INVOICE_PDF_PATH = /^\/api\/invoices\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/pdf$/i;
+// An invoice's PDF, a credit note's, or a receipt's (all served under the invoices area).
+const INVOICE_PDF_PATH = /^\/api\/invoices\/(?:credit-notes\/|receipts\/)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/pdf$/i;
 
 export function isInvoicePdfPath(apiPath: string): boolean {
   return INVOICE_PDF_PATH.test(apiPath);

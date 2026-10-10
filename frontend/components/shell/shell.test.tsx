@@ -70,6 +70,14 @@ describe("OrgScope", () => {
 });
 
 describe("OrgSwitcher", () => {
+  it("shows how many organizations the account owns and may own, and no count when none is given", () => {
+    const { rerender } = render(<OrgSwitcher organizations={ORGS} currentId={A} owned={{ count: 1, max: 1 }} />);
+    expect(screen.getByTestId("owned-count")).toHaveTextContent("Owned 1 / 1");
+    expect(screen.queryByTestId("create-organization-link")).toBeNull();
+    rerender(<OrgSwitcher organizations={ORGS} currentId={A} />);
+    expect(screen.queryByTestId("owned-count")).toBeNull();
+  });
+
   it("shows the current organization as text and the others as links to their own URLs", () => {
     render(<OrgSwitcher organizations={ORGS} currentId={A} />);
 

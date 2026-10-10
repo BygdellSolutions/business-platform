@@ -1,16 +1,21 @@
 import uuid
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
 
 from sqlalchemy import (
+    BigInteger,
+    Boolean,
     CheckConstraint,
     Date,
+    DateTime,
+    ForeignKey,
     ForeignKeyConstraint,
     Index,
     Integer,
     Numeric,
     String,
+    Text,
     UniqueConstraint,
     text,
 )
@@ -18,8 +23,26 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.base import Base
-from app.models.mixins import TenantOwned
+from app.models.mixins import Authored, Numbered, TenantOwned
 
+
+
+def discount_constraints(table: str) -> tuple[CheckConstraint, ...]:
+    """The discount layers of a line, as the database enforces them (the same rule as
+    `pricing.discounted_unit_price`): a line either has no list price and no discounts (ad-hoc or a manually set
+    price without a discount), or its unit price is the list price after the catalog layer, rounded, then the customer
+    layer, rounded, then the line's own discount, rounded."""
+    percent = "{0} IS NULL OR ({0} > 0 AND {0} < 100)"
+    return (
+        CheckConstraint(percent.format("catalog_discount_percent"), name=f"ck_{table}_catalog_discount_range"),
+        CheckConstraint(percent.format("customer_discount_percent"), name=f"ck_{table}_customer_discount_range"),
+        CheckConstraint(percent.format("line_discount_percent"), name=f"ck_{table}_line_discount_range"),
+        CheckConstraint(
+            "(list_unit_price IS NULL AND catalog_discount_percent IS NULL AND customer_discount_percent IS NULL AND line_discount_percent IS NULL)"
+            " OR (list_unit_price IS NOT NULL AND unit_price_ex_vat = round(round(round(list_unit_price * (100 - coalesce(catalog_discount_percent, 0)) / 100, 2) * (100 - coalesce(customer_discount_percent, 0)) / 100, 2) * (100 - coalesce(line_discount_percent, 0)) / 100, 2))",
+            name=f"ck_{table}_discount_layers",
+        ),
+    )
 
 class TransactionStatus(StrEnum):
     """Lifecycle of the transaction itself (not its invoicing).
@@ -37,7 +60,7 @@ class TransactionStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
-class Transaction(TenantOwned, Base):
+class Transaction(TenantOwned, Numbered, Authored, Base):
     """The header of a sale: who is billed, and when. Industry-neutral.
 
     Anything specific to an industry (an animal, a project, a vehicle, a property...) is
@@ -49,6 +72,7 @@ class Transaction(TenantOwned, Base):
     __table_args__ = (
         # Target for the tenant-safe composite foreign key from transaction_lines.
         UniqueConstraint("organization_id", "id", name="uq_transactions_organization_id_id"),
+        UniqueConstraint("organization_id", "number", name="uq_transactions_organization_number"),
         # Target for modules whose records must agree with a transaction on its billing customer
         # AND currency (a referencing row with non-NULL values is then checked by PostgreSQL itself).
         UniqueConstraint(
@@ -66,6 +90,16 @@ class Transaction(TenantOwned, Base):
         CheckConstraint("version >= 1 AND header_version >= 1", name="ck_transactions_versions_positive"),
         CheckConstraint("currency IS NULL OR currency ~ '^[A-Z]{3}$'", name="ck_transactions_currency_shape"),
         Index("ix_transactions_organization_status_date", "organization_id", "status", "transaction_date"),
+        # Paid at the counter (2026-10-10): payment and receipt come together, only on a completed order, and a paid
+        # order can therefore never be reopened or cancelled (a refund is the way back, not a status change).
+        CheckConstraint(
+            "(paid_at IS NULL) = (payment_method IS NULL) AND (paid_at IS NULL) = (receipt_number IS NULL)"
+            " AND (receipt_number IS NULL) = (receipt_number_text IS NULL)",
+            name="ck_transactions_paid_fields_together",
+        ),
+        CheckConstraint("paid_at IS NULL OR status = 'completed'", name="ck_transactions_paid_is_completed"),
+        CheckConstraint("payment_method IS NULL OR payment_method IN ('swish', 'card', 'cash')", name="ck_transactions_payment_method"),
+        UniqueConstraint("organization_id", "receipt_number", name="uq_transactions_organization_receipt_number"),
         Index("ix_transactions_organization_billing_customer", "organization_id", "billing_customer_id"),
     )
 
@@ -87,9 +121,14 @@ class Transaction(TenantOwned, Base):
     # explicit action, never automatically). Once set it never changes (a database trigger enforces
     # it), whatever happens to the organization's setting.
     currency: Mapped[str | None] = mapped_column(String(3))
+    # Paid at the counter instead of invoiced: when, how, and the receipt's number (its own series, from 1001).
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    payment_method: Mapped[str | None] = mapped_column(String(16))
+    receipt_number: Mapped[int | None] = mapped_column(BigInteger)
+    receipt_number_text: Mapped[str | None] = mapped_column(String(32))
 
 
-class TransactionLine(TenantOwned, Base):
+class TransactionLine(TenantOwned, Authored, Base):
     """One billable line. Item values are SNAPSHOTS copied at creation.
 
     `item_id` only links back to the catalog; editing the Item later never changes
@@ -133,6 +172,19 @@ class TransactionLine(TenantOwned, Base):
         CheckConstraint(
             "gross_amount = net_amount + vat_amount", name="ck_transaction_lines_gross_amount"
         ),
+        *discount_constraints("transaction_lines"),
+        CheckConstraint(
+            "NOT priced_by_hand OR (catalog_discount_percent IS NULL AND customer_discount_percent IS NULL)",
+            name="ck_transaction_lines_hand_price_layers",
+        ),
+        CheckConstraint("kind IN ('standard', 'service')", name="ck_transaction_lines_kind"),
+        # A service is a catalog service performed at a time for a subject; other lines carry none of that.
+        CheckConstraint(
+            "(kind = 'service' AND item_id IS NOT NULL AND performed_at IS NOT NULL AND subject_type IS NOT NULL AND subject_id IS NOT NULL)"
+            " OR (kind = 'standard' AND performed_at IS NULL AND performed_by IS NULL AND subject_type IS NULL AND subject_id IS NULL)",
+            name="ck_transaction_lines_service_fields",
+        ),
+        Index("ix_transaction_lines_subject", "organization_id", "subject_type", "subject_id"),
         Index("ix_transaction_lines_organization_transaction", "organization_id", "transaction_id"),
         Index("ix_transaction_lines_organization_item", "organization_id", "item_id"),
     )
@@ -145,7 +197,27 @@ class TransactionLine(TenantOwned, Base):
     unit: Mapped[str] = mapped_column(String(32))
     quantity: Mapped[Decimal] = mapped_column(Numeric(12, 3))
     unit_price_ex_vat: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    # Discount layers (see discount_constraints): the price before discounts and the two percentages, copied when the
+    # line is priced from the catalog. NULL for ad-hoc lines and manually set prices.
+    list_unit_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    catalog_discount_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    customer_discount_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    # The line's own discount, set by a person on this line (the last layer). On a line priced by hand the typed price
+    # is the list price it applies to.
+    line_discount_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    # The price was typed by a person (an ad-hoc line or an overridden price): the catalog and customer layers never
+    # apply, and a new billing customer or date does not reprice it.
+    priced_by_hand: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     vat_rate: Mapped[Decimal] = mapped_column(Numeric(5, 2))
     net_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     vat_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     gross_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    # "standard": a catalog item or an ad-hoc line (told apart by item_id). "service": work performed for a subject
+    # (a person, an animal...), always a catalog service, with when, by whom and for whom.
+    kind: Mapped[str] = mapped_column(String(16), default="standard", server_default=text("'standard'"))
+    performed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    performed_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
+    # The subject as (registry key, id): Sales never knows what it is (see app.core.subjects).
+    subject_type: Mapped[str | None] = mapped_column(String(64))
+    subject_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    notes: Mapped[str | None] = mapped_column(Text)

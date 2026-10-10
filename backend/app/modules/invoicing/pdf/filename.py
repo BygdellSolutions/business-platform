@@ -11,9 +11,9 @@ MAX_STEM = 60
 _UNSAFE = re.compile(r"[^A-Za-z0-9._-]+")
 
 
-def safe_filename(number_text: str | None) -> str:
+def safe_filename(number_text: str | None, kind: str = "invoice") -> str:
     stem = _UNSAFE.sub("_", number_text or "").strip("._-")[:MAX_STEM].strip("._-")
-    return f"invoice-{stem}.pdf" if stem else "invoice.pdf"
+    return f"{kind}-{stem}.pdf" if stem else f"{kind}.pdf"
 
 
 def content_disposition(filename: str) -> str:

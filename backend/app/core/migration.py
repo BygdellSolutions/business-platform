@@ -34,6 +34,8 @@ class MigrationSettings(BaseSettings):
     database_url: str | None = None  # development fallback only, see `url`
     # The application role that must be able to use what the migrations create (see `reconcile_runtime_grants`).
     runtime_db_role: str | None = None
+    # TEST databases only: the confirmation phrase of `app.scripts.renumber_invoices` (unset everywhere else).
+    renumber_invoices: str | None = None
 
     def url(self) -> str | None:
         """The credentials migrations run with. Production has no fallback: a missing MIGRATION_DATABASE_URL is an error,

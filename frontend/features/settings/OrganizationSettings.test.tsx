@@ -26,9 +26,21 @@ function organization(overrides: Partial<Organization> = {}): Organization {
     default_currency: "SEK",
     default_currency_locked: false,
     default_currency_lock_reason: null,
+    timezone: null,
+    today: "2026-10-08",
     created_at: "2026-10-01T10:00:00Z",
     updated_at: "2026-10-01T10:00:00Z",
     ...EMPTY_PROFILE,
+    phone: null,
+    email: null,
+    website: null,
+    bankgiro: null,
+    plusgiro: null,
+    iban: null,
+    bic: null,
+    payment_terms_days: null,
+    approved_for_f_tax: null,
+    document_language: null,
     ...overrides,
   };
 }
@@ -195,7 +207,7 @@ describe("the default currency", () => {
   it("explains that none is set and that transactions need one", () => {
     mount(A, organization({ default_currency: null }));
     expect(screen.getByLabelText("Default currency")).toHaveValue("");
-    expect(screen.getByText(/Transactions cannot be created until a currency is set/)).toBeInTheDocument();
+    expect(screen.getByText(/Orders cannot be created until a currency is set/)).toBeInTheDocument();
     expect(screen.getByLabelText("Default currency")).toBeEnabled();
   });
 
@@ -226,6 +238,52 @@ describe("the default currency", () => {
 
     expect(await screen.findByTestId("form-error")).toHaveTextContent("can no longer be changed");
     expect(screen.getByLabelText("Default currency")).toHaveValue("EUR");
+  });
+});
+
+describe("the time zone", () => {
+  it("explains that none is set, that dates default to UTC, and what today is", () => {
+    mount(A, organization());
+    expect(screen.getByLabelText("Time zone")).toHaveValue("");
+    expect(screen.getByText(/Not set: new dates default to today in UTC \(2026-10-08\)/)).toBeInTheDocument();
+  });
+
+  it("offers the browser's zone names as suggestions, never as a rule", () => {
+    mount(A, organization());
+    const input = screen.getByLabelText("Time zone");
+    const list = document.getElementById(input.getAttribute("list") ?? "");
+    expect(list?.tagName).toBe("DATALIST");
+    expect(Array.from(list?.querySelectorAll("option") ?? []).map((o) => o.getAttribute("value"))).toContain("Europe/Stockholm");
+  });
+
+  it("sends only the zone when only the zone changed", async () => {
+    mocked.mockResolvedValueOnce(ok(organization({ timezone: "Europe/Stockholm" })));
+    mount(A, organization());
+    await userEvent.type(screen.getByLabelText("Time zone"), "Europe/Stockholm");
+    await userEvent.click(screen.getByRole("button", { name: "Save settings" }));
+    expect(mocked).toHaveBeenCalledWith(A, "/organization", { method: "PATCH", body: { timezone: "Europe/Stockholm" } });
+  });
+
+  it("clearing the zone sends null", async () => {
+    mocked.mockResolvedValueOnce(ok(organization()));
+    mount(A, organization({ timezone: "Europe/Stockholm" }));
+    await userEvent.clear(screen.getByLabelText("Time zone"));
+    await userEvent.click(screen.getByRole("button", { name: "Save settings" }));
+    expect(mocked).toHaveBeenCalledWith(A, "/organization", { method: "PATCH", body: { timezone: null } });
+  });
+
+  it("shows the backend's refusal of an unknown zone next to the box", async () => {
+    mocked.mockResolvedValueOnce(fail(422, { detail: [{ loc: ["body", "timezone"], msg: "Value error, must be an IANA time zone name such as Europe/Stockholm", type: "value_error" }] }));
+    mount(A, organization());
+    await userEvent.type(screen.getByLabelText("Time zone"), "Mars/Olympus");
+    await userEvent.click(screen.getByRole("button", { name: "Save settings" }));
+    expect(await screen.findByText(/must be an IANA time zone name/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Time zone")).toHaveValue("Mars/Olympus");
+  });
+
+  it("is shown read-only to everyone else", () => {
+    mount(A, organization({ timezone: "Europe/Stockholm" }), false);
+    expect(screen.getByTestId("setting-timezone")).toHaveTextContent("Europe/Stockholm");
   });
 });
 
@@ -263,7 +321,7 @@ describe("transactions without a currency", () => {
 
   it("explains that they have none and asks for the currency to be set first when it is not", () => {
     mountEarlier({ default_currency: null, transactions_without_currency: 3 });
-    expect(screen.getByTestId("earlier-count")).toHaveTextContent("3 transactions were created before currencies existed and have no currency");
+    expect(screen.getByTestId("earlier-count")).toHaveTextContent("3 orders were created before currencies existed and have no currency");
     expect(screen.getByText(/Set the organization.s default currency first/)).toBeInTheDocument();
     expect(screen.queryByRole("button")).toBeNull();
   });
@@ -274,12 +332,12 @@ describe("transactions without a currency", () => {
 
     await userEvent.click(screen.getByTestId("assign-currency"));
     expect(mocked).not.toHaveBeenCalled(); // the first click only asks
-    expect(screen.getByText(/Assign SEK to 3 transactions\? This cannot be undone\./)).toBeInTheDocument();
+    expect(screen.getByText(/Assign SEK to 3 orders\? This cannot be undone\./)).toBeInTheDocument();
     await userEvent.click(screen.getByTestId("assign-currency-confirm"));
 
     expect(mocked).toHaveBeenCalledTimes(1);
     expect(mocked).toHaveBeenCalledWith(A, "/transactions/assign-currency", { method: "POST", body: { currency: "SEK" } });
-    expect(await screen.findByTestId("assigned")).toHaveTextContent("3 transactions now have the currency SEK");
+    expect(await screen.findByTestId("assigned")).toHaveTextContent("3 orders now have the currency SEK");
     expect(router.refresh).toHaveBeenCalledTimes(1);
   });
 
@@ -287,7 +345,7 @@ describe("transactions without a currency", () => {
     mocked.mockResolvedValue(ok<AssignCurrencyResult>({ currency: "EUR", assigned: 2 }));
     mountEarlier({ default_currency: "EUR", transactions_without_currency: 2 });
 
-    expect(screen.getByTestId("assign-currency")).toHaveTextContent("Assign EUR to these transactions");
+    expect(screen.getByTestId("assign-currency")).toHaveTextContent("Assign EUR to these orders");
     await userEvent.click(screen.getByTestId("assign-currency"));
     await userEvent.click(screen.getByTestId("assign-currency-confirm"));
 
@@ -316,7 +374,7 @@ describe("transactions without a currency", () => {
     await userEvent.click(screen.getByTestId("assign-currency"));
     await userEvent.click(screen.getByTestId("assign-currency-keep"));
     expect(mocked).not.toHaveBeenCalled();
-    expect(screen.getByTestId("earlier-count")).toHaveTextContent("1 transaction was created");
+    expect(screen.getByTestId("earlier-count")).toHaveTextContent("1 order was created");
   });
 
   it("offers no action to anyone else", () => {
@@ -337,6 +395,28 @@ describe("transactions without a currency", () => {
 
     await userEvent.click(screen.getByTestId("assign-currency"));
     await userEvent.click(screen.getByTestId("assign-currency-confirm"));
-    expect(await screen.findByTestId("assigned")).toHaveTextContent("1 transaction now has the currency SEK");
+    expect(await screen.findByTestId("assigned")).toHaveTextContent("1 order now has the currency SEK");
+  });
+});
+
+describe("contact, payment and documents", () => {
+  it("sends only what changed, with days as a number and F-tax and language as chosen", async () => {
+    mocked.mockResolvedValue(ok(organization({ bankgiro: "123-4567", payment_terms_days: 30, approved_for_f_tax: true, document_language: "sv" })));
+    mount(A, organization());
+
+    await userEvent.type(screen.getByLabelText("Bankgiro"), "123-4567");
+    await userEvent.type(screen.getByLabelText("Payment terms (days)"), "30");
+    await userEvent.selectOptions(screen.getByLabelText("Approved for F-tax (F-skatt)"), "yes");
+    await userEvent.selectOptions(screen.getByLabelText("Document language"), "sv");
+    await userEvent.click(screen.getByTestId("submit"));
+
+    expect(mocked.mock.calls[0][2]?.body).toEqual({ bankgiro: "123-4567", payment_terms_days: 30, approved_for_f_tax: true, document_language: "sv" });
+  });
+
+  it("shows the values read-only to someone who may not change them", () => {
+    mount(A, organization({ iban: "SE4550000000058398257466", approved_for_f_tax: false, document_language: "sv" }), false);
+    expect(screen.getByTestId("setting-iban")).toHaveTextContent("SE4550000000058398257466");
+    expect(screen.getByTestId("setting-approved_for_f_tax")).toHaveTextContent("No");
+    expect(screen.getByTestId("setting-document_language")).toHaveTextContent("Swedish");
   });
 });

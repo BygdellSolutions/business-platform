@@ -48,7 +48,7 @@ def test_milestone_example_billing_customer_item_quantity_price_vat(client: Test
     assert response.status_code == 201, response.text
     tx = response.json()
     assert tx["status"] == "draft"
-    assert tx["billing_customer"] == {"id": str(sales.billing.id), "name": "Umeå HK", "active": True}
+    assert tx["billing_customer"] == {"id": str(sales.billing.id), "name": "Umeå HK", "active": True, "walk_in": False}
     assert tx["line_count"] == 1
     [line] = tx["lines"]
     assert line["item_id"] == str(sales.item.id)
@@ -198,22 +198,15 @@ def test_a_request_may_carry_at_most_200_lines(client: TestClient, sales):
 # --- creating: lines, defaults and overrides ---------------------------------------------------------
 
 
-def test_item_values_are_the_defaults_and_each_can_be_overridden(client: TestClient, sales):
-    lines = [
-        from_item(sales),
-        from_item(sales, description="Massage, long", unit="hour", unit_price_ex_vat="1200.00", vat_rate="6.00"),
-        from_item(sales, unit_price_ex_vat="0.00"),  # a free line from a priced item
-    ]
-
-    tx = create(client, sales, lines=lines).json()
-
-    a, b, c = tx["lines"]
+def test_item_values_are_copied_and_cannot_be_typed_on_a_catalog_line(client: TestClient, sales):
+    tx = create(client, sales, lines=[from_item(sales)]).json()
+    a = tx["lines"][0]
     assert (a["description"], a["unit"], a["unit_price_ex_vat"], a["vat_rate"]) == ("Horse massage", "session", "850.00", "25.00")
-    assert (b["description"], b["unit"], b["unit_price_ex_vat"], b["vat_rate"]) == ("Massage, long", "hour", "1200.00", "6.00")
-    assert (b["net_amount"], b["vat_amount"], b["gross_amount"]) == ("1200.00", "72.00", "1272.00")
-    assert (c["description"], c["unit"], c["unit_price_ex_vat"], c["vat_rate"]) == ("Horse massage", "session", "0.00", "25.00")
-    assert c["net_amount"] == "0.00"
-    assert all(line["item_id"] == str(sales.item.id) for line in tx["lines"])
+    assert a["item_id"] == str(sales.item.id)
+
+    for override in ({"description": "Massage, long"}, {"unit": "hour"}, {"unit_price_ex_vat": "0.00"}, {"vat_rate": "6.00"}):
+        response = create(client, sales, lines=[from_item(sales, **override)])
+        assert response.status_code == 422 and response.json()["detail"][0]["type"] == "line.catalog_value", override
 
 
 def test_ad_hoc_lines_have_no_item_and_need_every_value(client: TestClient, sales):
@@ -484,21 +477,22 @@ def test_changing_a_lines_item_recopies_the_new_items_values(client: TestClient,
         "Saddle fitting", "hour", "600.00", "12.00")
     assert (swapped["net_amount"], swapped["vat_amount"]) == ("600.00", "72.00")
 
-    # an override in the same request wins over the new item's value
-    again = client.patch(
-        line_url, json={"item_id": str(sales.item.id), "unit_price_ex_vat": "1.00"}, headers=sales.headers
-    ).json()
-    assert (again["description"], again["unit_price_ex_vat"], again["vat_rate"]) == ("Horse massage", "1.00", "25.00")
+    # a typed value is refused with the item change, as it is when a catalog line is added
+    again = client.patch(line_url, json={"item_id": str(sales.item.id), "unit_price_ex_vat": "1.00"}, headers=sales.headers)
+    assert again.status_code == 422 and again.json()["detail"][0]["type"] == "line.catalog_value"
 
 
-def test_detaching_a_line_from_its_item_keeps_its_values(client: TestClient, sales):
-    tx = create(client, sales, lines=[from_item(sales)]).json()
-    line_url = f"/api/transactions/{tx['id']}/lines/{tx['lines'][0]['id']}"
+def test_a_line_never_changes_kind(client: TestClient, sales):
+    tx = create(client, sales, lines=[from_item(sales), ad_hoc("1")]).json()
+    catalog_url = f"/api/transactions/{tx['id']}/lines/{tx['lines'][0]['id']}"
+    adhoc_url = f"/api/transactions/{tx['id']}/lines/{tx['lines'][1]['id']}"
 
-    detached = client.patch(line_url, json={"item_id": None}, headers=sales.headers).json()
+    detached = client.patch(catalog_url, json={"item_id": None}, headers=sales.headers)
+    attached = client.patch(adhoc_url, json={"item_id": str(sales.item.id)}, headers=sales.headers)
 
-    assert detached["item_id"] is None
-    assert (detached["description"], detached["unit_price_ex_vat"], detached["net_amount"]) == ("Horse massage", "850.00", "850.00")
+    assert detached.status_code == 422 and detached.json()["detail"][0]["type"] == "line.kind_change"
+    assert attached.status_code == 422 and attached.json()["detail"][0]["type"] == "line.kind_change"
+    assert client.patch(adhoc_url, json={"description": "Still ad hoc", "unit_price_ex_vat": "9.00"}, headers=sales.headers).status_code == 200
 
 
 def test_changing_only_the_quantity_recalculates_the_amounts(client: TestClient, sales):

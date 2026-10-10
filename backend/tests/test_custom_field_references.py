@@ -12,8 +12,21 @@ from app.core.entity_registry import registry
 from tests.factories import make_customer, make_definition, make_horse
 
 BASE = "/api/custom-fields"
-GENERIC_409 = {"customer": "Customer is referenced by other records", "horse": "Horse is referenced by other records"}
-DELETE_PATH = {"customer": "/api/customers", "horse": "/api/horses"}
+GENERIC_409 = {
+    "customer": "Customer is referenced by other records",
+    "horse": "Horse is referenced by other records",
+    "supplier": "Supplier is referenced by other records",
+}
+DELETE_PATH = {"customer": "/api/customers", "horse": "/api/horses", "supplier": "/api/suppliers"}
+
+
+def _supplier(db, org):
+    from app.models import Supplier
+
+    supplier = Supplier(organization_id=org.id, name="Target Supplies")
+    db.add(supplier)
+    db.flush()
+    return supplier
 
 
 def values_url(entity_id, entity_type="transaction_line"):
@@ -184,7 +197,12 @@ def test_every_referenceable_entity_type_has_a_guarded_delete_path_in_this_suite
 @pytest.mark.parametrize("source", sorted(DELETE_PATH))
 def test_deleting_any_referenceable_record_goes_through_the_guard(client: TestClient, db_session: Session, cf, source):
     make_definition(db_session, cf.org, key=f"ref_{source}", field_type="reference", reference_source=source, position=40)
-    target = {"customer": make_customer(db_session, cf.org, "Target AB"), "horse": make_horse(db_session, cf.org, "Target", owner=cf.anna)}[source]
+    targets = {
+        "customer": lambda: make_customer(db_session, cf.org, "Target AB"),
+        "horse": lambda: make_horse(db_session, cf.org, "Target", owner=cf.anna),
+        "supplier": lambda: _supplier(db_session, cf.org),
+    }
+    target = targets[source]()
     put(client, cf, cf.lines[0], **{f"ref_{source}": str(target.id)})
 
     blocked = client.delete(f"{DELETE_PATH[source]}/{target.id}", headers=cf.headers)

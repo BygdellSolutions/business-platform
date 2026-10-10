@@ -34,10 +34,10 @@ def _reserved_transaction_validator(
         return []
     action = "reopened" if event == REOPEN else "cancelled"
     if invoice_status == InvoiceStatus.ISSUED:
-        message = f"This transaction is on an issued invoice and cannot be {action}"
+        message = f"This order is on an issued invoice and cannot be {action}"
         label = "Issued invoice"
     else:
-        message = f"This transaction is reserved by a draft invoice and cannot be {action}; delete the draft invoice first"
+        message = f"This order is reserved by a draft invoice and cannot be {action}; delete the draft invoice first"
         label = "Draft invoice"
     return [Problem(code="invoice.reserved", message=message, entity_type=TRANSACTION, entity_id=str(entity_id), label=label)]
 

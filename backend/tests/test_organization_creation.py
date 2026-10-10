@@ -30,7 +30,7 @@ def body(name: str | None = None, **extra) -> dict:
 
 
 def creator(db, **fields):
-    return make_user(db, can_create_organizations=True, **fields)
+    return make_user(db, **fields)  # the default account may own one organization
 
 
 def as_user(user) -> dict[str, str]:
@@ -98,7 +98,7 @@ def test_each_new_organization_starts_with_exactly_one_owner_and_no_other_member
 
 
 def test_one_user_may_create_two_organizations_with_the_same_name(client, db_session):
-    user = creator(db_session)
+    user = creator(db_session, max_owned_organizations=2)
     assert client.post(URL, json=body("Twin"), headers=as_user(user)).status_code == 201
     assert client.post(URL, json=body("Twin"), headers=as_user(user)).status_code == 201
     assert count(db_session, Organization, Organization.name == "Twin") == 2
@@ -114,8 +114,8 @@ def test_without_authentication_it_is_a_401_and_nothing_is_written(client, db_se
     assert snapshot(db_session) == before
 
 
-def test_a_user_without_the_flag_is_refused_with_a_403_and_nothing_is_written(client, db_session):
-    user = make_user(db_session)  # can_create_organizations defaults to false
+def test_an_account_that_may_own_none_is_refused_with_a_403_and_nothing_is_written(client, db_session):
+    user = make_user(db_session, max_owned_organizations=0)
     before = snapshot(db_session)
 
     response = client.post(URL, json=body(), headers=as_user(user))
@@ -125,23 +125,29 @@ def test_a_user_without_the_flag_is_refused_with_a_403_and_nothing_is_written(cl
     assert snapshot(db_session) == before
 
 
-def test_being_an_owner_of_an_organization_does_not_allow_creating_another(client, db_session):
-    user = make_user(db_session)
+def test_an_account_that_owns_its_one_organization_cannot_create_another(client, db_session):
+    user = make_user(db_session)  # Owned 1 / 1 after the next line
     add_member(db_session, make_org(db_session, "Mine"), user, Role.OWNER)
 
     assert client.post(URL, json=body(), headers=as_user(user)).status_code == 403
 
 
-def test_creating_an_organization_does_not_grant_the_flag_and_the_flag_is_not_changed_by_it(client, db_session):
+def test_creating_uses_up_the_allowance_and_a_larger_limit_allows_more(client, db_session):
     user = creator(db_session)
-    client.post(URL, json=body(), headers=as_user(user))
+    assert client.post(URL, json=body(), headers=as_user(user)).status_code == 201
+    assert client.post(URL, json=body(), headers=as_user(user)).status_code == 403  # Owned 1 / 1
     db_session.refresh(user)
-    assert user.can_create_organizations is True
+    assert user.max_owned_organizations == 1  # creating never changes the entitlement
 
-    other = make_user(db_session)
-    add_member(db_session, make_org(db_session, "X"), other, Role.OWNER)
-    db_session.refresh(other)
-    assert other.can_create_organizations is False
+    roomy = make_user(db_session, max_owned_organizations=3)
+    assert [client.post(URL, json=body(), headers=as_user(roomy)).status_code for _ in range(4)] == [201, 201, 201, 403]
+
+
+def test_memberships_that_are_not_ownership_do_not_count(client, db_session):
+    user = creator(db_session)
+    for name in ("A", "B", "C"):
+        add_member(db_session, make_org(db_session, name), user, Role.ADMIN)
+    assert client.post(URL, json=body(), headers=as_user(user)).status_code == 201
 
 
 def test_a_disabled_user_is_unauthenticated(client, db_session):
@@ -152,8 +158,8 @@ def test_a_disabled_user_is_unauthenticated(client, db_session):
 def test_the_flag_is_judged_from_the_database_not_from_a_stale_loaded_user(client, db_session):
     user = creator(db_session)
     assert client.get("/api/me/user", headers=as_user(user)).json()["can_create_organizations"] is True  # the user is now loaded in the session
-    db_session.execute(text("update users set can_create_organizations = false where id = :u"), {"u": user.id})  # the ORM object still says true
-    assert user.can_create_organizations is True
+    db_session.execute(text("update users set max_owned_organizations = 0 where id = :u"), {"u": user.id})  # the ORM object still says 1
+    assert user.max_owned_organizations == 1
 
     assert client.post(URL, json=body(), headers=as_user(user)).status_code == 403
 
@@ -170,6 +176,7 @@ def test_the_flag_is_judged_from_the_database_not_from_a_stale_loaded_user(clien
         {"organization_id": str(uuid.uuid4())},
         {"id": str(uuid.uuid4())},
         {"can_create_organizations": True},
+        {"max_owned_organizations": 9},
     ],
 )
 def test_a_request_cannot_name_an_owner_a_role_or_an_id(client, db_session, extra):
@@ -238,7 +245,7 @@ def test_a_successful_creation_records_one_security_event_without_the_form_conte
 
 
 def test_a_refused_or_invalid_request_records_no_event(client, db_session):
-    plain, allowed = make_user(db_session), creator(db_session)
+    plain, allowed = make_user(db_session, max_owned_organizations=0), creator(db_session)
     client.post(URL, json=body(), headers=as_user(plain))
     client.post(URL, json={"name": "x"}, headers=as_user(allowed))
     client.post(URL, json=body())
@@ -274,7 +281,7 @@ def test_the_same_key_with_a_different_body_is_a_conflict_and_changes_nothing(cl
 
 
 def test_different_keys_or_no_key_create_different_organizations(client, db_session):
-    user, payload = creator(db_session), body("Repeat")
+    user, payload = creator(db_session, max_owned_organizations=4), body("Repeat")
     for headers in ({"Idempotency-Key": key()}, {"Idempotency-Key": key()}, {}, {}):
         assert client.post(URL, json=payload, headers={**as_user(user), **headers}).status_code == 201
     assert count(db_session, Organization, Organization.name == "Repeat") == 4
@@ -300,12 +307,20 @@ def test_a_replay_is_only_returned_to_a_user_who_is_still_a_member(client, db_se
     assert response.status_code == 409 and created["id"] not in response.text
 
 
-def test_a_replay_does_not_bypass_a_revoked_capability(client, db_session):
-    user, request_key, payload = creator(db_session), key(), body("Revoked later")
-    client.post(URL, json=payload, headers={**as_user(user), "Idempotency-Key": request_key})
-    admin.set_org_creation(db_session, email=user.email, allowed=False)
+def test_a_replay_returns_the_committed_organization_even_after_the_limit_was_lowered_and_creates_nothing(client, db_session):
+    """A retry reproduces a creation that already happened (while it was allowed); it grants nothing new. Since the
+    owned-organization limit replaced the yes/no flag, "revoked" and "used up the allowance" are the same state, and
+    the ordinary retry of a lost response at "Owned 1 / 1" must get its organization back."""
+    user, request_key, payload = creator(db_session), key(), body("Lowered later")
+    first = client.post(URL, json=payload, headers={**as_user(user), "Idempotency-Key": request_key})
+    admin.set_owned_limit(db_session, email=user.email, limit=0)
+    before = snapshot(db_session)
 
-    assert client.post(URL, json=payload, headers={**as_user(user), "Idempotency-Key": request_key}).status_code == 403
+    replay = client.post(URL, json=payload, headers={**as_user(user), "Idempotency-Key": request_key})
+
+    assert replay.status_code == 200 and replay.json()["id"] == first.json()["id"]
+    assert snapshot(db_session) == before
+    assert client.post(URL, json=body("New"), headers=as_user(user)).status_code == 403  # but nothing NEW
 
 
 @pytest.mark.parametrize("bad", ["short", "x" * 44, "a" * 42 + "!", "a" * 42 + " ", ""])
@@ -367,7 +382,7 @@ def test_an_existing_organization_without_an_owner_is_left_exactly_as_it_is(clie
     # A fixed past timestamp: inside this one transaction now() never moves, so an untouched-or-touched check on the
     # default value would see nothing either way.
     db_session.execute(text("update organizations set updated_at = '2020-01-01 00:00:00+00' where id = :o"), {"o": legacy.id})
-    member = make_user(db_session, can_create_organizations=True)
+    member = make_user(db_session)
     add_member(db_session, legacy, member, Role.EMPLOYEE)
     before = db_session.execute(text("select name, default_currency, updated_at from organizations where id = :o"), {"o": legacy.id}).one()
 
@@ -406,8 +421,8 @@ def test_session_mode_ignores_the_development_identity_and_headers_naming_someon
     assert count(db_session, OrganizationUser, OrganizationUser.user_id == other.id) == 0
 
 
-def test_session_mode_still_judges_the_flag(session_client, db_session):
-    user = make_user(db_session)
+def test_session_mode_still_judges_the_limit(session_client, db_session):
+    user = make_user(db_session, max_owned_organizations=0)
     assert session_client.post(URL, json=body(), headers=make_session(db_session, user).headers).status_code == 403
 
 
@@ -415,15 +430,15 @@ def test_session_mode_still_judges_the_flag(session_client, db_session):
 
 
 def test_the_operator_grants_and_revokes_the_account_right_without_touching_memberships(client, db_session):
-    user = make_user(db_session)
+    user = make_user(db_session, max_owned_organizations=0)
     org = make_org(db_session, "Held")
     add_member(db_session, org, user, Role.ADMIN)
     assert client.post(URL, json=body(), headers=as_user(user)).status_code == 403
 
-    assert admin.set_org_creation(db_session, email=user.email.upper(), allowed=True) is True
+    assert admin.set_org_creation(db_session, email=user.email.upper(), allowed=True) is True  # room for one: limit 1
     assert client.post(URL, json=body(), headers=as_user(user)).status_code == 201
-    assert admin.set_org_creation(db_session, email=user.email, allowed=True) is False  # already granted
-    assert admin.set_org_creation(db_session, email=user.email, allowed=False) is True
+    assert admin.set_owned_limit(db_session, email=user.email, limit=1) is False  # already 1
+    assert admin.set_org_creation(db_session, email=user.email, allowed=False) is False  # owns 1 = limit 1 already
     assert client.post(URL, json=body(), headers=as_user(user)).status_code == 403
 
     roles = db_session.execute(select(OrganizationUser.organization_id, OrganizationUser.role).where(OrganizationUser.user_id == user.id, OrganizationUser.organization_id == org.id)).all()
@@ -431,9 +446,9 @@ def test_the_operator_grants_and_revokes_the_account_right_without_touching_memb
 
     changes = events(db_session, "capability_changed")
     assert [(e.actor_user_id, e.detail) for e in changes] == [
-        (user.id, "org_creation_granted:cli"),
-        (user.id, "org_creation_granted:cli:unchanged"),
-        (user.id, "org_creation_revoked:cli"),
+        (user.id, "owned_limit:1:cli"),
+        (user.id, "owned_limit:1:cli:unchanged"),
+        (user.id, "owned_limit:1:cli:unchanged"),
     ]
     assert all(user.email not in (e.detail or "") for e in changes)
 
@@ -446,15 +461,15 @@ def test_the_operator_command_refuses_an_unknown_user(db_session):
 def test_there_is_no_endpoint_that_changes_the_flag_for_a_user(client, db_session):
     user = make_user(db_session)
     for method, path in (("patch", "/api/me/user"), ("put", "/api/me/user"), ("post", "/api/me/user"), ("patch", f"/api/users/{user.id}")):
-        response = getattr(client, method)(path, json={"can_create_organizations": True}, headers=as_user(user))
+        response = getattr(client, method)(path, json={"max_owned_organizations": 9}, headers=as_user(user))
         assert response.status_code in (404, 405), (method, path)
     db_session.refresh(user)
-    assert user.can_create_organizations is False
+    assert user.max_owned_organizations == 1
 
 
 def test_the_development_seed_gives_the_flag_to_the_owner_only(db_session):
     from app.scripts import seed_dev
 
     seed_dev.seed(db_session)
-    flags = dict(db_session.execute(select(User.email, User.can_create_organizations).where(User.email.in_(["fredrik@dev.test", "maria@dev.test"]))).all())
-    assert flags == {"fredrik@dev.test": True, "maria@dev.test": False}
+    limits = dict(db_session.execute(select(User.email, User.max_owned_organizations).where(User.email.in_(["fredrik@dev.test", "maria@dev.test"]))).all())
+    assert limits == {"fredrik@dev.test": 2, "maria@dev.test": 1}  # Fredrik owns one and may create a second

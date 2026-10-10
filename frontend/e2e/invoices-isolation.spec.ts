@@ -37,10 +37,10 @@ async function build(context: Parameters<typeof signIn>[0]) {
 
 test("identical invoice numbers exist independently in both organizations", async ({ page, context }) => {
   const m = await build(context);
-  expect(m.a.issued.number_text).toBe("1");
-  expect(m.b.issued.number_text).toBe("1");
+  expect(m.a.issued.number_text).toBe("1001");
+  expect(m.b.issued.number_text).toBe("1001");
   expect(m.a.issued.id).not.toBe(m.b.issued.id);
-  expect(testRow(`select string_agg(organization_id::text || ':' || next_number, ',' order by organization_id) from invoice_counters where organization_id in (${sql(a.orgId)}, ${sql(b.orgId)})`).split(",").map((part) => part.split(":")[1])).toEqual(["2", "2"]);
+  expect(testRow(`select string_agg(organization_id::text || ':' || next_number, ',' order by organization_id) from invoice_counters where organization_id in (${sql(a.orgId)}, ${sql(b.orgId)})`).split(",").map((part) => part.split(":")[1])).toEqual(["1002", "1002"]);
 
   await page.goto(`/o/${a.orgId}/invoices`);
   const rows = page.getByTestId("invoice-row");
@@ -116,7 +116,7 @@ test("eligibility, the invoice-state view and the pages show only the active org
 test("switching organization clears the invoice list, the detail and an open draft editor", async ({ page, context }) => {
   const m = await build(context);
   // One person who belongs to both organizations.
-  testRow(`insert into organization_users (organization_id, user_id, role) select ${sql(b.orgId)}, id, 'owner' from users where email = ${sql(a.email)}`);
+  testRow(`update users set max_owned_organizations = max_owned_organizations + 1 where email = ${sql(a.email)}; insert into organization_users (organization_id, user_id, role) select ${sql(b.orgId)}, id, 'owner' from users where email = ${sql(a.email)}`); // owning a second organization needs the allowance
 
   await page.goto(`/o/${a.orgId}/invoices/${m.a.draft.id}`);
   await page.getByTestId("edit-details").click();
@@ -142,19 +142,19 @@ test("switching organization clears the invoice list, the detail and an open dra
 
 test("a request for one organization's invoice through the other organization's address is refused for a member of both", async ({ context }) => {
   const m = await build(context);
-  testRow(`insert into organization_users (organization_id, user_id, role) select ${sql(b.orgId)}, id, 'owner' from users where email = ${sql(a.email)}`);
+  testRow(`update users set max_owned_organizations = max_owned_organizations + 1 where email = ${sql(a.email)}; insert into organization_users (organization_id, user_id, role) select ${sql(b.orgId)}, id, 'owner' from users where email = ${sql(a.email)}`); // owning a second organization needs the allowance
 
   // Member of both, but the invoice belongs to B: through A's address it does not exist.
   const viaA = await context.request.get(bffUrl(a.orgId, `/invoices/${m.b.issued.id}`));
   const viaB = await context.request.get(bffUrl(b.orgId, `/invoices/${m.b.issued.id}`));
   expect(viaA.status()).toBe(404);
   expect(viaB.status()).toBe(200);
-  expect(((await viaB.json()) as InvoiceJson).number_text).toBe("1");
+  expect(((await viaB.json()) as InvoiceJson).number_text).toBe("1001");
 });
 
 test("a request that is still running when the user switches organization cannot touch the other organization's screen", async ({ page, context }) => {
   const m = await build(context);
-  testRow(`insert into organization_users (organization_id, user_id, role) select ${sql(b.orgId)}, id, 'owner' from users where email = ${sql(a.email)}`);
+  testRow(`update users set max_owned_organizations = max_owned_organizations + 1 where email = ${sql(a.email)}; insert into organization_users (organization_id, user_id, role) select ${sql(b.orgId)}, id, 'owner' from users where email = ${sql(a.email)}`); // owning a second organization needs the allowance
   await page.route("**/api/o/*/invoices/*/issue", async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 1500)); // a slow answer for A's issuance
     await route.continue();

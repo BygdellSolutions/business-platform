@@ -41,7 +41,7 @@ def test_a_valid_login_returns_a_fresh_session_and_the_user(session_client, db_s
     body = response.json()
     assert set(body) == {"token", "csrf_token", "expires_at", "user"}
     assert len(body["token"]) == 43 and len(body["csrf_token"]) == 43 and body["token"] != body["csrf_token"]
-    assert body["user"] == {"id": str(user.id), "email": user.email, "name": "Ada Owner", "can_create_organizations": False}
+    assert body["user"] == {"id": str(user.id), "email": user.email, "name": "Ada Owner", "can_create_organizations": True}
     (session,) = active_sessions(db_session, user)
     assert session.token_hash == hash_token(body["token"]) and session.csrf_hash == hash_token(body["csrf_token"])
     assert session.absolute_expires_at - session.created_at == timedelta(days=settings.session_absolute_days)

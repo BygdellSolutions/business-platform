@@ -39,7 +39,7 @@ def test_upgrade_changes_no_membership_promotes_nobody_and_grants_nothing(scratc
 
 
 def test_the_backstop_is_installed_and_deferred(scratch_url: str):
-    _upgrade(scratch_url, "head")
+    _upgrade(scratch_url, REVISION)  # exactly this migration's triggers (a later one adds the ownership limit's)
     names = _scalar(scratch_url, "select string_agg(tgname, ',' order by tgname) from pg_trigger where tgrelid = 'organization_users'::regclass and not tgisinternal")
     assert names == "trg_organization_users_owner_required_delete,trg_organization_users_owner_required_update"
     assert _scalar(scratch_url, "select bool_and(tgdeferrable and tginitdeferred) from pg_trigger where tgname like 'trg_organization_users_owner_required%'") is True

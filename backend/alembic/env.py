@@ -39,6 +39,7 @@ def load_target_metadata():
     from app.modules.sales import models as sales_models  # noqa: F401  (Sales models)
     from app.modules.custom_fields import models as custom_field_models  # noqa: F401  (custom fields)
     from app.modules.invoicing import models as invoicing_models  # noqa: F401  (Invoicing models)
+    from app.modules.inventory import models as inventory_models  # noqa: F401  (Inventory models)
 
     return Base.metadata
 

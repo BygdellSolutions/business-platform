@@ -1,10 +1,11 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.auth import _busy, _issued, session_mode_only
-from app.core import clock, invitations, memberships, passwords
+from app.core import clock, invitations, memberships, ownership, passwords
 from app.core.auth import get_current_user
 from app.core.db import get_db
 from app.core.passwords import AuthBusy, admission
@@ -53,7 +54,8 @@ def _run(call):
         raise HTTPException(status.HTTP_409_CONFLICT, detail={"code": "invitation_not_pending", "message": "This invitation is no longer pending."})
 
 
-def _read(invitation, now) -> dict:
+def _read(invitation, now, names: dict | None = None) -> dict:
+    names = names or {}
     return dict(
         id=invitation.id,
         email=invitation.email,
@@ -61,16 +63,34 @@ def _read(invitation, now) -> dict:
         created_at=invitation.created_at,
         expires_at=invitation.expires_at,
         state=invitations.state_of(invitation, now),
+        invited_by=invitation.created_by,
+        invited_by_name=names.get(invitation.created_by),
+        accepted_at=invitation.accepted_at,
+        accepted_by_name=names.get(invitation.accepted_by),
+        revoked_at=invitation.revoked_at,
     )
 
 
+def _names(db: Session, rows) -> dict:
+    """The names of the people an invitation mentions (inviter, accepting account)."""
+    ids = {row.created_by for row in rows} | {row.accepted_by for row in rows if row.accepted_by is not None}
+    if not ids:
+        return {}
+    return dict(db.execute(select(User.id, User.name).where(User.id.in_(ids))).all())
+
+
 @router.get("", response_model=list[InvitationRead])
-def list_invitations(ctx: TenantContext = Depends(get_tenant_context), db: Session = Depends(get_db)) -> list[InvitationRead]:
-    """Pending and expired-but-unsuperseded invitations. Owner/admin only. Never a token."""
+def list_invitations(
+    closed: bool = False, ctx: TenantContext = Depends(get_tenant_context), db: Session = Depends(get_db)
+) -> list[InvitationRead]:
+    """Pending and expired-but-unsuperseded invitations, or with `closed=true` the accepted and revoked ones (newest
+    first): who invited, when, and how it ended. Owner/admin only. Never a token."""
     if ctx.role not in memberships.ADMINISTRATORS:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail={"code": "membership_admin_forbidden", "message": "Only an owner or admin can manage invitations."})
     now = clock.utcnow()
-    return [InvitationRead(**_read(i, now)) for i in invitations.list_pending(db, ctx.organization_id)]
+    rows = invitations.list_closed(db, ctx.organization_id) if closed else invitations.list_pending(db, ctx.organization_id)
+    names = _names(db, rows)
+    return [InvitationRead(**_read(i, now, names)) for i in rows]
 
 
 @router.post("", response_model=InvitationCreated, status_code=status.HTTP_201_CREATED)
@@ -126,6 +146,14 @@ def accept_invitation(payload: TokenBody, request: Request, user: User = Depends
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail={"code": "invitation_wrong_account", "message": "This invitation was made for a different account."})
     except invitations.InvitationNotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=UNUSABLE)
+    except ownership.OwnershipLimitReached:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ownership_limit_reached",
+                "message": "You cannot become an owner of this organization because you have reached your owned-organization limit.",
+            },
+        )
     return AcceptedResponse(organization_id=accepted.organization_id, role=accepted.role, joined=accepted.joined)
 
 
@@ -159,5 +187,5 @@ def accept_invitation_as_new_account(payload: AcceptNewBody, request: Request, d
         raise HTTPException(status.HTTP_409_CONFLICT, detail={"code": "account_exists", "message": "An account with this email already exists. Sign in to accept the invitation."})
     except AuthBusy:
         raise _busy()
-    base = _issued(issued)
+    base = _issued(db, issued)
     return AcceptedSession(**base.model_dump(), organization_id=accepted.organization_id, role=accepted.role)

@@ -1,9 +1,14 @@
 import Link from "next/link";
 
+import { RecordHistory } from "@/components/history/RecordHistory";
+import { RecordMeta } from "@/components/history/RecordMeta";
 import { Notice } from "@/components/ui/Notice";
 import { TransactionEditor } from "@/features/transactions/TransactionEditor";
+import { readActiveRole } from "@/lib/active-role";
 import { readEntityFields } from "@/lib/custom-fields/server";
-import type { Transaction } from "@/lib/api/types";
+import type { InvoiceStateOfOrder, LineFulfillment, Organization, StockDemand, Transaction } from "@/lib/api/types";
+import { readRecordHistory } from "@/lib/history-server";
+import { canMutateInvoices, canWriteRecords } from "@/lib/roles";
 import { requireUuid, serverRead } from "@/lib/server-api";
 
 /**
@@ -21,7 +26,16 @@ export default async function TransactionPage({
 }) {
   const { orgId, id } = await params;
   const { created } = await searchParams;
-  const transaction = await serverRead<Transaction>(orgId, `/api/transactions/${requireUuid(id)}`);
+  const recordId = requireUuid(id);
+  const [transaction, role, organization, history, stock, fulfillment, [invoice]] = await Promise.all([
+    serverRead<Transaction>(orgId, `/api/transactions/${recordId}`),
+    readActiveRole(orgId),
+    serverRead<Organization>(orgId, "/api/organization"),
+    readRecordHistory(orgId, "transaction", recordId),
+    serverRead<StockDemand[]>(orgId, `/api/inventory/transactions/${recordId}`),
+    serverRead<LineFulfillment[]>(orgId, `/api/inventory/transactions/${recordId}/fulfillment`),
+    serverRead<InvoiceStateOfOrder[]>(orgId, "/api/invoices/by-transaction", `?${new URLSearchParams({ ids: recordId })}`),
+  ]);
   // The organization's custom-field definitions for transactions and for lines, and the values of
   // this transaction and its lines: read here, on the server, like everything else on the page.
   const [transactionFields, lineFields] = await Promise.all([
@@ -37,21 +51,35 @@ export default async function TransactionPage({
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold" data-testid="record-name">
-          Transaction · {transaction.transaction_date}
+          Order {transaction.number} · {transaction.transaction_date}
         </h1>
         <Link href={`/o/${orgId}/transactions`} className="text-sm underline">
-          Back to transactions
+          Back to orders
         </Link>
       </div>
-      {created === "1" && <Notice testId="created">Transaction created. Add its lines below.</Notice>}
+      {created === "1" && <Notice testId="created">Order created. Add its lines below.</Notice>}
+      <RecordMeta record={transaction} people={history.history.people} timeZone={organization.timezone} />
+      {invoice && invoice.state !== "none" && invoice.invoice_id && (
+        <p className="text-sm" data-testid="order-invoice">
+          <Link href={`/o/${orgId}/invoices/${invoice.invoice_id}`} className="underline">
+            {invoice.state === "invoiced" ? `Invoice ${invoice.number_text ?? ""}` : "Draft invoice"}
+          </Link>
+        </p>
+      )}
       <TransactionEditor
         key={transaction.id}
         transaction={transaction}
+        canEdit={canWriteRecords(role)}
+        canInvoice={canMutateInvoices(role)}
+        timeZone={organization.timezone}
+        stock={stock}
+        fulfillment={fulfillment}
         fields={{
           transaction: { definitions: transactionFields.definitions, values: transactionFields.values[transaction.id] ?? [] },
           line: { definitions: lineFields.definitions, values: lineFields.values },
         }}
       />
+      <RecordHistory data={history} entityType="transaction" timeZone={organization.timezone} />
     </div>
   );
 }

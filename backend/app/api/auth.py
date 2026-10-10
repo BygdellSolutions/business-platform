@@ -6,7 +6,7 @@ Called by the BFF, never by a browser. They answer "who is this?" and never anyt
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
-from app.core import clock, auth_service, security_events, sessions
+from app.core import auth_service, clock, ownership, security_events, sessions
 from app.core.auth import get_current_user
 from app.core.config import settings
 from app.core.db import get_db
@@ -21,13 +21,13 @@ def session_mode_only() -> None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Not found")
 
 
-def _issued(issued: auth_service.SessionIssued) -> SessionResponse:
+def _issued(db: Session, issued: auth_service.SessionIssued) -> SessionResponse:
     user = issued.user
     return SessionResponse(
         token=issued.token,
         csrf_token=issued.csrf_token,
         expires_at=issued.expires_at,
-        user=AuthUser(id=str(user.id), email=user.email, name=user.name, can_create_organizations=user.can_create_organizations),
+        user=AuthUser(id=str(user.id), email=user.email, name=user.name, can_create_organizations=ownership.owned_count(db, user.id) < user.max_owned_organizations),
     )
 
 
@@ -65,7 +65,7 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
         raise _throttled(error)
     except auth_service.AuthBusy:
         raise _busy()
-    return _issued(issued)
+    return _issued(db, issued)
 
 
 @router.post("/setup", response_model=SessionResponse, dependencies=[Depends(session_mode_only)])
@@ -87,7 +87,7 @@ def redeem_setup_link(payload: SetupRequest, request: Request, db: Session = Dep
         raise _throttled(error)
     except auth_service.AuthBusy:
         raise _busy()
-    return _issued(issued)
+    return _issued(db, issued)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(session_mode_only)])

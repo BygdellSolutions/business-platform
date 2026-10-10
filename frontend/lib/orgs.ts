@@ -31,7 +31,10 @@ export interface CurrentUser {
   id: string;
   email: string;
   name: string;
+  /** Computed by FastAPI: whether this account owns fewer organizations than it may. */
   can_create_organizations: boolean;
+  owned_organizations: number;
+  max_owned_organizations: number;
 }
 
 export type CurrentUserResult = { status: "ok"; user: CurrentUser } | { status: "unauthorized" } | { status: "unavailable" };

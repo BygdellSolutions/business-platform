@@ -49,29 +49,49 @@ EXIT_OK, EXIT_FAILED, EXIT_REFUSED = 0, 1, 2
 # What the schema's guarantees rest on (derived from the migrations; tests/test_verify_restore.py proves this list equals what a
 # freshly migrated database really contains, so a new trigger or function cannot be forgotten).
 REQUIRED_TRIGGERS = {
+    ("audit_events", "trg_audit_events_append_only"),
+    ("credit_note_lines", "trg_credit_note_lines_append_only"),
+    ("credit_note_pdfs", "trg_credit_note_pdfs_append_only"),
+    ("credit_note_vat_rows", "trg_credit_note_vat_rows_append_only"),
+    ("credit_notes", "trg_credit_notes_append_only"),
+    ("invoice_payments", "trg_invoice_payments_append_only"),
+    ("stock_movements", "trg_stock_movements_append_only"),
     ("invoice_lines", "trg_invoice_lines_immutability"),
     ("invoice_pdfs", "trg_invoice_pdfs_guard"),
     ("invoice_transactions", "trg_invoice_transactions_immutability"),
     ("invoice_vat_rows", "trg_invoice_vat_rows_immutability"),
     ("invoices", "trg_invoices_immutability"),
+    ("organization_users", "trg_organization_users_owner_limit"),
     ("organization_users", "trg_organization_users_owner_required_delete"),
     ("organization_users", "trg_organization_users_owner_required_update"),
     ("security_events", "trg_security_events_append_only"),
     ("transactions", "trg_transactions_currency_immutable"),
+    # Record numbers: handed out on insert, never changed.
+    ("customers", "customers_record_number"),
+    ("horses", "horses_record_number"),
+    ("items", "items_record_number"),
+    ("suppliers", "suppliers_record_number"),
+    ("transactions", "transactions_record_number"),
 }
 DEFERRED_CONSTRAINT_TRIGGERS = {"trg_organization_users_owner_required_delete", "trg_organization_users_owner_required_update"}
 REQUIRED_FUNCTIONS = {
+    "audit_events_append_only",
+    "credit_notes_append_only",
+    "invoice_payments_append_only",
+    "stock_movements_append_only",
     "invoice_children_immutability",
     "invoice_pdfs_guard",
     "invoices_immutability",
+    "organization_users_owner_limit",
     "organization_users_owner_required",
     "security_events_append_only",
     "transactions_currency_is_immutable",
+    "assign_record_number",
 }
 TENANT_TABLES = {
-    "custom_field_definitions", "custom_field_options", "custom_field_values", "customers", "horses", "invoice_counters", "invoice_lines",
-    "invoice_pdfs", "invoice_transactions", "invoice_vat_rows", "invoices", "items", "organization_creation_requests",
-    "organization_invitations", "organization_users", "transaction_lines", "transactions",
+    "audit_events", "credit_note_lines", "credit_note_pdfs", "credit_note_vat_rows", "credit_notes", "custom_field_definitions", "custom_field_options", "custom_field_values", "customers", "horse_notes", "horses", "invoice_counters", "invoice_lines",
+    "invoice_payments", "invoice_pdfs", "invoice_return_events", "invoice_return_lines", "invoice_returns", "invoice_transactions", "invoice_vat_rows", "invoices", "item_discounts", "incoming_stock", "items", "line_fulfillments", "organization_creation_requests",
+    "organization_invitations", "organization_users", "record_counters", "stock_movements", "suppliers", "transaction_lines", "transactions",
 }  # `security_events.organization_id` is deliberately nullable (an event may be about no organization)
 CORE_TABLES = ("organizations", "users", "organization_users")
 HEX64 = "^[0-9a-f]{64}$"

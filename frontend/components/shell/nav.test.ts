@@ -7,6 +7,10 @@ describe("navigation", () => {
     expect(NAV.find((item) => item.label === "Settings")).toEqual({ label: "Settings", path: "/settings", enabled: true });
   });
 
+  it("links the inventory overview (backorders and incoming stock)", () => {
+    expect(NAV.find((item) => item.label === "Inventory")).toEqual({ label: "Inventory", path: "/inventory", enabled: true });
+  });
+
   it("links the invoices", () => {
     expect(NAV.find((item) => item.label === "Invoices")).toEqual({ label: "Invoices", path: "/invoices", enabled: true });
   });

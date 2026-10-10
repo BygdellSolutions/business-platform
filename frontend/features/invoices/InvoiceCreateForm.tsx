@@ -16,6 +16,8 @@ import { apiFetch } from "@/lib/api/client";
 import type { Invoice, Invoiceable } from "@/lib/api/types";
 import { isDateShape } from "@/lib/dates";
 import { useMutation } from "@/lib/forms";
+import { SortHeader } from "@/components/ui/SortHeader";
+import type { TableSort } from "@/lib/table-sort";
 
 const INPUT = "rounded border border-zinc-400 px-2 py-1 font-normal dark:bg-zinc-900 aria-[invalid=true]:border-red-600";
 const NOT_A_DATE = "Enter a date such as 2026-10-03.";
@@ -41,6 +43,7 @@ export function InvoiceCreateForm({
   page,
   customerFilter,
   canMutate = true,
+  sort,
 }: {
   rows: Invoiceable[];
   hasNext: boolean;
@@ -49,6 +52,8 @@ export function InvoiceCreateForm({
   customerFilter: string | null;
   /** The user's role may create invoices. Without it the list is shown read-only: no selection, no form. Presentation only; FastAPI decides. */
   canMutate?: boolean;
+  /** The list's order (the backend sorts; this is the headings' links). Without it the headings are plain. */
+  sort?: TableSort;
 }) {
   const orgId = useOrgId();
   const router = useRouter();
@@ -94,7 +99,7 @@ export function InvoiceCreateForm({
   const general = error?.kind === "validation" ? error.formErrors : error && ["forbidden", "client", "unauthorized"].includes(error.kind) ? [error.message] : [];
   const labelOf = (id: string) => {
     const row = selection.find((selected) => selected.id === id) ?? rows.find((candidate) => candidate.id === id);
-    return row ? `${row.transaction_date} · ${row.billing_customer.name}` : "A selected transaction";
+    return row ? `Order ${row.number} · ${row.transaction_date} · ${row.billing_customer.name}` : "A selected order";
   };
 
   async function onSubmit(event: FormEvent) {
@@ -116,7 +121,7 @@ export function InvoiceCreateForm({
           setProblem(failure.message);
           refresh();
         } else if (failure.kind === "validation" && failure.fieldErrors.transaction_ids) {
-          setProblem("One or more of the selected transactions could not be found. The eligible list was re-read.");
+          setProblem("One or more of the selected orders could not be found. The eligible list was re-read.");
           refresh();
         } else if (failure.kind === "unconfirmed") {
           // Unknown outcome: the draft may exist. Re-read eligibility (its transactions would be gone from it) and say so.
@@ -138,7 +143,7 @@ export function InvoiceCreateForm({
       {canMutate && (
       <section aria-label="Selection" data-testid="selection" className="flex max-w-3xl flex-col gap-2 rounded border border-zinc-300 p-3 text-sm dark:border-zinc-700">
         {first === undefined ? (
-          <p data-testid="selection-empty">Select one or more completed transactions. All of them must have the same billing customer and currency.</p>
+          <p data-testid="selection-empty">Select one or more completed orders. All of them must have the same billing customer and currency.</p>
         ) : (
           <>
             <p data-testid="selection-summary">
@@ -148,6 +153,7 @@ export function InvoiceCreateForm({
             <ul className="flex flex-col gap-1">
               {selection.map((selected) => (
                 <li key={selected.id} data-testid="selected-row" className="flex flex-wrap items-center gap-3">
+                  <span>Order {selected.number}</span>
                   <span>{selected.transaction_date}</span>
                   <span>
                     net <DecimalText value={selected.totals.net_amount} />, VAT <DecimalText value={selected.totals.vat_amount} />, gross <DecimalText value={selected.totals.gross_amount} />
@@ -164,7 +170,7 @@ export function InvoiceCreateForm({
               </button>
               {customerFilter === null && (
                 <Link href={`${base}?customer_id=${first.billing_customer_id}`} className="underline" data-testid="only-this-customer">
-                  Show only this customer&apos;s transactions
+                  Show only this customer&apos;s orders
                 </Link>
               )}
             </div>
@@ -194,7 +200,7 @@ export function InvoiceCreateForm({
 
       <div aria-busy={refreshing} data-testid="eligible" className={refreshing ? "opacity-50" : ""}>
         {rows.length === 0 ? (
-          <p data-testid="empty">{customerFilter !== null ? "No invoiceable transactions for this customer." : "No completed transactions are waiting to be invoiced."}</p>
+          <p data-testid="empty">{customerFilter !== null ? "No invoiceable orders for this customer." : "No completed orders are waiting to be invoiced."}</p>
         ) : (
           <div className="overflow-x-auto">
             <table data-testid="eligible-table" className="w-full max-w-5xl text-left text-sm">
@@ -205,20 +211,21 @@ export function InvoiceCreateForm({
                       <span className="sr-only">Select</span>
                     </th>
                   )}
-                  <th className="py-1 pr-4">Date</th>
-                  <th className="py-1 pr-4">Billing customer</th>
-                  <th className="py-1 pr-4">Currency</th>
-                  <th className="py-1 pr-4 text-right">Lines</th>
-                  <th className="py-1 pr-4 text-right">Net</th>
-                  <th className="py-1 pr-4 text-right">VAT</th>
-                  <th className="py-1 text-right">Gross</th>
+                  <SortHeader label="Order no." sortKey="number" current={sort?.sort ?? ""} dir={sort?.dir ?? "asc"} href={sort?.hrefs.number} align="right" />
+                  <SortHeader label="Date" sortKey="date" current={sort?.sort ?? ""} dir={sort?.dir ?? "asc"} href={sort?.hrefs.date} />
+                  <SortHeader label="Billing customer" sortKey="customer" current={sort?.sort ?? ""} dir={sort?.dir ?? "asc"} href={sort?.hrefs.customer} />
+                  <SortHeader label="Currency" sortKey="currency" current={sort?.sort ?? ""} dir={sort?.dir ?? "asc"} href={sort?.hrefs.currency} />
+                  <SortHeader label="Lines" sortKey="lines" current={sort?.sort ?? ""} dir={sort?.dir ?? "asc"} href={sort?.hrefs.lines} align="right" />
+                  <SortHeader label="Net" sortKey="net" current={sort?.sort ?? ""} dir={sort?.dir ?? "asc"} href={sort?.hrefs.net} align="right" />
+                  <SortHeader label="VAT" sortKey="vat" current={sort?.sort ?? ""} dir={sort?.dir ?? "asc"} href={sort?.hrefs.vat} align="right" />
+                  <SortHeader label="Gross" sortKey="gross" current={sort?.sort ?? ""} dir={sort?.dir ?? "asc"} href={sort?.hrefs.gross} align="right" last />
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row) => {
                   const chosen = selection.some((selected) => selected.id === row.id);
                   const fit = chosen ? "ok" : compatibility(selection, row);
-                  const label = `Select transaction of ${row.transaction_date}, ${row.billing_customer.name}`;
+                  const label = `Select order of ${row.transaction_date}, ${row.billing_customer.name}`;
                   return (
                     <tr key={row.id} data-testid="eligible-row" data-compat={fit} className={`border-b border-zinc-200 dark:border-zinc-800 ${fit === "ok" ? "" : "text-zinc-400"}`}>
                       {canMutate && (
@@ -226,10 +233,13 @@ export function InvoiceCreateForm({
                           <input type="checkbox" aria-label={label} checked={chosen} disabled={fit !== "ok"} onChange={() => setSelection((current) => toggle(current, row))} data-testid="select-transaction" />
                         </td>
                       )}
-                      <td className="py-1 pr-4">
+                      <td className="py-1 pr-4 text-right" data-testid="order-number">
                         <Link href={`/o/${orgId}/transactions/${row.id}`} className="underline">
-                          {row.transaction_date}
+                          {row.number}
                         </Link>
+                      </td>
+                      <td className="py-1 pr-4" data-testid="order-date">
+                        {row.transaction_date}
                       </td>
                       <td className="py-1 pr-4" data-testid="eligible-customer">
                         {row.billing_customer.name}
@@ -261,12 +271,12 @@ export function InvoiceCreateForm({
         )}
         <nav aria-label="Pages" className="mt-2 flex gap-4 text-sm">
           {page > 1 && (
-            <Link href={pageHref(base, customerFilter, page - 1)} className="underline" data-testid="prev-page">
+            <Link href={pageHref(base, customerFilter, page - 1, sort)} className="underline" data-testid="prev-page">
               Previous
             </Link>
           )}
           {hasNext && (
-            <Link href={pageHref(base, customerFilter, page + 1)} className="underline" data-testid="next-page">
+            <Link href={pageHref(base, customerFilter, page + 1, sort)} className="underline" data-testid="next-page">
               Next
             </Link>
           )}
@@ -304,9 +314,13 @@ export function InvoiceCreateForm({
   );
 }
 
-function pageHref(base: string, customer: string | null, page: number): string {
+function pageHref(base: string, customer: string | null, page: number, sort?: TableSort): string {
   const query = new URLSearchParams();
   if (customer !== null) query.set("customer_id", customer);
+  if (sort?.sort) {
+    query.set("sort", sort.sort);
+    if (sort.dir === "desc") query.set("dir", "desc");
+  }
   if (page > 1) query.set("page", String(page));
   const text = query.toString();
   return text ? `${base}?${text}` : base;

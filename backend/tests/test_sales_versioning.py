@@ -238,9 +238,9 @@ def test_the_status_conflict_is_answered_before_the_version_one(raw_client, sale
         line_edit = raw_client.patch(f"/api/transactions/{draft['id']}/lines/{line['id']}", json={"quantity": "2"}, headers=headers)
         again = raw_client.post(f"/api/transactions/{draft['id']}/complete", headers=headers)
         assert header_edit.status_code == line_edit.status_code == again.status_code == 409
-        assert "completed transaction cannot be" in header_edit.json()["detail"]
-        assert "completed transaction cannot be" in line_edit.json()["detail"]
-        assert "completed transaction cannot be completed" in again.json()["detail"]
+        assert "completed order cannot be" in header_edit.json()["detail"]
+        assert "completed order cannot be" in line_edit.json()["detail"]
+        assert "completed order cannot be completed" in again.json()["detail"]
 
 
 def test_a_transaction_that_cannot_be_completed_for_another_reason_still_says_so_with_a_fresh_version(raw_client, sales):

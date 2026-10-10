@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 
 /**
- * The BFF's one binary pass-through: the frozen PDF of an invoice.
+ * The BFF's one binary pass-through: the PDF of an invoice, a credit note or a receipt (an order paid at the counter).
  *
  * Nothing the backend says about the file is relayed as it came. The response is checked to BE what
  * it should be (a 200 with a PDF body of a sane size whose SHA-256 is the ETag the backend named),
@@ -17,7 +17,7 @@ import { NextResponse } from "next/server";
 /** Matches the backend's renderer limit (a larger file is a bug, not an invoice). */
 export const MAX_PDF_BYTES = 64 * 1024 * 1024;
 
-const FILENAME = /^invoice(?:-[A-Za-z0-9._-]{1,60})?\.pdf$/;
+const FILENAME = /^(?:invoice|credit-note|receipt)(?:-[A-Za-z0-9._-]{1,60})?\.pdf$/;
 const DISPOSITION = /^attachment;\s*filename="([^"\\\r\n]*)"$/;
 const ETAG = /^"([0-9a-f]{64})"$/;
 const MAGIC = [0x25, 0x50, 0x44, 0x46, 0x2d]; // "%PDF-"

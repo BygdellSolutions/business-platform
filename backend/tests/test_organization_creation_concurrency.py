@@ -31,7 +31,7 @@ def committed(dev_auth):
 @pytest.fixture
 def make(committed):
     def build(**fields) -> CommittedUser:
-        user = build_committed_user(with_credential=False, can_create_organizations=fields.pop("can_create_organizations", True), **fields)
+        user = build_committed_user(with_credential=False, max_owned_organizations=fields.pop("max_owned_organizations", 1), **fields)
         committed.append(user)
         return user
 
@@ -139,7 +139,7 @@ def test_two_simultaneous_creations_with_the_same_key_create_one_organization(ma
 
 
 def test_two_simultaneous_creations_with_different_keys_create_two_organizations_each_with_one_owner(make):
-    user, name = make(), f"Twin {secrets.token_hex(4)}"
+    user, name = make(max_owned_organizations=2), f"Twin {secrets.token_hex(4)}"
 
     responses = race(lambda: post(user, name, key()).result(), lambda: post(user, name, key()).result())
 
@@ -148,6 +148,17 @@ def test_two_simultaneous_creations_with_different_keys_create_two_organizations
     assert organizations_of(user) == [(name, "owner"), (name, "owner")]
     assert counts(user) == {"requests": 2, "memberships": 2, "events": 2}
     assert scalar("select count(*) from organization_users where organization_id = any(:o) and role = 'owner'", o=[r.json()["id"] for r in responses]) == 2
+
+
+def test_two_simultaneous_creations_at_the_limit_create_exactly_one(make):
+    """Owned 0 / 1 and two creations at the same instant: the user-row lock serializes them, so the second sees the
+    first owner membership and is refused. Never two."""
+    user, name = make(), f"Limit {secrets.token_hex(4)}"
+
+    responses = race(lambda: post(user, name, key()).result(), lambda: post(user, name, key()).result())
+
+    assert sorted(r.status_code for r in responses) == [201, 403]
+    assert organizations_of(user) == [(name, "owner")]
 
 
 def test_different_users_using_the_same_key_each_get_their_own_organization(make):

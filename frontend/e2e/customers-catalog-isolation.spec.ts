@@ -25,8 +25,8 @@ const ids = {
 
 const customers = (orgId: string, query = "") => `/o/${orgId}/customers${query}`;
 const catalog = (orgId: string, query = "") => `/o/${orgId}/catalog${query}`;
-const customerNames = (page: Page) => page.getByTestId("customer-row").locator("td:first-child").allTextContents();
-const itemNames = (page: Page) => page.getByTestId("item-row").locator("td:first-child").allTextContents();
+const customerNames = (page: Page) => page.getByTestId("customer-row").locator("td:nth-child(2)").allTextContents() // after the No. column;
+const itemNames = (page: Page) => page.getByTestId("item-row").locator("td:nth-child(2)").allTextContents() // after the No. column;
 const switchTo = (page: Page, org: { name: string }) => page.getByTestId("org-switcher").getByRole("link", { name: org.name }).click();
 
 async function outcome(response: APIResponse) {

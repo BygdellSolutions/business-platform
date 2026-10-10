@@ -163,15 +163,13 @@ def test_every_member_can_read_definitions_choices_and_metadata(client: TestClie
     assert client.get(f"{BASE}/entity-types", headers=headers).status_code == 200
 
 
-@pytest.mark.parametrize("org", ["A", "B", "C", "D"])
-def test_every_member_can_write_values_roles_do_not_restrict_that(client: TestClient, db_session: Session, world: World, org: str):
-    make_definition(db_session, world.orgs[org], key="comment")
+@pytest.mark.parametrize("org,allowed", [("A", True), ("B", False), ("C", True), ("D", True)])
+def test_every_member_but_a_viewer_can_write_values(client: TestClient, db_session: Session, world: World, org: str, allowed: bool):
     tx = make_transaction(db_session, world.orgs[org], lines=[{}])
-    line_id = tx.id  # any record id would do for the header type below
     make_definition(db_session, world.orgs[org], entity_type="transaction", key="memo")
 
     response = client.patch(
-        f"{BASE}/entities/transaction/{line_id}/values", json={"values": {"memo": "ok"}}, headers=world.headers(org)
+        f"{BASE}/entities/transaction/{tx.id}/values", json={"values": {"memo": "ok"}}, headers=world.headers(org)
     )
 
-    assert response.status_code == 200
+    assert response.status_code == (200 if allowed else 403)

@@ -44,7 +44,7 @@ describe("client code and the session", () => {
   it.each(CLIENT.map((file) => [rel(file), file]))("%s never names the session cookie or reads cookies other than the CSRF cookie", (_name, file) => {
     const source = read(file);
     expect(source).not.toMatch(/bp_session|__Host-bp_session|bp_dev_user|bp_pre/);
-    if (/document\.cookie/.test(source)) expect(["lib/api/client.ts", "components/shell/SignOut.tsx"]).toContain(rel(file));
+    if (/document\.cookie/.test(source)) expect(["lib/api/client.ts", "components/shell/SignOut.tsx", "features/account/ChangePasswordForm.tsx"]).toContain(rel(file)); // the CSRF cookie only
   });
 
   it("the shared cookie constants name the CSRF cookie only (never the session cookie)", () => {
@@ -105,6 +105,7 @@ describe("the authentication mode is decided in one place", () => {
   it("only the shell, the authentication pages and the BFF routes branch on the mode", () => {
     const branching = ALL.filter((file) => /\bauthMode\(\)|\bauthConfig\(\)|\bdevIdentityEnabled\(\)/.test(read(file)) && rel(file) !== "lib/auth/config.ts").map(rel).sort();
     expect(branching).toEqual([
+      "app/account/page.tsx", // offers a password change only with real sign-in
       "app/api/dev-session/route.ts",
       "app/api/o/[orgId]/[...path]/route.ts",
       "app/api/organizations/route.ts",
@@ -112,6 +113,7 @@ describe("the authentication mode is decided in one place", () => {
       "app/invite/page.tsx",
       "app/login/page.tsx",
       "app/o/[orgId]/layout.tsx",
+      "app/o/[orgId]/settings/page.tsx", // says whether the danger zone checks a password
       "app/page.tsx",
       "app/setup/page.tsx",
       "lib/auth/credential.ts",

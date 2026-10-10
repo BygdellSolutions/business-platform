@@ -14,7 +14,7 @@ import { LinesTable } from "@/features/transactions/LinesTable";
 import { TotalsPanel } from "@/features/transactions/TotalsPanel";
 import { TransactionStatusBadge } from "@/features/transactions/TransactionStatusBadge";
 import type { ApiResult, Problem } from "@/lib/api/errors";
-import type { Transaction } from "@/lib/api/types";
+import type { LineFulfillment, StockDemand, Transaction } from "@/lib/api/types";
 
 /**
  * The transaction page's interactive part.
@@ -32,8 +32,31 @@ import type { Transaction } from "@/lib/api/types";
  * one without changing anything, and an editor with unsaved edits keeps them and lets the user
  * decide. When the tab becomes visible again and nothing is being edited it refreshes by itself;
  * it never refreshes over an open editor.
+ *
+ * `canEdit` is false for a role that may only read (a viewer): the whole transaction is then shown
+ * read-only, without lifecycle or add-line controls. Presentation only; FastAPI refuses the writes.
  */
-export function TransactionEditor({ transaction, fields }: { transaction: Transaction; fields: Fields }) {
+const NO_STOCK: StockDemand[] = [];
+const NO_FULFILLMENT: LineFulfillment[] = [];
+
+export function TransactionEditor({
+  transaction,
+  fields,
+  canEdit,
+  canInvoice = true,
+  timeZone = null,
+  stock = NO_STOCK,
+  fulfillment = NO_FULFILLMENT,
+}: {
+  transaction: Transaction;
+  fields: Fields;
+  canEdit: boolean;
+  /** The role may make invoices ("Invoice" also puts the order on a draft invoice); presentation only. */
+  canInvoice?: boolean;
+  timeZone?: string | null;
+  stock?: StockDemand[];
+  fulfillment?: LineFulfillment[];
+}) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
   const [mutating, setMutating] = useState(false);
@@ -148,7 +171,10 @@ export function TransactionEditor({ transaction, fields }: { transaction: Transa
   const api = useMemo<EditorApi>(
     () => ({
       transaction,
-      readOnly: transaction.status !== "draft",
+      timeZone,
+      stock,
+      fulfillment,
+      readOnly: !canEdit || transaction.status !== "draft",
       busy,
       refreshing,
       editorsOpen,
@@ -161,16 +187,23 @@ export function TransactionEditor({ transaction, fields }: { transaction: Transa
       refresh,
       registerEditor,
     }),
-    [transaction, busy, refreshing, editorsOpen, notice, fields, fieldErrors, mutate, report, announce, refresh, registerEditor],
+    [transaction, timeZone, stock, fulfillment, canEdit, busy, refreshing, editorsOpen, notice, fields, fieldErrors, mutate, report, announce, refresh, registerEditor],
   );
 
   return (
     <EditorContext.Provider value={api}>
       <div data-testid="transaction-editor" data-status={transaction.status} data-busy={busy || undefined} className="flex flex-col gap-5">
         <div className="flex flex-wrap items-center gap-3">
-          <TransactionStatusBadge status={transaction.status} />
-          {transaction.status === "completed" && <span data-testid="status-note">Completed: finalized and read-only. Reopen it to make changes.</span>}
+          <TransactionStatusBadge status={transaction.status} paid={transaction.paid_at !== null} />
+          {transaction.status === "completed" && (
+            <span data-testid="status-note">
+              {transaction.paid_at !== null
+                ? "Paid at the counter: finalized. A paid order cannot be reopened."
+                : "Completed: finalized and read-only. Reopen it to make changes."}
+            </span>
+          )}
           {transaction.status === "cancelled" && <span data-testid="status-note">Cancelled: final, kept for the record. It cannot be changed.</span>}
+          {!canEdit && <span data-testid="role-note">Your role in this organization can view orders but not change them.</span>}
         </div>
 
         {notice && (
@@ -194,11 +227,11 @@ export function TransactionEditor({ transaction, fields }: { transaction: Transa
           </Notice>
         )}
 
-        <LifecycleBar />
+        {canEdit && <LifecycleBar canInvoice={canInvoice} />}
         <HeaderEditor />
         <TransactionFields />
         <LinesTable />
-        {transaction.status === "draft" && <AddLineForm />}
+        {canEdit && transaction.status === "draft" && <AddLineForm />}
         <TotalsPanel />
       </div>
     </EditorContext.Provider>

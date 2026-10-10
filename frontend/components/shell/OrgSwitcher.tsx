@@ -5,7 +5,18 @@ import type { Membership } from "@/lib/api/types";
  * transition): switching organization reloads the page, so no client state, router cache entry
  * or in-flight request from the previous organization can survive.
  */
-export function OrgSwitcher({ organizations, currentId, canCreate = false }: { organizations: Membership[]; currentId: string; canCreate?: boolean }) {
+export function OrgSwitcher({
+  organizations,
+  currentId,
+  canCreate = false,
+  owned,
+}: {
+  organizations: Membership[];
+  currentId: string;
+  canCreate?: boolean;
+  /** How many organizations this account owns and may own ("Owned 1 / 1"). */
+  owned?: { count: number; max: number };
+}) {
   return (
     <nav aria-label="Organizations" data-testid="org-switcher" className="flex flex-wrap items-center gap-2 text-sm">
       <span className="text-zinc-500">Organization:</span>
@@ -20,6 +31,11 @@ export function OrgSwitcher({ organizations, currentId, canCreate = false }: { o
             {organization.name}
           </a>
         ),
+      )}
+      {owned && (
+        <span className="text-xs text-zinc-500" data-testid="owned-count">
+          Owned {owned.count} / {owned.max}
+        </span>
       )}
       {canCreate && (
         // Presentation only (FastAPI decides). A plain anchor: creation happens outside any organization.
