@@ -57,6 +57,9 @@ export default async function SupplierPage({
           Back to suppliers
         </Link>
       </div>
+      <p className="-mt-3 text-sm text-zinc-500" data-testid="record-number">
+        Supplier no. {supplier.number}
+      </p>
       {created === "1" && <Notice testId="created">Supplier created.</Notice>}
       <RecordMeta
         record={supplier}

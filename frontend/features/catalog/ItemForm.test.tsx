@@ -20,6 +20,7 @@ const mocked = vi.mocked(apiFetch);
 function item(overrides: Partial<Item> = {}): Item {
   return {
     id: "22222222-2222-4222-8222-222222222222",
+    number: 1,
     type: "service",
     name: "Horse massage",
     description: null,

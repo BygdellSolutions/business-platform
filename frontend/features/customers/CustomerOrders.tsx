@@ -50,7 +50,7 @@ export function CustomerOrders({
                 <tr key={order.id} data-testid="customer-order" className="border-b border-zinc-200 dark:border-zinc-800">
                   <td className="py-1 pr-4">
                     <Link href={`/o/${orgId}/transactions/${order.id}`} className="underline">
-                      {order.transaction_date}
+                      Order {order.number} · {order.transaction_date}
                     </Link>
                   </td>
                   <td className="py-1 pr-4">{STATUS[order.status]}</td>

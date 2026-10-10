@@ -43,6 +43,7 @@ export default async function SuppliersPage({
         <table data-testid="suppliers-table" className="w-full max-w-4xl text-left text-sm">
           <thead>
             <tr className="border-b border-zinc-300 dark:border-zinc-700">
+              <th className="py-1 pr-4 text-right">No.</th>
               <th className="py-1 pr-4">Name</th>
               <th className="py-1 pr-4">Contact person</th>
               <th className="py-1 pr-4">Email</th>
@@ -53,6 +54,9 @@ export default async function SuppliersPage({
           <tbody>
             {suppliers.map((supplier) => (
               <tr key={supplier.id} data-testid="supplier-row" className="border-b border-zinc-200 dark:border-zinc-800">
+                <td className="py-1 pr-4 text-right" data-testid="record-number">
+                  {supplier.number}
+                </td>
                 <td className="py-1 pr-4">
                   <Link href={`${base}/${supplier.id}`} className="underline">
                     {supplier.name}

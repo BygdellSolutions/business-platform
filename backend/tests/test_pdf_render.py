@@ -381,7 +381,7 @@ def test_a_different_document_renders_to_different_bytes():
 
 
 def test_the_renderer_identifies_itself_with_library_and_font_versions():
-    assert TEMPLATE_VERSION == 7
+    assert TEMPLATE_VERSION == 8
     assert renderer_identity().startswith("reportlab ") and "bundled Noto fonts" in renderer_identity()
 
 
@@ -486,7 +486,7 @@ def test_the_font_layer_refuses_unsupported_characters_by_itself_not_only_throug
 # The layout code as of TEMPLATE_VERSION. A download serves the stored PDF of the CURRENT template version, so a
 # change to what is printed without a new version would leave earlier downloads looking old. When this fails: bump
 # TEMPLATE_VERSION in render.py, then update both values here.
-PINNED_TEMPLATE = (7, "644eebfe981b80ef69ed2f988793c7ebe052a39f6bdc10964a30f0f2000e1867")
+PINNED_TEMPLATE = (8, "1a6dda30b6b69d10f3fb9920234291dd7649d9c53478325ef971d2b18a89f0e0")
 
 
 def test_a_change_to_the_printed_layout_comes_with_a_new_template_version():
@@ -495,3 +495,15 @@ def test_a_change_to_the_printed_layout_comes_with_a_new_template_version():
     names = ("build.py", "document.py", "format.py", "labels.py", "render.py")
     source = b"".join((BACKEND / "app/modules/invoicing/pdf" / name).read_bytes().replace(b"\r\n", b"\n") for name in names)
     assert (TEMPLATE_VERSION, hashlib.sha256(source).hexdigest()) == PINNED_TEMPLATE, "the PDF layout changed: bump TEMPLATE_VERSION and re-pin"
+
+
+def test_the_source_orders_numbers_are_printed_and_older_invoices_print_without_them():
+    numbered = document(
+        order_numbers=("1001", "1002"),
+        sources=(PdfSource(date="2026-10-01", number="1001", fields=(field("PO", "A"),)), PdfSource(date="2026-10-02", number="1002", fields=(field("PO", "B"),))),
+    )
+    text = pdf_text(render_pdf(numbered))
+    assert "Order no." in text and "1001, 1002" in text and "Order 1001 of 2026-10-01" in text
+    older = document(sources=(PdfSource(date="2026-10-01", fields=(field("PO", "A"),)), PdfSource(date="2026-10-02", fields=(field("PO", "B"),))))
+    text = pdf_text(render_pdf(older))
+    assert "Order no." not in text and "Order of 2026-10-01" in text

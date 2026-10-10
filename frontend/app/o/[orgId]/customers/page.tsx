@@ -46,6 +46,7 @@ export default async function CustomersPage({
         <table data-testid="customers-table" className="w-full max-w-4xl text-left text-sm">
           <thead>
             <tr className="border-b border-zinc-300 dark:border-zinc-700">
+              <th className="py-1 pr-4 text-right">No.</th>
               <th className="py-1 pr-4">Name</th>
               <th className="py-1 pr-4">Type</th>
               <th className="py-1 pr-4">Email</th>
@@ -56,6 +57,9 @@ export default async function CustomersPage({
           <tbody>
             {customers.map((customer) => (
               <tr key={customer.id} data-testid="customer-row" className="border-b border-zinc-200 dark:border-zinc-800">
+                <td className="py-1 pr-4 text-right" data-testid="record-number">
+                  {customer.number}
+                </td>
                 <td className="py-1 pr-4">
                   <Link href={`${base}/${customer.id}`} className="underline">
                     {customer.name}

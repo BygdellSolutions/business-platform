@@ -8,7 +8,7 @@ from app.api.deps import Pagination, pagination
 from app.core import audit
 from app.core.authz import record_writer, require_role
 from app.core.db import get_db
-from app.core.query import commit_and_refresh, contains_pattern, delete_or_409
+from app.core.query import commit_and_refresh, contains_pattern, delete_or_409, number_matches
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import create_scoped, get_scoped_or_404, scoped_select
 from app.models import Customer, Role
@@ -54,6 +54,7 @@ def list_customers(
             or_(
                 Customer.name.ilike(pattern, escape="\\"),
                 Customer.email.ilike(pattern, escape="\\"),
+                number_matches(Customer.number, q),
             )
         )
     if active is not None:

@@ -5,7 +5,7 @@ from sqlalchemy import Boolean, CheckConstraint, Numeric, String, UniqueConstrai
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.base import Base
-from app.models.mixins import Authored, BusinessProfile, TenantOwned, profile_constraints
+from app.models.mixins import Authored, BusinessProfile, Numbered, TenantOwned, profile_constraints
 
 
 class CustomerType(StrEnum):
@@ -13,7 +13,7 @@ class CustomerType(StrEnum):
     COMPANY = "company"  # not "organization": that word means the tenant
 
 
-class Customer(TenantOwned, Authored, BusinessProfile, Base):
+class Customer(TenantOwned, Numbered, Authored, BusinessProfile, Base):
     """A person or company that an organization does business with."""
 
     __tablename__ = "customers"
@@ -21,6 +21,7 @@ class Customer(TenantOwned, Authored, BusinessProfile, Base):
         # Target for tenant-safe composite foreign keys: other tables reference
         # (organization_id, id), so the database itself refuses cross-tenant links.
         UniqueConstraint("organization_id", "id", name="uq_customers_organization_id_id"),
+        UniqueConstraint("organization_id", "number", name="uq_customers_organization_number"),
         CheckConstraint(
             "customer_type IN ('" + "', '".join(CustomerType) + "')",
             name="ck_customers_customer_type",

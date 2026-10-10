@@ -53,6 +53,7 @@ TABLES_IN_DELETE_ORDER = (
     "organization_invitations",
     "organization_users",
     "audit_events",
+    "record_counters",
 )
 # Tables that keep their rows: the platform's security log (no foreign key to the organization).
 KEPT = ("security_events",)

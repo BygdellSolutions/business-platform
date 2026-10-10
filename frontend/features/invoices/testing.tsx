@@ -106,7 +106,7 @@ export function invoice(overrides: Partial<Invoice> = {}): Invoice {
     issued_by: null,
     customer_snapshot: party(),
     issuer_snapshot: party({ name: "Fredrik Horse Therapy", legal_name: "Fredrik Horse Therapy AB", address_line1: "Storgatan 1", city: "Umeå", postal_code: "903 26", registration_number: "556000-0001", vat_number: "SE556000000101" }),
-    transactions: [{ transaction_id: TX_1, position: 1, transaction_date: "2026-09-30", source_version: 1, fields: [] }],
+    transactions: [{ transaction_id: TX_1, position: 1, transaction_date: "2026-09-30", transaction_number: 1001, source_version: 1, fields: [] }],
     lines: [
       line(),
       line({
@@ -141,6 +141,7 @@ export function issued(overrides: Partial<Invoice> = {}): Invoice {
 export function eligible(id: string, overrides: Partial<Invoiceable> = {}): Invoiceable {
   return {
     id,
+    number: 1001,
     transaction_date: "2026-10-01",
     billing_customer_id: CUSTOMER_ID,
     billing_customer: { id: CUSTOMER_ID, name: "Umeå HK", active: true },

@@ -265,7 +265,7 @@ def list_backorders(
 ) -> list[BackorderRead]:
     """Backordered sales, oldest first (any member). By default only those still waiting for something."""
     query = (
-        select(LineFulfillment, Transaction.transaction_date, Customer.name, Item.name, Item.unit)
+        select(LineFulfillment, Transaction.transaction_date, Transaction.number, Customer.name, Item.name, Item.unit)
         .join(Transaction, (Transaction.organization_id == LineFulfillment.organization_id) & (Transaction.id == LineFulfillment.transaction_id))
         .outerjoin(Customer, (Customer.organization_id == Transaction.organization_id) & (Customer.id == Transaction.billing_customer_id))
         .join(Item, (Item.organization_id == LineFulfillment.organization_id) & (Item.id == LineFulfillment.item_id))
@@ -283,6 +283,7 @@ def list_backorders(
             transaction_id=row.transaction_id,
             transaction_line_id=row.transaction_line_id,
             transaction_date=transaction_date,
+            transaction_number=transaction_number,
             customer_name=customer_name,
             item_id=row.item_id,
             item_name=item_name,
@@ -293,7 +294,7 @@ def list_backorders(
             state=service.fulfillment_state(row, stock[row.item_id]),
             created_at=row.created_at,
         )
-        for row, transaction_date, customer_name, item_name, item_unit in rows
+        for row, transaction_date, transaction_number, customer_name, item_name, item_unit in rows
     ]
 
 

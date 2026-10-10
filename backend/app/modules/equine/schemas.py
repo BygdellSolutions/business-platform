@@ -62,6 +62,7 @@ class HorseUpdate(BaseModel):
 
 class HorseRead(BaseModel):
     id: uuid.UUID
+    number: int  # per organization, from the database (app.models.mixins.Numbered)
     name: str
     owner_customer_id: uuid.UUID
     stable_customer_id: uuid.UUID | None

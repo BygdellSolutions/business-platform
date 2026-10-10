@@ -22,7 +22,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.base import Base
-from app.models.mixins import Authored, TenantOwned
+from app.models.mixins import Authored, Numbered, TenantOwned
 
 
 
@@ -59,7 +59,7 @@ class TransactionStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
-class Transaction(TenantOwned, Authored, Base):
+class Transaction(TenantOwned, Numbered, Authored, Base):
     """The header of a sale: who is billed, and when. Industry-neutral.
 
     Anything specific to an industry (an animal, a project, a vehicle, a property...) is
@@ -71,6 +71,7 @@ class Transaction(TenantOwned, Authored, Base):
     __table_args__ = (
         # Target for the tenant-safe composite foreign key from transaction_lines.
         UniqueConstraint("organization_id", "id", name="uq_transactions_organization_id_id"),
+        UniqueConstraint("organization_id", "number", name="uq_transactions_organization_number"),
         # Target for modules whose records must agree with a transaction on its billing customer
         # AND currency (a referencing row with non-NULL values is then checked by PostgreSQL itself).
         UniqueConstraint(

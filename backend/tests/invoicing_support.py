@@ -87,6 +87,7 @@ def purge_organization(org_id: uuid.UUID, user_ids: list[uuid.UUID]) -> None:
             "items",
             "customers",
             "organization_users",
+            "record_counters",
         ):
             connection.execute(text(f"delete from {table} where organization_id = :o"), {"o": org_id})
         connection.execute(text("delete from organizations where id = :o"), {"o": org_id})

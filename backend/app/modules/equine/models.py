@@ -16,7 +16,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.base import Base
-from app.models.mixins import Authored, TenantOwned
+from app.models.mixins import Authored, Numbered, TenantOwned
 
 # Sanity bounds enforced by the database; the API additionally rejects future years.
 MIN_BIRTH_YEAR = 1900
@@ -29,7 +29,7 @@ class HorseSex(StrEnum):
     GELDING = "gelding"
 
 
-class Horse(TenantOwned, Authored, Base):
+class Horse(TenantOwned, Numbered, Authored, Base):
     """A horse. Not a customer.
 
     Owner and stable are two separate references to Customers of the SAME
@@ -62,6 +62,7 @@ class Horse(TenantOwned, Authored, Base):
         ),
         # Target of composite foreign keys (a horse's notes belong to a horse of the same organization).
         UniqueConstraint("organization_id", "id", name="uq_horses_organization_id_id"),
+        UniqueConstraint("organization_id", "number", name="uq_horses_organization_number"),
         # Serve the "horses of this owner/stable" filter.
         Index("ix_horses_organization_owner", "organization_id", "owner_customer_id"),
         Index("ix_horses_organization_stable", "organization_id", "stable_customer_id"),

@@ -58,6 +58,7 @@ class CustomerRef(BaseModel):
 
 class CustomerRead(ProfileRead):
     id: uuid.UUID
+    number: int  # per organization, from the database (app.models.mixins.Numbered)
     customer_type: CustomerType
     name: str
     email: str | None

@@ -84,6 +84,7 @@ class ItemRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    number: int  # per organization, from the database (app.models.mixins.Numbered)
     type: ItemType
     name: str
     description: str | None

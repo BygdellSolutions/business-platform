@@ -101,6 +101,7 @@ def list_invoiceable_transactions(
         result.append(
             InvoiceableTransaction(
                 id=tx.id,
+                number=tx.number,
                 transaction_date=tx.transaction_date,
                 billing_customer_id=tx.billing_customer_id,
                 billing_customer=CustomerRef.model_validate(customer),

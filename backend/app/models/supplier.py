@@ -2,10 +2,10 @@ from sqlalchemy import Boolean, String, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.base import Base
-from app.models.mixins import Authored, BusinessProfile, TenantOwned, profile_constraints
+from app.models.mixins import Authored, BusinessProfile, Numbered, TenantOwned, profile_constraints
 
 
-class Supplier(TenantOwned, Authored, BusinessProfile, Base):
+class Supplier(TenantOwned, Numbered, Authored, BusinessProfile, Base):
     """A company or person an organization buys goods from (the buying side's counterpart of a customer).
 
     Chosen from this register wherever goods are ordered (incoming stock), so the same supplier is always the same
@@ -16,6 +16,7 @@ class Supplier(TenantOwned, Authored, BusinessProfile, Base):
     __table_args__ = (
         # Target for tenant-safe composite foreign keys (incoming stock refers to (organization_id, id)).
         UniqueConstraint("organization_id", "id", name="uq_suppliers_organization_id_id"),
+        UniqueConstraint("organization_id", "number", name="uq_suppliers_organization_number"),
         *profile_constraints("suppliers"),
     )
 

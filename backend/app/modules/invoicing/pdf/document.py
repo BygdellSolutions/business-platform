@@ -83,6 +83,7 @@ class PdfVatRow(Frozen):
 
 class PdfSource(Frozen):
     date: str  # the date the invoice recorded for this source transaction
+    number: str | None = None  # its order number, when the invoice recorded one
     fields: tuple[PdfField, ...]
 
 
@@ -122,6 +123,8 @@ class PdfDocument(Frozen):
     # Template 2. The defaults print exactly what template 1 printed.
     language: str = "en"
     delivery_dates: tuple[str, ...] = ()
+    # Template 8: the numbers of the source orders the invoice recorded (none for invoices from before order numbers).
+    order_numbers: tuple[str, ...] = ()
     payment: PdfPayment | None = None
     approved_for_f_tax: bool = False
     # The seller's details for every page's footer, in four columns (company and address, contact, tax identifiers,
@@ -181,6 +184,7 @@ def iter_strings(document: PdfDocument):
     yield from (document.number_text, document.invoice_date, document.currency, document.net, document.vat, document.gross)
     yield from (value for value in (document.due_date, document.description) if value is not None)
     yield from document.delivery_dates
+    yield from document.order_numbers
     if document.credit is not None:
         yield from (document.credit.invoice_number, document.credit.invoice_date, document.credit.reason)
     for column in document.issuer_footer:

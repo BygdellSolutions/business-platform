@@ -49,6 +49,9 @@ export default async function CustomerPage({
       <h1 className="text-2xl font-semibold" data-testid="record-name">
         {customer.name}
       </h1>
+      <p className="text-sm text-zinc-500" data-testid="record-number">
+        Customer no. {customer.number}
+      </p>
       {created === "1" && <Notice testId="created">Customer created.</Notice>}
       <RecordMeta record={customer} people={history.history.people} timeZone={organization.timezone} />
       {canWriteRecords(role) ? <CustomerForm key={customer.id} customer={customer} canSetDiscount={role === "owner" || role === "admin"} /> : <CustomerDetails customer={customer} />}

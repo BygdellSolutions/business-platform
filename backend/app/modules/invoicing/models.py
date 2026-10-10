@@ -158,6 +158,8 @@ class InvoiceTransaction(TenantOwned, Base):
     customer_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
     currency: Mapped[str] = mapped_column(String(3))
     transaction_date: Mapped[date] = mapped_column(Date)
+    # The order's number when the invoice was created (null: issued before orders had numbers).
+    transaction_number: Mapped[int | None] = mapped_column(BigInteger)
     # The transaction's version when it was reserved: issuing re-checks it (defense in depth).
     source_version: Mapped[int] = mapped_column(Integer)
     position: Mapped[int] = mapped_column(Integer)

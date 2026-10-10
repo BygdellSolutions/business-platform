@@ -4,12 +4,22 @@ from collections.abc import Callable
 from typing import Any
 
 from fastapi import HTTPException, status
+from sqlalchemy import false
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.entity_registry import registry
 
 FOREIGN_KEY_VIOLATION = "23503"  # PostgreSQL SQLSTATE
+
+
+def number_matches(column, text: str):
+    """`column == N` when the search text is a record number ("1001", " 7 "), otherwise a condition that is never true,
+    so a list search finds a record by its number as well as by its name."""
+    digits = text.strip()
+    if digits.isascii() and digits.isdigit() and len(digits) <= 18:  # fits a bigint
+        return column == int(digits)
+    return false()
 
 
 def contains_pattern(text: str) -> str:

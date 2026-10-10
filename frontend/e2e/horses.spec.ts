@@ -13,7 +13,7 @@ test.beforeEach(async ({ context }) => {
 });
 
 const list = `/o/${ORG_A.id}/horses`;
-const horseNames = (page: Page) => page.getByTestId("horse-row").locator("td:first-child").allTextContents();
+const horseNames = (page: Page) => page.getByTestId("horse-row").locator("td:nth-child(2)").allTextContents() // after the No. column;
 const nameField = (page: Page) => page.getByLabel("Name", { exact: true });
 
 /** A fresh owner (and optionally stable) customer in organization A. */

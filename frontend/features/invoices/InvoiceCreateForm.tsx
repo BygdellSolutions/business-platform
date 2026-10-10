@@ -94,7 +94,7 @@ export function InvoiceCreateForm({
   const general = error?.kind === "validation" ? error.formErrors : error && ["forbidden", "client", "unauthorized"].includes(error.kind) ? [error.message] : [];
   const labelOf = (id: string) => {
     const row = selection.find((selected) => selected.id === id) ?? rows.find((candidate) => candidate.id === id);
-    return row ? `${row.transaction_date} · ${row.billing_customer.name}` : "A selected order";
+    return row ? `Order ${row.number} · ${row.transaction_date} · ${row.billing_customer.name}` : "A selected order";
   };
 
   async function onSubmit(event: FormEvent) {
@@ -148,7 +148,9 @@ export function InvoiceCreateForm({
             <ul className="flex flex-col gap-1">
               {selection.map((selected) => (
                 <li key={selected.id} data-testid="selected-row" className="flex flex-wrap items-center gap-3">
-                  <span>{selected.transaction_date}</span>
+                  <span>
+                    Order {selected.number} · {selected.transaction_date}
+                  </span>
                   <span>
                     net <DecimalText value={selected.totals.net_amount} />, VAT <DecimalText value={selected.totals.vat_amount} />, gross <DecimalText value={selected.totals.gross_amount} />
                   </span>
@@ -228,7 +230,7 @@ export function InvoiceCreateForm({
                       )}
                       <td className="py-1 pr-4">
                         <Link href={`/o/${orgId}/transactions/${row.id}`} className="underline">
-                          {row.transaction_date}
+                          Order {row.number} · {row.transaction_date}
                         </Link>
                       </td>
                       <td className="py-1 pr-4" data-testid="eligible-customer">

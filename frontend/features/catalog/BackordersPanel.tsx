@@ -65,7 +65,7 @@ export function BackordersPanel({ itemId, unit, backorders, canAllocate }: { ite
             <tr key={backorder.fulfillment_id} data-testid="backorder-row" className="border-b border-zinc-200 dark:border-zinc-800">
               <td className="py-1 pr-4">
                 <Link href={`/o/${orgId}/transactions/${backorder.transaction_id}`} className="underline">
-                  {backorder.transaction_date}
+                  Order {backorder.transaction_number} · {backorder.transaction_date}
                 </Link>
               </td>
               <td className="py-1 pr-4">{backorder.customer_name}</td>

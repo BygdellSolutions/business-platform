@@ -41,6 +41,9 @@ export default async function ItemPage({
       <h1 className="text-2xl font-semibold" data-testid="record-name">
         {item.name}
       </h1>
+      <p className="text-sm text-zinc-500" data-testid="record-number">
+        Item no. {item.number}
+      </p>
       {created === "1" && <Notice testId="created">Item created.</Notice>}
       {stockResult === "failed" && <Notice testId="stock-failed">The opening stock was not recorded. Record it in the Stock section below.</Notice>}
       <RecordMeta record={item} people={history.history.people} timeZone={organization.timezone} />

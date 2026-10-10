@@ -14,6 +14,7 @@ const ORG = "11111111-1111-4111-8111-111111111111";
 const customer: Customer = {
   ...EMPTY_PROFILE,
   id: "c1",
+  number: 1,
   customer_type: "company",
   default_discount_percent: null,
   name: "Umeå HK",
@@ -29,6 +30,7 @@ const customer: Customer = {
 
 const item: Item = {
   id: "i1",
+  number: 1,
   type: "service",
   name: "Horse massage",
   description: null,
@@ -51,6 +53,7 @@ const item: Item = {
 
 const horse: Horse = {
   id: "h1",
+  number: 1,
   name: "Kalle",
   owner_customer_id: "c2",
   stable_customer_id: "c1",

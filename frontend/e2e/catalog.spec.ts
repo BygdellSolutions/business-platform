@@ -14,7 +14,7 @@ test.beforeEach(async ({ context }) => {
 });
 
 const list = `/o/${ORG_A.id}/catalog`;
-const names = (page: Page) => page.getByTestId("item-row").locator("td:first-child").allTextContents();
+const names = (page: Page) => page.getByTestId("item-row").locator("td:nth-child(2)").allTextContents() // after the No. column;
 
 const price = (page: Page) => page.getByLabel("Price excluding VAT", { exact: true });
 const vat = (page: Page) => page.getByLabel("VAT rate (%)", { exact: true });

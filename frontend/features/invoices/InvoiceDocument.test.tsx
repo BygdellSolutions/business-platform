@@ -109,7 +109,7 @@ describe("the snapshot wins over live data (the live world deliberately disagree
   const doc = invoice({
     customer_name: "Snapshot Club",
     customer_snapshot: party({ name: "Snapshot Club", city: "Snapshot City", vat_number: "SNAP-VAT" }),
-    transactions: [{ transaction_id: TX_1, position: 1, transaction_date: "2026-09-30", source_version: 1, fields: [snapshot({ label: "Stored header label", display: "stored header value" })] }],
+    transactions: [{ transaction_id: TX_1, position: 1, transaction_date: "2026-09-30", transaction_number: 1001, source_version: 1, fields: [snapshot({ label: "Stored header label", display: "stored header value" })] }],
     lines: [line({ description: "Stored description", fields: [snapshot({ key: "owner", label: "Stored owner label", field_type: "reference", display: "Stored Owner Name", value: "some-id" })] })],
   });
 
@@ -145,7 +145,7 @@ describe("the snapshot wins over live data (the live world deliberately disagree
     const sources = within(screen.getByTestId("sources"));
     expect(sources.getByText(/navigation and audit only/)).toBeInTheDocument();
     const link = sources.getByTestId("source-link");
-    expect(link).toHaveTextContent("Order of 2026-09-30");
+    expect(link).toHaveTextContent("Order 1001 of 2026-09-30");
     expect(link).toHaveAttribute("href", `/o/${ORG_A}/transactions/${TX_1}`);
     // The links are the ONLY links in the document, and no link carries customer or item text.
     expect(within(screen.getByTestId("invoice-document")).getAllByRole("link")).toHaveLength(1);
@@ -160,13 +160,13 @@ describe("the snapshot wins over live data (the live world deliberately disagree
   it("several sources are listed, each with its own stored fields", () => {
     const two = invoice({
       transactions: [
-        { transaction_id: TX_1, position: 1, transaction_date: "2026-09-30", source_version: 1, fields: [snapshot({ label: "PO", display: "PO-1" })] },
-        { transaction_id: TX_2, position: 2, transaction_date: "2026-10-02", source_version: 1, fields: [] },
+        { transaction_id: TX_1, position: 1, transaction_date: "2026-09-30", transaction_number: 1001, source_version: 1, fields: [snapshot({ label: "PO", display: "PO-1" })] },
+        { transaction_id: TX_2, position: 2, transaction_date: "2026-10-02", transaction_number: null, source_version: 1, fields: [] },
       ],
     });
     render(<InvoiceDocument invoice={two} orgId={ORG_A} />);
     const rows = screen.getAllByTestId("source");
-    expect(rows.map((row) => within(row).getByTestId("source-link").textContent)).toEqual(["Order of 2026-09-30", "Order of 2026-10-02"]);
+    expect(rows.map((row) => within(row).getByTestId("source-link").textContent)).toEqual(["Order 1001 of 2026-09-30", "Order of 2026-10-02"]); // an older invoice recorded no number
     expect(within(rows[0]).getByText("PO-1")).toBeInTheDocument();
     expect(within(rows[1]).queryByTestId("transaction-fields")).toBeNull();
   });
@@ -175,7 +175,7 @@ describe("the snapshot wins over live data (the live world deliberately disagree
 describe("custom-field snapshots in the document", () => {
   it("shows line-level and transaction-level snapshots read-only, from stored text", () => {
     const doc = invoice({
-      transactions: [{ transaction_id: TX_1, position: 1, transaction_date: "2026-09-30", source_version: 1, fields: [snapshot({ label: "PO number", display: "PO-17" })] }],
+      transactions: [{ transaction_id: TX_1, position: 1, transaction_date: "2026-09-30", transaction_number: 1001, source_version: 1, fields: [snapshot({ label: "PO number", display: "PO-17" })] }],
       lines: [line({ fields: [snapshot({ label: "Kind", field_type: "select", display: "Therapy", value: "opt" }), snapshot({ key: "ok", label: "Checked", field_type: "boolean", value: true, display: "true", definition_id: "d-2" })] })],
     });
     render(<InvoiceDocument invoice={doc} orgId={ORG_A} />);

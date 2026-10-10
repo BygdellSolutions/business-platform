@@ -33,7 +33,7 @@ export function CustomerBought({ orgId, lines }: { orgId: string; lines: BoughtL
               <tr key={line.line_id} data-testid="bought-row" className="border-b border-zinc-200 dark:border-zinc-800">
                 <td className="py-1 pr-4">
                   <Link href={`/o/${orgId}/transactions/${line.transaction_id}`} className="underline">
-                    {line.transaction_date}
+                    Order {line.transaction_number} · {line.transaction_date}
                   </Link>{" "}
                   <span className="text-xs text-zinc-500">{line.status}</span>
                 </td>

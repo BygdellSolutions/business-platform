@@ -36,6 +36,9 @@ export default async function HorsePage({
       <h1 className="text-2xl font-semibold" data-testid="record-name">
         {horse.name}
       </h1>
+      <p className="text-sm text-zinc-500" data-testid="record-number">
+        Horse no. {horse.number}
+      </p>
       {created === "1" && <Notice testId="created">Horse created.</Notice>}
       <RecordMeta record={horse} people={history.history.people} timeZone={organization.timezone} />
       {canWriteRecords(role) ? <HorseForm key={horse.id} horse={horse} /> : <HorseDetails orgId={orgId} horse={horse} />}

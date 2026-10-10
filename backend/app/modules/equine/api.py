@@ -1,14 +1,14 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy import and_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session, aliased
 
 from app.api.deps import Pagination, pagination
 from app.core import audit
 from app.core.authz import record_writer
 from app.core.db import get_db
-from app.core.query import commit_and_refresh, contains_pattern, delete_or_409
+from app.core.query import commit_and_refresh, contains_pattern, delete_or_409, number_matches
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import (
     create_scoped,
@@ -55,6 +55,7 @@ def _horse_rows(ctx: TenantContext):
 def _to_read(horse: Horse, owner: Customer, stable: Customer | None) -> HorseRead:
     return HorseRead(
         id=horse.id,
+        number=horse.number,
         name=horse.name,
         owner_customer_id=horse.owner_customer_id,
         stable_customer_id=horse.stable_customer_id,
@@ -106,7 +107,7 @@ def list_horses(
     # A filter id from another organization simply matches nothing in this one.
     query = _horse_rows(ctx)
     if q:
-        query = query.where(Horse.name.ilike(contains_pattern(q), escape="\\"))
+        query = query.where(or_(Horse.name.ilike(contains_pattern(q), escape="\\"), number_matches(Horse.number, q)))
     if owner_customer_id is not None:
         query = query.where(Horse.owner_customer_id == owner_customer_id)
     if stable_customer_id is not None:

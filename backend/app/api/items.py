@@ -11,7 +11,7 @@ from app.core.authz import record_writer, roles_required
 from app.core.currency import share_lock_organization
 from app.core.db import get_db
 from app.core.org_time import organization_today
-from app.core.query import commit_and_refresh, contains_pattern, delete_or_409
+from app.core.query import commit_and_refresh, contains_pattern, delete_or_409, number_matches
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import create_scoped, get_scoped_or_404, reference_error, scoped_select
 from app.models import Item, ItemDiscount, ItemType, Role
@@ -54,7 +54,7 @@ def list_items(
     if q:
         pattern = contains_pattern(q)
         query = query.where(
-            or_(Item.name.ilike(pattern, escape="\\"), Item.description.ilike(pattern, escape="\\"))
+            or_(Item.name.ilike(pattern, escape="\\"), Item.description.ilike(pattern, escape="\\"), number_matches(Item.number, q))
         )
     if type is not None:
         query = query.where(Item.type == type)

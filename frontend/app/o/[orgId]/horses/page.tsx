@@ -72,6 +72,7 @@ export default async function HorsesPage({
         <table data-testid="horses-table" className="w-full max-w-5xl text-left text-sm">
           <thead>
             <tr className="border-b border-zinc-300 dark:border-zinc-700">
+              <th className="py-1 pr-4 text-right">No.</th>
               <th className="py-1 pr-4">Name</th>
               <th className="py-1 pr-4">Owner</th>
               <th className="py-1 pr-4">Stable</th>
@@ -84,6 +85,9 @@ export default async function HorsesPage({
           <tbody>
             {horses.map((horse) => (
               <tr key={horse.id} data-testid="horse-row" className="border-b border-zinc-200 dark:border-zinc-800">
+                <td className="py-1 pr-4 text-right" data-testid="record-number">
+                  {horse.number}
+                </td>
                 <td className="py-1 pr-4">
                   <Link href={`${base}/${horse.id}`} className="underline">
                     {horse.name}

@@ -358,7 +358,7 @@ describe("paging and the customer filter", () => {
 
   it("does not filter or sort anything in the browser: rows appear in the order the server sent them", () => {
     mount();
-    expect(screen.getAllByTestId("eligible-row").map((row) => row.textContent?.slice(0, 10))).toEqual(["2026-10-05", "2026-10-04", "2026-10-03", "2026-10-02"]);
+    expect(screen.getAllByTestId("eligible-row").map((row) => row.textContent?.match(/\d{4}-\d{2}-\d{2}/)?.[0])).toEqual(["2026-10-05", "2026-10-04", "2026-10-03", "2026-10-02"]);
   });
 });
 

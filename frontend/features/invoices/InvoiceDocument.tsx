@@ -168,7 +168,7 @@ export function InvoiceDocument({ invoice, orgId }: { invoice: Invoice; orgId: s
           {invoice.transactions.map((source) => (
             <li key={source.transaction_id} data-testid="source">
               <Link href={`/o/${orgId}/transactions/${source.transaction_id}`} data-testid="source-link" className="underline">
-                Order of {source.transaction_date}
+                {source.transaction_number !== null ? `Order ${source.transaction_number} of ${source.transaction_date}` : `Order of ${source.transaction_date}`}
               </Link>
               <FieldSnapshots fields={source.fields} label={`Fields of the order of ${source.transaction_date}`} testId="transaction-fields" />
             </li>

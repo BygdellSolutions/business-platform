@@ -44,7 +44,9 @@ from app.modules.invoicing.pdf.labels import decimal_separator, labels
 # 6: sources are called orders ("Order of {date}" / "Order {date}").
 # 7: credit notes ("Kreditfaktura" / "Credit note"): the invoice they credit, the reason, negative figures, no payment
 #    section. An invoice prints as in 6.
-TEMPLATE_VERSION = 7
+# 8: the source orders' numbers ("Order no." / "Ordernr" in the header, "Order 1001 of {date}"); invoices from
+#    before order numbers print as in 7.
+TEMPLATE_VERSION = 8
 ACCENT = colors.HexColor("#1f4e5f")
 ACCENT_LIGHT = colors.HexColor("#e8f0f2")
 # Room for the footer columns (up to five lines each) above the page number.
@@ -242,6 +244,8 @@ def _build(document: PdfDocument, fonts: font_layer.Registered) -> bytes:
         details.append((words["due_date"], document.due_date))
     if document.delivery_dates:
         details.append((words["delivery_date"], ", ".join(document.delivery_dates)))
+    if document.order_numbers:
+        details.append((words["order_numbers"], ", ".join(document.order_numbers)))
     details.append((words["currency"], document.currency))
     detail_table = Table([[printer.p(label, "label"), printer.p(value, "body")] for label, value in details], colWidths=[28 * mm, 36 * mm], hAlign="RIGHT")
     detail_table.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0), ("TOPPADDING", (0, 0), (-1, -1), 1), ("BOTTOMPADDING", (0, 0), (-1, -1), 1)]))
@@ -298,7 +302,8 @@ def _build(document: PdfDocument, fonts: font_layer.Registered) -> bytes:
         story.append(printer.p(words["reference_information"], "label"))
         for source in with_fields:
             if len(document.sources) > 1:
-                story.append(printer.p(words["transaction_of"].format(date=source.date), "bold"))
+                title = words["numbered_order_of"].format(number=source.number, date=source.date) if source.number else words["transaction_of"].format(date=source.date)
+                story.append(printer.p(title, "bold"))
             story += _fields(printer, source.fields, "body")
         story.append(Spacer(1, 5 * mm))
 

@@ -86,6 +86,7 @@ export function second(overrides: Partial<TransactionLine> = {}): TransactionLin
 export function tx(overrides: Partial<Transaction> = {}): Transaction {
   return {
     id: TX_ID,
+    number: 1,
     billing_customer_id: ANNA_ID,
     billing_customer: { id: ANNA_ID, name: "Anna Andersson", active: true },
     transaction_date: "2026-10-01",
@@ -113,12 +114,13 @@ export function tx(overrides: Partial<Transaction> = {}): Transaction {
 }
 
 export function customer(id: string, name: string, active = true): Customer {
-  return { id, customer_type: "person", name, email: null, phone: null, active, created_at: "", updated_at: "", created_by: null, updated_by: null, default_discount_percent: null, ...EMPTY_PROFILE };
+  return { id, number: 1, customer_type: "person", name, email: null, phone: null, active, created_at: "", updated_at: "", created_by: null, updated_by: null, default_discount_percent: null, ...EMPTY_PROFILE };
 }
 
 export function item(id: string, name: string, overrides: Partial<Item> = {}): Item {
   return {
     id,
+    number: 1,
     type: "service",
     name,
     description: null,

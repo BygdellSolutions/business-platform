@@ -300,6 +300,7 @@ def _insert_children(
             customer_id=invoice.customer_id,
             currency=invoice.currency,
             transaction_date=source.transaction_date,
+            transaction_number=source.number,
             source_version=source.version,
             position=index,
             fields=snapshots.custom_field_snapshot(transaction_fields.get(source.id, [])),

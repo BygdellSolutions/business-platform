@@ -121,6 +121,7 @@ def _totals_read(totals: Totals) -> TotalsRead:
 def _summary_fields(tx: Transaction, customer: Customer, lines: Sequence[TransactionLine]) -> dict:
     return dict(
         id=tx.id,
+        number=tx.number,
         billing_customer_id=tx.billing_customer_id,
         billing_customer=CustomerRef.model_validate(customer),
         transaction_date=tx.transaction_date,
@@ -379,6 +380,7 @@ def list_transactions(
     billing_customer_id: uuid.UUID | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
+    number: int | None = Query(default=None, ge=1, le=2**63 - 1, description="The order number"),
     page: Pagination = Depends(pagination),
     ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
@@ -393,6 +395,8 @@ def list_transactions(
         query = query.where(Transaction.transaction_date >= date_from)
     if date_to is not None:
         query = query.where(Transaction.transaction_date <= date_to)
+    if number is not None:
+        query = query.where(Transaction.number == number)
     query = (
         query.order_by(
             Transaction.transaction_date.desc(), Transaction.created_at.desc(), Transaction.id
@@ -543,7 +547,7 @@ def list_services(
     reads = {read.id: read for read in _line_reads(db, ctx, [line for line, _ in rows])}
     return [
         ServiceRecord(
-            transaction_id=tx.id, transaction_date=tx.transaction_date, status=tx.status, currency=tx.currency, line_id=line.id,
+            transaction_id=tx.id, transaction_number=tx.number, transaction_date=tx.transaction_date, status=tx.status, currency=tx.currency, line_id=line.id,
             description=line.description, quantity=line.quantity, gross_amount=line.gross_amount, performed_at=line.performed_at,
             performed_by_name=reads[line.id].performed_by_name, subject_type=line.subject_type, subject_id=line.subject_id,
             subject_label=reads[line.id].subject_label, notes=line.notes,

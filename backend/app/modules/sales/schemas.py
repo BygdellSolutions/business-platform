@@ -193,6 +193,7 @@ class TotalsRead(BaseModel):
 
 class TransactionSummary(BaseModel):
     id: uuid.UUID
+    number: int  # per organization, from the database (app.models.mixins.Numbered)
     billing_customer_id: uuid.UUID
     billing_customer: CustomerRef
     transaction_date: date
@@ -239,6 +240,7 @@ class ServiceRecord(BaseModel):
     and in which transaction."""
 
     transaction_id: uuid.UUID
+    transaction_number: int
     transaction_date: date
     status: TransactionStatus
     currency: str | None

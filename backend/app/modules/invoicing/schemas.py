@@ -104,6 +104,8 @@ class InvoiceTransactionRead(BaseModel):
     transaction_id: uuid.UUID
     position: int
     transaction_date: date
+    # The order's number when the invoice was created (null: invoices from before orders had numbers).
+    transaction_number: int | None = None
     source_version: int
     fields: list[dict[str, Any]]
 
@@ -231,6 +233,7 @@ class InvoiceableTotals(BaseModel):
 
 class InvoiceableTransaction(BaseModel):
     id: uuid.UUID
+    number: int
     transaction_date: date
     billing_customer_id: uuid.UUID
     billing_customer: CustomerRef

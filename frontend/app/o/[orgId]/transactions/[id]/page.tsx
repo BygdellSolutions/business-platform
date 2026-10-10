@@ -50,7 +50,7 @@ export default async function TransactionPage({
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold" data-testid="record-name">
-          Order · {transaction.transaction_date}
+          Order {transaction.number} · {transaction.transaction_date}
         </h1>
         <Link href={`/o/${orgId}/transactions`} className="text-sm underline">
           Back to orders

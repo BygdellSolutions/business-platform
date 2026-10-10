@@ -1,9 +1,20 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, event, func, inspect, text
+from sqlalchemy import BigInteger, CheckConstraint, DateTime, FetchedValue, ForeignKey, String, event, func, inspect, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
+
+
+class Numbered:
+    """A number per organization for people to refer to (order 1001, customer 7), handed out by the database.
+
+    The `assign_record_number` trigger (migration e4a6c8d0f235) takes it from `record_counters` on INSERT, whatever
+    path inserts, and refuses changing it. The application never sets it; it is read back after the insert.
+    Each table also declares `UniqueConstraint("organization_id", "number")`.
+    """
+
+    number: Mapped[int] = mapped_column(BigInteger, server_default=FetchedValue())
 
 
 class TenantOwned:

@@ -150,6 +150,7 @@ class BackorderRead(BaseModel):
     transaction_id: uuid.UUID
     transaction_line_id: uuid.UUID
     transaction_date: date
+    transaction_number: int
     customer_name: str | None
     item_id: uuid.UUID
     item_name: str

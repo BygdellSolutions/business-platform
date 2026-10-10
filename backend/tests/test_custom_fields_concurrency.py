@@ -78,6 +78,7 @@ def purge(world: Committed) -> None:
         "select set_config('app.deleting_organization', cast(:o as text), true)",
         "delete from audit_events where organization_id = :o",
         "delete from organization_users where organization_id = :o",
+        "delete from record_counters where organization_id = :o",
         "delete from organizations where id = :o",
     ]
     with engine.begin() as conn:

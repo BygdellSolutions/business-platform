@@ -68,6 +68,8 @@ export type ProfileField = keyof Profile;
 
 export interface Customer extends Profile {
   id: string;
+  /** Per organization, handed out by the database (orders from 1001, the rest from 1); never changes. */
+  number: number;
   customer_type: CustomerType;
   name: string;
   email: string | null;
@@ -98,6 +100,8 @@ export type CustomerUpdate = Partial<CustomerCreate>;
 /** A supplier: someone the organization buys goods from (GET /api/suppliers). */
 export interface Supplier extends Profile {
   id: string;
+  /** Per organization, handed out by the database (orders from 1001, the rest from 1); never changes. */
+  number: number;
   name: string;
   contact_person: string | null;
   email: string | null;
@@ -202,6 +206,8 @@ export type ItemType = "service" | "product" | "charge";
 
 export interface Item {
   id: string;
+  /** Per organization, handed out by the database (orders from 1001, the rest from 1); never changes. */
+  number: number;
   type: ItemType;
   name: string;
   description: string | null;
@@ -340,6 +346,7 @@ export interface Backorder {
   transaction_id: string;
   transaction_line_id: string;
   transaction_date: string;
+  transaction_number: number;
   customer_name: string | null;
   item_id: string;
   item_name: string;
@@ -377,6 +384,8 @@ export type HorseSex = "mare" | "stallion" | "gelding";
 
 export interface Horse {
   id: string;
+  /** Per organization, handed out by the database (orders from 1001, the rest from 1); never changes. */
+  number: number;
   name: string;
   owner_customer_id: string;
   stable_customer_id: string | null;
@@ -477,6 +486,8 @@ export interface Totals {
 
 export interface TransactionSummary {
   id: string;
+  /** Per organization, handed out by the database (orders from 1001, the rest from 1); never changes. */
+  number: number;
   billing_customer_id: string;
   billing_customer: CustomerRef;
   /** A calendar date, "YYYY-MM-DD". */
@@ -643,6 +654,8 @@ export interface InvoiceSource {
   transaction_id: string;
   position: number;
   transaction_date: string;
+  /** The order's number when the invoice was created (null: invoices from before orders had numbers). */
+  transaction_number: number | null;
   source_version: number;
   fields: FieldSnapshot[];
 }
@@ -718,6 +731,7 @@ export interface Invoice extends InvoiceSummary {
 /** A completed, currency-bearing transaction that is on no invoice (GET /api/invoiceable-transactions). */
 export interface Invoiceable {
   id: string;
+  number: number;
   transaction_date: string;
   billing_customer_id: string;
   billing_customer: CustomerRef;
@@ -813,6 +827,7 @@ export interface ServiceRecord {
 /** A non-service line billed to a customer (GET /api/transactions/bought): a catalog item or an ad-hoc line. */
 export interface BoughtLine {
   transaction_id: string;
+  transaction_number: number;
   transaction_date: string;
   status: TransactionStatus;
   currency: string | null;

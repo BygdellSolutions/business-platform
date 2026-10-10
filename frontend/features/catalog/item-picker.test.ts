@@ -15,6 +15,7 @@ const signal = new AbortController().signal;
 function item(overrides: Partial<Item>): Item {
   return {
     id: "i1",
+    number: 1,
     type: "service",
     name: "Horse massage",
     description: null,

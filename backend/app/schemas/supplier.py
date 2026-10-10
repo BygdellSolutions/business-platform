@@ -55,6 +55,7 @@ class SupplierRef(BaseModel):
 
 class SupplierRead(ProfileRead):
     id: uuid.UUID
+    number: int  # per organization, from the database (app.models.mixins.Numbered)
     name: str
     contact_person: str | None
     email: str | None

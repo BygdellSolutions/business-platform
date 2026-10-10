@@ -311,7 +311,13 @@ def test_no_trigger_on_a_sales_table_involves_invoicing(world):
             "join pg_proc p on p.oid = t.tgfoid where not t.tgisinternal and c.relname in ('transactions', 'transaction_lines', 'customers', 'items')"
         )
     ).all()
-    assert {(r[0], r[1]) for r in triggers} == {("transactions", "trg_transactions_currency_immutable")}
+    assert {(r[0], r[1]) for r in triggers} == {
+        ("transactions", "trg_transactions_currency_immutable"),
+        # Record numbers (core): handed out on insert, never changed; nothing to do with invoicing.
+        ("transactions", "transactions_record_number"),
+        ("customers", "customers_record_number"),
+        ("items", "items_record_number"),
+    }
     assert all("invoice" not in r[2] for r in triggers)
 
 

@@ -122,6 +122,7 @@ def document_from_invoice(invoice: Any) -> PdfDocument:
     return PdfDocument(
         language=language if language in ("en", "sv") else "en",
         delivery_dates=tuple(sorted({_text(source["transaction_date"]) for source in data["transactions"]})),
+        order_numbers=tuple(str(source["transaction_number"]) for source in data["transactions"] if source.get("transaction_number") is not None),
         payment=_payment(issuer, data["number_text"]),
         approved_for_f_tax=issuer.get("approved_for_f_tax") is True,
         issuer_footer=_footer(issuer, words),
@@ -134,7 +135,11 @@ def document_from_invoice(invoice: Any) -> PdfDocument:
             update={"reference": _text(f"{words['our_reference']}: {issuer['our_reference']}") if issuer.get("our_reference") else None}
         ),
         customer=_party(data["customer_snapshot"], prefer_legal_name=False, words=words),
-        sources=tuple(PdfSource(date=_text(source["transaction_date"]), fields=_fields(source["fields"])) for source in data["transactions"]),
+        sources=tuple(PdfSource(
+                date=_text(source["transaction_date"]),
+                number=str(source["transaction_number"]) if source.get("transaction_number") is not None else None,
+                fields=_fields(source["fields"]),
+            ) for source in data["transactions"]),
         lines=tuple(
             PdfLine(
                 position=_text(line["position"]),

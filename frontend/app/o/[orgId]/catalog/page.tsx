@@ -119,6 +119,7 @@ export default async function CatalogPage({
           >
             <thead>
               <tr className="border-b border-zinc-300 dark:border-zinc-700">
+                <th className="py-1 pr-4 text-right">No.</th>
                 <th className="py-1 pr-4">Name</th>
                 <th className="py-1 pr-4">SKU</th>
                 <th className="py-1 pr-4">Type</th>
@@ -151,6 +152,9 @@ export default async function CatalogPage({
                   data-testid="item-row"
                   className="border-b border-zinc-200 dark:border-zinc-800"
                 >
+                  <td className="py-1 pr-4 text-right" data-testid="record-number">
+                    {item.number}
+                  </td>
                   <td className="py-1 pr-4">
                     <Link href={`${base}/${item.id}`} className="underline">
                       {item.name}

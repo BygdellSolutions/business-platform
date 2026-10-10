@@ -13,7 +13,7 @@ test.beforeEach(async ({ context }) => {
 });
 
 const list = `/o/${ORG_A.id}/customers`;
-const names = (page: Page) => page.getByTestId("customer-row").locator("td:first-child").allTextContents();
+const names = (page: Page) => page.getByTestId("customer-row").locator("td:nth-child(2)").allTextContents() // after the No. column;
 
 test.describe("create", () => {
   test("a customer entered in the browser persists in PostgreSQL and is listed after a reload", async ({ page }) => {

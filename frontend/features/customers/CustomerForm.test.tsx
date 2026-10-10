@@ -21,6 +21,7 @@ const mocked = vi.mocked(apiFetch);
 function customer(overrides: Partial<Customer> = {}): Customer {
   return {
     id: "11111111-1111-4111-8111-111111111111",
+    number: 1,
     customer_type: "person",
     default_discount_percent: null,
     name: "Anna Andersson",

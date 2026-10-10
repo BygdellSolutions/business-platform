@@ -24,7 +24,7 @@ const ids = {
 };
 
 const horses = (orgId: string, query = "") => `/o/${orgId}/horses${query}`;
-const horseNames = (page: Page) => page.getByTestId("horse-row").locator("td:first-child").allTextContents();
+const horseNames = (page: Page) => page.getByTestId("horse-row").locator("td:nth-child(2)").allTextContents() // after the No. column;
 const switchTo = (page: Page, org: { name: string }) => page.getByTestId("org-switcher").getByRole("link", { name: org.name }).click();
 const ownerId = (page: Page) => page.locator('input[type="hidden"][name="owner_customer_id"]').inputValue();
 

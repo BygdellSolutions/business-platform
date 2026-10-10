@@ -87,6 +87,7 @@ export default async function TransactionsPage({
           <table data-testid="transactions-table" className="w-full max-w-5xl text-left text-sm">
             <thead>
               <tr className="border-b border-zinc-300 dark:border-zinc-700">
+                <th className="py-1 pr-4 text-right">Order no.</th>
                 <th className="py-1 pr-4">Date</th>
                 <th className="py-1 pr-4">Customer</th>
                 <th className="py-1 pr-4">Status</th>
@@ -100,6 +101,9 @@ export default async function TransactionsPage({
             <tbody>
               {transactions.map((transaction) => (
                 <tr key={transaction.id} data-testid="transaction-row" data-status={transaction.status} className={`border-b border-zinc-200 dark:border-zinc-800 ${transaction.status === "cancelled" ? "text-zinc-500" : ""}`}>
+                  <td className="py-1 pr-4 text-right" data-testid="record-number">
+                    {transaction.number}
+                  </td>
                   <td className="py-1 pr-4">
                     <Link href={`${base}/${transaction.id}`} className="underline" data-testid="transaction-link">
                       {transaction.transaction_date}

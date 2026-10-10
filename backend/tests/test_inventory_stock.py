@@ -230,7 +230,7 @@ def test_a_refusing_effect_rolls_the_whole_step_back(dev_auth, monkeypatch):
     finally:
         with engine.begin() as conn:
             conn.execute(text("select set_config('app.deleting_organization', cast(:o as text), true)"), {"o": org_id})
-            for table in ("audit_events", "transaction_lines", "transactions", "customers", "organization_users"):
+            for table in ("audit_events", "transaction_lines", "transactions", "customers", "organization_users", "record_counters"):
                 conn.execute(text(f"delete from {table} where organization_id = :o"), {"o": org_id})
             conn.execute(text("delete from organizations where id = :o"), {"o": org_id})
             conn.execute(text("delete from users where id = :u"), {"u": user_id})
