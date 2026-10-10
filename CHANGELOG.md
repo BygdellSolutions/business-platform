@@ -4,6 +4,9 @@ All notable changes to `business-platform` will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Operator step for TEST databases: renumber issued invoices and credit notes from 1001** (`app/scripts/renumber_invoices.py`), run by the migration job only when `RENUMBER_INVOICES` is the exact confirmation phrase (any other value stops the job before it migrates). Keeps the order of the shared series, updates the counter, removes the stored PDFs (rendered again on the next download), switches the immutability triggers back on before committing, and does nothing the second time. Never for a real database: issued invoices must not change.
+
 ### Fixed
 - Invoice rows no longer break onto two lines (the status badges wrapped and "Refund due" sat on its own line); every main list keeps its rows on one line and scrolls sideways when wide (`lib/list-rows-one-line.test.ts`).
 

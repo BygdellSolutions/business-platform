@@ -9,6 +9,8 @@ services:
       APP_ENV: production
       MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL:?set MIGRATION_DATABASE_URL (owner role)}
       RUNTIME_DB_ROLE: ${RUNTIME_DB_ROLE:?set RUNTIME_DB_ROLE}
+      # TEST databases only, set by the operator for one run and removed again (app/scripts/renumber_invoices.py).
+      RENUMBER_INVOICES: ${RENUMBER_INVOICES:-}
     restart: "no"
 
   # Makes `docker compose up` (and so the Coolify deployment) FAIL unless the migration exited 0.

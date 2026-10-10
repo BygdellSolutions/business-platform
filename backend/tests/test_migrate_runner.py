@@ -324,3 +324,18 @@ def test_the_alembic_cli_upgrade_needs_only_the_migration_credentials_and_check_
         assert checked.returncode == 0 and "No new upgrade operations detected" in checked.stdout + checked.stderr
         if __import__("os").environ.get("CI"):  # (a developer's .env would supply the web settings; a clean checkout does not)
             assert _alembic_cli(url, "check", with_web_settings=False).returncode != 0  # check reads the models, which need the web settings
+
+
+def test_renumbering_runs_only_with_the_exact_confirmation_phrase():
+    from app.scripts.renumber_invoices import CONFIRMATION
+
+    with disposable_database("mig") as url:
+        wrong = run_migrate(url, env={"RENUMBER_INVOICES": "yes"})
+        assert wrong.returncode == 2 and "configuration_error" in names(wrong)
+        assert scalar(url, "select count(*) from information_schema.tables where table_name = 'alembic_version'") == 0  # nothing ran
+
+        plain = run_migrate(url)
+        assert plain.returncode == 0 and "invoices_renumbered" not in names(plain)
+        confirmed = run_migrate(url, env={"RENUMBER_INVOICES": CONFIRMATION})
+        assert confirmed.returncode == 0, confirmed.stdout + confirmed.stderr
+        assert "invoices_renumbered" in names(confirmed)  # on an empty database: nothing to renumber, and it says so
