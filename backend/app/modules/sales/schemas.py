@@ -254,6 +254,23 @@ class ServiceRecord(BaseModel):
     notes: str | None
 
 
+class BoughtLine(BaseModel):
+    """One line a customer was billed for that is not a service (a catalog item or an ad-hoc line), for the customer's
+    page: what, how many, at what price, and in which order."""
+
+    transaction_id: uuid.UUID
+    transaction_date: date
+    status: TransactionStatus
+    currency: str | None
+    line_id: uuid.UUID
+    item_id: uuid.UUID | None  # null: an ad-hoc line
+    description: str
+    unit: str
+    quantity: QuantityOut
+    unit_price_ex_vat: MoneyOut
+    gross_amount: MoneyOut
+
+
 class SalesSummary(BaseModel):
     """The dashboard's figures from Sales: open drafts now, and the chosen month (the current one by default, in the
     organization's time zone)."""

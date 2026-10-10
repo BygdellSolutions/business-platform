@@ -40,6 +40,7 @@ from app.modules.sales.pricing import (
     discounted_unit_price,
 )
 from app.modules.sales.schemas import (
+    BoughtLine,
     SalesSummary,
     ServiceRecord,
     AssignCurrency,
@@ -546,6 +547,38 @@ def list_services(
             description=line.description, quantity=line.quantity, gross_amount=line.gross_amount, performed_at=line.performed_at,
             performed_by_name=reads[line.id].performed_by_name, subject_type=line.subject_type, subject_id=line.subject_id,
             subject_label=reads[line.id].subject_label, notes=line.notes,
+        )
+        for line, tx in rows
+    ]
+
+
+@router.get("/bought", response_model=list[BoughtLine])
+def list_bought(
+    billing_customer_id: uuid.UUID,
+    page: Pagination = Depends(pagination),
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: Session = Depends(get_db),
+) -> list[BoughtLine]:
+    """What a customer was billed for besides services (catalog items and ad-hoc lines), newest order first; cancelled
+    orders are left out. A customer of another organization simply matches nothing."""
+    rows = db.execute(
+        select(TransactionLine, Transaction)
+        .join(Transaction, and_(Transaction.organization_id == TransactionLine.organization_id, Transaction.id == TransactionLine.transaction_id))
+        .where(
+            TransactionLine.organization_id == ctx.organization_id,
+            TransactionLine.kind == "standard",
+            Transaction.billing_customer_id == billing_customer_id,
+            Transaction.status != CANCELLED,
+        )
+        .order_by(Transaction.transaction_date.desc(), Transaction.created_at.desc(), TransactionLine.position, TransactionLine.id)
+        .limit(page.limit)
+        .offset(page.offset)
+    ).all()
+    return [
+        BoughtLine(
+            transaction_id=tx.id, transaction_date=tx.transaction_date, status=tx.status, currency=tx.currency, line_id=line.id,
+            item_id=line.item_id, description=line.description, unit=line.unit, quantity=line.quantity,
+            unit_price_ex_vat=line.unit_price_ex_vat, gross_amount=line.gross_amount,
         )
         for line, tx in rows
     ]

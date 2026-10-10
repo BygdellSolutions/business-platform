@@ -799,6 +799,30 @@ export interface ServiceRecord {
   notes: string | null;
 }
 
+/** A non-service line billed to a customer (GET /api/transactions/bought): a catalog item or an ad-hoc line. */
+export interface BoughtLine {
+  transaction_id: string;
+  transaction_date: string;
+  status: TransactionStatus;
+  currency: string | null;
+  line_id: string;
+  /** null: an ad-hoc line. */
+  item_id: string | null;
+  description: string;
+  unit: string;
+  quantity: QuantityString;
+  unit_price_ex_vat: MoneyString;
+  gross_amount: MoneyString;
+}
+
+/** Whether an order is on an invoice (GET /api/invoices/by-transaction). */
+export interface InvoiceStateOfOrder {
+  transaction_id: string;
+  state: "none" | "draft" | "invoiced";
+  invoice_id: string | null;
+  number_text: string | null;
+}
+
 /** A member's name as any member may see it (GET /api/members/people). */
 export interface Colleague {
   user_id: string;
