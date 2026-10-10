@@ -1,19 +1,23 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 
 import { useOrgId } from "@/components/shell/org-context";
 import { Button } from "@/components/ui/Button";
 import { ConfirmButton } from "@/components/ui/ConfirmButton";
+import { EntityPicker, type PickerEntity } from "@/components/ui/EntityPicker";
 import { ErrorSummary } from "@/components/ui/ErrorSummary";
 import { DecimalField, TextField } from "@/components/ui/Field";
+import { SupplierName } from "@/features/suppliers/SupplierName";
+import { supplierSearch } from "@/features/suppliers/supplier-picker";
 import { apiFetch } from "@/lib/api/client";
 import type { Incoming } from "@/lib/api/types";
 import { blankToNull, problemsFrom, useMutation } from "@/lib/forms";
 import { trimQuantity } from "@/lib/decimal";
 
-const CONTROLS = ["quantity", "expected_on", "supplier", "reference"] as const;
+const CONTROLS = ["quantity", "expected_on", "supplier_id", "reference"] as const;
 const DATE = "rounded border border-zinc-400 px-2 py-1 font-normal dark:bg-zinc-900";
 
 const STATES: Record<Incoming["state"], string> = {
@@ -32,7 +36,9 @@ export function IncomingPanel({ itemId, unit, incoming, canWrite }: { itemId: st
   const orgId = useOrgId();
   const router = useRouter();
   const { pending, error, run } = useMutation();
-  const [form, setForm] = useState({ quantity: "", expected_on: "", supplier: "", reference: "" });
+  const [form, setForm] = useState({ quantity: "", expected_on: "", reference: "" });
+  const [supplier, setSupplier] = useState<PickerEntity | null>(null);
+  const search = useMemo(() => supplierSearch(orgId, { activeOnly: true }), [orgId]);
   const [receiving, setReceiving] = useState<Record<string, string>>({});
   const problems = problemsFrom(error, CONTROLS);
   const set = (key: keyof typeof form) => (value: string) => setForm((current) => ({ ...current, [key]: value }));
@@ -43,12 +49,13 @@ export function IncomingPanel({ itemId, unit, incoming, canWrite }: { itemId: st
       item_id: itemId,
       quantity: form.quantity.trim(),
       expected_on: blankToNull(form.expected_on),
-      supplier: blankToNull(form.supplier),
+      supplier_id: supplier?.id ?? null,
       reference: blankToNull(form.reference),
     };
     const created = await run(() => apiFetch<Incoming>(orgId, "/inventory/incoming", { method: "POST", body }));
     if (created === null) return;
-    setForm({ quantity: "", expected_on: "", supplier: "", reference: "" });
+    setForm({ quantity: "", expected_on: "", reference: "" });
+    setSupplier(null);
     router.refresh();
   }
 
@@ -102,7 +109,9 @@ export function IncomingPanel({ itemId, unit, incoming, canWrite }: { itemId: st
                 <td className="py-1 pr-4 text-right" data-testid="incoming-remaining">
                   {trimQuantity(row.remaining)}
                 </td>
-                <td className="py-1 pr-4">{row.supplier}</td>
+                <td className="py-1 pr-4">
+                  <SupplierName orgId={orgId} supplier={row.supplier} />
+                </td>
                 <td className="py-1 pr-4">{row.reference}</td>
                 <td className="py-1 pr-4">{STATES[row.state]}</td>
                 {canWrite && (
@@ -143,7 +152,18 @@ export function IncomingPanel({ itemId, unit, incoming, canWrite }: { itemId: st
             Expected on (optional)
             <input type="date" name="expected_on" value={form.expected_on} onChange={(event) => set("expected_on")(event.target.value)} className={DATE} />
           </label>
-          <TextField label="Supplier (optional)" name="supplier" value={form.supplier} onChange={set("supplier")} error={problems.byField.supplier} autoComplete="off" />
+          <EntityPicker
+            label="Supplier (optional)"
+            name="supplier_id"
+            value={supplier}
+            onChange={setSupplier}
+            search={search}
+            clearable
+            error={problems.byField.supplier_id}
+          />
+          <p className="-mt-2 text-xs text-zinc-500">
+            Chosen from <Link href={`/o/${orgId}/suppliers`} className="underline">Suppliers</Link>; add a new one there first.
+          </p>
           <TextField label="Reference (optional)" name="reference" value={form.reference} onChange={set("reference")} error={problems.byField.reference} autoComplete="off" hint="For example the purchase order number." />
           <ErrorSummary messages={problems.general} />
           <div>

@@ -39,6 +39,12 @@ export async function createCustomer(context: BrowserContext, orgId: string, nam
   return (await response.json()) as { id: string; name: string };
 }
 
+export async function createSupplier(context: BrowserContext, orgId: string, name: string) {
+  const response = await context.request.post(bffUrl(orgId, "/suppliers"), { data: { name } });
+  expect(response.status(), await response.text()).toBe(201);
+  return (await response.json()) as { id: string; name: string };
+}
+
 /**
  * The names of the first customers ("000..." first) that the page can read for the organization in its address, asked
  * from inside the page through the application's own BFF route, exactly as the page's own code would. Does not
@@ -370,6 +376,7 @@ export function createWorld(options: { currency?: string | null; label?: string 
         "horse_notes",
         "horses",
         "incoming_stock",
+        "suppliers",
         "line_fulfillments",
         "stock_movements",
         "item_discounts",
@@ -519,6 +526,7 @@ const ORGANIZATION_TABLES = [
   "horse_notes",
   "horses",
   "incoming_stock",
+  "suppliers",
   "line_fulfillments",
   "stock_movements",
   "item_discounts",

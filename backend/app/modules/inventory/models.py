@@ -133,13 +133,18 @@ class IncomingStock(TenantOwned, Base):
         CheckConstraint("quantity > 0 AND received >= 0 AND received <= quantity", name="ck_incoming_stock_quantities"),
         CheckConstraint("(cancelled_at IS NULL) = (cancelled_by IS NULL)", name="ck_incoming_stock_cancellation"),
         Index("ix_incoming_stock_open_item", "organization_id", "item_id", postgresql_where=text("cancelled_at IS NULL AND received < quantity")),
+        ForeignKeyConstraint(
+            ["organization_id", "supplier_id"], ["suppliers.organization_id", "suppliers.id"], ondelete="RESTRICT", name="fk_incoming_stock_supplier"
+        ),
+        Index("ix_incoming_stock_supplier", "organization_id", "supplier_id"),
     )
 
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
     quantity: Mapped[Decimal] = mapped_column(Numeric(12, 3))
     received: Mapped[Decimal] = mapped_column(Numeric(12, 3), default=Decimal("0"), server_default=text("0"))
     expected_on: Mapped[date | None] = mapped_column(Date)
-    supplier: Mapped[str | None] = mapped_column(String(255))
+    # The supplier from the register (optional). Earlier free-text names were turned into suppliers by migration.
+    supplier_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     reference: Mapped[str | None] = mapped_column(String(255))
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

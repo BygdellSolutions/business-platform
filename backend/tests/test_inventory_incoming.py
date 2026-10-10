@@ -33,7 +33,7 @@ def test_incoming_stock_is_on_its_way_until_a_person_receives_it(client: TestCli
 
     created = client.post(
         "/api/inventory/incoming",
-        json={"item_id": str(item.id), "quantity": "10", "expected_on": "2026-10-20", "supplier": "Horse Supplies AB", "reference": "PO-17"},
+        json={"item_id": str(item.id), "quantity": "10", "expected_on": "2026-10-20", "reference": "PO-17"},
         headers=owner,
     )
     assert created.status_code == 201 and created.json()["state"] == "expected" and created.json()["created_by_name"]

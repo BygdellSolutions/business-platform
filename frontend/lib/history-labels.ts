@@ -6,6 +6,15 @@ import { PROFILE_LABELS } from "@/lib/profile-labels";
  */
 export const FIELD_LABELS: Record<string, Record<string, string>> = {
   customer: { customer_type: "Type", name: "Name", email: "Email", phone: "Phone", active: "Active", ...PROFILE_LABELS },
+  supplier: {
+    name: "Name",
+    contact_person: "Contact person",
+    email: "Email",
+    phone: "Phone",
+    our_customer_number: "Our customer number",
+    active: "Active",
+    ...PROFILE_LABELS,
+  },
   item: { type: "Type", name: "Name", description: "Description", unit: "Unit", price_ex_vat: "Price excl. VAT", vat_rate: "VAT %", active: "Active" },
   horse_note: { body: "Note" },
   horse: { name: "Name", owner_customer_id: "Owner", stable_customer_id: "Stable", birth_year: "Birth year", sex: "Sex", breed: "Breed", active: "Active" },
@@ -25,6 +34,10 @@ export const FIELD_LABELS: Record<string, Record<string, string>> = {
   invoice: {
     payment: "Payment",
     outstanding: "Outstanding",
+    refund: "Refund",
+    refund_due: "Refund due",
+    credit_note: "Credit note",
+    return: "Return",
     status: "Status",
     number_text: "Number",
     customer_name: "Customer",
@@ -41,6 +54,7 @@ export const FIELD_LABELS: Record<string, Record<string, string>> = {
 
 export const ENTITY_LABELS: Record<string, string> = {
   customer: "Customer",
+  supplier: "Supplier",
   item: "Item",
   horse: "Horse",
   horse_note: "Note",

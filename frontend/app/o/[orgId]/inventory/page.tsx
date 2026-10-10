@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { BACKORDER_STATES } from "@/features/catalog/backorder-labels";
 import { StockBadges } from "@/features/catalog/StockBadges";
+import { SupplierName } from "@/features/suppliers/SupplierName";
 import type { Backorder, Incoming, StockItem } from "@/lib/api/types";
 import { serverRead } from "@/lib/server-api";
 import { trimQuantity } from "@/lib/decimal";
@@ -212,7 +213,9 @@ export default async function InventoryPage({
                   <td className="py-1 pr-4 text-right" data-testid="incoming-overview-remaining">
                     {trimQuantity(row.remaining)}
                   </td>
-                  <td className="py-1 pr-4">{row.supplier}</td>
+                  <td className="py-1 pr-4">
+                    <SupplierName orgId={orgId} supplier={row.supplier} />
+                  </td>
                   <td className="py-1 pr-4">{row.reference}</td>
                 </tr>
               ))}

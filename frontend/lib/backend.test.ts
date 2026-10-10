@@ -58,7 +58,7 @@ describe("apiPathFromSegments", () => {
   });
 
   it("only allows the documented API areas", () => {
-    expect([...ALLOWED_API_AREAS].sort()).toEqual(["custom-fields", "customers", "horses", "inventory", "invitations", "invoiceable-transactions", "invoices", "items", "me", "members", "organization", "transactions"]);
+    expect([...ALLOWED_API_AREAS].sort()).toEqual(["custom-fields", "customers", "horses", "inventory", "invitations", "invoiceable-transactions", "invoices", "items", "me", "members", "organization", "suppliers", "transactions"]);
   });
 });
 

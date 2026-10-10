@@ -12,7 +12,7 @@ from app.core.db import get_db
 from app.core.query import contains_pattern
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import get_scoped, get_scoped_or_404, reference_error
-from app.models import Customer, Item, ItemType, User
+from app.models import Customer, Item, ItemType, Supplier, User
 from app.modules.inventory import service
 from app.modules.inventory.models import IncomingStock, LineFulfillment, MovementReason, StockMovement
 from app.modules.inventory.schemas import (
@@ -33,6 +33,7 @@ from app.modules.inventory.schemas import (
     TransactionDemand,
 )
 from app.modules.sales.models import Transaction, TransactionLine
+from app.schemas.supplier import SupplierRef
 
 router = APIRouter(prefix="/api/items", tags=["inventory"])
 availability_router = APIRouter(prefix="/api/inventory", tags=["inventory"])
@@ -328,23 +329,27 @@ def confirm_allocation(
 @availability_router.get("/incoming", response_model=list[IncomingRead])
 def list_incoming(
     item_id: uuid.UUID | None = None,
+    supplier_id: uuid.UUID | None = None,
     open_only: bool = True,
     ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
 ) -> list[IncomingRead]:
     """Incoming deliveries, the earliest expected first (any member). `open_only`: still expected, not cancelled."""
     query = (
-        select(IncomingStock, Item.name, Item.unit, User.name)
+        select(IncomingStock, Item.name, Item.unit, User.name, Supplier)
         .join(Item, (Item.organization_id == IncomingStock.organization_id) & (Item.id == IncomingStock.item_id))
         .outerjoin(User, User.id == IncomingStock.created_by)
+        .outerjoin(Supplier, (Supplier.organization_id == IncomingStock.organization_id) & (Supplier.id == IncomingStock.supplier_id))
         .where(IncomingStock.organization_id == ctx.organization_id)
     )
     if item_id is not None:
         query = query.where(IncomingStock.item_id == item_id)
+    if supplier_id is not None:
+        query = query.where(IncomingStock.supplier_id == supplier_id)
     if open_only:
         query = query.where(IncomingStock.cancelled_at.is_(None), IncomingStock.received < IncomingStock.quantity)
     query = query.order_by(IncomingStock.expected_on.asc().nulls_last(), IncomingStock.created_at).limit(MOVEMENTS_SHOWN)
-    return [_incoming_read(row, name, unit, author) for row, name, unit, author in db.execute(query)]
+    return [_incoming_read(row, name, unit, author, supplier) for row, name, unit, author, supplier in db.execute(query)]
 
 
 @availability_router.post("/incoming", response_model=IncomingRead, status_code=status.HTTP_201_CREATED)
@@ -354,10 +359,18 @@ def create_incoming(payload: IncomingCreate, ctx: TenantContext = Depends(record
     if item is None:
         reference_error("item_id", "Item not found", "reference.not_found")
     service.ensure_tracked(item)
+    supplier = None
+    if payload.supplier_id is not None:
+        # The supplier must be this organization's and active; another tenant's id reads as "not found".
+        supplier = get_scoped(db, ctx, Supplier, payload.supplier_id)
+        if supplier is None:
+            reference_error("supplier_id", "Supplier not found", "reference.not_found")
+        if not supplier.active:
+            reference_error("supplier_id", "This supplier is inactive; activate it or choose another", "reference.inactive")
     row = IncomingStock(organization_id=ctx.organization_id, created_by=ctx.user.id, **payload.model_dump())
     db.add(row)
     db.commit()
-    return _incoming_read(row, item.name, item.unit, ctx.user.name)
+    return _incoming_read(row, item.name, item.unit, ctx.user.name, supplier)
 
 
 @availability_router.post("/incoming/{incoming_id}/receive", response_model=IncomingRead)
@@ -376,7 +389,7 @@ def receive_incoming(
     service.record_movement(db, ctx, item, quantity, MovementReason.RECEIPT, note=payload.note, incoming_stock_id=row.id)
     row.received = row.received + quantity
     db.commit()
-    return _incoming_read(row, item.name, item.unit, _author(db, row.created_by))
+    return _incoming_read(row, item.name, item.unit, _author(db, row.created_by), _supplier(db, row))
 
 
 @availability_router.post("/incoming/{incoming_id}/cancel", response_model=IncomingRead)
@@ -389,14 +402,20 @@ def cancel_incoming(incoming_id: uuid.UUID, ctx: TenantContext = Depends(record_
     row.cancelled_by = ctx.user.id
     db.commit()
     item = db.get(Item, row.item_id)
-    return _incoming_read(row, item.name, item.unit, _author(db, row.created_by))
+    return _incoming_read(row, item.name, item.unit, _author(db, row.created_by), _supplier(db, row))
 
 
 def _author(db: Session, user_id: uuid.UUID | None) -> str | None:
     return db.scalar(select(User.name).where(User.id == user_id)) if user_id else None
 
 
-def _incoming_read(row: IncomingStock, item_name: str, item_unit: str, author: str | None) -> IncomingRead:
+def _supplier(db: Session, row: IncomingStock) -> Supplier | None:
+    if row.supplier_id is None:
+        return None
+    return db.scalar(select(Supplier).where(Supplier.organization_id == row.organization_id, Supplier.id == row.supplier_id))
+
+
+def _incoming_read(row: IncomingStock, item_name: str, item_unit: str, author: str | None, supplier: Supplier | None = None) -> IncomingRead:
     if row.cancelled_at is not None:
         state = "cancelled"
     elif row.received >= row.quantity:
@@ -412,7 +431,7 @@ def _incoming_read(row: IncomingStock, item_name: str, item_unit: str, author: s
         received=row.received,
         remaining=row.quantity - row.received if row.cancelled_at is None else Decimal(0),
         expected_on=row.expected_on,
-        supplier=row.supplier,
+        supplier=SupplierRef.model_validate(supplier) if supplier is not None else None,
         reference=row.reference,
         state=state,
         created_at=row.created_at,

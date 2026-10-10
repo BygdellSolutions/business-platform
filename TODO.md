@@ -37,6 +37,8 @@ Found while testing staging (2026-10-08). Small reviewed slices, each validated 
 - [x] Credit notes (partial/full per line, reason, returned to stock, own number, Kreditfaktura PDF) and refunds — 2026-10-10
 - [x] Return cases on the invoice (requested → goods received → approved / rejected, follow-up date, notes, "Returns to handle" on the dashboard; approval opens the credit form prefilled) — 2026-10-10
 - [ ] Credit notes later: a credited line's open backorder is not cancelled automatically (a person handles it on the Inventory page); no "makulera" of an issued invoice (decided 2026-10-10: invoices will be emailed on issue)
+- [x] Suppliers register, chosen on incoming stock (migrated from typed names) — 2026-10-10
+- [ ] Suppliers later: purchase orders, a supplier's article numbers and prices per item
 - [ ] Payments later: bank file import and automatic matching (bankgiro/OCR), Swish integration, reminders
 - [ ] Later (email, paused): email infrastructure, **self-service password recovery** (the first email to build: today a locked-out user depends on an operator), invitation email, invoice email with delivery state and resend
 
@@ -134,6 +136,7 @@ Found while testing staging (2026-10-08). Small reviewed slices, each validated 
 - Vitest: `features/transactions/CustomFields.test.tsx` "the errors go away when the user saves values..." failed once in a full parallel run on 2026-10-08 and passed on every rerun (3 alone, 1 full); likely a timing assumption under load. Investigate if it recurs.
 - Playwright: `e2e/customers-catalog-isolation.spec.ts` "an item saved in one tab..." failed once in a full local run on 2026-10-08 (the New item form in a second tab was submitted before hydration: empty fields after a native submit) and passed 10 of 10 alone. The hydration wait for pages opened with `context.newPage()` may not cover this; investigate if it recurs.
 - Playwright: `e2e/horses.spec.ts` "the filter pickers also find a customer that has been deactivated..." failed once in a full local session run on 2026-10-08 (picker options) and passed 8 of 8 alone.
+- Playwright: `e2e/danger-zone.spec.ts` "an owner deletes the organization with an issued invoice in it" failed once in a full local session run on 2026-10-10 (the delete button stayed disabled after the form was filled: likely filled before hydration) and passed 3 of 3 alone.
 - The frontend uses hand-written API types; generate them from FastAPI's OpenAPI document later.
 - Dev identity (`/dev-login`, cookie) is development only; replace `lib/identity.ts` and `lib/backend.ts` with real authentication later. Behind a reverse proxy the same-origin check needs the original `Host` header forwarded.
 - Frontend client: no data library yet; revisit (SWR/TanStack Query) if shared client caches or optimistic updates become real needs.

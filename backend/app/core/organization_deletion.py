@@ -43,6 +43,7 @@ TABLES_IN_DELETE_ORDER = (
     "horse_notes",
     "horses",
     "incoming_stock",
+    "suppliers",
     "line_fulfillments",
     "stock_movements",
     "item_discounts",

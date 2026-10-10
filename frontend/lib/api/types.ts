@@ -95,6 +95,40 @@ export interface CustomerCreate extends Profile {
 /** Partial update: only the fields present are changed. */
 export type CustomerUpdate = Partial<CustomerCreate>;
 
+/** A supplier: someone the organization buys goods from (GET /api/suppliers). */
+export interface Supplier extends Profile {
+  id: string;
+  name: string;
+  contact_person: string | null;
+  email: string | null;
+  phone: string | null;
+  /** The organization's own customer number at the supplier. */
+  our_customer_number: string | null;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+}
+
+export interface SupplierCreate extends Profile {
+  name: string;
+  contact_person: string | null;
+  email: string | null;
+  phone: string | null;
+  our_customer_number: string | null;
+  active: boolean;
+}
+
+export type SupplierUpdate = Partial<SupplierCreate>;
+
+/** A supplier named by another record (an incoming delivery). */
+export interface SupplierRef {
+  id: string;
+  name: string;
+  active: boolean;
+}
+
 /** The active organization's settings (GET /api/organization). */
 export interface Organization extends Profile {
   id: string;
@@ -281,7 +315,7 @@ export interface Incoming {
   received: QuantityString;
   remaining: QuantityString;
   expected_on: string | null;
-  supplier: string | null;
+  supplier: SupplierRef | null;
   reference: string | null;
   state: "expected" | "partially_received" | "received" | "cancelled";
   created_at: string;

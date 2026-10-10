@@ -1,6 +1,6 @@
 import { expect, test } from "./fixtures";
 
-import { bffUrl, createCustomer, createItem, createTransaction, createWorld, lifecycle, openAddLine, pick, signIn, type World } from "./support";
+import { bffUrl, createCustomer, createItem, createSupplier, createTransaction, createWorld, lifecycle, openAddLine, pick, signIn, type World } from "./support";
 
 /**
  * Inventory I1: a product that tracks stock gets a Stock panel. The first count is the opening stock; every later
@@ -94,15 +94,20 @@ test("a delivery on its way is recorded, received in part, and the rest cancelle
   world = createWorld({ label: "Incoming" });
   await signIn(context, world.email);
   const item = await createItem(context, world.orgId, { name: "Fly spray", type: "product", unit: "pcs", price_ex_vat: "150.00", track_stock: true });
+  const supplier = await createSupplier(context, world.orgId, "Horse Supplies AB");
 
   await page.goto(`/o/${world.orgId}/catalog/${item.id}`);
   const incoming = page.getByTestId("incoming-panel");
   await expect(incoming.getByTestId("no-incoming")).toBeVisible();
   await incoming.getByLabel(/^Quantity/).fill("10");
-  await incoming.getByLabel("Supplier (optional)").fill("Horse Supplies AB");
+  await pick(page, "supplier_id", supplier.name); // chosen from the register, never typed
   await incoming.getByLabel("Reference (optional)").fill("PO-17");
   await incoming.getByTestId("submit-incoming").click();
   await expect(incoming.getByTestId("incoming-row")).toContainText("Expected");
+  await expect(incoming.getByTestId("supplier-link")).toHaveText("Horse Supplies AB");
+  await incoming.getByTestId("supplier-link").click();
+  await expect(page.getByTestId("supplier-delivery")).toContainText("Fly spray");
+  await page.goto(`/o/${world.orgId}/catalog/${item.id}`);
   await expect(page.getByTestId("stock-figures")).toContainText("incoming 10");
   await expect(page.getByTestId("on-hand")).toHaveText("0");
 

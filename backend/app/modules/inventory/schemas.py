@@ -5,6 +5,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from app.schemas.money import CountIn, QuantityIn, QuantityOut
+from app.schemas.supplier import SupplierRef
 
 Note = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
 
@@ -101,7 +102,7 @@ class IncomingCreate(BaseModel):
     item_id: uuid.UUID
     quantity: QuantityIn
     expected_on: date | None = None
-    supplier: Text255 | None = None
+    supplier_id: uuid.UUID | None = None
     reference: Text255 | None = None
 
 
@@ -123,7 +124,7 @@ class IncomingRead(BaseModel):
     received: QuantityOut
     remaining: QuantityOut
     expected_on: date | None
-    supplier: str | None
+    supplier: SupplierRef | None
     reference: str | None
     state: Literal["expected", "partially_received", "received", "cancelled"]
     created_at: datetime

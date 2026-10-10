@@ -143,3 +143,9 @@ The owner found "10 1", "0 of 1 1" and "1 1" in four places one after another: a
 quantity. Fixing them one by one missed the rest. Rule: a unit gets its own column or is named ("unit: pcs");
 `lib/no-unit-after-quantity.test.ts` scans the UI for the adjacent form. When the owner reports one instance of a
 display problem, search for every instance before answering.
+
+## The test database has one user at a time (2026-10-10)
+
+Running the backend suite while the e2e suites ran wiped the e2e seed data (both use the TEST database) and failed 60
+unrelated browser tests. Rule: run pytest, the dev e2e suite and the session e2e suite one after another, never
+together; while e2e runs, do only work that needs no database.
