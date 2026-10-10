@@ -87,7 +87,7 @@ test("completion delivers what is in stock and backorders the rest; a reopen giv
   await page.reload();
   await expect(page.getByTestId("on-hand")).toHaveText("5");
   await expect(page.getByTestId("stock-movement").first()).toContainText("Returned");
-  await expect(page.getByTestId("stock-movement").first()).toContainText("Transaction reopened");
+  await expect(page.getByTestId("stock-movement").first()).toContainText("Order reopened");
 });
 
 test("a delivery on its way is recorded, received in part, and the rest cancelled", async ({ page, context }) => {

@@ -102,7 +102,7 @@ def test_reopen_returns_the_delivered_units_and_completing_again_starts_afresh(c
 
     assert _on_hand(client, item, owner) == "5.000" and _fulfillment(client, tx, owner) == []
     movements = client.get(f"/api/items/{item.id}/stock", headers=owner).json()["movements"]
-    assert [(m["reason"], m["quantity_change"], m["note"]) for m in movements[:2]] == [("return", "3.000", "Transaction reopened"), ("delivery", "-3.000", None)]
+    assert [(m["reason"], m["quantity_change"], m["note"]) for m in movements[:2]] == [("return", "3.000", "Order reopened"), ("delivery", "-3.000", None)]
     old = db_session.scalars(select(LineFulfillment).where(LineFulfillment.transaction_id == tx.id)).all()
     assert [(row.cancel_reason, row.cancelled_by is not None) for row in old] == [("reopen", True)]  # kept, not deleted
 

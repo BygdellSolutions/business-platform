@@ -223,7 +223,7 @@ describe("a transaction stops being invoiceable between listing and creating", (
   });
 
   it.each([
-    ["transactions_not_completed", "Only completed transactions can be invoiced"],
+    ["transactions_not_completed", "Only completed orders can be invoiced"],
     ["currency_missing", "A transaction without a currency cannot be invoiced"],
   ])("also handles %s the same way", async (code, message) => {
     installBackend(({ method }) => (method === "POST" ? conflict(code, message, { transaction_ids: [R2] }) : ok(null)));

@@ -259,7 +259,7 @@ def test_a_transaction_locks_the_currency_whatever_its_status(client, db_session
         response, _ = patch(client, db_session, {"default_currency": "EUR"}, org=org)
         assert response.status_code == 409, status
         assert response.json()["detail"]["code"] == "currency_locked"
-        assert "Transactions" in response.json()["detail"]["message"]
+        assert "Orders already exist" in response.json()["detail"]["message"]
 
 
 def test_a_lock_is_reported_in_the_settings_with_its_reason(client, db_session):

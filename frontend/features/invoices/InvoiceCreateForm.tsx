@@ -138,7 +138,7 @@ export function InvoiceCreateForm({
       {canMutate && (
       <section aria-label="Selection" data-testid="selection" className="flex max-w-3xl flex-col gap-2 rounded border border-zinc-300 p-3 text-sm dark:border-zinc-700">
         {first === undefined ? (
-          <p data-testid="selection-empty">Select one or more completed transactions. All of them must have the same billing customer and currency.</p>
+          <p data-testid="selection-empty">Select one or more completed orders. All of them must have the same billing customer and currency.</p>
         ) : (
           <>
             <p data-testid="selection-summary">

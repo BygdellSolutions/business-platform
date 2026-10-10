@@ -297,7 +297,7 @@ def return_on_undo(db: Session, ctx: TenantContext, transaction_id: uuid.UUID, r
                 items[row.item_id],
                 given,
                 MovementReason.RETURN,
-                note="Transaction reopened" if reason == "reopen" else "Transaction cancelled",
+                note="Order reopened" if reason == "reopen" else "Order cancelled",
                 transaction_id=transaction_id,
                 transaction_line_id=row.transaction_line_id,
             )

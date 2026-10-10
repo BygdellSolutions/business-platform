@@ -27,7 +27,7 @@ def _transactions_fix_the_currency(db: Session, organization_id: uuid.UUID) -> s
     exists = db.scalar(
         select(Transaction.id).where(Transaction.organization_id == organization_id).limit(1)
     )
-    return "Transactions already exist, and their prices are in the current currency." if exists else None
+    return "Orders already exist, and their prices are in the current currency." if exists else None
 
 
 def _service_subjects_are_referenced(db: Session, entity_key: str, organization_id: uuid.UUID, record_id: uuid.UUID) -> bool:

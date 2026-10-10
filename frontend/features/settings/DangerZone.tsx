@@ -203,7 +203,7 @@ function DeleteSection({ organizationName, passwordChecked }: { organizationName
         <div className="text-sm" data-testid="delete-warning">
           <p className="font-semibold text-red-700 dark:text-red-400">This permanently deletes the organization and ALL of its data.</p>
           <p>
-            Customers, horses, the catalog, transactions, issued invoices and their PDFs, history, settings and every member&apos;s access are
+            Customers, horses, the catalog, orders, issued invoices and their PDFs, history, settings and every member&apos;s access are
             removed for good. It cannot be undone, and nobody can restore it from the app.
           </p>
           <p className="mt-1">

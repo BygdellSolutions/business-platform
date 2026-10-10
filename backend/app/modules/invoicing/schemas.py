@@ -30,7 +30,7 @@ class InvoiceCreate(BaseModel):
     @classmethod
     def no_duplicates(cls, value: list[uuid.UUID]) -> list[uuid.UUID]:
         if len(set(value)) != len(value):
-            raise ValueError("each transaction may be listed once")
+            raise ValueError("each order may be listed once")
         return value
 
     @model_validator(mode="after")
