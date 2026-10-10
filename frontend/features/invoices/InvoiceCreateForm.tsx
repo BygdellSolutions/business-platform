@@ -148,9 +148,8 @@ export function InvoiceCreateForm({
             <ul className="flex flex-col gap-1">
               {selection.map((selected) => (
                 <li key={selected.id} data-testid="selected-row" className="flex flex-wrap items-center gap-3">
-                  <span>
-                    Order {selected.number} · {selected.transaction_date}
-                  </span>
+                  <span>Order {selected.number}</span>
+                  <span>{selected.transaction_date}</span>
                   <span>
                     net <DecimalText value={selected.totals.net_amount} />, VAT <DecimalText value={selected.totals.vat_amount} />, gross <DecimalText value={selected.totals.gross_amount} />
                   </span>
@@ -207,6 +206,7 @@ export function InvoiceCreateForm({
                       <span className="sr-only">Select</span>
                     </th>
                   )}
+                  <th className="py-1 pr-4 text-right">Order no.</th>
                   <th className="py-1 pr-4">Date</th>
                   <th className="py-1 pr-4">Billing customer</th>
                   <th className="py-1 pr-4">Currency</th>
@@ -228,10 +228,13 @@ export function InvoiceCreateForm({
                           <input type="checkbox" aria-label={label} checked={chosen} disabled={fit !== "ok"} onChange={() => setSelection((current) => toggle(current, row))} data-testid="select-transaction" />
                         </td>
                       )}
-                      <td className="py-1 pr-4">
+                      <td className="py-1 pr-4 text-right" data-testid="order-number">
                         <Link href={`/o/${orgId}/transactions/${row.id}`} className="underline">
-                          Order {row.number} · {row.transaction_date}
+                          {row.number}
                         </Link>
+                      </td>
+                      <td className="py-1 pr-4" data-testid="order-date">
+                        {row.transaction_date}
                       </td>
                       <td className="py-1 pr-4" data-testid="eligible-customer">
                         {row.billing_customer.name}

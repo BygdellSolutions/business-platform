@@ -20,7 +20,8 @@ export function CustomerBought({ orgId, lines }: { orgId: string; lines: BoughtL
         <table className="text-left text-sm">
           <thead>
             <tr className="border-b border-zinc-300 dark:border-zinc-700">
-              <th className="py-1 pr-4">Order</th>
+              <th className="py-1 pr-4 text-right">Order no.</th>
+              <th className="py-1 pr-4">Date</th>
               <th className="py-1 pr-4">Description</th>
               <th className="py-1 pr-4 text-right">Qty</th>
               <th className="py-1 pr-4">Unit</th>
@@ -31,10 +32,13 @@ export function CustomerBought({ orgId, lines }: { orgId: string; lines: BoughtL
           <tbody>
             {lines.map((line) => (
               <tr key={line.line_id} data-testid="bought-row" className="border-b border-zinc-200 dark:border-zinc-800">
-                <td className="py-1 pr-4">
+                <td className="py-1 pr-4 text-right" data-testid="order-number">
                   <Link href={`/o/${orgId}/transactions/${line.transaction_id}`} className="underline">
-                    Order {line.transaction_number} · {line.transaction_date}
-                  </Link>{" "}
+                    {line.transaction_number}
+                  </Link>
+                </td>
+                <td className="py-1 pr-4" data-testid="order-date">
+                  {line.transaction_date}{" "}
                   <span className="text-xs text-zinc-500">{line.status}</span>
                 </td>
                 <td className="py-1 pr-4">

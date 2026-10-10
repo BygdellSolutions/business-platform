@@ -149,3 +149,10 @@ display problem, search for every instance before answering.
 Running the backend suite while the e2e suites ran wiped the e2e seed data (both use the TEST database) and failed 60
 unrelated browser tests. Rule: run pytest, the dev e2e suite and the session e2e suite one after another, never
 together; while e2e runs, do only work that needs no database.
+
+## One value per column (2026-10-10)
+
+I showed new order numbers as "Order 1001 · 2026-10-10" inside the existing date column of five tables; the owner
+asked for separate columns everywhere. Rule: a new field in a table gets its own column (sortable, scannable, and
+tests read cells, not substrings), never a prefix to an existing cell. `lib/order-number-columns.test.ts` guards the
+order case.

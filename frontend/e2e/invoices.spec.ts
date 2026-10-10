@@ -55,7 +55,7 @@ test.describe("what can be invoiced", () => {
 
     await page.goto(`${list(world)}/new`);
 
-    const dates = (await page.getByTestId("eligible-row").locator("td:nth-child(2)").allTextContents()).map((cell) => cell.replace(/^Order \d+ · /, ""));
+    const dates = await page.getByTestId("eligible-row").getByTestId("order-date").allTextContents();
     expect(dates.sort()).toEqual(["2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04"]); // not the draft (10-06) and not the currency-less one (10-05)
     expect(s.none).toBeTruthy();
     await expect(eligibleRow(page, "2026-10-04").getByTestId("eligible-currency")).toHaveText("EUR");

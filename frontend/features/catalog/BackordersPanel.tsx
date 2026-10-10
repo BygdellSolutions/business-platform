@@ -52,6 +52,7 @@ export function BackordersPanel({ itemId, unit, backorders, canAllocate }: { ite
       <table className="text-left text-sm">
         <thead>
           <tr className="border-b border-zinc-300 dark:border-zinc-700">
+            <th className="py-1 pr-4 text-right">Order no.</th>
             <th className="py-1 pr-4">Completed</th>
             <th className="py-1 pr-4">Customer</th>
             <th className="py-1 pr-4">Unit</th>
@@ -63,10 +64,13 @@ export function BackordersPanel({ itemId, unit, backorders, canAllocate }: { ite
         <tbody>
           {backorders.map((backorder) => (
             <tr key={backorder.fulfillment_id} data-testid="backorder-row" className="border-b border-zinc-200 dark:border-zinc-800">
-              <td className="py-1 pr-4">
+              <td className="py-1 pr-4 text-right" data-testid="order-number">
                 <Link href={`/o/${orgId}/transactions/${backorder.transaction_id}`} className="underline">
-                  Order {backorder.transaction_number} · {backorder.transaction_date}
+                  {backorder.transaction_number}
                 </Link>
+              </td>
+              <td className="py-1 pr-4" data-testid="order-date">
+                {backorder.transaction_date}
               </td>
               <td className="py-1 pr-4">{backorder.customer_name}</td>
               <td className="py-1 pr-4">{unit}</td>

@@ -36,6 +36,7 @@ export function CustomerOrders({
         <table className="text-left text-sm">
           <thead>
             <tr className="border-b border-zinc-300 dark:border-zinc-700">
+              <th className="py-1 pr-4 text-right">Order no.</th>
               <th className="py-1 pr-4">Date</th>
               <th className="py-1 pr-4">Status</th>
               <th className="py-1 pr-4 text-right">Lines</th>
@@ -48,10 +49,13 @@ export function CustomerOrders({
               const invoice = invoiceOf.get(order.id);
               return (
                 <tr key={order.id} data-testid="customer-order" className="border-b border-zinc-200 dark:border-zinc-800">
-                  <td className="py-1 pr-4">
+                  <td className="py-1 pr-4 text-right" data-testid="order-number">
                     <Link href={`/o/${orgId}/transactions/${order.id}`} className="underline">
-                      Order {order.number} · {order.transaction_date}
+                      {order.number}
                     </Link>
+                  </td>
+                  <td className="py-1 pr-4" data-testid="order-date">
+                    {order.transaction_date}
                   </td>
                   <td className="py-1 pr-4">{STATUS[order.status]}</td>
                   <td className="py-1 pr-4 text-right">{order.line_count}</td>

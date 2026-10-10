@@ -4,6 +4,9 @@ All notable changes to `business-platform` will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- An order's number and date are separate columns in every table that lists orders (new invoice, a customer's orders and products bought, a product's backorders, the Inventory backlog); the number links to the order. `lib/order-number-columns.test.ts` refuses the combined form.
+
 ### Added
 - **Record numbers.** Orders are numbered from 1001; customers, suppliers, horses and catalog items from 1; each series per organization. The number is shown in every list ("No." / "Order no." column), on the record's page ("Customer no. 7", "Order 1001 · 2026-10-10"), and wherever an order is referred to (customer page, invoice creation, backorders, an invoice's source orders); a list search finds a record by its number, and `GET /api/transactions?number=` finds an order. PostgreSQL hands the numbers out (`record_counters` and the `assign_record_number` trigger, so every way of inserting gets one, atomically) and refuses changing one; the API never accepts one. Existing records were numbered in creation order (migration `e4a6c8d0f235`).
 - **Invoices record their orders' numbers** (`invoice_transactions.transaction_number`, a snapshot) and the PDF prints them: "Order no." in the header and "Order 1001 of <date>" (template 8). Invoices issued before order numbers keep "Order of <date>"; issued invoices are never changed.
