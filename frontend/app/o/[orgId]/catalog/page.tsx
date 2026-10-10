@@ -5,6 +5,7 @@ import { ListFilters } from "@/components/ui/ListFilters";
 import { Pagination } from "@/components/ui/Pagination";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { StockBadges } from "@/features/catalog/StockBadges";
+import { ITEM_TYPES, ITEM_TYPE_LABELS } from "@/features/catalog/item-types";
 import { readActiveRole } from "@/lib/active-role";
 import type { Item, ItemAvailability } from "@/lib/api/types";
 import {
@@ -17,7 +18,7 @@ import { canWriteRecords } from "@/lib/roles";
 import { serverRead } from "@/lib/server-api";
 import { trimQuantity } from "@/lib/decimal";
 
-const TYPES = ["service", "product"] as const;
+const TYPES = ITEM_TYPES;
 
 /** The stock columns of one row: empty for an item that does not track stock. */
 function StockCells({ figures }: { figures: ItemAvailability | undefined }) {
@@ -96,8 +97,11 @@ export default async function CatalogPage({
             className="rounded border border-zinc-400 px-2 py-1 text-sm dark:bg-zinc-900"
           >
             <option value="">All</option>
-            <option value="service">Service</option>
-            <option value="product">Product</option>
+            {ITEM_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {ITEM_TYPE_LABELS[type]}
+              </option>
+            ))}
           </select>
         </label>
       </ListFilters>
@@ -155,7 +159,7 @@ export default async function CatalogPage({
                   <td className="py-1 pr-4" data-testid="item-sku">
                     {item.sku}
                   </td>
-                  <td className="py-1 pr-4">{item.type}</td>
+                  <td className="py-1 pr-4">{ITEM_TYPE_LABELS[item.type]}</td>
                   <td className="py-1 pr-4">{item.unit}</td>
                   {/* Every amount is exactly the string the backend sent: no parsing, rounding or arithmetic here. */}
                   <td className="py-1 pr-4 text-right" data-testid="item-price">

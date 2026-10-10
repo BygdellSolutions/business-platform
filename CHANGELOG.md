@@ -5,6 +5,7 @@ All notable changes to `business-platform` will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **A third catalog type, "Charge"** (travel, mileage, fees), next to Service and Product: its own filter and label in the catalog, never tracks stock, billed as an ordinary catalog line (not as a Service line). Migration `d3f5b7c9e124` widens `ck_items_type`; its downgrade refuses while any charge exists (nothing is deleted).
 - **Catalog prices split up and shown incl. VAT.** The catalog list shows Base price excl. VAT, Promotion (percent and end date), Promotion price excl. VAT and Price incl. VAT today (promotion included, customer discounts not); the item page shows the price incl. VAT and the promotion price. Every amount is computed by FastAPI (`price_inc_vat`, `promotion_price_ex_vat`, `promotion_price_inc_vat` on items, rounded half-up as a line of quantity 1), never in the browser.
 - **A price can be entered incl. VAT** ("Price is entered: Excluding / Including VAT" on the item form; `price_inc_vat` on create and update, exactly one of the two prices). It is stored as the nearest price excl. VAT at the item's (or the newly sent) VAT rate, and the form shows both stored values.
 - **Incoming stock: a unit cost and an editable expected date.** A delivery records what is paid per unit excl. VAT (optional, fillable later); `PATCH /api/inventory/incoming/{id}` changes the expected date (only while something is still expected, else 409) and the unit cost (any time). Migration `c2e4a6b8d013` adds `incoming_stock.unit_cost` (nullable, CHECK >= 0).

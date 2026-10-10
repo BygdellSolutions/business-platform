@@ -217,3 +217,29 @@ def test_an_item_can_be_priced_incl_vat_but_not_both_ways_at_once(client: TestCl
     assert changed.status_code == 200 and (changed.json()["price_ex_vat"], changed.json()["price_inc_vat"]) == ("1000.00", "1120.00")
     assert client.patch(f"/api/items/{item_id}", json={"price_inc_vat": "1", "price_ex_vat": "1"}, headers=owner).status_code == 422
     assert client.patch(f"/api/items/{item_id}", json={"price_inc_vat": None}, headers=owner).status_code == 422
+
+
+# --- charges (travel, mileage, fees) ----------------------------------------------------------------------------------
+
+
+def test_a_charge_is_its_own_type_never_stock_and_billed_as_a_catalog_line(client: TestClient, db_session: Session):
+    from tests.factories import make_customer, make_transaction
+
+    org = make_org(db_session)
+    user = make_user(db_session)
+    add_member(db_session, org, user, Role.OWNER)
+    owner = {"X-Dev-User-Email": user.email}
+    body = {"type": "charge", "name": "Mileage", "unit": "km", "price_ex_vat": "25.00", "vat_rate": "25.00"}
+
+    created = client.post("/api/items", json=body, headers=owner)
+    assert created.status_code == 201 and created.json()["type"] == "charge"
+    assert client.post("/api/items", json={**body, "name": "Stocked", "track_stock": True}, headers=owner).status_code == 422
+    assert client.patch(f"/api/items/{created.json()['id']}", json={"track_stock": True}, headers=owner).status_code == 422
+    make_item(db_session, org, name="Liniment", type=ItemType.PRODUCT)
+    assert [i["name"] for i in client.get("/api/items", params={"type": "charge"}, headers=owner).json()] == ["Mileage"]
+
+    tx = make_transaction(db_session, org, billing_customer=make_customer(db_session, org))
+    line = client.post(f"/api/transactions/{tx.id}/lines", json={"item_id": created.json()["id"], "quantity": "42"}, headers=owner)
+    assert line.status_code == 201 and line.json()["net_amount"] == "1050.00"
+    as_service = client.post(f"/api/transactions/{tx.id}/lines", json={"kind": "service", "item_id": created.json()["id"], "quantity": "1"}, headers=owner)
+    assert as_service.status_code == 422

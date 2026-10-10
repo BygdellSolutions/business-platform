@@ -197,7 +197,8 @@ export interface AssignCurrencyResult {
   assigned: number;
 }
 
-export type ItemType = "service" | "product";
+/** A charge is travel, mileage, a fee...: billed like an item, never stock, kept apart from products. */
+export type ItemType = "service" | "product" | "charge";
 
 export interface Item {
   id: string;

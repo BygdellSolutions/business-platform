@@ -39,7 +39,7 @@ Found while testing staging (2026-10-08). Small reviewed slices, each validated 
 - [ ] Credit notes later: a credited line's open backorder is not cancelled automatically (a person handles it on the Inventory page); no "makulera" of an issued invoice (decided 2026-10-10: invoices will be emailed on issue)
 - [x] Suppliers register, chosen on incoming stock (migrated from typed names) — 2026-10-10
 - [x] Staging feedback 2026-10-10: order date on a supplier's deliveries; catalog stock badges no longer wrap rows; catalog prices split (base, promotion, promotion price, incl. VAT) and entry incl. VAT; editable expected date and a unit cost on incoming stock
-- [ ] Open question (owner, 2026-10-10): how to keep travel, mileage and similar charges apart from products in the catalog (proposal: a third item type, see the reply of 2026-10-10)
+- [x] Catalog type "Charge" for travel, mileage and fees (owner chose it 2026-10-10)
 - [ ] Suppliers later: purchase orders, a supplier's article numbers and prices per item; an explicit order date if deliveries are often recorded after ordering; cost history per item (average, last paid) and margin
 - [ ] Payments later: bank file import and automatic matching (bankgiro/OCR), Swish integration, reminders
 - [ ] Later (email, paused): email infrastructure, **self-service password recovery** (the first email to build: today a locked-out user depends on an operator), invitation email, invoice email with delivery state and resend

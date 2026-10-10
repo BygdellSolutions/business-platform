@@ -320,6 +320,25 @@ test.describe("list, search and filters", () => {
     await expect(page.getByRole("search").getByLabel("Type")).toHaveValue("service");
   });
 
+  test("a charge (travel, mileage) is created as its own type and filtered apart from products", async ({ page }) => {
+    const name = unique("Mileage");
+    await page.goto(`${list}/new`);
+    await page.getByLabel("Type", { exact: true }).selectOption("charge");
+    await expect(page.getByLabel("Track stock")).toHaveCount(0); // a charge never holds stock
+    await page.getByLabel("Name").fill(name);
+    await page.getByLabel("Unit").fill("km");
+    await page.getByLabel("Price excluding VAT").fill("25.00");
+    await page.getByLabel("VAT rate (%)").fill("25");
+    await page.getByTestId("submit").click();
+    await expect(page.getByTestId("created")).toBeVisible();
+
+    await page.goto(`${list}?type=charge&q=${encodeURIComponent(name)}`);
+    await expect(page.getByTestId("item-row")).toHaveCount(1);
+    await expect(page.getByTestId("item-row")).toContainText("Charge (travel, mileage, fees)");
+    await page.goto(`${list}?type=product&q=${encodeURIComponent(name)}`);
+    await expect(page.getByTestId("empty")).toBeVisible();
+  });
+
   test("search also matches the description", async ({ page, context }) => {
     const token = unique("descword").replace(" ", "");
     const created = await createItem(context, ORG_A.id, { name: unique("Described"), description: `contains ${token} inside` });

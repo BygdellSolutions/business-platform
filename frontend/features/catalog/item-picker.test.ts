@@ -60,7 +60,9 @@ describe("itemSearch", () => {
   it("leaves q out when nothing was typed and cannot be widened by what was typed", async () => {
     mocked.mockResolvedValue({ ok: true, status: 200, data: [] });
     await itemSearch(A)("", signal);
-    expect(new URL(mocked.mock.calls[0][1], "http://x").searchParams.has("q")).toBe(false);
+    expect(
+      new URL(mocked.mock.calls[0][1], "http://x").searchParams.has("q"),
+    ).toBe(false);
 
     await itemSearch(A)("x&active=false&limit=999", signal);
     const url = new URL(mocked.mock.calls[1][1], "http://x");
@@ -69,11 +71,33 @@ describe("itemSearch", () => {
   });
 
   it("identifies each choice by the item's id; the unit and price are only a hint, as strings", async () => {
-    mocked.mockResolvedValue({ ok: true, status: 200, data: [item({ id: "abc", name: "Saddle fitting", unit: "hour", price_ex_vat: "0.10" as MoneyString })] });
+    mocked.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: [
+        item({
+          id: "abc",
+          name: "Saddle fitting",
+          unit: "hour",
+          price_ex_vat: "0.10" as MoneyString,
+        }),
+      ],
+    });
 
     const result = await itemSearch(A)("", signal);
 
-    expect(result).toEqual({ ok: true, status: 200, data: [{ id: "abc", label: "Saddle fitting", detail: "hour · 0.10", inactive: false }] });
+    expect(result).toEqual({
+      ok: true,
+      status: 200,
+      data: [
+        {
+          id: "abc",
+          label: "Saddle fitting",
+          detail: "hour · 0.10",
+          inactive: false,
+        },
+      ],
+    });
   });
 
   it("passes a failure through unchanged", async () => {

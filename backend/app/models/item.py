@@ -14,10 +14,11 @@ from app.models.mixins import Authored, TenantOwned
 class ItemType(StrEnum):
     SERVICE = "service"
     PRODUCT = "product"
+    CHARGE = "charge"  # travel, mileage, fees...: billed like an item, never stock, kept apart from products
 
 
 class Item(TenantOwned, Authored, Base):
-    """Something an organization sells: a service or a product (industry-neutral).
+    """Something an organization sells: a service, a product or a charge (industry-neutral).
 
     An Item holds the *current* catalog state. Transactions will copy name, price
     and VAT at the time of sale, so editing an Item never rewrites history.
