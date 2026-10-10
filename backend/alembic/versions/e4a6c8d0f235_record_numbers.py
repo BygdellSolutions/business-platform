@@ -86,6 +86,10 @@ def upgrade() -> None:
         )
 
     op.add_column("invoice_transactions", sa.Column("transaction_number", sa.BigInteger(), nullable=True))
+    # The immutability trigger lets a DRAFT's link change only in its snapshot fields, so it would refuse this
+    # one-time fill (it did on staging). It is switched off for this statement only, inside the migration's
+    # transaction; issued invoices are excluded by the WHERE clause, not by the trigger.
+    op.execute("ALTER TABLE invoice_transactions DISABLE TRIGGER trg_invoice_transactions_immutability")
     op.execute(
         """
         UPDATE invoice_transactions l SET transaction_number = t.number
@@ -94,6 +98,7 @@ def upgrade() -> None:
           AND i.organization_id = l.organization_id AND i.id = l.invoice_id AND i.status = 'draft'
         """
     )
+    op.execute("ALTER TABLE invoice_transactions ENABLE TRIGGER trg_invoice_transactions_immutability")
 
 
 def downgrade() -> None:
