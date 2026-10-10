@@ -624,7 +624,7 @@ test.describe("lifecycle", () => {
     const base = `${list}?billing_customer_id=${customer.id}`;
     await page.goto(base);
     await expect(page.getByTestId("transaction-row")).toHaveCount(3);
-    expect(await page.getByTestId("transaction-link").allTextContents()).toEqual(["2026-10-15", "2026-06-15", "2026-01-15"]); // newest first
+    expect(await page.getByTestId("transaction-date").allTextContents()).toEqual(["2026-10-15", "2026-06-15", "2026-01-15"]); // newest first
     const middle = page.getByTestId("transaction-row").nth(1);
     await expect(middle.getByTestId("transaction-net")).toHaveText("20.00");
     await expect(middle.getByTestId("transaction-gross")).toHaveText("25.00");
@@ -632,10 +632,10 @@ test.describe("lifecycle", () => {
 
     await page.goto(`${base}&status=draft`);
     await expect(page.getByTestId("transaction-row")).toHaveCount(1);
-    await expect(page.getByTestId("transaction-link")).toHaveText(old.transaction_date);
+    await expect(page.getByTestId("transaction-date")).toHaveText(old.transaction_date);
     await page.goto(`${base}&date_from=2026-06-01&date_to=2026-07-01`);
     await expect(page.getByTestId("transaction-row")).toHaveCount(1);
-    await expect(page.getByTestId("transaction-link")).toHaveText("2026-06-15");
+    await expect(page.getByTestId("transaction-date")).toHaveText("2026-06-15");
     await page.goto(`${base}&status=cancelled&date_from=2026-06-01`);
     await expect(page.getByTestId("transaction-row")).toHaveCount(1);
     await expect(page.getByTestId("picker-billing_customer_id").getByRole("combobox")).toHaveValue(customer.name);

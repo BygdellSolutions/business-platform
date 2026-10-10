@@ -5,6 +5,7 @@ All notable changes to `business-platform` will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- The order list opens an order from its **Order no.** (the date is plain text now).
 - "Outstanding" is called **"Remaining"** wherever people read it (invoice list, the invoice's payments, dashboard notes, history, the overpayment message). The API field stays `outstanding_amount`.
 
 ### Added

@@ -105,12 +105,13 @@ export default async function TransactionsPage({
               {transactions.map((transaction) => (
                 <tr key={transaction.id} data-testid="transaction-row" data-status={transaction.status} className={`border-b border-zinc-200 dark:border-zinc-800 ${transaction.status === "cancelled" ? "text-zinc-500" : ""}`}>
                   <td className="py-1 pr-4 text-right" data-testid="record-number">
-                    {transaction.number}
-                  </td>
-                  <td className="py-1 pr-4">
+                    {/* The order number opens the order (it is the order's name); the date is plain. */}
                     <Link href={`${base}/${transaction.id}`} className="underline" data-testid="transaction-link">
-                      {transaction.transaction_date}
+                      {transaction.number}
                     </Link>
+                  </td>
+                  <td className="py-1 pr-4" data-testid="transaction-date">
+                    {transaction.transaction_date}
                   </td>
                   <td className="py-1 pr-4" data-testid="transaction-customer">
                     <Link href={`/o/${orgId}/customers/${transaction.billing_customer_id}`} className="underline">
