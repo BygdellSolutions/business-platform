@@ -1781,3 +1781,80 @@ atomic publish alone survives); the verifier's real `CREATE TABLE` probe and its
 * There is no bulk session-revocation command; after a compromise (as opposed to a failure) a restore brings back the sessions of the backup moment.
 * The pre-migration backup is a documented contract, not code; D5 proves the orchestration.
 * One new static-test count changed: the CI test that pins the number of artifact uploads now expects five (the drill workflow's failure log, under the same rules).
+
+## Invoicing by delivery (PROPOSED 2026-10-11, NOT implemented)
+
+Asked by the owner on 2026-10-11 ("implement this so we are following the standard"). It replaces the decision of
+2026-10-08 that a whole order, backordered units included, goes on one invoice.
+
+### The rule
+
+**Invoice what has been delivered.** An order line's *invoiceable quantity* is what was handed over to the customer and
+is not yet on an invoice:
+
+- a stock-tracking line: delivered at completion + delivered later (Inventory's `delivered + fulfilled_later`) minus
+  what is already on invoices;
+- every other line (a service, a charge, an ad-hoc line, an item that does not track stock): its whole quantity once the
+  order is completed (a service is "delivered" when it is performed).
+
+The rest is *backordered*: it is invoiced when it is delivered, on a later invoice. One order can therefore be on
+several invoices, one per delivery. Counter sales are unchanged: paid in full now (an advance payment), the receipt
+lists what is to be delivered later.
+
+### What the invoice says
+
+Each invoice line charges the delivered quantity, priced like the order line (same unit price and discount layers;
+net = round(quantity × unit price, 2), per line, half-up, as always). A line with units still to come also stores, as
+a snapshot taken when the draft is built, the ordered quantity and what is still backordered, and the PDF prints under
+it: "Ordered 7 · Delivered 2 · Backordered 5" / "Beställt 7 · Levererat 2 · Restnoterat 5" (template 11). Because each
+partial line is rounded on its own, the invoices of one order can differ from the order's own total by an öre; this is
+inherent to invoicing by delivery and is what other systems do.
+
+### Data model (Invoicing's own tables; one migration)
+
+- `invoice_transactions`: the unique "an order is on one invoice" key is dropped; an order may be on several invoices,
+  and at most one of them a draft (partial unique index on drafts, via a `status` copy kept in step by the existing
+  issue path).
+- `invoice_lines`: the unique "a line is invoiced once" key is dropped; new `ordered_quantity` and
+  `backordered_quantity` (snapshots, `backordered_quantity >= 0`, `quantity + backordered_quantity <= ordered_quantity`
+  allowing for earlier invoices).
+- Over-invoicing is refused under the order's row lock (as today) by comparing with Inventory's delivered figures
+  through a core hook (`stock.delivered`; Invoicing never imports Inventory). Database backstop: a trigger refusing an
+  invoice line whose source line's invoiced total would exceed the ordered quantity (both tables are Invoicing's and
+  Sales'; delivery figures stay Inventory's).
+
+### Flows
+
+- **Invoice** on an order: invoices the delivered part (onto the customer's open draft, as today). Nothing delivered
+  yet: the order is completed and waits; no empty draft is made.
+- **Deliver** (backorders, later): the delivered units become invoiceable. See decision 1.
+- **Ready to invoice** (dashboard card, New invoice page): every completed order with an invoiceable quantity.
+- **Orders list**: Not invoiced, Partly invoiced (something is invoiced, the rest waits for delivery), Invoice draft,
+  Invoiced.
+- **Reopen / cancel**: refused while the order is on any invoice (unchanged).
+- **Credit notes and returns**: per invoice line, unchanged; the stock that can go back is capped per order line across
+  all of its invoice lines.
+- **Existing data**: issued invoices stay exactly as they are (they charged backordered units in advance; those lines
+  count as fully invoiced, so a later delivery creates nothing new to invoice). A draft made before the change is
+  checked when it is issued and refused with a clear message if it charges more than was delivered (delete it and
+  invoice the order again).
+
+### Slices
+
+1. Invoicing reads delivered quantities (hook) and invoices them; data model + migration + backstop; tenant isolation,
+   concurrency (deliver vs invoice, two invoices at once) and over-invoicing tests.
+2. Later deliveries become invoiceable; Ready to invoice; orders list "Partly invoiced".
+3. PDF template 11 (ordered / delivered / backordered under a partial line); invoice page shows the same.
+4. Credit notes and returns across several invoice lines of one order line.
+
+### Decisions (owner, 2026-10-11)
+
+1. **Later deliveries go onto the customer's open draft invoice automatically** (or a new draft), exactly like Invoice
+   on an order. The draft is still reviewed and issued by a person.
+2. **No fixed rule for partial deliveries: the person chooses per order, when it happens.** When an order is invoiced
+   and something is not delivered, a warning asks:
+   - **Invoice what is delivered now** (2 now, the 5 when they are delivered), or
+   - **Wait until everything is delivered** (nothing is invoiced yet; when the last units are delivered, the whole
+     order goes onto the open draft).
+   The choice is kept per order by Invoicing (a hold on the order, never a Sales status) and can be changed while
+   nothing of the order is invoiced yet.

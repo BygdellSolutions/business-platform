@@ -22,6 +22,9 @@ import {
   testRow,
   unique,
   withRequiredTransactionField,
+  createCompletedTransaction,
+  createInvoiceApi,
+  issueInvoiceApi,
 } from "./support";
 
 /**
@@ -612,6 +615,20 @@ test.describe("lifecycle", () => {
     await expect(page.getByTestId("tx-status")).toHaveText("Completed");
   });
 
+  test("the list says where a completed order stands with invoicing: not invoiced, invoice draft, invoiced", async ({ page, context }) => {
+    const customer = await createCustomer(context, ORG_A.id, unique("Invoicing State"));
+    await createCompletedTransaction(context, ORG_A.id, customer.id, { date: "2026-10-01" });
+    const drafted = await createCompletedTransaction(context, ORG_A.id, customer.id, { date: "2026-10-02" });
+    const issued = await createCompletedTransaction(context, ORG_A.id, customer.id, { date: "2026-10-03" });
+    await createInvoiceApi(context, ORG_A.id, [drafted.id]);
+    await issueInvoiceApi(context, ORG_A.id, await createInvoiceApi(context, ORG_A.id, [issued.id]));
+
+    await page.goto(`${list}?billing_customer_id=${customer.id}&sort=date&dir=asc`);
+    await expect(page.getByTestId("tx-status")).toHaveText(["Not invoiced", "Invoice draft", "Invoiced"]);
+    // Only how it reads: the order's own status is still "completed".
+    for (const row of await page.getByTestId("tx-status").all()) await expect(row).toHaveAttribute("data-status", "completed");
+  });
+
   test("the list shows status and totals, filters by status, customer and date, and pages", async ({ page, context }) => {
     const customer = await createCustomer(context, ORG_A.id, unique("List Billing"));
     const make = (date: string, price: string) =>
@@ -629,7 +646,7 @@ test.describe("lifecycle", () => {
     const middle = page.getByTestId("transaction-row").nth(1);
     await expect(middle.getByTestId("transaction-net")).toHaveText("20.00");
     await expect(middle.getByTestId("transaction-gross")).toHaveText("25.00");
-    await expect(middle.getByTestId("tx-status")).toHaveText("Completed");
+    await expect(middle.getByTestId("tx-status")).toHaveText("Not invoiced"); // completed, on no invoice yet
 
     await page.goto(`${base}&status=draft`);
     await expect(page.getByTestId("transaction-row")).toHaveCount(1);

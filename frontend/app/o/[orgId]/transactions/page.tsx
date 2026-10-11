@@ -9,7 +9,7 @@ import { SortHeader } from "@/components/ui/SortHeader";
 import { CustomerFilter } from "@/features/customers/CustomerFilter";
 import { TransactionStatusBadge } from "@/features/transactions/TransactionStatusBadge";
 import { readActiveRole } from "@/lib/active-role";
-import type { Customer, TransactionSummary } from "@/lib/api/types";
+import type { Customer, InvoiceStateOfOrder, TransactionSummary } from "@/lib/api/types";
 import { backendQuery, listHref, sortHref, pageOf, parseListParams, type ExtraSpec } from "@/lib/list-params";
 import { canWriteRecords } from "@/lib/roles";
 import { serverRead, serverReadOrNull } from "@/lib/server-api";
@@ -40,6 +40,11 @@ export default async function TransactionsPage({
     customerId === undefined ? null : serverReadOrNull<Customer>(orgId, `/api/customers/${customerId}`),
   ]);
   const { rows: transactions, hasNext } = pageOf(rows);
+  // Where each completed order stands with invoicing (one request for the page; Sales itself does not know).
+  const completed = transactions.filter((transaction) => transaction.status === "completed" && transaction.paid_at === null).map((transaction) => transaction.id);
+  const invoiceStates =
+    completed.length === 0 ? [] : await serverRead<InvoiceStateOfOrder[]>(orgId, "/api/invoices/by-transaction", `?${new URLSearchParams({ ids: completed.join(",") })}`);
+  const invoiceOf = new Map(invoiceStates.map((entry) => [entry.transaction_id, entry.state]));
   const base = `/o/${orgId}/transactions`;
   const filtered = Object.keys(list.refs).length > 0 || Object.keys(list.extra).length > 0;
   const initialCustomer =
@@ -122,7 +127,7 @@ export default async function TransactionsPage({
                       {!transaction.billing_customer.active && <span className="ml-1 text-xs text-zinc-500">(inactive)</span>}
                     </td>
                     <td className="py-1 pr-4">
-                      <TransactionStatusBadge status={transaction.status} paid={transaction.paid_at !== null} />
+                      <TransactionStatusBadge status={transaction.status} paid={transaction.paid_at !== null} invoice={invoiceOf.get(transaction.id)} />
                     </td>
                     <td className="py-1 pr-4" data-testid="transaction-currency">
                       {transaction.currency ?? <span className="text-zinc-500">none</span>}
