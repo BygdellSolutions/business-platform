@@ -132,39 +132,41 @@ export function CreditNotesPanel({
           None. Credit lines here when goods come back or a charge was wrong; the invoice itself never changes.
         </p>
       ) : (
-        <table className="text-left text-sm">
-          <thead>
-            <tr className="border-b border-zinc-300 dark:border-zinc-700">
-              <SortHeader label="Number" {...sorted.header("number")} />
-              <SortHeader label="Date" {...sorted.header("date")} />
-              <SortHeader label="Reason" {...sorted.header("reason")} />
-              <SortHeader label="Credited" {...sorted.header("gross")} align="right" />
-              <SortHeader label="Created" {...sorted.header("created")} />
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.rows.map((note) => (
-              <tr key={note.id} data-testid="credit-note-row" className="border-b border-zinc-200 align-top dark:border-zinc-800">
-                <td className="py-1 pr-4" data-testid="credit-note-number">
-                  {note.number_text}
-                </td>
-                <td className="py-1 pr-4">{note.credit_date}</td>
-                <td className="py-1 pr-4">{note.reason}</td>
-                <td className="py-1 pr-4 text-right" data-testid="credit-note-gross">
-                  <DecimalText value={note.gross_amount} /> {note.currency}
-                </td>
-                <td className="py-1 pr-4 text-xs text-zinc-500">
-                  {formatTimestamp(note.issued_at, timeZone)}
-                  {note.issued_by_name && ` by ${note.issued_by_name}`}
-                </td>
-                <td className="py-1">
-                  <DownloadPdf invoice={{ id: note.id, status: "issued" }} path={`/invoices/credit-notes/${note.id}/pdf`} label="PDF" />
-                </td>
+        <div className="overflow-x-auto">
+          <table className="text-left text-sm">
+            <thead>
+              <tr className="border-b border-zinc-300 dark:border-zinc-700">
+                <SortHeader label="Number" {...sorted.header("number")} />
+                <SortHeader label="Date" {...sorted.header("date")} />
+                <SortHeader label="Reason" {...sorted.header("reason")} />
+                <SortHeader label="Credited" {...sorted.header("gross")} align="right" />
+                <SortHeader label="Created" {...sorted.header("created")} />
+                <th />
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {sorted.rows.map((note) => (
+                <tr key={note.id} data-testid="credit-note-row" className="border-b border-zinc-200 align-top dark:border-zinc-800">
+                  <td className="py-1 pr-4" data-testid="credit-note-number">
+                    {note.number_text}
+                  </td>
+                  <td className="py-1 pr-4">{note.credit_date}</td>
+                  <td className="py-1 pr-4">{note.reason}</td>
+                  <td className="py-1 pr-4 text-right" data-testid="credit-note-gross">
+                    <DecimalText value={note.gross_amount} /> {note.currency}
+                  </td>
+                  <td className="py-1 pr-4 text-xs text-zinc-500">
+                    {formatTimestamp(note.issued_at, timeZone)}
+                    {note.issued_by_name && ` by ${note.issued_by_name}`}
+                  </td>
+                  <td className="py-1">
+                    <DownloadPdf invoice={{ id: note.id, status: "issued" }} path={`/invoices/credit-notes/${note.id}/pdf`} label="PDF" />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {canCredit && creditable.length > 0 && !open && (
@@ -189,70 +191,72 @@ export function CreditNotesPanel({
               Credit all
             </Button>
           </div>
-          <table className="text-left text-sm">
-            <thead>
-              <tr className="border-b border-zinc-300 dark:border-zinc-700">
-                <th className="py-1 pr-4">Line</th>
-                <th className="py-1 pr-4">Unit</th>
-                <th className="py-1 pr-4 text-right">Invoiced</th>
-                <th className="py-1 pr-4 text-right">Credited</th>
-                <th className="py-1 pr-4 text-right">Unit price</th>
-                <th className="py-1 pr-4 text-right">Credit</th>
-                <th className="py-1 pr-4">Returned to stock</th>
-              </tr>
-            </thead>
-            <tbody>
-              {creditable.map((line) => {
-                const problem = lineError(line);
-                const canReturn = !nothing(line.stock_returnable);
-                return (
-                  <tr key={line.id} data-testid="credit-line" className="border-b border-zinc-200 align-top dark:border-zinc-800">
-                    <td className="py-1 pr-4">{line.description}</td>
-                    <td className="py-1 pr-4">{line.unit}</td>
-                    <td className="py-1 pr-4 text-right">{trimQuantity(line.quantity)}</td>
-                    <td className="py-1 pr-4 text-right">{trimQuantity(line.credited_quantity)}</td>
-                    <td className="py-1 pr-4 text-right">
-                      <DecimalText value={line.unit_price_ex_vat} />
-                    </td>
-                    <td className="py-1 pr-4 text-right">
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        aria-label={`Credit quantity of ${line.description}`}
-                        placeholder={`max ${trimQuantity(line.creditable_quantity ?? "")}`}
-                        value={row(line).quantity}
-                        onChange={(event) => set(line, { quantity: event.target.value })}
-                        className={`${CELL} w-28`}
-                        data-testid="credit-quantity"
-                        aria-invalid={problem !== null}
-                      />
-                      {problem && (
-                        <span className="block max-w-xs text-left text-xs text-red-700 dark:text-red-300" data-testid="credit-line-error">
-                          {problem}
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-1 pr-4">
-                      {canReturn ? (
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={row(line).returned}
-                            onChange={(event) => set(line, { returned: event.target.checked })}
-                            data-testid="credit-returned"
-                            aria-label={`${line.description} returned to stock`}
-                          />
-                          <span className="text-xs text-zinc-500">up to {trimQuantity(line.stock_returnable ?? "")}</span>
-                        </label>
-                      ) : (
-                        <span className="text-xs text-zinc-500">—</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className="overflow-x-auto">
+            <table className="text-left text-sm">
+              <thead>
+                <tr className="border-b border-zinc-300 dark:border-zinc-700">
+                  <th className="py-1 pr-4">Line</th>
+                  <th className="py-1 pr-4">Unit</th>
+                  <th className="py-1 pr-4 text-right">Invoiced</th>
+                  <th className="py-1 pr-4 text-right">Credited</th>
+                  <th className="py-1 pr-4 text-right">Unit price</th>
+                  <th className="py-1 pr-4 text-right">Credit</th>
+                  <th className="py-1 pr-4">Returned to stock</th>
+                </tr>
+              </thead>
+              <tbody>
+                {creditable.map((line) => {
+                  const problem = lineError(line);
+                  const canReturn = !nothing(line.stock_returnable);
+                  return (
+                    <tr key={line.id} data-testid="credit-line" className="border-b border-zinc-200 align-top dark:border-zinc-800">
+                      <td className="py-1 pr-4">{line.description}</td>
+                      <td className="py-1 pr-4">{line.unit}</td>
+                      <td className="py-1 pr-4 text-right">{trimQuantity(line.quantity)}</td>
+                      <td className="py-1 pr-4 text-right">{trimQuantity(line.credited_quantity)}</td>
+                      <td className="py-1 pr-4 text-right">
+                        <DecimalText value={line.unit_price_ex_vat} />
+                      </td>
+                      <td className="py-1 pr-4 text-right">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          aria-label={`Credit quantity of ${line.description}`}
+                          placeholder={`max ${trimQuantity(line.creditable_quantity ?? "")}`}
+                          value={row(line).quantity}
+                          onChange={(event) => set(line, { quantity: event.target.value })}
+                          className={`${CELL} w-28`}
+                          data-testid="credit-quantity"
+                          aria-invalid={problem !== null}
+                        />
+                        {problem && (
+                          <span className="block max-w-xs text-left text-xs text-red-700 dark:text-red-300" data-testid="credit-line-error">
+                            {problem}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-1 pr-4">
+                        {canReturn ? (
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={row(line).returned}
+                              onChange={(event) => set(line, { returned: event.target.checked })}
+                              data-testid="credit-returned"
+                              aria-label={`${line.description} returned to stock`}
+                            />
+                            <span className="text-xs text-zinc-500">up to {trimQuantity(line.stock_returnable ?? "")}</span>
+                          </label>
+                        ) : (
+                          <span className="text-xs text-zinc-500">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
           <TextAreaField label="Reason" name="reason" value={reason} onChange={setReason} error={problems.byField.reason} required rows={2} />
           <p className="text-xs text-zinc-500">The amounts are the invoice&apos;s own prices; the credit note gets the next number and cannot be changed afterwards.</p>
           <ErrorSummary messages={problems.general} />

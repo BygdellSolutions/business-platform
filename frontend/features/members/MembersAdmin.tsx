@@ -57,65 +57,67 @@ export function MembersAdmin({ members, actorRole }: { members: Member[]; actorR
           {message.text}
         </Notice>
       )}
-      <table className="w-full max-w-3xl text-left text-sm" data-testid="members-table">
-        <thead>
-          <tr className="border-b border-zinc-300 dark:border-zinc-700">
-            <SortHeader label="Name" {...sorted.header("name")} />
-            <SortHeader label="Email" {...sorted.header("email")} />
-            <SortHeader label="Role" {...sorted.header("role")} />
-            <th className="py-2 font-medium">
-              <span className="sr-only">Actions</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.rows.map((member) => {
-            const allowed = offered(actorRole, member, ownersListed);
-            return (
-              <tr key={member.id} data-testid="member-row" data-email={member.email} className="border-b border-zinc-200 dark:border-zinc-800">
-                <td className="py-2 pr-4">
-                  {member.name}
-                  {member.is_you && <span className="ml-2 text-zinc-500">(you)</span>}
-                </td>
-                <td className="py-2 pr-4">{member.email}</td>
-                <td className="py-2 pr-4">
-                  {allowed.roles.length > 0 ? (
-                    <select
-                      aria-label={`Role of ${member.name}`}
-                      value={member.role}
-                      disabled={busy !== null}
-                      onChange={(event) => void changeRole(member, event.target.value as Role)}
-                      className="rounded border border-zinc-400 px-2 py-1 dark:bg-zinc-900"
-                      data-testid="member-role"
-                    >
-                      {/* the current role is always listed, so the control shows the truth even when it cannot be re-chosen */}
-                      {[...new Set<Role>([member.role, ...allowed.roles])].map((role) => (
-                        <option key={role} value={role}>
-                          {ROLE_LABELS[role]}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <span data-testid="member-role-text">{ROLE_LABELS[member.role]}</span>
-                  )}
-                </td>
-                <td className="py-2">
-                  {allowed.remove && (
-                    <ConfirmButton
-                      label="Remove"
-                      confirmLabel="Remove member"
-                      question={`Remove ${member.name} from this organization?`}
-                      disabled={busy !== null}
-                      onConfirm={() => void remove(member)}
-                      testId="member-remove"
-                    />
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      <div className="overflow-x-auto">
+        <table className="w-full max-w-3xl text-left text-sm" data-testid="members-table">
+          <thead>
+            <tr className="border-b border-zinc-300 dark:border-zinc-700">
+              <SortHeader label="Name" {...sorted.header("name")} />
+              <SortHeader label="Email" {...sorted.header("email")} />
+              <SortHeader label="Role" {...sorted.header("role")} />
+              <th className="py-2 font-medium">
+                <span className="sr-only">Actions</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.rows.map((member) => {
+              const allowed = offered(actorRole, member, ownersListed);
+              return (
+                <tr key={member.id} data-testid="member-row" data-email={member.email} className="border-b border-zinc-200 dark:border-zinc-800">
+                  <td className="py-2 pr-4">
+                    {member.name}
+                    {member.is_you && <span className="ml-2 text-zinc-500">(you)</span>}
+                  </td>
+                  <td className="py-2 pr-4">{member.email}</td>
+                  <td className="py-2 pr-4">
+                    {allowed.roles.length > 0 ? (
+                      <select
+                        aria-label={`Role of ${member.name}`}
+                        value={member.role}
+                        disabled={busy !== null}
+                        onChange={(event) => void changeRole(member, event.target.value as Role)}
+                        className="rounded border border-zinc-400 px-2 py-1 dark:bg-zinc-900"
+                        data-testid="member-role"
+                      >
+                        {/* the current role is always listed, so the control shows the truth even when it cannot be re-chosen */}
+                        {[...new Set<Role>([member.role, ...allowed.roles])].map((role) => (
+                          <option key={role} value={role}>
+                            {ROLE_LABELS[role]}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span data-testid="member-role-text">{ROLE_LABELS[member.role]}</span>
+                    )}
+                  </td>
+                  <td className="py-2">
+                    {allowed.remove && (
+                      <ConfirmButton
+                        label="Remove"
+                        confirmLabel="Remove member"
+                        question={`Remove ${member.name} from this organization?`}
+                        disabled={busy !== null}
+                        onConfirm={() => void remove(member)}
+                        testId="member-remove"
+                      />
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

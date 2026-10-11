@@ -174,51 +174,53 @@ export function InvitationsAdmin({ invitations, actorRole }: { invitations: Invi
           No pending invitations.
         </p>
       ) : (
-        <table className="w-full max-w-3xl text-left text-sm" data-testid="invitations-table">
-          <thead>
-            <tr className="border-b border-zinc-300 dark:border-zinc-700">
-              <SortHeader label="Email" {...sorted.header("email")} />
-              <SortHeader label="Role" {...sorted.header("role")} />
-              <SortHeader label="Invited by" {...sorted.header("invited_by")} />
-              <SortHeader label="Expires" {...sorted.header("expires")} />
-              <th className="py-2 font-medium">
-                <span className="sr-only">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.rows.map((invitation) => (
-              <tr key={invitation.id} data-testid="invitation-row" data-email={invitation.email} className="border-b border-zinc-200 dark:border-zinc-800">
-                <td className="py-2 pr-4">{invitation.email}</td>
-                <td className="py-2 pr-4">{ROLE_LABELS[invitation.role]}</td>
-                <td className="py-2 pr-4" data-testid="invitation-invited">
-                  {invitation.invited_by_name ?? <span className="text-zinc-500">not recorded</span>}
-                  <span className="block text-xs text-zinc-500">{new Date(invitation.created_at).toLocaleDateString("sv-SE")}</span>
-                </td>
-                <td className="py-2 pr-4" data-testid="invitation-state">
-                  {invitation.state === "expired" ? "Expired" : new Date(invitation.expires_at).toLocaleDateString("sv-SE")}
-                </td>
-                <td className="flex flex-wrap gap-2 py-2">
-                  {canManageInvitation(actorRole, invitation.role) && (
-                    <>
-                      <Button type="button" disabled={busy} onClick={() => void regenerate(invitation)} data-testid="invitation-regenerate">
-                        Regenerate
-                      </Button>
-                      <ConfirmButton
-                        label="Revoke"
-                        confirmLabel="Revoke invitation"
-                        question={`Revoke the invitation for ${invitation.email}?`}
-                        disabled={busy}
-                        onConfirm={() => void revoke(invitation)}
-                        testId="invitation-revoke"
-                      />
-                    </>
-                  )}
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full max-w-3xl text-left text-sm" data-testid="invitations-table">
+            <thead>
+              <tr className="border-b border-zinc-300 dark:border-zinc-700">
+                <SortHeader label="Email" {...sorted.header("email")} />
+                <SortHeader label="Role" {...sorted.header("role")} />
+                <SortHeader label="Invited by" {...sorted.header("invited_by")} />
+                <SortHeader label="Expires" {...sorted.header("expires")} />
+                <th className="py-2 font-medium">
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {sorted.rows.map((invitation) => (
+                <tr key={invitation.id} data-testid="invitation-row" data-email={invitation.email} className="border-b border-zinc-200 dark:border-zinc-800">
+                  <td className="py-2 pr-4">{invitation.email}</td>
+                  <td className="py-2 pr-4">{ROLE_LABELS[invitation.role]}</td>
+                  <td className="py-2 pr-4" data-testid="invitation-invited">
+                    {invitation.invited_by_name ?? <span className="text-zinc-500">not recorded</span>}
+                    <span className="block text-xs text-zinc-500">{new Date(invitation.created_at).toLocaleDateString("sv-SE")}</span>
+                  </td>
+                  <td className="py-2 pr-4" data-testid="invitation-state">
+                    {invitation.state === "expired" ? "Expired" : new Date(invitation.expires_at).toLocaleDateString("sv-SE")}
+                  </td>
+                  <td className="flex flex-wrap gap-2 py-2">
+                    {canManageInvitation(actorRole, invitation.role) && (
+                      <>
+                        <Button type="button" disabled={busy} onClick={() => void regenerate(invitation)} data-testid="invitation-regenerate">
+                          Regenerate
+                        </Button>
+                        <ConfirmButton
+                          label="Revoke"
+                          confirmLabel="Revoke invitation"
+                          question={`Revoke the invitation for ${invitation.email}?`}
+                          disabled={busy}
+                          onConfirm={() => void revoke(invitation)}
+                          testId="invitation-revoke"
+                        />
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </section>
   );

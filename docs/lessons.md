@@ -162,3 +162,4 @@ order case.
 Wrapping rows came back on the invoice list after the catalog fix, because the rule was fixed in one component
 (stock badges) instead of on the tables. Rule: every main list table is `whitespace-nowrap` inside `overflow-x-auto`,
 and badge groups never `flex-wrap`; `lib/list-rows-one-line.test.ts` checks the lists.
+- **A box must hold what is put in it, with real data.** Boxing the page sections looked fine on empty sections, but a product's Incoming table (supplier, reference, cost) stuck out past its box. Screenshots of empty pages prove nothing about width: every table inside a box sits in a sideways scroller, and `e2e/boxes-fit.spec.ts` fills the pages with long data and fails when anything sticks out of a `.panel`, at laptop and phone width (with a control that shows the check can see a spill).

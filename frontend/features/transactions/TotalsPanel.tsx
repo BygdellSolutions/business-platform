@@ -39,31 +39,33 @@ export function TotalsPanel() {
       </dl>
 
       {totals.vat_breakdown.length > 0 && (
-        <table data-testid="vat-breakdown" className="max-w-md text-left text-sm">
-          <caption className="pb-1 text-left text-zinc-500">VAT breakdown</caption>
-          <thead>
-            <tr className="border-b border-zinc-300 dark:border-zinc-700">
-              <th className="py-1 pr-4">VAT rate (%)</th>
-              <th className="py-1 pr-4 text-right">Net</th>
-              <th className="py-1 text-right">VAT</th>
-            </tr>
-          </thead>
-          <tbody>
-            {totals.vat_breakdown.map((row) => (
-              <tr key={row.vat_rate} data-testid="vat-row">
-                <td className="py-1 pr-4">
-                  <DecimalText value={row.vat_rate} />
-                </td>
-                <td className="py-1 pr-4 text-right">
-                  <DecimalText value={row.net_amount} />
-                </td>
-                <td className="py-1 text-right">
-                  <DecimalText value={row.vat_amount} />
-                </td>
+        <div className="overflow-x-auto">
+          <table data-testid="vat-breakdown" className="max-w-md text-left text-sm">
+            <caption className="pb-1 text-left text-zinc-500">VAT breakdown</caption>
+            <thead>
+              <tr className="border-b border-zinc-300 dark:border-zinc-700">
+                <th className="py-1 pr-4">VAT rate (%)</th>
+                <th className="py-1 pr-4 text-right">Net</th>
+                <th className="py-1 text-right">VAT</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {totals.vat_breakdown.map((row) => (
+                <tr key={row.vat_rate} data-testid="vat-row">
+                  <td className="py-1 pr-4">
+                    <DecimalText value={row.vat_rate} />
+                  </td>
+                  <td className="py-1 pr-4 text-right">
+                    <DecimalText value={row.net_amount} />
+                  </td>
+                  <td className="py-1 text-right">
+                    <DecimalText value={row.vat_amount} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </section>
   );

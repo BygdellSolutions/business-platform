@@ -81,36 +81,38 @@ export function ReturnsPanel({ invoice, canHandle, today, timeZone }: { invoice:
       {canHandle && opening && (
         <form onSubmit={open} noValidate aria-label="Open a return" className="flex flex-col gap-3 rounded border border-zinc-300 p-3 dark:border-zinc-700">
           <h3 className="font-medium">New return</h3>
-          <table className="text-left text-sm">
-            <thead>
-              <tr className="border-b border-zinc-300 dark:border-zinc-700">
-                <th className="py-1 pr-4">Line</th>
-                <th className="py-1 pr-4">Unit</th>
-                <th className="py-1 pr-4 text-right">Not credited</th>
-                <th className="py-1 pr-4 text-right">To return</th>
-              </tr>
-            </thead>
-            <tbody>
-              {returnable.map((line) => (
-                <tr key={line.id} className="border-b border-zinc-200 dark:border-zinc-800">
-                  <td className="py-1 pr-4">{line.description}</td>
-                  <td className="py-1 pr-4">{line.unit}</td>
-                  <td className="py-1 pr-4 text-right">{trimQuantity(line.creditable_quantity ?? "")}</td>
-                  <td className="py-1 pr-4 text-right">
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      aria-label={`Quantity to return of ${line.description}`}
-                      value={quantities[line.id] ?? ""}
-                      onChange={(event) => setQuantities((current) => ({ ...current, [line.id]: event.target.value }))}
-                      className={`${CELL} w-28`}
-                      data-testid="return-quantity"
-                    />
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="text-left text-sm">
+              <thead>
+                <tr className="border-b border-zinc-300 dark:border-zinc-700">
+                  <th className="py-1 pr-4">Line</th>
+                  <th className="py-1 pr-4">Unit</th>
+                  <th className="py-1 pr-4 text-right">Not credited</th>
+                  <th className="py-1 pr-4 text-right">To return</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {returnable.map((line) => (
+                  <tr key={line.id} className="border-b border-zinc-200 dark:border-zinc-800">
+                    <td className="py-1 pr-4">{line.description}</td>
+                    <td className="py-1 pr-4">{line.unit}</td>
+                    <td className="py-1 pr-4 text-right">{trimQuantity(line.creditable_quantity ?? "")}</td>
+                    <td className="py-1 pr-4 text-right">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        aria-label={`Quantity to return of ${line.description}`}
+                        value={quantities[line.id] ?? ""}
+                        onChange={(event) => setQuantities((current) => ({ ...current, [line.id]: event.target.value }))}
+                        className={`${CELL} w-28`}
+                        data-testid="return-quantity"
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <TextAreaField label="Reason" name="reason" value={reason} onChange={setReason} error={problems.byField.reason} required rows={2} />
           <label className="flex flex-col gap-1 text-sm font-medium">
             Follow up on

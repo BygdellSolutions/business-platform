@@ -60,7 +60,7 @@ export function StockPanel({
   itemId: string;
   unit: string;
   stock: Stock;
-  /** Committed, available and incoming next to on hand (null: not read). */
+  /** Sold-not-delivered, available and incoming next to on hand (null: not read). */
   figures: ItemAvailability | null;
   canAdjust: boolean;
   timeZone: string | null;
@@ -86,7 +86,7 @@ export function StockPanel({
 
   const sorted = useSortedRows(stock.movements, SORT_COLUMNS);
   return (
-    <section aria-label="Stock" data-testid="stock-panel" className="panel flex max-w-3xl flex-col gap-3">
+    <section aria-label="Stock" data-testid="stock-panel" className="panel flex max-w-5xl flex-col gap-3">
       <h2 className="flex items-center gap-2 text-lg font-semibold">
         Stock {figures && <StockBadges states={figures.states} />}
       </h2>
@@ -99,7 +99,7 @@ export function StockPanel({
         {figures && (
           <span className="text-zinc-600 dark:text-zinc-400" data-testid="stock-figures">
             {" "}
-            · allocated to drafts {trimQuantity(figures.allocated)} · committed to backorders {trimQuantity(figures.committed)} · available {trimQuantity(figures.available)} ·
+            · on draft orders {trimQuantity(figures.allocated)} · sold, not delivered {trimQuantity(figures.committed)} · available {trimQuantity(figures.available)} ·
             incoming {trimQuantity(figures.incoming)}
           </span>
         )}
@@ -107,35 +107,37 @@ export function StockPanel({
       {stock.movements.length > 0 && (
         <details data-testid="stock-history-toggle">
           <summary className="cursor-pointer select-none text-sm text-zinc-700 underline dark:text-zinc-300">Show stock history ({stock.movements.length})</summary>
-          <table className="text-left text-sm">
-            <thead>
-              <tr className="border-b border-zinc-300 dark:border-zinc-700">
-                <SortHeader label="When" {...sorted.header("when")} />
-                <SortHeader label="What" {...sorted.header("what")} />
-                <SortHeader label="Change" {...sorted.header("change")} align="right" />
-                <SortHeader label="On hand after" {...sorted.header("after")} align="right" />
-                <SortHeader label="Note" {...sorted.header("note")} />
-                <SortHeader label="By" {...sorted.header("by")} />
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.rows.map((movement) => (
-                <tr key={movement.id} data-testid="stock-movement" className="border-b border-zinc-200 dark:border-zinc-800">
-                  <td className="py-1 pr-4">{formatTimestamp(movement.created_at, timeZone)}</td>
-                  <td className="py-1 pr-4">{REASONS[movement.reason]}</td>
-                  <td className="py-1 pr-4 text-right">
-                    {movement.quantity_change.startsWith("-") ? "" : "+"}
-                    {trimQuantity(movement.quantity_change)}
-                  </td>
-                  <td className="py-1 pr-4 text-right">
-                    {trimQuantity(movement.quantity_after)}
-                  </td>
-                  <td className="py-1 pr-4">{movement.note}</td>
-                  <td className="py-1 pr-4">{movement.created_by_name ?? <span className="text-zinc-500">not recorded</span>}</td>
+          <div className="overflow-x-auto">
+            <table className="text-left text-sm">
+              <thead>
+                <tr className="border-b border-zinc-300 dark:border-zinc-700">
+                  <SortHeader label="When" {...sorted.header("when")} />
+                  <SortHeader label="What" {...sorted.header("what")} />
+                  <SortHeader label="Change" {...sorted.header("change")} align="right" />
+                  <SortHeader label="On hand after" {...sorted.header("after")} align="right" />
+                  <SortHeader label="Note" {...sorted.header("note")} />
+                  <SortHeader label="By" {...sorted.header("by")} />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {sorted.rows.map((movement) => (
+                  <tr key={movement.id} data-testid="stock-movement" className="border-b border-zinc-200 dark:border-zinc-800">
+                    <td className="py-1 pr-4">{formatTimestamp(movement.created_at, timeZone)}</td>
+                    <td className="py-1 pr-4">{REASONS[movement.reason]}</td>
+                    <td className="py-1 pr-4 text-right">
+                      {movement.quantity_change.startsWith("-") ? "" : "+"}
+                      {trimQuantity(movement.quantity_change)}
+                    </td>
+                    <td className="py-1 pr-4 text-right">
+                      {trimQuantity(movement.quantity_after)}
+                    </td>
+                    <td className="py-1 pr-4">{movement.note}</td>
+                    <td className="py-1 pr-4">{movement.created_by_name ?? <span className="text-zinc-500">not recorded</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </details>
       )}
       {canAdjust && (

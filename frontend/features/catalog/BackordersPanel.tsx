@@ -60,55 +60,57 @@ export function BackordersPanel({ itemId, unit, backorders, canAllocate }: { ite
   const sorted = useSortedRows(backorders, SORT_COLUMNS);
   if (backorders.length === 0) return null;
   return (
-    <section aria-label="Backorders" data-testid="backorders-panel" className="panel flex max-w-3xl flex-col gap-3">
+    <section aria-label="Backorders" data-testid="backorders-panel" className="panel flex max-w-5xl flex-col gap-3">
       <h2 className="text-lg font-semibold">Backorders</h2>
-      <table className="text-left text-sm">
-        <thead>
-          <tr className="border-b border-zinc-300 dark:border-zinc-700">
-            <SortHeader label="Order no." {...sorted.header("number")} align="right" />
-            <SortHeader label="Completed" {...sorted.header("date")} />
-            <SortHeader label="Customer" {...sorted.header("customer")} />
-            <SortHeader label="Unit" {...sorted.header("unit")} />
-            <SortHeader label="Waiting" {...sorted.header("waiting")} align="right" />
-            <SortHeader label="State" {...sorted.header("state")} />
-            {canAllocate && <th className="py-1">Deliver now</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.rows.map((backorder) => (
-            <tr key={backorder.fulfillment_id} data-testid="backorder-row" className="border-b border-zinc-200 dark:border-zinc-800">
-              <td className="py-1 pr-4 text-right" data-testid="order-number">
-                <Link href={`/o/${orgId}/transactions/${backorder.transaction_id}`} className="underline">
-                  {backorder.transaction_number}
-                </Link>
-              </td>
-              <td className="py-1 pr-4" data-testid="order-date">
-                {backorder.transaction_date}
-              </td>
-              <td className="py-1 pr-4">{backorder.customer_name}</td>
-              <td className="py-1 pr-4">{unit}</td>
-              <td className="py-1 pr-4 text-right" data-testid="backorder-waiting">
-                {trimQuantity(backorder.remaining)}
-              </td>
-              <td className="py-1 pr-4" data-testid="backorder-state">
-                {BACKORDER_STATES[backorder.state]}
-              </td>
-              {canAllocate && (
-                <td className="py-1">
-                  <input
-                    aria-label={`Deliver now to ${backorder.customer_name ?? "this sale"}`}
-                    inputMode="decimal"
-                    value={quantities[backorder.fulfillment_id] ?? ""}
-                    onChange={(event) => setQuantities((current) => ({ ...current, [backorder.fulfillment_id]: event.target.value }))}
-                    className="w-24 rounded border border-zinc-400 px-2 py-1 dark:bg-zinc-900"
-                    data-testid="allocation-quantity"
-                  />
-                </td>
-              )}
+      <div className="overflow-x-auto">
+        <table className="text-left text-sm">
+          <thead>
+            <tr className="border-b border-zinc-300 dark:border-zinc-700">
+              <SortHeader label="Order no." {...sorted.header("number")} align="right" />
+              <SortHeader label="Completed" {...sorted.header("date")} />
+              <SortHeader label="Customer" {...sorted.header("customer")} />
+              <SortHeader label="Unit" {...sorted.header("unit")} />
+              <SortHeader label="Waiting" {...sorted.header("waiting")} align="right" />
+              <SortHeader label="State" {...sorted.header("state")} />
+              {canAllocate && <th className="py-1">Deliver now</th>}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {sorted.rows.map((backorder) => (
+              <tr key={backorder.fulfillment_id} data-testid="backorder-row" className="border-b border-zinc-200 dark:border-zinc-800">
+                <td className="py-1 pr-4 text-right" data-testid="order-number">
+                  <Link href={`/o/${orgId}/transactions/${backorder.transaction_id}`} className="underline">
+                    {backorder.transaction_number}
+                  </Link>
+                </td>
+                <td className="py-1 pr-4" data-testid="order-date">
+                  {backorder.transaction_date}
+                </td>
+                <td className="py-1 pr-4">{backorder.customer_name}</td>
+                <td className="py-1 pr-4">{unit}</td>
+                <td className="py-1 pr-4 text-right" data-testid="backorder-waiting">
+                  {trimQuantity(backorder.remaining)}
+                </td>
+                <td className="py-1 pr-4" data-testid="backorder-state">
+                  {BACKORDER_STATES[backorder.state]}
+                </td>
+                {canAllocate && (
+                  <td className="py-1">
+                    <input
+                      aria-label={`Deliver now to ${backorder.customer_name ?? "this sale"}`}
+                      inputMode="decimal"
+                      value={quantities[backorder.fulfillment_id] ?? ""}
+                      onChange={(event) => setQuantities((current) => ({ ...current, [backorder.fulfillment_id]: event.target.value }))}
+                      className="w-24 rounded border border-zinc-400 px-2 py-1 dark:bg-zinc-900"
+                      data-testid="allocation-quantity"
+                    />
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       {canAllocate && (
         <div className="flex flex-col gap-2">
           {onHand !== null && (

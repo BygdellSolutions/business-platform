@@ -96,52 +96,54 @@ export function PaymentsPanel({ invoice, canRecord, today, timeZone }: { invoice
         </p>
       )}
       {invoice.payments.length > 0 && (
-        <table className="text-left text-sm">
-          <thead>
-            <tr className="border-b border-zinc-300 dark:border-zinc-700">
-              <SortHeader label="Paid on" {...sorted.header("paid_on")} />
-              <SortHeader label="Amount" {...sorted.header("amount")} align="right" />
-              <SortHeader label="Method" {...sorted.header("method")} />
-              <SortHeader label="Reference" {...sorted.header("reference")} />
-              <SortHeader label="Recorded" {...sorted.header("recorded")} />
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.rows.map((payment) => (
-              <tr key={payment.id} data-testid="payment-row" className="border-b border-zinc-200 align-top dark:border-zinc-800">
-                <td className="py-1 pr-4">{payment.paid_on}</td>
-                <td className="py-1 pr-4 text-right">
-                  <DecimalText value={payment.amount} />
-                </td>
-                <td className="py-1 pr-4">
-                  {payment.kind === "reversal" ? "Reversal" : payment.kind === "refund" ? `Refund · ${METHOD_LABELS[payment.method] ?? payment.method}` : METHOD_LABELS[payment.method] ?? payment.method}
-                  {payment.reversed && <span className="block text-xs text-zinc-500">reversed</span>}
-                </td>
-                <td className="py-1 pr-4">
-                  {payment.reference}
-                  {payment.note && <span className="block text-xs italic text-zinc-500">{payment.note}</span>}
-                </td>
-                <td className="py-1 pr-4 text-xs text-zinc-500">
-                  {formatTimestamp(payment.created_at, timeZone)}
-                  {payment.created_by_name && ` by ${payment.created_by_name}`}
-                </td>
-                <td className="py-1">
-                  {canRecord && !payment.reversed && payment.kind !== "reversal" && (
-                    <ConfirmButton
-                      label="Reverse"
-                      question={`Reverse this ${payment.kind}? A reversal is recorded; nothing is deleted.`}
-                      confirmLabel="Yes, reverse"
-                      disabled={pending}
-                      onConfirm={() => void reverse(payment.id)}
-                      testId="reverse-payment"
-                    />
-                  )}
-                </td>
+        <div className="overflow-x-auto">
+          <table className="text-left text-sm">
+            <thead>
+              <tr className="border-b border-zinc-300 dark:border-zinc-700">
+                <SortHeader label="Paid on" {...sorted.header("paid_on")} />
+                <SortHeader label="Amount" {...sorted.header("amount")} align="right" />
+                <SortHeader label="Method" {...sorted.header("method")} />
+                <SortHeader label="Reference" {...sorted.header("reference")} />
+                <SortHeader label="Recorded" {...sorted.header("recorded")} />
+                <th />
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {sorted.rows.map((payment) => (
+                <tr key={payment.id} data-testid="payment-row" className="border-b border-zinc-200 align-top dark:border-zinc-800">
+                  <td className="py-1 pr-4">{payment.paid_on}</td>
+                  <td className="py-1 pr-4 text-right">
+                    <DecimalText value={payment.amount} />
+                  </td>
+                  <td className="py-1 pr-4">
+                    {payment.kind === "reversal" ? "Reversal" : payment.kind === "refund" ? `Refund · ${METHOD_LABELS[payment.method] ?? payment.method}` : METHOD_LABELS[payment.method] ?? payment.method}
+                    {payment.reversed && <span className="block text-xs text-zinc-500">reversed</span>}
+                  </td>
+                  <td className="py-1 pr-4">
+                    {payment.reference}
+                    {payment.note && <span className="block text-xs italic text-zinc-500">{payment.note}</span>}
+                  </td>
+                  <td className="py-1 pr-4 text-xs text-zinc-500">
+                    {formatTimestamp(payment.created_at, timeZone)}
+                    {payment.created_by_name && ` by ${payment.created_by_name}`}
+                  </td>
+                  <td className="py-1">
+                    {canRecord && !payment.reversed && payment.kind !== "reversal" && (
+                      <ConfirmButton
+                        label="Reverse"
+                        question={`Reverse this ${payment.kind}? A reversal is recorded; nothing is deleted.`}
+                        confirmLabel="Yes, reverse"
+                        disabled={pending}
+                        onConfirm={() => void reverse(payment.id)}
+                        testId="reverse-payment"
+                      />
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
       {canRecord && (invoice.payment_status !== "paid" || owesRefund) && (
         <form onSubmit={record} noValidate aria-label={owesRefund ? "Record refund" : "Record payment"} className="flex flex-col gap-3">

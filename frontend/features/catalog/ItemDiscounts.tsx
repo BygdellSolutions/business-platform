@@ -61,41 +61,43 @@ export function ItemDiscounts({ itemId, discounts, canManage }: { itemId: string
 
   const sorted = useSortedRows(discounts, SORT_COLUMNS);
   return (
-    <section aria-label="Discounts" data-testid="item-discounts" className="panel flex max-w-3xl flex-col gap-3">
+    <section aria-label="Discounts" data-testid="item-discounts" className="panel flex max-w-5xl flex-col gap-3">
       <h2 className="text-lg font-semibold">Campaign discounts</h2>
       {discounts.length === 0 ? (
         <p className="text-sm text-zinc-500" data-testid="no-discounts">
           No discounts.
         </p>
       ) : (
-        <table className="text-left text-sm">
-          <thead>
-            <tr className="border-b border-zinc-300 dark:border-zinc-700">
-              <SortHeader label="Discount" {...sorted.header("percent")} />
-              <SortHeader label="From" {...sorted.header("from")} />
-              <SortHeader label="To" {...sorted.header("to")} />
-              <SortHeader label="Note" {...sorted.header("note")} />
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.rows.map((discount) => (
-              <tr key={discount.id} data-testid="discount-row" className="border-b border-zinc-200 dark:border-zinc-800">
-                <td className="py-1 pr-4">
-                  −<DecimalText value={discount.percent} /> %
-                </td>
-                <td className="py-1 pr-4">{discount.starts_on}</td>
-                <td className="py-1 pr-4">{discount.ends_on ?? <span className="text-zinc-500">until removed</span>}</td>
-                <td className="py-1 pr-4">{discount.note}</td>
-                <td className="py-1">
-                  {canManage && (
-                    <ConfirmButton label="Remove" question="Remove this discount?" confirmLabel="Yes, remove" disabled={pending} onConfirm={() => void remove(discount.id)} testId="remove-discount" />
-                  )}
-                </td>
+        <div className="overflow-x-auto">
+          <table className="text-left text-sm">
+            <thead>
+              <tr className="border-b border-zinc-300 dark:border-zinc-700">
+                <SortHeader label="Discount" {...sorted.header("percent")} />
+                <SortHeader label="From" {...sorted.header("from")} />
+                <SortHeader label="To" {...sorted.header("to")} />
+                <SortHeader label="Note" {...sorted.header("note")} />
+                <th />
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {sorted.rows.map((discount) => (
+                <tr key={discount.id} data-testid="discount-row" className="border-b border-zinc-200 dark:border-zinc-800">
+                  <td className="py-1 pr-4">
+                    −<DecimalText value={discount.percent} /> %
+                  </td>
+                  <td className="py-1 pr-4">{discount.starts_on}</td>
+                  <td className="py-1 pr-4">{discount.ends_on ?? <span className="text-zinc-500">until removed</span>}</td>
+                  <td className="py-1 pr-4">{discount.note}</td>
+                  <td className="py-1">
+                    {canManage && (
+                      <ConfirmButton label="Remove" question="Remove this discount?" confirmLabel="Yes, remove" disabled={pending} onConfirm={() => void remove(discount.id)} testId="remove-discount" />
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
       {canManage && (
         <form onSubmit={add} noValidate aria-label="Add discount" className="flex flex-col gap-3">

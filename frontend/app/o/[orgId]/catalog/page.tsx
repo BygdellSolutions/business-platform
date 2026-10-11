@@ -137,9 +137,9 @@ export default async function CatalogPage({
                   <SortHeader label="VAT" sortKey="vat_rate" current={list.sort} dir={list.dir} href={sortHref(base, list, "vat_rate")} align="right" />
                   <SortHeader label="Incl. VAT" sortKey="price_inc_vat" current={list.sort} dir={list.dir} href={sortHref(base, list, "price_inc_vat")} align="right" title="The current price incl. VAT: what a customer pays today" />
                   <SortHeader label="On hand" sortKey="on_hand" current={list.sort} dir={list.dir} href={sortHref(base, list, "on_hand")} align="right" />
-                  <SortHeader label="Allocated" sortKey="allocated" current={list.sort} dir={list.dir} href={sortHref(base, list, "allocated")} align="right" />
+                  <SortHeader label="On draft orders" sortKey="allocated" current={list.sort} dir={list.dir} href={sortHref(base, list, "allocated")} align="right" />
                   <SortHeader label="Available" sortKey="available" current={list.sort} dir={list.dir} href={sortHref(base, list, "available")} align="right" />
-                  <SortHeader label="Backordered" sortKey="committed" current={list.sort} dir={list.dir} href={sortHref(base, list, "committed")} align="right" />
+                  <SortHeader label="Sold, not delivered" sortKey="committed" current={list.sort} dir={list.dir} href={sortHref(base, list, "committed")} align="right" />
                   <SortHeader label="Incoming" sortKey="incoming" current={list.sort} dir={list.dir} href={sortHref(base, list, "incoming")} align="right" />
                   <th className="py-1 pr-4">Stock</th>
                   <SortHeader label="Status" sortKey="active" current={list.sort} dir={list.dir} href={sortHref(base, list, "active")} last />

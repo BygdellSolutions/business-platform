@@ -34,51 +34,53 @@ export function CustomerBought({ orgId, lines }: { orgId: string; lines: BoughtL
           Nothing yet (services are listed separately).
         </p>
       ) : (
-        <table className="text-left text-sm">
-          <thead>
-            <tr className="border-b border-zinc-300 dark:border-zinc-700">
-              <SortHeader label="Order no." {...sorted.header("number")} align="right" />
-              <SortHeader label="Date" {...sorted.header("date")} />
-              <SortHeader label="Description" {...sorted.header("description")} />
-              <SortHeader label="Qty" {...sorted.header("quantity")} align="right" />
-              <SortHeader label="Unit" {...sorted.header("unit")} />
-              <SortHeader label="Unit price" {...sorted.header("unit_price")} align="right" />
-              <SortHeader label="Amount" {...sorted.header("amount")} align="right" last />
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.rows.map((line) => (
-              <tr key={line.line_id} data-testid="bought-row" className="border-b border-zinc-200 dark:border-zinc-800">
-                <td className="py-1 pr-4 text-right" data-testid="order-number">
-                  <Link href={`/o/${orgId}/transactions/${line.transaction_id}`} className="underline">
-                    {line.transaction_number}
-                  </Link>
-                </td>
-                <td className="py-1 pr-4" data-testid="order-date">
-                  {line.transaction_date}{" "}
-                  <span className="text-xs text-zinc-500">{line.status}</span>
-                </td>
-                <td className="py-1 pr-4">
-                  {line.item_id ? (
-                    <Link href={`/o/${orgId}/catalog/${line.item_id}`} className="underline">
-                      {line.description}
-                    </Link>
-                  ) : (
-                    line.description
-                  )}
-                </td>
-                <td className="py-1 pr-4 text-right">{trimQuantity(line.quantity)}</td>
-                <td className="py-1 pr-4">{line.unit}</td>
-                <td className="py-1 pr-4 text-right">
-                  <DecimalText value={line.unit_price_ex_vat} />
-                </td>
-                <td className="py-1 text-right">
-                  <DecimalText value={line.gross_amount} /> {line.currency ?? ""}
-                </td>
+        <div className="overflow-x-auto">
+          <table className="text-left text-sm">
+            <thead>
+              <tr className="border-b border-zinc-300 dark:border-zinc-700">
+                <SortHeader label="Order no." {...sorted.header("number")} align="right" />
+                <SortHeader label="Date" {...sorted.header("date")} />
+                <SortHeader label="Description" {...sorted.header("description")} />
+                <SortHeader label="Qty" {...sorted.header("quantity")} align="right" />
+                <SortHeader label="Unit" {...sorted.header("unit")} />
+                <SortHeader label="Unit price" {...sorted.header("unit_price")} align="right" />
+                <SortHeader label="Amount" {...sorted.header("amount")} align="right" last />
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {sorted.rows.map((line) => (
+                <tr key={line.line_id} data-testid="bought-row" className="border-b border-zinc-200 dark:border-zinc-800">
+                  <td className="py-1 pr-4 text-right" data-testid="order-number">
+                    <Link href={`/o/${orgId}/transactions/${line.transaction_id}`} className="underline">
+                      {line.transaction_number}
+                    </Link>
+                  </td>
+                  <td className="py-1 pr-4" data-testid="order-date">
+                    {line.transaction_date}{" "}
+                    <span className="text-xs text-zinc-500">{line.status}</span>
+                  </td>
+                  <td className="py-1 pr-4">
+                    {line.item_id ? (
+                      <Link href={`/o/${orgId}/catalog/${line.item_id}`} className="underline">
+                        {line.description}
+                      </Link>
+                    ) : (
+                      line.description
+                    )}
+                  </td>
+                  <td className="py-1 pr-4 text-right">{trimQuantity(line.quantity)}</td>
+                  <td className="py-1 pr-4">{line.unit}</td>
+                  <td className="py-1 pr-4 text-right">
+                    <DecimalText value={line.unit_price_ex_vat} />
+                  </td>
+                  <td className="py-1 text-right">
+                    <DecimalText value={line.gross_amount} /> {line.currency ?? ""}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </CollapsibleSection>
   );

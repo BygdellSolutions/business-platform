@@ -32,40 +32,42 @@ export function ServiceList({ orgId, services, timeZone, title }: { orgId: strin
           No services yet.
         </p>
       ) : (
-        <table className="text-left text-sm">
-          <thead>
-            <tr className="border-b border-zinc-300 dark:border-zinc-700">
-              <SortHeader label="When" {...sorted.header("when")} />
-              <SortHeader label="Service" {...sorted.header("service")} />
-              <SortHeader label="For" {...sorted.header("for")} />
-              <SortHeader label="By" {...sorted.header("by")} />
-              <SortHeader label="Amount" {...sorted.header("amount")} align="right" />
-              <th className="py-1">Order</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.rows.map((service) => (
-              <tr key={service.line_id} data-testid="service-row" className="border-b border-zinc-200 align-top dark:border-zinc-800">
-                <td className="py-1 pr-4">{formatTimestamp(service.performed_at, timeZone)}</td>
-                <td className="py-1 pr-4">
-                  {service.description}
-                  {service.notes && <span className="block text-xs italic text-zinc-500">{service.notes}</span>}
-                </td>
-                <td className="py-1 pr-4">{service.subject_label ?? <span className="text-zinc-500">no longer exists</span>}</td>
-                <td className="py-1 pr-4">{service.performed_by_name ?? <span className="text-zinc-500">not recorded</span>}</td>
-                <td className="py-1 pr-4 text-right">
-                  <DecimalText value={service.gross_amount} /> {service.currency ?? ""}
-                </td>
-                <td className="py-1">
-                  <Link href={`/o/${orgId}/transactions/${service.transaction_id}`} className="underline">
-                    {service.transaction_date}
-                  </Link>{" "}
-                  <span className="text-xs text-zinc-500">{service.status}</span>
-                </td>
+        <div className="overflow-x-auto">
+          <table className="text-left text-sm">
+            <thead>
+              <tr className="border-b border-zinc-300 dark:border-zinc-700">
+                <SortHeader label="When" {...sorted.header("when")} />
+                <SortHeader label="Service" {...sorted.header("service")} />
+                <SortHeader label="For" {...sorted.header("for")} />
+                <SortHeader label="By" {...sorted.header("by")} />
+                <SortHeader label="Amount" {...sorted.header("amount")} align="right" />
+                <th className="py-1">Order</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {sorted.rows.map((service) => (
+                <tr key={service.line_id} data-testid="service-row" className="border-b border-zinc-200 align-top dark:border-zinc-800">
+                  <td className="py-1 pr-4">{formatTimestamp(service.performed_at, timeZone)}</td>
+                  <td className="py-1 pr-4">
+                    {service.description}
+                    {service.notes && <span className="block text-xs italic text-zinc-500">{service.notes}</span>}
+                  </td>
+                  <td className="py-1 pr-4">{service.subject_label ?? <span className="text-zinc-500">no longer exists</span>}</td>
+                  <td className="py-1 pr-4">{service.performed_by_name ?? <span className="text-zinc-500">not recorded</span>}</td>
+                  <td className="py-1 pr-4 text-right">
+                    <DecimalText value={service.gross_amount} /> {service.currency ?? ""}
+                  </td>
+                  <td className="py-1">
+                    <Link href={`/o/${orgId}/transactions/${service.transaction_id}`} className="underline">
+                      {service.transaction_date}
+                    </Link>{" "}
+                    <span className="text-xs text-zinc-500">{service.status}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </CollapsibleSection>
   );

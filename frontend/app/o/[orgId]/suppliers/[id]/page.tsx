@@ -100,63 +100,65 @@ export default async function SupplierPage({
             product.
           </p>
         ) : (
-          <table
-            className="text-left text-sm"
-            data-testid="supplier-deliveries"
-          >
-            <thead>
-              <tr className="border-b border-zinc-300 dark:border-zinc-700">
-                <SortHeader label="Order date" sortKey="ordered" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.ordered} />
-                <SortHeader label="Product" sortKey="product" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.product} />
-                <SortHeader label="Unit" sortKey="unit" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.unit} />
-                <SortHeader label="Ordered" sortKey="quantity" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.quantity} align="right" />
-                <SortHeader label="Received" sortKey="received" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.received} align="right" />
-                <SortHeader label="Expected" sortKey="expected" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.expected} />
-                <SortHeader label="Reference" sortKey="reference" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.reference} />
-                <SortHeader label="Unit cost excl. VAT" sortKey="unit_cost" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.unit_cost} align="right" />
-                <SortHeader label="State" sortKey="state" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.state} last />
-              </tr>
-            </thead>
-            <tbody>
-              {sortRows(deliveries, deliverySort, DELIVERY_SORTS).map((row) => (
-                <tr
-                  key={row.id}
-                  data-testid="supplier-delivery"
-                  className="border-b border-zinc-200 dark:border-zinc-800"
-                >
-                  <td className="py-1 pr-4" data-testid="delivery-ordered-on">
-                    {formatDay(row.created_at, organization.timezone)}
-                  </td>
-                  <td className="py-1 pr-4">
-                    <Link
-                      href={`/o/${orgId}/catalog/${row.item_id}`}
-                      className="underline"
-                    >
-                      {row.item_name}
-                    </Link>
-                  </td>
-                  <td className="py-1 pr-4">{row.item_unit}</td>
-                  <td className="py-1 pr-4 text-right">
-                    {trimQuantity(row.quantity)}
-                  </td>
-                  <td className="py-1 pr-4 text-right">
-                    {trimQuantity(row.received)}
-                  </td>
-                  <td className="py-1 pr-4">{row.expected_on ?? "—"}</td>
-                  <td className="py-1 pr-4">{row.reference}</td>
-                  <td
-                    className="py-1 pr-4 text-right"
-                    data-testid="delivery-unit-cost"
-                  >
-                    {row.unit_cost !== null && (
-                      <DecimalText value={row.unit_cost} />
-                    )}
-                  </td>
-                  <td className="py-1">{DELIVERY_STATES[row.state]}</td>
+          <div className="overflow-x-auto">
+            <table
+              className="text-left text-sm"
+              data-testid="supplier-deliveries"
+            >
+              <thead>
+                <tr className="border-b border-zinc-300 dark:border-zinc-700">
+                  <SortHeader label="Order date" sortKey="ordered" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.ordered} />
+                  <SortHeader label="Product" sortKey="product" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.product} />
+                  <SortHeader label="Unit" sortKey="unit" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.unit} />
+                  <SortHeader label="Ordered" sortKey="quantity" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.quantity} align="right" />
+                  <SortHeader label="Received" sortKey="received" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.received} align="right" />
+                  <SortHeader label="Expected" sortKey="expected" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.expected} />
+                  <SortHeader label="Reference" sortKey="reference" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.reference} />
+                  <SortHeader label="Unit cost excl. VAT" sortKey="unit_cost" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.unit_cost} align="right" />
+                  <SortHeader label="State" sortKey="state" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.state} last />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {sortRows(deliveries, deliverySort, DELIVERY_SORTS).map((row) => (
+                  <tr
+                    key={row.id}
+                    data-testid="supplier-delivery"
+                    className="border-b border-zinc-200 dark:border-zinc-800"
+                  >
+                    <td className="py-1 pr-4" data-testid="delivery-ordered-on">
+                      {formatDay(row.created_at, organization.timezone)}
+                    </td>
+                    <td className="py-1 pr-4">
+                      <Link
+                        href={`/o/${orgId}/catalog/${row.item_id}`}
+                        className="underline"
+                      >
+                        {row.item_name}
+                      </Link>
+                    </td>
+                    <td className="py-1 pr-4">{row.item_unit}</td>
+                    <td className="py-1 pr-4 text-right">
+                      {trimQuantity(row.quantity)}
+                    </td>
+                    <td className="py-1 pr-4 text-right">
+                      {trimQuantity(row.received)}
+                    </td>
+                    <td className="py-1 pr-4">{row.expected_on ?? "—"}</td>
+                    <td className="py-1 pr-4">{row.reference}</td>
+                    <td
+                      className="py-1 pr-4 text-right"
+                      data-testid="delivery-unit-cost"
+                    >
+                      {row.unit_cost !== null && (
+                        <DecimalText value={row.unit_cost} />
+                      )}
+                    </td>
+                    <td className="py-1">{DELIVERY_STATES[row.state]}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </CollapsibleSection>
       <RecordHistory

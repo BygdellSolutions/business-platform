@@ -4,7 +4,11 @@ All notable changes to `business-platform` will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Tables no longer stick out of their box (a product's Incoming list was the visible case; 13 places in all, most of them on a phone). Every table inside a box scrolls sideways within it, the product page's Stock, Backorders, Incoming and Campaign discounts boxes are wider, and a browser test (`e2e/boxes-fit.spec.ts`) checks the main pages at laptop and phone width with long data.
+
 ### Changed
+- **Stock figures in plain words.** "Allocated" is now **On draft orders** and "Committed" (in the catalog "Backordered") is now **Sold, not delivered**, on the Inventory page, the Catalog list and a product's Stock box, so the same figure has one name everywhere. The "Backordered" stock state is unchanged.
 - **Each block of information sits in its own box.** Pages are a light grey background with white boxes: Inventory shows Stock, Backorders and Incoming as three boxes; a product shows its details, Stock, Incoming, Campaign discounts and History each boxed; an order its Details, Lines, Add line and Totals; an invoice its document, payments, returns and credit notes; list pages put the filters and the table in one box; settings, members and account forms likewise. One shared `panel` style (`app/globals.css`) draws every box.
 - **Friendlier look for people who are not technical.** The menu moved into a left sidebar (a top strip on phones), grouped under Sales, Contacts, Products, Equine and Organization, with an icon per page and the current page highlighted; the organization, your role, your email, Account and Sign out sit in the sidebar, the organization switcher above the page. One accent colour marks the main action: "New customer", "New order" and the other "New …" links are filled buttons, and every form's submit button (Save, Add, Record payment…) is the primary button; Leave and Transfer stay plain and Delete organization stays red. The bundled Noto Sans font is now actually used (a leftover `font-family: Arial` overrode it).
 

@@ -170,7 +170,7 @@ export function IncomingPanel({
     <section
       aria-label="Incoming stock"
       data-testid="incoming-panel"
-      className="panel flex max-w-3xl flex-col gap-3"
+      className="panel flex max-w-5xl flex-col gap-3"
     >
       <h2 className="text-lg font-semibold">Incoming</h2>
       {incoming.length === 0 ? (
@@ -178,173 +178,175 @@ export function IncomingPanel({
           No deliveries yet.
         </p>
       ) : (
-        <table className="text-left text-sm">
-          <thead>
-            <tr className="border-b border-zinc-300 dark:border-zinc-700">
-              <SortHeader label="Order date" {...sorted.header("ordered")} />
-              <SortHeader label="Expected" {...sorted.header("expected")} />
-              <SortHeader label="Unit" {...sorted.header("unit")} />
-              <SortHeader label="Ordered" {...sorted.header("quantity")} align="right" />
-              <SortHeader label="Received" {...sorted.header("received")} align="right" />
-              <SortHeader label="Still expected" {...sorted.header("remaining")} align="right" />
-              <SortHeader label="Supplier" {...sorted.header("supplier")} />
-              <SortHeader label="Reference" {...sorted.header("reference")} />
-              <SortHeader label="Unit cost excl. VAT" {...sorted.header("unit_cost")} align="right" />
-              <SortHeader label="State" {...sorted.header("state")} />
-              {canWrite && <th className="py-1">Actions</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.rows.map((row) => (
-              <tr
-                key={row.id}
-                data-testid="incoming-row"
-                className="border-b border-zinc-200 align-top dark:border-zinc-800"
-              >
-                <td className="py-1 pr-4" data-testid="incoming-ordered-on">
-                  {formatDay(row.created_at, timeZone)}
-                </td>
-                <td className="py-1 pr-4" data-testid="incoming-expected">
-                  {row.expected_on ?? (
-                    <span className="text-zinc-500">not given</span>
-                  )}
-                </td>
-                <td className="py-1 pr-4">{unit}</td>
-                <td
-                  className="py-1 pr-4 text-right"
-                  data-testid="incoming-ordered"
+        <div className="overflow-x-auto">
+          <table className="text-left text-sm">
+            <thead>
+              <tr className="border-b border-zinc-300 dark:border-zinc-700">
+                <SortHeader label="Order date" {...sorted.header("ordered")} />
+                <SortHeader label="Expected" {...sorted.header("expected")} />
+                <SortHeader label="Unit" {...sorted.header("unit")} />
+                <SortHeader label="Ordered" {...sorted.header("quantity")} align="right" />
+                <SortHeader label="Received" {...sorted.header("received")} align="right" />
+                <SortHeader label="Still expected" {...sorted.header("remaining")} align="right" />
+                <SortHeader label="Supplier" {...sorted.header("supplier")} />
+                <SortHeader label="Reference" {...sorted.header("reference")} />
+                <SortHeader label="Unit cost excl. VAT" {...sorted.header("unit_cost")} align="right" />
+                <SortHeader label="State" {...sorted.header("state")} />
+                {canWrite && <th className="py-1">Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.rows.map((row) => (
+                <tr
+                  key={row.id}
+                  data-testid="incoming-row"
+                  className="border-b border-zinc-200 align-top dark:border-zinc-800"
                 >
-                  {trimQuantity(row.quantity)}
-                </td>
-                <td className="py-1 pr-4 text-right">
-                  {trimQuantity(row.received)}
-                </td>
-                <td
-                  className="py-1 pr-4 text-right"
-                  data-testid="incoming-remaining"
-                >
-                  {trimQuantity(row.remaining)}
-                </td>
-                <td className="py-1 pr-4">
-                  <SupplierName orgId={orgId} supplier={row.supplier} />
-                </td>
-                <td className="py-1 pr-4">{row.reference}</td>
-                <td
-                  className="py-1 pr-4 text-right"
-                  data-testid="incoming-unit-cost"
-                >
-                  {row.unit_cost !== null && (
-                    <DecimalText value={row.unit_cost} />
-                  )}
-                </td>
-                <td className="py-1 pr-4">{STATES[row.state]}</td>
-                {canWrite && (
-                  <td className="py-1">
-                    {editing?.id === row.id ? (
-                      <div
-                        className="flex flex-wrap items-center gap-2"
-                        data-testid="incoming-edit"
-                      >
-                        {isOpen(row) && (
+                  <td className="py-1 pr-4" data-testid="incoming-ordered-on">
+                    {formatDay(row.created_at, timeZone)}
+                  </td>
+                  <td className="py-1 pr-4" data-testid="incoming-expected">
+                    {row.expected_on ?? (
+                      <span className="text-zinc-500">not given</span>
+                    )}
+                  </td>
+                  <td className="py-1 pr-4">{unit}</td>
+                  <td
+                    className="py-1 pr-4 text-right"
+                    data-testid="incoming-ordered"
+                  >
+                    {trimQuantity(row.quantity)}
+                  </td>
+                  <td className="py-1 pr-4 text-right">
+                    {trimQuantity(row.received)}
+                  </td>
+                  <td
+                    className="py-1 pr-4 text-right"
+                    data-testid="incoming-remaining"
+                  >
+                    {trimQuantity(row.remaining)}
+                  </td>
+                  <td className="py-1 pr-4">
+                    <SupplierName orgId={orgId} supplier={row.supplier} />
+                  </td>
+                  <td className="py-1 pr-4">{row.reference}</td>
+                  <td
+                    className="py-1 pr-4 text-right"
+                    data-testid="incoming-unit-cost"
+                  >
+                    {row.unit_cost !== null && (
+                      <DecimalText value={row.unit_cost} />
+                    )}
+                  </td>
+                  <td className="py-1 pr-4">{STATES[row.state]}</td>
+                  {canWrite && (
+                    <td className="py-1">
+                      {editing?.id === row.id ? (
+                        <div
+                          className="flex flex-wrap items-center gap-2"
+                          data-testid="incoming-edit"
+                        >
+                          {isOpen(row) && (
+                            <input
+                              type="date"
+                              aria-label="Expected on"
+                              value={editing.expected_on}
+                              onChange={(event) =>
+                                setEditing({
+                                  ...editing,
+                                  expected_on: event.target.value,
+                                })
+                              }
+                              className={DATE}
+                            />
+                          )}
                           <input
-                            type="date"
-                            aria-label="Expected on"
-                            value={editing.expected_on}
+                            aria-label="Unit cost excl. VAT"
+                            inputMode="decimal"
+                            value={editing.unit_cost}
                             onChange={(event) =>
                               setEditing({
                                 ...editing,
-                                expected_on: event.target.value,
+                                unit_cost: event.target.value,
                               })
                             }
-                            className={DATE}
+                            className="w-28 rounded border border-zinc-400 px-2 py-1 dark:bg-zinc-900"
                           />
-                        )}
-                        <input
-                          aria-label="Unit cost excl. VAT"
-                          inputMode="decimal"
-                          value={editing.unit_cost}
-                          onChange={(event) =>
-                            setEditing({
-                              ...editing,
-                              unit_cost: event.target.value,
-                            })
-                          }
-                          className="w-28 rounded border border-zinc-400 px-2 py-1 dark:bg-zinc-900"
-                        />
-                        <Button
-                          type="button"
-                          disabled={editMutation.pending}
-                          onClick={() => void saveEdit(row)}
-                          data-testid="save-incoming"
-                        >
-                          Save
-                        </Button>
-                        <button
-                          type="button"
-                          className="text-sm underline"
-                          onClick={() => setEditing(null)}
-                        >
-                          Cancel editing
-                        </button>
-                        <ErrorSummary messages={editProblems.general} />
-                      </div>
-                    ) : (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          className="text-sm underline"
-                          data-testid="edit-incoming"
-                          onClick={() =>
-                            setEditing({
-                              id: row.id,
-                              expected_on: row.expected_on ?? "",
-                              unit_cost: row.unit_cost ?? "",
-                            })
-                          }
-                        >
-                          Edit
-                        </button>
-                        {isOpen(row) && (
-                          <>
-                            <input
-                              aria-label="Quantity received"
-                              inputMode="decimal"
-                              placeholder={trimQuantity(row.remaining)}
-                              value={receiving[row.id] ?? ""}
-                              onChange={(event) =>
-                                setReceiving((current) => ({
-                                  ...current,
-                                  [row.id]: event.target.value,
-                                }))
-                              }
-                              className="w-24 rounded border border-zinc-400 px-2 py-1 dark:bg-zinc-900"
-                            />
-                            <Button
-                              type="button"
-                              disabled={pending}
-                              onClick={() => void receive(row)}
-                              data-testid="receive-incoming"
-                            >
-                              Receive
-                            </Button>
-                            <ConfirmButton
-                              label="Cancel"
-                              question="Will the rest of this delivery not come? Units already received stay on hand."
-                              confirmLabel="Yes, cancel the rest"
-                              disabled={pending}
-                              onConfirm={() => void cancel(row)}
-                              testId="cancel-incoming"
-                            />
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                          <Button
+                            type="button"
+                            disabled={editMutation.pending}
+                            onClick={() => void saveEdit(row)}
+                            data-testid="save-incoming"
+                          >
+                            Save
+                          </Button>
+                          <button
+                            type="button"
+                            className="text-sm underline"
+                            onClick={() => setEditing(null)}
+                          >
+                            Cancel editing
+                          </button>
+                          <ErrorSummary messages={editProblems.general} />
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            className="text-sm underline"
+                            data-testid="edit-incoming"
+                            onClick={() =>
+                              setEditing({
+                                id: row.id,
+                                expected_on: row.expected_on ?? "",
+                                unit_cost: row.unit_cost ?? "",
+                              })
+                            }
+                          >
+                            Edit
+                          </button>
+                          {isOpen(row) && (
+                            <>
+                              <input
+                                aria-label="Quantity received"
+                                inputMode="decimal"
+                                placeholder={trimQuantity(row.remaining)}
+                                value={receiving[row.id] ?? ""}
+                                onChange={(event) =>
+                                  setReceiving((current) => ({
+                                    ...current,
+                                    [row.id]: event.target.value,
+                                  }))
+                                }
+                                className="w-24 rounded border border-zinc-400 px-2 py-1 dark:bg-zinc-900"
+                              />
+                              <Button
+                                type="button"
+                                disabled={pending}
+                                onClick={() => void receive(row)}
+                                data-testid="receive-incoming"
+                              >
+                                Receive
+                              </Button>
+                              <ConfirmButton
+                                label="Cancel"
+                                question="Will the rest of this delivery not come? Units already received stay on hand."
+                                confirmLabel="Yes, cancel the rest"
+                                disabled={pending}
+                                onConfirm={() => void cancel(row)}
+                                testId="cancel-incoming"
+                              />
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
       {canWrite && (
         <form
