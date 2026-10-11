@@ -1,54 +1,257 @@
 @import "tailwindcss";
 
+/*
+ * The design system. Every colour the app uses comes from these tokens (light first, dark below); components use
+ * them through Tailwind (`bg-page`, `text-muted`...) or the utilities at the end of this file.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-  /* One accent colour marks what to click first: primary buttons and the current page. */
-  --accent: #1d4ed8;
-  --accent-hover: #1e40af;
-  --accent-soft: #e0e7ff;
-  --accent-soft-foreground: #1e3a8a;
+  --page: #f5f7fa;
+  --sidebar: #ffffff;
+  --topbar: #ffffff;
   --panel: #ffffff;
-  --panel-border: #e4e4e7;
-  --page: #f6f6f7;
-}
+  --surface-hover: #eef2f7;
+  --row-hover: #f3f6fa;
+  --input: #ffffff;
+  --border: #e2e7ee;
+  --border-strong: #c9d1dc;
+  --foreground: #0f1724;
+  --secondary: #4a5568;
+  --muted: #6b778a;
+  --table-head: #4a5568;
+  --table-head-bg: #f7f9fb;
+  --link: #1d5fbf;
+  --link-hover: #0f3f86;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-accent: var(--accent);
-  --color-accent-hover: var(--accent-hover);
-  --color-accent-soft: var(--accent-soft);
-  --color-accent-soft-foreground: var(--accent-soft-foreground);
-  --color-page: var(--page);
-  --font-sans: var(--font-sans-local), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* One accent colour marks what to click first: primary buttons and the current page. */
+  --accent: #1f6fdb;
+  --accent-hover: #2f80ed;
+  --accent-soft: rgb(47 128 237 / 0.12);
+  --accent-soft-foreground: #0f1724;
+  --accent-icon: #1f6fdb;
+
+  /* Status tones: the base colour tints a badge or notice, the text colour is readable on that tint. */
+  --success: #42b883;
+  --success-text: #1f7a52;
+  --warning: #e5a84b;
+  --warning-text: #8a5a12;
+  --danger: #e05d66;
+  --danger-text: #b42f3a;
+  --purple: #9b6fe8;
+  --purple-text: #6b3fc4;
+  --info: #3ba7e8;
+  --info-text: #1a6fa3;
+  --primary-tone: #2f80ed;
+  --primary-tone-text: #1d5fbf;
+  --orange: #e8894b;
+  --orange-text: #a3501a;
+  --neutral: #748094;
+  --neutral-text: #4a5568;
+
+  accent-color: var(--accent);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-    --accent: #2563eb;
-    --accent-hover: #3b82f6;
-    --accent-soft: #1e293b;
-    --accent-soft-foreground: #bfdbfe;
-    --panel: #141416;
-    --panel-border: #2a2a2e;
-    --page: #0a0a0a;
+    /* Tells the browser to draw its own parts of form controls (the calendar icon, date picker, select arrows) for a dark page. */
+    color-scheme: dark;
+    --page: #0b0f17;
+    --sidebar: #0f1520;
+    --topbar: #111827;
+    --panel: #151d29;
+    --surface-hover: #1b2635;
+    --row-hover: #1a2432;
+    --input: #101722;
+    --border: #273244;
+    --border-strong: #344156;
+    --foreground: #f3f6fa;
+    --secondary: #a8b3c2;
+    --muted: #748094;
+    --table-head: #b8c2d0;
+    --table-head-bg: #121a25;
+    --link: #b7d5fa;
+    --link-hover: #ffffff;
+
+    --accent: #2f80ed;
+    --accent-hover: #4593f5;
+    --accent-soft: rgb(47 128 237 / 0.16);
+    --accent-soft-foreground: #f3f6fa;
+    --accent-icon: #5ea2f2;
+
+    --success-text: #67cea0;
+    --warning-text: #f0c27a;
+    --danger-text: #f07a83;
+    --purple-text: #b995f0;
+    --info-text: #62bff0;
+    --primary-tone-text: #8cb8f3;
+    --orange-text: #f2a877;
+    --neutral-text: #a8b3c2;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
+@theme inline {
+  --color-background: var(--page);
+  --color-foreground: var(--foreground);
+  --color-page: var(--page);
+  --color-sidebar: var(--sidebar);
+  --color-topbar: var(--topbar);
+  --color-panel: var(--panel);
+  --color-surface-hover: var(--surface-hover);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-secondary: var(--secondary);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-soft-foreground: var(--accent-soft-foreground);
+  --color-accent-icon: var(--accent-icon);
+  /* No font is downloaded: Inter or Geist when the computer has them, else the system's UI font (Segoe UI, San
+     Francisco), else the bundled Noto Sans. */
+  --font-sans: Inter, Geist, system-ui, "Segoe UI", var(--font-sans-local), sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
+
+/*
+ * The neutral grey scale, redefined once as a slate scale with a navy undertone. Pages use these greys for borders,
+ * secondary text and dark surfaces (`border-zinc-200 dark:border-zinc-800`), so every page follows without being
+ * edited one by one.
+ */
+@theme {
+  --color-zinc-50: #f6f8fa;
+  --color-zinc-100: #eef1f5;
+  --color-zinc-200: #e2e7ee;
+  --color-zinc-300: #c9d1dc;
+  --color-zinc-400: #a8b3c2;
+  --color-zinc-500: #6b778a;
+  --color-zinc-600: #56627a;
+  --color-zinc-700: #344156;
+  --color-zinc-800: #273244;
+  --color-zinc-900: #151d29;
+  --color-zinc-950: #0f1520;
+}
+
+body {
+  background: var(--page);
+  color: var(--foreground);
+  font-size: 14px;
+}
+
+/* --- shared pieces ------------------------------------------------------------------------------------------------- */
 
 /* A box around one block of information on a page (Stock, Backorders, Incoming...), so separate things read as separate. */
 @utility panel {
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--border);
   border-radius: 0.75rem;
   background: var(--panel);
-  padding: 1.25rem;
+  padding: 1.125rem 1.25rem;
   box-shadow: 0 1px 2px rgb(0 0 0 / 0.04);
+}
+
+/* Status tones, used by `badge` and `tint`: "badge tone-success". */
+@utility tone-success {
+  --tone: var(--success);
+  --tone-text: var(--success-text);
+}
+@utility tone-warning {
+  --tone: var(--warning);
+  --tone-text: var(--warning-text);
+}
+@utility tone-danger {
+  --tone: var(--danger);
+  --tone-text: var(--danger-text);
+}
+@utility tone-purple {
+  --tone: var(--purple);
+  --tone-text: var(--purple-text);
+}
+@utility tone-info {
+  --tone: var(--info);
+  --tone-text: var(--info-text);
+}
+@utility tone-primary {
+  --tone: var(--primary-tone);
+  --tone-text: var(--primary-tone-text);
+}
+@utility tone-orange {
+  --tone: var(--orange);
+  --tone-text: var(--orange-text);
+}
+@utility tone-neutral {
+  --tone: var(--neutral);
+  --tone-text: var(--neutral-text);
+}
+
+/* A surface tinted by its tone (a notice, an attention card). */
+@utility tint {
+  background-color: color-mix(in srgb, var(--tone, var(--neutral)) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone, var(--neutral)) 30%, transparent);
+}
+
+/* A small status label: subtle tint, readable text, never neon. The label says it; colour only supports it. */
+@utility badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+  padding: 1px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: nowrap;
+  color: var(--tone-text, var(--neutral-text));
+  background-color: color-mix(in srgb, var(--tone, var(--neutral)) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone, var(--neutral)) 28%, transparent);
+}
+
+/*
+ * Form controls, tables and links inside the app: one look everywhere. These rules are deliberately outside Tailwind's
+ * layers, so they win over the per-page utility classes the pages already carry (spacing and widths still come from
+ * those classes).
+ */
+:is(input:not([type="checkbox"], [type="radio"], [type="hidden"], [type="file"], [type="range"], [type="color"]), select, textarea) {
+  background-color: var(--input);
+  border-color: var(--border-strong);
+  border-radius: 8px;
+  color: var(--foreground);
+}
+:is(input:not([type="checkbox"], [type="radio"], [type="hidden"], [type="file"], [type="range"], [type="color"]), select) {
+  min-height: 2.25rem;
+}
+:is(input, select, textarea)::placeholder {
+  color: var(--muted);
+}
+:is(input, select, textarea):focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgb(47 128 237 / 0.15);
+}
+:is(a, button, summary):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+main table {
+  border-collapse: collapse;
+}
+main table :is(th, td) {
+  padding: 8px 10px;
+}
+main table thead th {
+  color: var(--table-head);
+  background: var(--table-head-bg);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+main table tbody tr:hover {
+  background: var(--row-hover);
+}
+main table tbody a:not([class*="bg-"]) {
+  color: var(--link);
+  text-decoration: none;
+}
+main table tbody a:not([class*="bg-"]):hover {
+  color: var(--link-hover);
+  text-decoration: underline;
 }

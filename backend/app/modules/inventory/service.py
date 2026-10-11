@@ -414,6 +414,13 @@ def _returned_after_credit(db: Session, organization_id: uuid.UUID, row: LineFul
     )
 
 
+def split_at_completion(db: Session, organization_id: uuid.UUID, transaction_line_ids: Iterable[uuid.UUID]) -> dict[uuid.UUID, tuple[Decimal, Decimal]]:
+    """Per stock-tracking line of a completed transaction: (handed over at completion, backordered at completion). These
+    are the figures of the sale itself and never change afterwards (later deliveries are `fulfilled_later`), so a
+    receipt prints the same thing however often it is downloaded. Lines not tracked are left out."""
+    return {row.transaction_line_id: (row.delivered, row.backordered) for row in _active_fulfillments(db, organization_id, transaction_line_ids)}
+
+
 def returnable(db: Session, organization_id: uuid.UUID, transaction_line_ids: Iterable[uuid.UUID]) -> dict[uuid.UUID, Decimal]:
     """Per stock-tracking line that was delivered: how much can still come back into stock on a credit note (what was
     handed over, at completion and later, less what credit notes returned already). Lines not tracked are left out."""

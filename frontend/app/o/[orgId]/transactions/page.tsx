@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { CONTROL, FILTER_LABEL } from "@/components/ui/controls";
 import { PRIMARY_LINK } from "@/components/ui/Button";
 import { DecimalText } from "@/components/ui/DecimalText";
 import { ListFilters } from "@/components/ui/ListFilters";
@@ -17,7 +18,6 @@ const SORTS = ["number", "date", "customer", "status", "currency", "lines", "net
 
 const STATUSES = ["draft", "completed", "cancelled"] as const;
 const EXTRAS: Record<string, ExtraSpec> = { status: STATUSES, date_from: "date", date_to: "date" };
-const CONTROL = "rounded border border-zinc-400 px-2 py-1 text-sm dark:bg-zinc-900";
 
 /**
  * Transactions with their totals as FastAPI calculated them (sums of the stored line amounts).
@@ -48,7 +48,7 @@ export default async function TransactionsPage({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold">Orders</h1>
+        <h1 className="text-[28px] leading-tight font-semibold tracking-tight">Orders</h1>
         {canWrite && (
           <Link href={`${base}/new`} className={PRIMARY_LINK} data-testid="new-transaction">
             New order
@@ -58,7 +58,7 @@ export default async function TransactionsPage({
 
       <div className="panel flex flex-col gap-4">
         <ListFilters action={base} params={list} search={false} activeStatus={false}>
-          <label className="flex flex-col gap-1 text-sm">
+          <label className={FILTER_LABEL}>
             Status
             <select name="status" defaultValue={list.extra.status ?? ""} className={CONTROL}>
               <option value="">All</option>
@@ -68,11 +68,11 @@ export default async function TransactionsPage({
             </select>
           </label>
           <CustomerFilter key={`customer-${customerId ?? ""}`} name="billing_customer_id" label="Customer" initial={initialCustomer} />
-          <label className="flex flex-col gap-1 text-sm">
+          <label className={FILTER_LABEL}>
             From
             <input type="date" name="date_from" defaultValue={list.extra.date_from ?? ""} className={CONTROL} />
           </label>
-          <label className="flex flex-col gap-1 text-sm">
+          <label className={FILTER_LABEL}>
             To
             <input type="date" name="date_to" defaultValue={list.extra.date_to ?? ""} className={CONTROL} />
           </label>

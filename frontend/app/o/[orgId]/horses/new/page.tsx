@@ -10,7 +10,7 @@ export default async function NewHorsePage({ params }: { params: Promise<{ orgId
   }
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold">New horse</h1>
+      <h1 className="text-[28px] leading-tight font-semibold tracking-tight">New horse</h1>
       <HorseForm />
     </div>
   );

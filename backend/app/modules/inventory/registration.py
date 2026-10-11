@@ -32,5 +32,7 @@ def register(registry: Registry) -> None:
     # Credit notes: which invoiced lines can go back into stock, and putting them back.
     registry.add_hook("stock.returnable", service.returnable)
     registry.add_hook("stock.return", service.return_on_credit)
+    # Receipts: what of each line was handed over at the sale and what is to be delivered later.
+    registry.add_hook("stock.split_at_completion", service.split_at_completion)
     # The catalog list sorts by stock columns through these expressions (core never imports Inventory).
     registry.add_hook("item.sort", sorting.item_sorts)

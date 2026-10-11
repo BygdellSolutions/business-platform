@@ -11,7 +11,7 @@ export default async function NewCustomerPage({ params }: { params: Promise<{ or
   }
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold">New customer</h1>
+      <h1 className="text-[28px] leading-tight font-semibold tracking-tight">New customer</h1>
       <CustomerForm canSetDiscount={role === "owner" || role === "admin"} />
     </div>
   );

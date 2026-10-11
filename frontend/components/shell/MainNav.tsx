@@ -33,11 +33,11 @@ export function MainNav({ orgId, items }: { orgId: string; items: NavItem[] }) {
   }
 
   return (
-    <nav aria-label="Main" className="flex gap-4 overflow-x-auto text-sm md:flex-col md:overflow-visible">
+    <nav aria-label="Main" className="flex gap-4 overflow-x-auto text-sm md:flex-col md:gap-5 md:overflow-visible">
       {sections.map((section) => (
         <div key={section.title ?? "home"} className="flex shrink-0 flex-col gap-1">
-          {section.title && <span className="hidden px-3 text-xs font-semibold tracking-wide text-zinc-500 uppercase md:block">{section.title}</span>}
-          <ul className="flex gap-1 md:flex-col">
+          {section.title && <span className="hidden px-3 pb-1 text-[11px] font-semibold tracking-wider text-muted uppercase md:block">{section.title}</span>}
+          <ul className="flex gap-0.5 md:flex-col">
             {section.items.map((item) => {
               const href = `${base}${item.path}`;
               const current = item.path === "" ? pathname === base : pathname === href || pathname.startsWith(`${href}/`);
@@ -47,13 +47,11 @@ export function MainNav({ orgId, items }: { orgId: string; items: NavItem[] }) {
                     <a
                       href={href}
                       aria-current={current ? "page" : undefined}
-                      className={`flex items-center gap-3 rounded-md px-3 py-2 whitespace-nowrap ${
-                        current
-                          ? "bg-accent-soft font-semibold text-accent-soft-foreground"
-                          : "text-zinc-700 hover:bg-zinc-200/60 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                      className={`group flex h-10 items-center gap-3 rounded-lg px-3 whitespace-nowrap transition-colors ${
+                        current ? "bg-accent-soft font-medium text-accent-soft-foreground" : "text-secondary hover:bg-surface-hover hover:text-foreground"
                       }`}
                     >
-                      <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+                      <svg aria-hidden="true" viewBox="0 0 24 24" className={`size-[18px] shrink-0 ${current ? "text-accent-icon" : "text-muted group-hover:text-secondary"}`} fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
                         <path d={ICONS[item.path] ?? ICONS[""]} />
                       </svg>
                       {item.label}

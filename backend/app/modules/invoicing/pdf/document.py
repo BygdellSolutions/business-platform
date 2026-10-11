@@ -106,11 +106,23 @@ class PdfCredit(Frozen):
     reason: str
 
 
+class PdfLater(Frozen):
+    """A line of a counter sale that was not all in stock: paid in full, part handed over, the rest delivered later."""
+
+    description: str
+    unit: str
+    ordered: str
+    handed_over: str
+    later: str
+
+
 class PdfReceipt(Frozen):
-    """An order paid at the counter (template 9): when and how it was paid. No payment is asked for."""
+    """An order paid at the counter (template 9): when and how it was paid. No payment is asked for. From template 10,
+    the lines that are to be delivered later (paid now, not all in stock at the sale)."""
 
     paid_on: str
     method: str  # already in the document's language ("Swish", "kort", ...)
+    later: tuple[PdfLater, ...] = ()
 
 
 class PdfDocument(Frozen):
@@ -198,6 +210,8 @@ def iter_strings(document: PdfDocument):
         yield from (document.credit.invoice_number, document.credit.invoice_date, document.credit.reason)
     if document.receipt is not None:
         yield from (document.receipt.paid_on, document.receipt.method)
+        for entry in document.receipt.later:
+            yield from (entry.description, entry.unit, entry.ordered, entry.handed_over, entry.later)
     for column in document.issuer_footer:
         yield from column
     if document.payment is not None:

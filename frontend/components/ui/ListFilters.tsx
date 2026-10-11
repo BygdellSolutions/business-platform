@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
 
+import { BUTTON_VARIANTS } from "@/components/ui/Button";
+import { CONTROL, FILTER_LABEL, SearchField } from "@/components/ui/controls";
 import type { ListParams } from "@/lib/list-params";
 
-const CONTROL = "rounded border border-zinc-400 px-2 py-1 text-sm dark:bg-zinc-900";
 
 /**
  * Search and filters as a plain GET form: submitting it loads the list address with the
@@ -27,9 +28,9 @@ export function ListFilters({
   return (
     <form action={action} method="get" role="search" aria-label="Filter" className="flex flex-wrap items-end gap-3">
       {search && (
-        <label className="flex flex-col gap-1 text-sm">
+        <label className={FILTER_LABEL}>
           Search
-          <input name="q" type="search" defaultValue={params.q} maxLength={255} className={CONTROL} />
+          <SearchField name="q" type="search" defaultValue={params.q} maxLength={255} placeholder="Search" />
         </label>
       )}
       {children}
@@ -37,7 +38,7 @@ export function ListFilters({
       {params.sort && <input type="hidden" name="sort" value={params.sort} />}
       {params.sort && params.dir === "desc" && <input type="hidden" name="dir" value="desc" />}
       {activeStatus && (
-        <label className="flex flex-col gap-1 text-sm">
+        <label className={FILTER_LABEL}>
           Status
           <select name="active" defaultValue={params.active} className={CONTROL}>
             <option value="all">All</option>
@@ -46,11 +47,11 @@ export function ListFilters({
           </select>
         </label>
       )}
-      <button type="submit" className="rounded border border-zinc-400 px-3 py-1 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800">
+      <button type="submit" className={BUTTON_VARIANTS.primary}>
         Apply
       </button>
       {/* A plain link: clearing the filters is just the bare list address. */}
-      <a href={action} className="text-sm underline">
+      <a href={action} className="flex h-9 items-center text-sm text-secondary hover:text-foreground hover:underline">
         Clear
       </a>
     </form>

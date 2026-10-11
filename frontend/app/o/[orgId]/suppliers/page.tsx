@@ -31,7 +31,7 @@ export default async function SuppliersPage({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold">Suppliers</h1>
+        <h1 className="text-[28px] leading-tight font-semibold tracking-tight">Suppliers</h1>
         {canWrite && (
           <Link href={`${base}/new`} className={PRIMARY_LINK} data-testid="new-supplier">
             New supplier

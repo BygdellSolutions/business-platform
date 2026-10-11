@@ -38,7 +38,7 @@ export default async function NewInvoicePage({
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold">New invoice</h1>
+      <h1 className="text-[28px] leading-tight font-semibold tracking-tight">New invoice</h1>
       {canMutate ? (
         <p className="text-sm text-zinc-600 dark:text-zinc-400">Choose completed orders of one billing customer and one currency. The draft reserves them; deleting the draft releases them.</p>
       ) : (

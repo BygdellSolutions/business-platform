@@ -1,11 +1,15 @@
 import Link from "next/link";
 
-import { BACKORDER_STATES } from "@/features/catalog/backorder-labels";
+import { BACKORDER_STATES, BACKORDER_TONES } from "@/features/catalog/backorder-labels";
 import { StockBadges } from "@/features/catalog/StockBadges";
 import { SupplierName } from "@/features/suppliers/SupplierName";
+import { readActiveRole } from "@/lib/active-role";
 import type { Backorder, Incoming, StockItem } from "@/lib/api/types";
+import { canWriteRecords } from "@/lib/roles";
 import { serverRead } from "@/lib/server-api";
 import { trimQuantity } from "@/lib/decimal";
+import { BUTTON_VARIANTS } from "@/components/ui/Button";
+import { CONTROL, FILTER_LABEL, SearchField } from "@/components/ui/controls";
 import { SortHeader } from "@/components/ui/SortHeader";
 import { sortRows, tableSort, type SortValue } from "@/lib/table-sort";
 
@@ -37,7 +41,6 @@ const INCOMING_SORTS: Record<string, (r: Incoming) => SortValue> = {
   supplier: (r) => ({ text: r.supplier?.name ?? null }),
   reference: (r) => ({ text: r.reference }),
 };
-const CONTROL = "rounded border border-zinc-400 px-2 py-1 text-sm dark:bg-zinc-900";
 
 function one(value: string | string[] | undefined): string {
   return typeof value === "string" ? value : "";
@@ -56,6 +59,7 @@ export default async function InventoryPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { orgId } = await params;
+  const canWrite = canWriteRecords(await readActiveRole(orgId));
   const raw = await searchParams;
   const q = one(raw.q).trim();
   const state = STATES.some((entry) => entry.value === one(raw.state)) ? one(raw.state) : "";
@@ -77,7 +81,7 @@ export default async function InventoryPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold">Inventory</h1>
+      <h1 className="text-[28px] leading-tight font-semibold tracking-tight">Inventory</h1>
       <section aria-label="Stock" className="panel flex flex-col gap-2">
         <h2 className="text-lg font-semibold">Stock</h2>
         <p className="text-xs text-zinc-500">
@@ -85,11 +89,11 @@ export default async function InventoryPage({
           delivered: completed orders still waiting for stock. Available = on hand − on draft orders − sold, not delivered.
         </p>
         <form action={`/o/${orgId}/inventory`} className="flex flex-wrap items-end gap-3">
-          <label className="flex flex-col gap-1 text-sm">
+          <label className={FILTER_LABEL}>
             Search
-            <input name="q" defaultValue={q} placeholder="Name or SKU" className={CONTROL} />
+            <SearchField name="q" defaultValue={q} placeholder="Name or SKU" />
           </label>
-          <label className="flex flex-col gap-1 text-sm">
+          <label className={FILTER_LABEL}>
             State
             <select name="state" defaultValue={state} className={CONTROL}>
               {STATES.map((entry) => (
@@ -101,7 +105,7 @@ export default async function InventoryPage({
           </label>
           {productSort.sort && <input type="hidden" name="sort" value={productSort.sort} />}
           {productSort.sort && productSort.dir === "desc" && <input type="hidden" name="sort_dir" value="desc" />}
-          <button type="submit" className="rounded border border-zinc-400 px-3 py-1 text-sm">
+          <button type="submit" className={BUTTON_VARIANTS.primary}>
             Show
           </button>
         </form>
@@ -111,7 +115,7 @@ export default async function InventoryPage({
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full max-w-6xl text-left text-sm" data-testid="stock-table">
+            <table className="w-full text-left text-sm whitespace-nowrap" data-testid="stock-table">
               <thead>
                 <tr className="border-b border-zinc-300 dark:border-zinc-700">
                   <SortHeader label="Product" sortKey="name" current={productSort.sort} dir={productSort.dir} href={productSort.hrefs.name} />
@@ -170,7 +174,7 @@ export default async function InventoryPage({
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="text-left text-sm">
+            <table className="text-left text-sm whitespace-nowrap">
               <thead>
                 <tr className="border-b border-zinc-300 dark:border-zinc-700">
                   <SortHeader label="Order no." sortKey="number" current={backlogSort.sort} dir={backlogSort.dir} href={backlogSort.hrefs.number} align="right" />
@@ -180,6 +184,7 @@ export default async function InventoryPage({
                   <SortHeader label="Unit" sortKey="unit" current={backlogSort.sort} dir={backlogSort.dir} href={backlogSort.hrefs.unit} />
                   <SortHeader label="Waiting" sortKey="waiting" current={backlogSort.sort} dir={backlogSort.dir} href={backlogSort.hrefs.waiting} align="right" />
                   <SortHeader label="State" sortKey="state" current={backlogSort.sort} dir={backlogSort.dir} href={backlogSort.hrefs.state} />
+                  {canWrite && <th className="py-1" aria-label="Deliver" />}
                 </tr>
               </thead>
               <tbody>
@@ -203,7 +208,17 @@ export default async function InventoryPage({
                     <td className="py-1 pr-4 text-right" data-testid="backlog-waiting">
                       {trimQuantity(backorder.remaining)}
                     </td>
-                    <td className="py-1 pr-4">{BACKORDER_STATES[backorder.state]}</td>
+                    <td className="py-1 pr-4">
+                      <span className={`badge ${BACKORDER_TONES[backorder.state]}`}>{BACKORDER_STATES[backorder.state]}</span>
+                    </td>
+                    {canWrite && (
+                      // Delivering happens on the product's page, where its stock and every customer waiting for it are shown.
+                      <td className="py-1">
+                        <Link href={`/o/${orgId}/catalog/${backorder.item_id}#backorders`} className="underline" data-testid="backlog-deliver">
+                          Deliver
+                        </Link>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -219,7 +234,7 @@ export default async function InventoryPage({
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="text-left text-sm">
+            <table className="text-left text-sm whitespace-nowrap">
               <thead>
                 <tr className="border-b border-zinc-300 dark:border-zinc-700">
                   <SortHeader label="Expected" sortKey="expected" current={incomingSort.sort} dir={incomingSort.dir} href={incomingSort.hrefs.expected} />

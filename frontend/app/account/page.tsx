@@ -21,7 +21,7 @@ export default async function AccountPage() {
   return (
     <main className="mx-auto flex max-w-xl flex-col gap-6 p-8">
       <div>
-        <h1 className="text-2xl font-semibold">Account security</h1>
+        <h1 className="text-[28px] leading-tight font-semibold tracking-tight">Account security</h1>
         <p className="text-sm text-zinc-500" data-testid="account-email">
           Signed in as {current.user.email}
         </p>

@@ -33,7 +33,7 @@ export default async function HorsePage({
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold" data-testid="record-name">
+      <h1 className="text-[28px] leading-tight font-semibold tracking-tight" data-testid="record-name">
         {horse.name}
       </h1>
       <p className="text-sm text-zinc-500" data-testid="record-number">

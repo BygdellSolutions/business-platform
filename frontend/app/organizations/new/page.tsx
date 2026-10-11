@@ -18,7 +18,7 @@ export default async function NewOrganizationPage() {
 
   return (
     <main className="mx-auto flex max-w-xl flex-col gap-4 p-8">
-      <h1 className="text-2xl font-semibold">Create an organization</h1>
+      <h1 className="text-[28px] leading-tight font-semibold tracking-tight">Create an organization</h1>
       {current.user.can_create_organizations ? (
         <>
           <p className="text-sm text-zinc-500">You will be its owner. You can complete the business profile later in Settings.</p>

@@ -14,7 +14,7 @@ export default async function NewTransactionPage({ params }: { params: Promise<{
   const organization = await serverRead<Organization>(orgId, "/api/organization");
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold">New order</h1>
+      <h1 className="text-[28px] leading-tight font-semibold tracking-tight">New order</h1>
       <p className="text-sm text-zinc-600 dark:text-zinc-400">Choose who is billed and the date. You add the lines on the next page.</p>
       <TransactionCreateForm today={organization.today} />
     </div>

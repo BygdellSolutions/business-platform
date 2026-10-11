@@ -168,9 +168,12 @@ test("received stock goes to waiting sales only when a person confirms the oldes
   await expect(page.getByTestId("stock-row-on-hand")).toHaveText("4");
   await expect(page.getByTestId("stock-row")).toContainText("Backordered");
 
-  await page.goto(`/o/${world.orgId}/catalog/${item.id}`);
+  // Delivering happens on the product's page: the Inventory page's Deliver link goes straight to its Backorders box.
+  await page.getByTestId("backlog-deliver").first().click();
+  await expect(page).toHaveURL(`/o/${world.orgId}/catalog/${item.id}#backorders`);
   const panel = page.getByTestId("backorders-panel");
   await expect(panel.getByTestId("backorder-state")).toHaveText(["Ready to fulfill", "Ready to fulfill"]);
+  await expect(panel.getByTestId("confirm-allocation")).toHaveText("Deliver");
   await panel.getByTestId("propose-allocation").click();
   await expect(panel.getByTestId("allocation-proposed")).toContainText("from 4 on hand");
   await expect(panel.getByTestId("allocation-quantity").first()).toHaveValue("2");

@@ -22,7 +22,7 @@ export default async function Home() {
 
   return (
     <main className="mx-auto flex max-w-xl flex-col gap-4 p-8">
-      <h1 className="text-2xl font-semibold">Choose an organization</h1>
+      <h1 className="text-[28px] leading-tight font-semibold tracking-tight">Choose an organization</h1>
       <p className="text-sm text-zinc-500">
         Signed in as <span data-testid="user-email">{current.user.email}</span>
       </p>

@@ -29,7 +29,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ orgId
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold">Settings</h1>
+      <h1 className="text-[28px] leading-tight font-semibold tracking-tight">Settings</h1>
       <CopyableValue
         label="Organization ID"
         value={organization.id}

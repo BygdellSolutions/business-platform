@@ -36,29 +36,42 @@ export default async function OrgLayout({
   const organization = result.memberships.find((membership) => membership.id === orgId);
   if (!organization) notFound();
 
+  // The organization's mark in the sidebar: its initials ("Bygdell Solutions" -> "BS").
+  const initials = organization.name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0]?.toUpperCase())
+    .join("");
+
   return (
     <div className="flex min-h-full flex-col md:flex-row">
-      <aside className="flex shrink-0 flex-col gap-4 border-b border-zinc-200 bg-white p-4 md:sticky md:top-0 md:h-screen md:w-60 md:overflow-y-auto md:border-r md:border-b-0 dark:border-zinc-800 dark:bg-zinc-950">
-        <div className="px-3">
-          <div data-testid="org-name" className="text-lg leading-tight font-semibold">{organization.name}</div>
-          <div className="text-sm text-zinc-500">
-            Your role: <span data-testid="org-role" className="capitalize">{organization.role}</span>
+      <aside className="flex shrink-0 flex-col gap-5 border-b border-border bg-sidebar p-3 md:sticky md:top-0 md:h-screen md:w-60 md:overflow-y-auto md:border-r md:border-b-0">
+        <div className="flex items-center gap-3 px-2 pt-1">
+          <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-sm font-semibold text-accent-icon">
+            {initials}
+          </span>
+          <div className="min-w-0">
+            <div data-testid="org-name" className="truncate text-[15px] leading-tight font-semibold">{organization.name}</div>
+            <div className="text-xs text-muted">
+              Your role: <span data-testid="org-role" className="capitalize">{organization.role}</span>
+            </div>
           </div>
         </div>
         <MainNav orgId={orgId} items={NAV.filter((item) => item.roles === undefined || item.roles.includes(organization.role))} />
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-zinc-200 px-3 pt-4 text-sm md:mt-auto dark:border-zinc-800">
-          <span data-testid="user-email" className="w-full truncate text-zinc-600 dark:text-zinc-400">{current.user.email}</span>
-          <a href="/account" className="underline" data-testid="account-link">
-            Account
-          </a>
-          {(mode === "dev" || mode === "session") && <SignOut mode={mode} />}
-        </div>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col bg-page">
-        <div className="border-b border-zinc-200 px-4 py-2 md:px-8 dark:border-zinc-800">
+        <header className="sticky top-0 z-10 flex min-h-14 flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b border-border bg-topbar px-4 py-2 md:px-6">
           <OrgSwitcher organizations={result.memberships} currentId={orgId} canCreate={current.user.can_create_organizations} owned={{ count: current.user.owned_organizations, max: current.user.max_owned_organizations }} />
-        </div>
-        <main className="flex-1 p-4 md:p-8">
+          <div className="flex items-center gap-4 text-sm">
+            <span data-testid="user-email" className="hidden truncate text-muted sm:inline">{current.user.email}</span>
+            <a href="/account" className="text-secondary hover:text-foreground" data-testid="account-link">
+              Account
+            </a>
+            {(mode === "dev" || mode === "session") && <SignOut mode={mode} />}
+          </div>
+        </header>
+        <main className="flex-1 p-4 md:p-6">
           <OrgScope orgId={orgId}>{children}</OrgScope>
         </main>
       </div>

@@ -10,7 +10,7 @@ export default async function NewSupplierPage({ params }: { params: Promise<{ or
   }
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold">New supplier</h1>
+      <h1 className="text-[28px] leading-tight font-semibold tracking-tight">New supplier</h1>
       <SupplierForm />
     </div>
   );

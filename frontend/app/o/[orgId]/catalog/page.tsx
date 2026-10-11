@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { PRIMARY_LINK } from "@/components/ui/Button";
 import { DecimalText } from "@/components/ui/DecimalText";
+import { FILTER_LABEL } from "@/components/ui/controls";
 import { ListFilters } from "@/components/ui/ListFilters";
 import { Pagination } from "@/components/ui/Pagination";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -81,7 +82,7 @@ export default async function CatalogPage({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold">Catalog</h1>
+        <h1 className="text-[28px] leading-tight font-semibold tracking-tight">Catalog</h1>
         {canWrite && (
           <Link
             href={`${base}/new`}
@@ -95,7 +96,7 @@ export default async function CatalogPage({
 
       <div className="panel flex flex-col gap-4">
         <ListFilters action={base} params={list}>
-          <label className="flex flex-col gap-1 text-sm">
+          <label className={FILTER_LABEL}>
             Type
             <select
               name="type"

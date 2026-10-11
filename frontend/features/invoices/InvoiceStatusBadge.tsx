@@ -1,18 +1,18 @@
 import type { Invoice, InvoiceStatus } from "@/lib/api/types";
 
 /** An open return case: one look wherever it is shown (the invoice's badges, the invoice list's Return column). */
-export const RETURN_OPEN_CLASS = "rounded bg-orange-100 px-2 py-0.5 text-sm font-medium text-orange-900 dark:bg-orange-950 dark:text-orange-200";
+export const RETURN_OPEN_CLASS = "badge tone-orange";
 
-const DRAFT = { label: "Draft", className: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200" };
-const ISSUED = { label: "Issued", className: "bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200" };
+const DRAFT = { label: "Draft", className: "tone-warning" };
+const ISSUED = { label: "Issued", className: "tone-info" };
 const PAYMENT: Record<NonNullable<Invoice["payment_status"]>, { label: string; className: string }> = {
-  unpaid: { label: "Unpaid", className: "bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200" },
-  partially_paid: { label: "Partially paid", className: "bg-violet-100 text-violet-900 dark:bg-violet-950 dark:text-violet-200" },
-  paid: { label: "Paid", className: "bg-green-100 text-green-900 dark:bg-green-950 dark:text-green-200" },
+  unpaid: { label: "Unpaid", className: "tone-info" },
+  partially_paid: { label: "Partially paid", className: "tone-purple" },
+  paid: { label: "Paid", className: "tone-success" },
 };
 
-const CREDITED = { label: "Credited", className: "bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200" };
-const PARTLY_CREDITED = { label: "Partly credited", className: "bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200" };
+const CREDITED = { label: "Credited", className: "tone-neutral" };
+const PARTLY_CREDITED = { label: "Partly credited", className: "tone-neutral" };
 
 /**
  * Where an invoice stands, as the server reports it: a draft is "Draft"; an issued invoice says how far it is paid
@@ -38,12 +38,12 @@ export function InvoiceStatusBadge({
         data-status={status}
         data-payment={paymentStatus ?? undefined}
         data-credit={creditStatus ?? undefined}
-        className={`rounded px-2 py-0.5 text-sm font-medium ${look.className}`}
+        className={`badge ${look.className}`}
       >
         {look.label}
       </span>
       {status === "issued" && creditStatus === "partly_credited" && (
-        <span data-testid="credit-status" className={`rounded px-2 py-0.5 text-sm font-medium ${PARTLY_CREDITED.className}`}>
+        <span data-testid="credit-status" className={`badge ${PARTLY_CREDITED.className}`}>
           {PARTLY_CREDITED.label}
         </span>
       )}

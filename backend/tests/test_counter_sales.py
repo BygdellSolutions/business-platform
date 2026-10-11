@@ -145,6 +145,44 @@ def test_a_paid_order_has_a_receipt_pdf_and_nothing_else_does(client: TestClient
     assert client.get(f"/api/invoices/receipts/{paid['id']}/pdf", headers=outsider).status_code == 404
 
 
+def test_a_receipt_says_what_is_still_to_be_delivered_and_keeps_saying_it_after_delivery(client: TestClient, db_session: Session, world):
+    """Paid for 7 with 2 on the shelf (decided by the owner 2026-10-11): the receipt shows, per line, what was handed over
+    at the purchase and what is to come. Those are the sale's own figures, so a later delivery does not change it."""
+    from tests.pdf_support import pdf_text
+
+    org, owner, anna = world
+    pad = make_item(db_session, org, "Saddle pad", ItemType.PRODUCT, "pcs", "100.00", track_stock=True)
+    oil = make_item(db_session, org, "Hoof oil", ItemType.PRODUCT, "bottles", "50.00", track_stock=True)
+    for item, count in ((pad, "2"), (oil, "5")):
+        assert client.post(f"/api/items/{item.id}/stock", json={"kind": "count", "quantity": count}, headers=owner).status_code == 201
+    order = _draft(client, owner, anna.id, {"item_id": str(pad.id), "quantity": "7"}, {"item_id": str(oil.id), "quantity": "1"})
+    paid = _pay(client, owner, order, "card").json()
+    receipt = lambda: pdf_text(client.get(f"/api/invoices/receipts/{paid['id']}/pdf", headers=owner).content)  # noqa: E731
+
+    before = receipt()
+    assert "To be delivered later" in before
+    assert "2 of 7 pcs handed over at purchase, 5 pcs to be delivered later" in before
+    assert "bottles handed over" not in before  # the oil was all in stock
+
+    # The 5 arrive and are delivered: the receipt still tells what happened at the purchase.
+    incoming = client.post("/api/inventory/incoming", json={"item_id": str(pad.id), "quantity": "5"}, headers=owner).json()
+    assert client.post(f"/api/inventory/incoming/{incoming['id']}/receive", json={}, headers=owner).status_code == 200
+    fulfillment = client.get("/api/inventory/backorders", headers=owner).json()[0]["fulfillment_id"]
+    delivered = client.post(f"/api/inventory/items/{pad.id}/allocation", json={"allocations": [{"fulfillment_id": fulfillment, "quantity": "5"}]}, headers=owner)
+    assert delivered.status_code == 200
+    assert receipt() == before
+
+
+def test_a_receipt_of_a_sale_that_was_all_in_stock_has_no_later_delivery(client: TestClient, db_session: Session, world):
+    from tests.pdf_support import pdf_text
+
+    org, owner, anna = world
+    pad = make_item(db_session, org, "Saddle pad", ItemType.PRODUCT, "pcs", "100.00", track_stock=True)
+    assert client.post(f"/api/items/{pad.id}/stock", json={"kind": "count", "quantity": "9"}, headers=owner).status_code == 201
+    paid = _pay(client, owner, _draft(client, owner, anna.id, {"item_id": str(pad.id), "quantity": "7"})).json()
+    assert "delivered later" not in pdf_text(client.get(f"/api/invoices/receipts/{paid['id']}/pdf", headers=owner).content)
+
+
 def test_the_dashboard_counts_counter_sales_as_paid_and_never_as_ready_to_invoice(client: TestClient, db_session: Session, world):
     org, owner, anna = world
     _pay(client, owner, _draft(client, owner, anna.id))  # 1000.00 incl. VAT

@@ -12,6 +12,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.entity_registry import registry
 from app.core.org_time import today_in
 from app.core.tenant import TenantContext
 from app.core.tenant_scope import get_scoped, get_scoped_or_404, scoped_select
@@ -19,7 +20,7 @@ from app.models import Customer, Organization
 from app.modules.invoicing import snapshots
 from app.modules.invoicing.pdf import render
 from app.modules.invoicing.pdf.build import document_from_invoice
-from app.modules.invoicing.pdf.document import PdfReceipt
+from app.modules.invoicing.pdf.document import PdfLater, PdfReceipt
 from app.modules.invoicing.pdf.labels import labels
 from app.modules.sales.models import Transaction, TransactionLine
 from app.modules.sales.pricing import calculate_totals
@@ -76,5 +77,14 @@ def receipt_pdf(db: Session, ctx: TenantContext, transaction_id: uuid.UUID) -> t
     }
     document = document_from_invoice(data)
     words = labels(document.language)
-    document = document.model_copy(update={"receipt": PdfReceipt(paid_on=paid_on, method=words[f"method_{order.payment_method}"]), "payment": None})
+    split: dict = {}
+    for answer in registry.call_hooks("stock.split_at_completion", db, ctx.organization_id, [line.id for line in lines]):
+        split.update(answer)
+    later = tuple(
+        PdfLater(description=line.description, unit=line.unit, ordered=f"{line.quantity:.3f}", handed_over=f"{split[line.id][0]:.3f}", later=f"{split[line.id][1]:.3f}")
+        for line in lines
+        if line.id in split and split[line.id][1] > 0
+    )
+    receipt = PdfReceipt(paid_on=paid_on, method=words[f"method_{order.payment_method}"], later=later)
+    document = document.model_copy(update={"receipt": receipt, "payment": None})
     return render.render_pdf(document), f"receipt-{order.receipt_number_text}.pdf"

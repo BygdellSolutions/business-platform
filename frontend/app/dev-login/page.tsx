@@ -23,7 +23,7 @@ export default async function DevLogin({ searchParams }: { searchParams: Promise
 
   return (
     <main className="mx-auto flex max-w-xl flex-col gap-4 p-8">
-      <h1 className="text-2xl font-semibold">Development sign-in</h1>
+      <h1 className="text-[28px] leading-tight font-semibold tracking-tight">Development sign-in</h1>
       <p className="text-sm text-zinc-500">
         Development only. Pick a seeded user, or type the email of any user the backend knows. There are no passwords yet.
       </p>

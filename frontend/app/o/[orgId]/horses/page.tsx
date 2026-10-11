@@ -57,7 +57,7 @@ export default async function HorsesPage({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold">Horses</h1>
+        <h1 className="text-[28px] leading-tight font-semibold tracking-tight">Horses</h1>
         {canWrite && (
           <Link href={`${base}/new`} className={PRIMARY_LINK} data-testid="new-horse">
             New horse

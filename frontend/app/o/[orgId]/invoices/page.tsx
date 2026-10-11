@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { CONTROL, FILTER_LABEL } from "@/components/ui/controls";
 import { DecimalText } from "@/components/ui/DecimalText";
 import { ListFilters } from "@/components/ui/ListFilters";
 import { Notice } from "@/components/ui/Notice";
@@ -21,7 +22,6 @@ const PAYMENTS = ["open", "overdue", "not_yet_due", "unpaid", "partially_paid", 
 const CREDITS = ["any", "partly_credited", "credited"] as const;
 const RETURNS = ["open", "follow_up_due"] as const;
 const EXTRAS: Record<string, ExtraSpec> = { status: STATUSES, payment: PAYMENTS, credit: CREDITS, returns: RETURNS, date_from: "date", date_to: "date", paid_from: "date", paid_to: "date" };
-const CONTROL = "rounded border border-zinc-400 px-2 py-1 text-sm dark:bg-zinc-900";
 
 /**
  * Invoices as FastAPI lists them. Every word and amount shown is the invoice's own stored content
@@ -55,7 +55,7 @@ export default async function InvoicesPage({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold">Invoices</h1>
+        <h1 className="text-[28px] leading-tight font-semibold tracking-tight">Invoices</h1>
       </div>
       {first(raw.deleted) === "1" && <Notice testId="deleted">Draft deleted. Its orders can be invoiced again.</Notice>}
 
@@ -70,7 +70,7 @@ export default async function InvoicesPage({
       )}
       <div className="panel flex flex-col gap-4">
         <ListFilters action={base} params={list} activeStatus={false}>
-          <label className="flex flex-col gap-1 text-sm">
+          <label className={FILTER_LABEL}>
             Status
             <select name="status" defaultValue={list.extra.status ?? ""} className={CONTROL}>
               <option value="">All</option>
@@ -78,7 +78,7 @@ export default async function InvoicesPage({
               <option value="issued">Issued</option>
             </select>
           </label>
-          <label className="flex flex-col gap-1 text-sm">
+          <label className={FILTER_LABEL}>
             Payment
             <select name="payment" defaultValue={list.extra.payment ?? ""} className={CONTROL}>
               <option value="">All</option>
@@ -91,7 +91,7 @@ export default async function InvoicesPage({
               <option value="refund_due">Refund due</option>
             </select>
           </label>
-          <label className="flex flex-col gap-1 text-sm">
+          <label className={FILTER_LABEL}>
             Credit notes
             <select name="credit" defaultValue={list.extra.credit ?? ""} className={CONTROL}>
               <option value="">All</option>
@@ -100,7 +100,7 @@ export default async function InvoicesPage({
               <option value="credited">Fully credited</option>
             </select>
           </label>
-          <label className="flex flex-col gap-1 text-sm">
+          <label className={FILTER_LABEL}>
             Returns
             <select name="returns" defaultValue={list.extra.returns ?? ""} className={CONTROL}>
               <option value="">All</option>
@@ -109,11 +109,11 @@ export default async function InvoicesPage({
             </select>
           </label>
           <CustomerFilter key={`customer-${customerId ?? ""}`} name="customer_id" label="Customer" initial={initialCustomer} />
-          <label className="flex flex-col gap-1 text-sm">
+          <label className={FILTER_LABEL}>
             From
             <input type="date" name="date_from" defaultValue={list.extra.date_from ?? ""} className={CONTROL} />
           </label>
-          <label className="flex flex-col gap-1 text-sm">
+          <label className={FILTER_LABEL}>
             To
             <input type="date" name="date_to" defaultValue={list.extra.date_to ?? ""} className={CONTROL} />
           </label>
@@ -171,7 +171,7 @@ export default async function InvoicesPage({
                       {invoice.open_returns === 0 ? (
                         "—"
                       ) : invoice.return_follow_up_due ? (
-                        <span className="rounded bg-amber-100 px-2 py-0.5 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                        <span className="badge tone-warning">
                           Follow-up due{invoice.return_follow_up_on ? ` ${formatShortDate(invoice.return_follow_up_on)}` : ""}
                         </span>
                       ) : (

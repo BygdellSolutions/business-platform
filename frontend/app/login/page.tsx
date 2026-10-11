@@ -14,7 +14,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
 
   return (
     <main className="mx-auto flex max-w-sm flex-col gap-4 p-8">
-      <h1 className="text-2xl font-semibold">Sign in</h1>
+      <h1 className="text-[28px] leading-tight font-semibold tracking-tight">Sign in</h1>
       <LoginForm next={safeNext(typeof next === "string" ? next : undefined)} notice={typeof notice === "string" ? notice : undefined} />
     </main>
   );

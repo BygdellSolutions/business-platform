@@ -26,7 +26,7 @@ export function SummaryCard({
     <div
       data-testid={testId}
       className={`flex h-full flex-col gap-1 rounded-xl border p-4 ${
-        tone === "attention" && count > 0 ? "border-amber-400 bg-amber-50 dark:border-amber-700 dark:bg-amber-950" : "border-(--panel-border) bg-(--panel) shadow-xs"
+        tone === "attention" && count > 0 ? "tint tone-warning" : "border-border bg-panel shadow-xs"
       }`}
     >
       <span className="text-sm text-zinc-600 dark:text-zinc-400">{title}</span>

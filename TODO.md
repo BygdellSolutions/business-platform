@@ -46,6 +46,7 @@ Found while testing staging (2026-10-08). Small reviewed slices, each validated 
 - [x] Friendlier screens, step 1: sidebar menu grouped by area with icons and the current page highlighted; one accent colour; filled primary buttons ("New …" and every form's Save) — 2026-10-11
 - [x] Friendlier screens, step 2: every block of information in its own box (one shared `panel` style) — 2026-10-11
 - [ ] Friendlier screens, next steps (proposed 2026-10-11): clickable table rows with roomier spacing and coloured status pills; empty states that explain the page and offer the first "New …"; plain-language labels (Person/Company) and a one-line explanation under each page title; a dashboard that shows only the to-dos that have something in them; hide the menu entries of modules an organization does not use
+- [x] Backorders in plain words: "Deliver" button, Deliver links from the Inventory page; Paid now warns about a shortage; the receipt lists what is to be delivered later — 2026-10-11
 - [ ] Counter sales later: returns and refunds of a paid-now sale; a stored (frozen) receipt PDF; a receipt printer; check the Kassaregister requirement with Skatteverket before relying on it for cash/card sales
 - [ ] Suppliers later: purchase orders, a supplier's article numbers and prices per item; an explicit order date if deliveries are often recorded after ordering; cost history per item (average, last paid) and margin
 - [ ] Payments later: bank file import and automatic matching (bankgiro/OCR), Swish integration, reminders

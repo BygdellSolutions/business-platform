@@ -45,7 +45,7 @@ export default async function Dashboard({
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Dashboard</h1>
+          <h1 className="text-[28px] leading-tight font-semibold tracking-tight">Dashboard</h1>
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
             You are working in <strong data-testid="dashboard-org">{organization?.name}</strong> as <strong>{role}</strong> · {sales.today}
           </p>
@@ -176,7 +176,7 @@ export default async function Dashboard({
               ←
             </Link>
             <input type="month" name="month" defaultValue={sales.month} max={sales.today.slice(0, 7)} aria-label="Month" className="rounded border border-zinc-400 px-2 py-1 dark:bg-zinc-900" />
-            <button type="submit" className="rounded border border-zinc-400 px-2 py-1">
+            <button type="submit" className={BUTTON_VARIANTS.secondary}>
               Show
             </button>
             {sales.next_month !== null && (

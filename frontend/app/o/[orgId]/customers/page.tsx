@@ -34,7 +34,7 @@ export default async function CustomersPage({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold">Customers</h1>
+        <h1 className="text-[28px] leading-tight font-semibold tracking-tight">Customers</h1>
         {canWrite && (
           <Link href={`${base}/new`} className={PRIMARY_LINK} data-testid="new-customer">
             New customer

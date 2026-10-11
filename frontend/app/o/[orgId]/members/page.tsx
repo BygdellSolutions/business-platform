@@ -21,7 +21,7 @@ export default async function MembersPage({ params }: { params: Promise<{ orgId:
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold">Members</h1>
+      <h1 className="text-[28px] leading-tight font-semibold tracking-tight">Members</h1>
       {role !== undefined && canAdminister(role) ? (
         <>
           <MembersAdmin key={orgId} members={await serverRead<Member[]>(orgId, "/api/members")} actorRole={role} />

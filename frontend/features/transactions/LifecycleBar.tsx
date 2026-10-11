@@ -6,11 +6,13 @@ import { useState } from "react";
 import { useOrgId } from "@/components/shell/org-context";
 import { Button } from "@/components/ui/Button";
 import { ConfirmButton } from "@/components/ui/ConfirmButton";
+import { Notice } from "@/components/ui/Notice";
 import { useEditor } from "@/features/transactions/editor-context";
 import { classify } from "@/features/transactions/failures";
 import { DownloadPdf } from "@/features/invoices/DownloadPdf";
 import { apiFetch } from "@/lib/api/client";
 import type { Invoice, PaymentMethod, Transaction } from "@/lib/api/types";
+import { trimQuantity } from "@/lib/decimal";
 
 type Action = "invoice" | "pay" | "reopen" | "cancel";
 
@@ -33,12 +35,15 @@ export const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
  */
 export function LifecycleBar({ canInvoice = true }: { canInvoice?: boolean }) {
   const orgId = useOrgId();
-  const { transaction, busy, editorsOpen, mutate, report, announce } = useEditor();
+  const { transaction, stock, busy, editorsOpen, mutate, report, announce } = useEditor();
   const [running, setRunning] = useState<Action | null>(null);
   const [choosingMethod, setChoosingMethod] = useState(false);
   const [invoiced, setInvoiced] = useState<{ id: string } | "later" | null>(null);
   const blocked = busy || editorsOpen > 0;
   const walkIn = transaction.billing_customer.walk_in === true;
+  // Paying at the counter for more than is in stock is allowed (the rest is backordered), but never by accident:
+  // the person at the till sees it before choosing how it was paid (decided by the owner 2026-10-11).
+  const short = stock.filter((demand) => demand.shortage !== "0.000");
 
   async function step(action: "reopen" | "cancel") {
     setRunning(action);
@@ -107,6 +112,23 @@ export function LifecycleBar({ canInvoice = true }: { canInvoice?: boolean }) {
               Back
             </button>
           </span>
+        )}
+        {status === "draft" && choosingMethod && short.length > 0 && (
+          <div className="basis-full">
+          <Notice tone="warning" testId="pay-now-shortage">
+            <p className="font-medium">Not everything is in stock.</p>
+            {short.map((demand) => {
+              const line = transaction.lines.find((entry) => entry.item_id === demand.item_id);
+              return (
+                <p key={demand.item_id}>
+                  {line?.description}: {trimQuantity(demand.available)} of {trimQuantity(demand.requested)} {line?.unit} in stock. The customer pays for
+                  all {trimQuantity(demand.requested)} now, takes {trimQuantity(demand.available)} today and gets {trimQuantity(demand.shortage)} when
+                  they arrive.
+                </p>
+              );
+            })}
+          </Notice>
+          </div>
         )}
         {status === "draft" && !walkIn && (
           <Button type="button" disabled={blocked} onClick={() => void invoice()} data-testid="invoice-order">

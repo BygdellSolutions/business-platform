@@ -48,7 +48,9 @@ from app.modules.invoicing.pdf.labels import decimal_separator, labels
 #    before order numbers print as in 7.
 # 9: receipts ("Kvitto" / "Receipt") of orders paid at the counter: receipt number and date, "Amount paid", how it was
 #    paid, no due date and no payment section. Invoices and credit notes print as in 8.
-TEMPLATE_VERSION = 9
+# 10: a receipt lists what is to be delivered later ("To be delivered later" / "Levereras senare": handed over at the
+#    purchase and still to come, per line) when a counter sale was not all in stock. Everything else prints as in 9.
+TEMPLATE_VERSION = 10
 ACCENT = colors.HexColor("#1f4e5f")
 ACCENT_LIGHT = colors.HexColor("#e8f0f2")
 # Room for the footer columns (up to five lines each) above the page number.
@@ -415,6 +417,16 @@ def _build(document: PdfDocument, fonts: font_layer.Registered) -> bytes:
 
     # How to pay, on every invoice: the reference (the invoice number) and due date always, then whatever the issuer
     # snapshot stores (bankgiro, plusgiro, IBAN, BIC, terms). Nothing that is not stored is printed.
+    if receipt and receipt.later:
+        # Paid in full but not all handed over: the customer has in writing what is still owed to them.
+        rows_later = [[printer.p(entry.description, "bold"), printer.p(words["to_deliver_row"].format(
+            handed_over=trimmed(entry.handed_over, sep), ordered=trimmed(entry.ordered, sep), later=trimmed(entry.later, sep), unit=entry.unit), "body")]
+            for entry in receipt.later]
+        later_table = Table(rows_later, colWidths=[width * 0.4, width * 0.6 - 16])
+        later_table.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 6), ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2)]))
+        box = Table([[printer.p(words["to_deliver"], "box_label")], [printer.p(words["to_deliver_note"], "body")], [later_table]], colWidths=[width - 16])
+        box.setStyle(TableStyle([("BOX", (0, 0), (-1, -1), 0.6, ACCENT), ("LEFTPADDING", (0, 0), (-1, -1), 6), ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
+        story += [Spacer(1, 6 * mm), KeepTogether([box])]
     if credit or receipt:
         # A credit note asks for no payment (what is to be paid back is settled on the invoice); a receipt is paid.
         doc.build(story, canvasmaker=_numbered_canvas(footer))

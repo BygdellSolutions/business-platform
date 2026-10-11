@@ -241,6 +241,37 @@ describe("lifecycle", () => {
     expect(screen.queryByTestId("cancel")).toBeNull();
   });
 
+  it("Paid now says plainly what is not in stock before the payment method is chosen, and still lets it be paid", async () => {
+    const demand = (item_id: string, requested: string, available: string, shortage: string) => ({
+      item_id,
+      requested: requested as QuantityString,
+      on_hand: available as QuantityString,
+      allocated: "0.000" as QuantityString,
+      available: available as QuantityString,
+      incoming: "0.000" as QuantityString,
+      shortage: shortage as QuantityString,
+    });
+    const lines = [line({ id: "l1", item_id: "i1", description: "Saddle pad", unit: "pcs" }), line({ id: "l2", item_id: "i2", description: "Hoof oil", unit: "bottles" })];
+    installBackend(() => ok(tx({ status: "completed", version: 5, paid_at: "2026-10-10T10:00:00Z", payment_method: "card", receipt_number_text: "1001" })));
+    render(<Harness initial={tx({ lines })} stock={[demand("i1", "7.000", "2.000", "5.000"), demand("i2", "1.000", "4.000", "0.000")]} />);
+
+    expect(screen.queryByTestId("pay-now-shortage")).toBeNull(); // only when paying
+    await userEvent.click(screen.getByTestId("pay-now"));
+    const warning = screen.getByTestId("pay-now-shortage");
+    expect(warning).toHaveTextContent("Saddle pad: 2 of 7 pcs in stock. The customer pays for all 7 now, takes 2 today and gets 5 when they arrive.");
+    expect(warning).not.toHaveTextContent("Hoof oil"); // enough of it
+
+    await userEvent.click(screen.getByTestId("pay-card"));
+    expect(writes()).toEqual([{ method: "POST", path: `/transactions/${TX_ID}/pay-now`, body: { method: "card" }, ifMatch: 4, orgId: ORG_A }]);
+  });
+
+  it("Paid now shows no stock warning when everything is in stock", async () => {
+    render(<Harness initial={tx({ lines: [line({ item_id: "i1" })] })} stock={[{ item_id: "i1", requested: "1.000", on_hand: "3.000", allocated: "0.000", available: "3.000", incoming: "0.000", shortage: "0.000" } as never]} />);
+    await userEvent.click(screen.getByTestId("pay-now"));
+    expect(screen.getByTestId("payment-methods")).toBeInTheDocument();
+    expect(screen.queryByTestId("pay-now-shortage")).toBeNull();
+  });
+
   it("Invoice completes, then puts the order on a draft invoice and links to it", async () => {
     installBackend((call) => (call.path === "/invoices/for-order" ? ok({ id: "draft-1" }) : ok(tx({ status: "completed", version: 5 }))));
     server.tx = tx({ status: "completed", version: 5 });

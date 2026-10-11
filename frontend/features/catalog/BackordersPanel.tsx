@@ -7,7 +7,7 @@ import { useState } from "react";
 import { useOrgId } from "@/components/shell/org-context";
 import { Button } from "@/components/ui/Button";
 import { ErrorSummary } from "@/components/ui/ErrorSummary";
-import { BACKORDER_STATES } from "@/features/catalog/backorder-labels";
+import { BACKORDER_STATES, BACKORDER_TONES } from "@/features/catalog/backorder-labels";
 import { apiFetch } from "@/lib/api/client";
 import type { AllocationProposal, Backorder } from "@/lib/api/types";
 import { problemsFrom, useMutation } from "@/lib/forms";
@@ -60,7 +60,7 @@ export function BackordersPanel({ itemId, unit, backorders, canAllocate }: { ite
   const sorted = useSortedRows(backorders, SORT_COLUMNS);
   if (backorders.length === 0) return null;
   return (
-    <section aria-label="Backorders" data-testid="backorders-panel" className="panel flex max-w-5xl flex-col gap-3">
+    <section id="backorders" aria-label="Backorders" data-testid="backorders-panel" className="panel scroll-mt-4 flex max-w-5xl flex-col gap-3">
       <h2 className="text-lg font-semibold">Backorders</h2>
       <div className="overflow-x-auto">
         <table className="text-left text-sm">
@@ -92,7 +92,7 @@ export function BackordersPanel({ itemId, unit, backorders, canAllocate }: { ite
                   {trimQuantity(backorder.remaining)}
                 </td>
                 <td className="py-1 pr-4" data-testid="backorder-state">
-                  {BACKORDER_STATES[backorder.state]}
+                  <span className={`badge ${BACKORDER_TONES[backorder.state]}`}>{BACKORDER_STATES[backorder.state]}</span>
                 </td>
                 {canAllocate && (
                   <td className="py-1">
@@ -124,7 +124,7 @@ export function BackordersPanel({ itemId, unit, backorders, canAllocate }: { ite
               Propose (oldest first)
             </Button>
             <Button type="button" disabled={pending} onClick={() => void confirm()} data-testid="confirm-allocation">
-              Confirm allocation
+              Deliver
             </Button>
           </div>
         </div>

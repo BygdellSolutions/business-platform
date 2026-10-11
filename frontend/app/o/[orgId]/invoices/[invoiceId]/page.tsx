@@ -45,7 +45,7 @@ export default async function InvoicePage({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold" data-testid="record-name">
+        <h1 className="text-[28px] leading-tight font-semibold tracking-tight" data-testid="record-name">
           {invoice.number_text !== null ? `Invoice ${invoice.number_text}` : "Draft invoice"} · {invoice.customer_name}
         </h1>
         <Link href={`/o/${orgId}/invoices`} className="text-sm underline">
