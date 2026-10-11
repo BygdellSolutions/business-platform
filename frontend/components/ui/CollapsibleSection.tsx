@@ -23,7 +23,7 @@ export function CollapsibleSection({
   children: ReactNode;
 }) {
   return (
-    <section aria-label={title} data-testid={testId} className={`flex flex-col ${className}`}>
+    <section aria-label={title} data-testid={testId} className={`panel flex flex-col ${className}`}>
       <details data-testid={toggleTestId} className="group">
         <summary className="flex cursor-pointer list-none items-center gap-2 select-none [&::-webkit-details-marker]:hidden">
           <span aria-hidden="true" className="inline-block text-sm text-zinc-500 transition-transform group-open:rotate-90">

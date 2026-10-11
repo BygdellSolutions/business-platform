@@ -133,7 +133,7 @@ function SettingsForm({ organization }: { organization: Organization }) {
   }
 
   return (
-    <form onSubmit={onSubmit} noValidate className="flex max-w-xl flex-col gap-4" aria-label="Organization settings">
+    <form onSubmit={onSubmit} noValidate className="panel flex max-w-xl flex-col gap-4" aria-label="Organization settings">
       <TextField label="Name" name="name" value={state.name} onChange={(value) => set("name", value)} error={problems.byField.name} autoComplete="off" hint="Shown in the app." />
       <TextField label="Legal name" name="legal_name" value={state.legal_name} onChange={(value) => set("legal_name", value)} error={problems.byField.legal_name} autoComplete="off" hint="For documents, if different from the name." />
       <TextField

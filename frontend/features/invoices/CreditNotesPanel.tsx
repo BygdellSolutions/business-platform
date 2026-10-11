@@ -120,7 +120,7 @@ export function CreditNotesPanel({
   if (invoice.credit_notes.length === 0 && !canCredit) return null;
 
   return (
-    <section id="credit-notes" aria-label="Credit notes" data-testid="credit-notes" className="flex max-w-4xl flex-col gap-3">
+    <section id="credit-notes" aria-label="Credit notes" data-testid="credit-notes" className="panel flex max-w-4xl flex-col gap-3">
       <h2 className="text-lg font-semibold">Credit notes</h2>
       {created && (
         <p role="status" data-testid="credit-created" className="text-sm text-green-800 dark:text-green-300">

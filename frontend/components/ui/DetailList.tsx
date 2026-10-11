@@ -10,7 +10,7 @@ export interface Detail {
 /** A record shown read-only: label and value pairs, for someone who may look but not change. */
 export function DetailList({ details, testId }: { details: Detail[]; testId?: string }) {
   return (
-    <dl data-testid={testId} className="grid max-w-xl grid-cols-[minmax(8rem,auto)_1fr] gap-x-6 gap-y-2 text-sm">
+    <dl data-testid={testId} className="panel grid max-w-xl grid-cols-[minmax(8rem,auto)_1fr] gap-x-6 gap-y-2 text-sm">
       {details.map((detail) => (
         <div key={detail.label} className="contents">
           <dt className="text-zinc-500">{detail.label}</dt>

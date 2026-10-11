@@ -120,7 +120,7 @@ export function InvitationsAdmin({ invitations, actorRole }: { invitations: Invi
 
   const sorted = useSortedRows(invitations, SORT_COLUMNS);
   return (
-    <section className="flex flex-col gap-4" aria-labelledby="invitations-heading" data-testid="invitations">
+    <section className="panel flex flex-col gap-4" aria-labelledby="invitations-heading" data-testid="invitations">
       <h2 id="invitations-heading" className="text-xl font-semibold">
         Invitations
       </h2>

@@ -34,7 +34,7 @@ export function DangerZone({
   const owners = members.filter((member) => member.role === "owner").length;
   const soleOwner = isOwner && owners <= 1;
   return (
-    <section aria-label="Danger zone" data-testid="danger-zone" className="flex max-w-xl flex-col gap-5 rounded border-2 border-red-600 p-4">
+    <section aria-label="Danger zone" data-testid="danger-zone" className="flex max-w-xl flex-col gap-5 rounded-xl border-2 border-red-600 bg-(--panel) p-5">
       <h2 className="text-lg font-semibold text-red-700 dark:text-red-400">Danger zone</h2>
       {transferred && <Notice testId="transferred">Ownership transferred. You are now an admin.</Notice>}
       <LeaveSection soleOwner={soleOwner} passwordChecked={passwordChecked} />

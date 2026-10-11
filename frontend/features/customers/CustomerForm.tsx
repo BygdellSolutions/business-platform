@@ -117,7 +117,7 @@ export function CustomerForm({ customer, canSetDiscount = false }: { customer?: 
           onChanged={(updated) => setRecord((current) => (current ? { ...current, active: updated.active, updated_at: updated.updated_at } : updated))}
         />
       )}
-      <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4" aria-label={record ? "Edit customer" : "New customer"}>
+      <form onSubmit={onSubmit} noValidate className="panel flex max-w-3xl flex-col gap-4" aria-label={record ? "Edit customer" : "New customer"}>
         <SelectField label="Type" name="customer_type" value={state.customer_type} onChange={(value) => set("customer_type", value as CustomerType)} options={TYPES} error={problems.byField.customer_type} />
         <TextField label="Name" name="name" value={state.name} onChange={(value) => set("name", value)} error={problems.byField.name} autoComplete="off" />
         <TextField label="Email" name="email" value={state.email} onChange={(value) => set("email", value)} error={problems.byField.email} inputMode="email" autoComplete="off" />

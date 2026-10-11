@@ -50,7 +50,7 @@ export function HorseNotes({ horseId, notes, canWrite, timeZone }: { horseId: st
   }
 
   return (
-    <section aria-label="Notes" data-testid="horse-notes" className="flex max-w-3xl flex-col gap-3">
+    <section aria-label="Notes" data-testid="horse-notes" className="panel flex max-w-3xl flex-col gap-3">
       <h2 className="text-lg font-semibold">Notes</h2>
       {canWrite && (
         <form onSubmit={add} noValidate aria-label="Add note" className="flex flex-col gap-2">

@@ -60,7 +60,7 @@ export function BackordersPanel({ itemId, unit, backorders, canAllocate }: { ite
   const sorted = useSortedRows(backorders, SORT_COLUMNS);
   if (backorders.length === 0) return null;
   return (
-    <section aria-label="Backorders" data-testid="backorders-panel" className="flex max-w-3xl flex-col gap-3">
+    <section aria-label="Backorders" data-testid="backorders-panel" className="panel flex max-w-3xl flex-col gap-3">
       <h2 className="text-lg font-semibold">Backorders</h2>
       <table className="text-left text-sm">
         <thead>

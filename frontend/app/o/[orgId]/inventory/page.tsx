@@ -78,7 +78,7 @@ export default async function InventoryPage({
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold">Inventory</h1>
-      <section aria-label="Stock" className="flex flex-col gap-2">
+      <section aria-label="Stock" className="panel flex flex-col gap-2">
         <h2 className="text-lg font-semibold">Stock</h2>
         <p className="text-xs text-zinc-500">
           Allocated: on open draft sales (not final; whichever sale is completed first gets the stock). Committed: completed sales still waiting for
@@ -160,7 +160,7 @@ export default async function InventoryPage({
           </table>
         )}
       </section>
-      <section aria-label="Backorders" className="flex flex-col gap-2">
+      <section aria-label="Backorders" className="panel flex flex-col gap-2">
         <h2 className="text-lg font-semibold">Backorders</h2>
         {backorders.length === 0 ? (
           <p className="text-sm text-zinc-500" data-testid="no-backorders">
@@ -207,7 +207,7 @@ export default async function InventoryPage({
           </table>
         )}
       </section>
-      <section aria-label="Incoming" className="flex flex-col gap-2">
+      <section aria-label="Incoming" className="panel flex flex-col gap-2">
         <h2 className="text-lg font-semibold">Incoming</h2>
         {incoming.length === 0 ? (
           <p className="text-sm text-zinc-500" data-testid="no-incoming-overview">

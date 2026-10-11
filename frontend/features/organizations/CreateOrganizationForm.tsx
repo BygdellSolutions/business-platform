@@ -69,7 +69,7 @@ export function CreateOrganizationForm() {
   const refused = error?.kind === "forbidden";
 
   return (
-    <form onSubmit={(event) => void submit(event)} noValidate className="flex max-w-xl flex-col gap-4" data-testid="create-organization-form">
+    <form onSubmit={(event) => void submit(event)} noValidate className="panel flex max-w-xl flex-col gap-4" data-testid="create-organization-form">
       <TextField label="Organization name" name="name" value={name} onChange={setName} required error={local.name ?? problems.byField.name} autoComplete="organization" hint="Shown in the app. Other organizations may use the same name." />
       <TextField
         label="Currency"

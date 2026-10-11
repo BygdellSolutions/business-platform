@@ -8,6 +8,9 @@
   --accent-hover: #1e40af;
   --accent-soft: #e0e7ff;
   --accent-soft-foreground: #1e3a8a;
+  --panel: #ffffff;
+  --panel-border: #e4e4e7;
+  --page: #f6f6f7;
 }
 
 @theme inline {
@@ -17,6 +20,7 @@
   --color-accent-hover: var(--accent-hover);
   --color-accent-soft: var(--accent-soft);
   --color-accent-soft-foreground: var(--accent-soft-foreground);
+  --color-page: var(--page);
   --font-sans: var(--font-sans-local), ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
@@ -29,10 +33,22 @@
     --accent-hover: #3b82f6;
     --accent-soft: #1e293b;
     --accent-soft-foreground: #bfdbfe;
+    --panel: #141416;
+    --panel-border: #2a2a2e;
+    --page: #0a0a0a;
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
+}
+
+/* A box around one block of information on a page (Stock, Backorders, Incoming...), so separate things read as separate. */
+@utility panel {
+  border: 1px solid var(--panel-border);
+  border-radius: 0.75rem;
+  background: var(--panel);
+  padding: 1.25rem;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.04);
 }

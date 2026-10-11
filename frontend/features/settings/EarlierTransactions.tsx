@@ -36,7 +36,7 @@ export function EarlierTransactions({ status, canEdit }: { status: CurrencyStatu
   }
 
   return (
-    <section aria-label="Earlier orders" data-testid="earlier-transactions" className="flex max-w-xl flex-col gap-2">
+    <section aria-label="Earlier orders" data-testid="earlier-transactions" className="panel flex max-w-xl flex-col gap-2">
       <h2 className="text-lg font-medium">Earlier orders</h2>
       {assigned !== null ? (
         <Notice testId="assigned">

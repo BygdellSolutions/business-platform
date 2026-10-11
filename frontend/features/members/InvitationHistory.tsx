@@ -23,7 +23,7 @@ export function InvitationHistory({ invitations, timeZone }: { invitations: Invi
   const sorted = useSortedRows(invitations, SORT_COLUMNS);
   if (invitations.length === 0) return null;
   return (
-    <section aria-label="Invitation history" className="flex flex-col gap-2" data-testid="invitation-history">
+    <section aria-label="Invitation history" className="panel flex flex-col gap-2" data-testid="invitation-history">
       <h2 className="text-lg font-semibold">Invitation history</h2>
       <table className="w-full max-w-4xl text-left text-sm">
         <thead>

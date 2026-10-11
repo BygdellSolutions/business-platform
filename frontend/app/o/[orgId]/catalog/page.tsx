@@ -93,118 +93,120 @@ export default async function CatalogPage({
         )}
       </div>
 
-      <ListFilters action={base} params={list}>
-        <label className="flex flex-col gap-1 text-sm">
-          Type
-          <select
-            name="type"
-            defaultValue={list.type}
-            className="rounded border border-zinc-400 px-2 py-1 text-sm dark:bg-zinc-900"
-          >
-            <option value="">All</option>
-            {ITEM_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {ITEM_TYPE_LABELS[type]}
-              </option>
-            ))}
-          </select>
-        </label>
-      </ListFilters>
-
-      {items.length === 0 ? (
-        <p data-testid="empty">
-          {filtered ? "No items match." : "No items yet."}
-        </p>
-      ) : (
-        // Wide on purpose (prices and stock side by side): the table scrolls sideways instead of squeezing cells.
-        <div className="overflow-x-auto">
-          <table
-            data-testid="items-table"
-            className="w-full text-left text-sm whitespace-nowrap"
-          >
-            <thead>
-              <tr className="border-b border-zinc-300 dark:border-zinc-700">
-                <SortHeader label="No." sortKey="number" current={list.sort} dir={list.dir} href={sortHref(base, list, "number")} align="right" />
-                <SortHeader label="Product" sortKey="name" current={list.sort} dir={list.dir} href={sortHref(base, list, "name")} />
-                <SortHeader label="SKU" sortKey="sku" current={list.sort} dir={list.dir} href={sortHref(base, list, "sku")} />
-                <SortHeader label="Type" sortKey="type" current={list.sort} dir={list.dir} href={sortHref(base, list, "type")} />
-                <SortHeader label="Unit" sortKey="unit" current={list.sort} dir={list.dir} href={sortHref(base, list, "unit")} />
-                <SortHeader label="Base price" sortKey="price" current={list.sort} dir={list.dir} href={sortHref(base, list, "price")} align="right" title="The normal price, excl. VAT (a promotion never changes it)" />
-                <SortHeader label="Promotion" sortKey="promotion" current={list.sort} dir={list.dir} href={sortHref(base, list, "promotion")} />
-                <SortHeader label="Promotion duration" sortKey="promotion_ends" current={list.sort} dir={list.dir} href={sortHref(base, list, "promotion_ends")} />
-                <SortHeader label="Current price" sortKey="current_price" current={list.sort} dir={list.dir} href={sortHref(base, list, "current_price")} align="right" title="What is charged today, excl. VAT (customer discounts not included)" />
-                <SortHeader label="VAT" sortKey="vat_rate" current={list.sort} dir={list.dir} href={sortHref(base, list, "vat_rate")} align="right" />
-                <SortHeader label="Incl. VAT" sortKey="price_inc_vat" current={list.sort} dir={list.dir} href={sortHref(base, list, "price_inc_vat")} align="right" title="The current price incl. VAT: what a customer pays today" />
-                <SortHeader label="On hand" sortKey="on_hand" current={list.sort} dir={list.dir} href={sortHref(base, list, "on_hand")} align="right" />
-                <SortHeader label="Allocated" sortKey="allocated" current={list.sort} dir={list.dir} href={sortHref(base, list, "allocated")} align="right" />
-                <SortHeader label="Available" sortKey="available" current={list.sort} dir={list.dir} href={sortHref(base, list, "available")} align="right" />
-                <SortHeader label="Backordered" sortKey="committed" current={list.sort} dir={list.dir} href={sortHref(base, list, "committed")} align="right" />
-                <SortHeader label="Incoming" sortKey="incoming" current={list.sort} dir={list.dir} href={sortHref(base, list, "incoming")} align="right" />
-                <th className="py-1 pr-4">Stock</th>
-                <SortHeader label="Status" sortKey="active" current={list.sort} dir={list.dir} href={sortHref(base, list, "active")} last />
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item) => (
-                <tr
-                  key={item.id}
-                  data-testid="item-row"
-                  className="border-b border-zinc-200 dark:border-zinc-800"
-                >
-                  <td className="py-1 pr-4 text-right" data-testid="record-number">
-                    {item.number}
-                  </td>
-                  <td className="py-1 pr-4">
-                    <Link href={`${base}/${item.id}`} className="underline">
-                      {item.name}
-                    </Link>
-                  </td>
-                  <td className="py-1 pr-4" data-testid="item-sku">
-                    {item.sku}
-                  </td>
-                  <td className="py-1 pr-4">{ITEM_TYPE_LABELS[item.type]}</td>
-                  <td className="py-1 pr-4">{item.unit}</td>
-                  {/* Every amount is exactly the string the backend sent: no parsing, rounding or arithmetic here. */}
-                  <td className="py-1 pr-4 text-right" data-testid="item-price">
-                    <DecimalText value={item.price_ex_vat} />
-                  </td>
-                  <td className="py-1 pr-4" data-testid="current-discount">
-                    {item.current_discount ? (
-                      <span className="text-red-700 dark:text-red-400">−{trimQuantity(item.current_discount.percent)}%</span>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                  <td className="py-1 pr-4" data-testid="promotion-duration">
-                    {item.current_discount
-                      ? `${formatShortDate(item.current_discount.starts_on)} – ${item.current_discount.ends_on ? formatShortDate(item.current_discount.ends_on) : "no end date"}`
-                      : "—"}
-                  </td>
-                  <td className="py-1 pr-4 text-right" data-testid="item-current-price">
-                    {item.current_price_ex_vat !== null && <DecimalText value={item.current_price_ex_vat} />}
-                  </td>
-                  <td className="py-1 pr-4 text-right" data-testid="item-vat">
-                    {trimQuantity(item.vat_rate)}%
-                  </td>
-                  <td className="py-1 pr-4 text-right" data-testid="item-price-inc-vat">
-                    {item.current_price_inc_vat !== null && <DecimalText value={item.current_price_inc_vat} />}
-                  </td>
-                  <StockCells figures={stock.get(item.id)} />
-                  <td className="py-1">
-                    <StatusBadge active={item.active} />
-                  </td>
-                </tr>
+      <div className="panel flex flex-col gap-4">
+        <ListFilters action={base} params={list}>
+          <label className="flex flex-col gap-1 text-sm">
+            Type
+            <select
+              name="type"
+              defaultValue={list.type}
+              className="rounded border border-zinc-400 px-2 py-1 text-sm dark:bg-zinc-900"
+            >
+              <option value="">All</option>
+              {ITEM_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {ITEM_TYPE_LABELS[type]}
+                </option>
               ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+            </select>
+          </label>
+        </ListFilters>
 
-      <Pagination
-        page={list.page}
-        hasNext={hasNext}
-        hrefFor={(page) => listHref(base, list, { page })}
-      />
+        {items.length === 0 ? (
+          <p data-testid="empty">
+            {filtered ? "No items match." : "No items yet."}
+          </p>
+        ) : (
+          // Wide on purpose (prices and stock side by side): the table scrolls sideways instead of squeezing cells.
+          <div className="overflow-x-auto">
+            <table
+              data-testid="items-table"
+              className="w-full text-left text-sm whitespace-nowrap"
+            >
+              <thead>
+                <tr className="border-b border-zinc-300 dark:border-zinc-700">
+                  <SortHeader label="No." sortKey="number" current={list.sort} dir={list.dir} href={sortHref(base, list, "number")} align="right" />
+                  <SortHeader label="Product" sortKey="name" current={list.sort} dir={list.dir} href={sortHref(base, list, "name")} />
+                  <SortHeader label="SKU" sortKey="sku" current={list.sort} dir={list.dir} href={sortHref(base, list, "sku")} />
+                  <SortHeader label="Type" sortKey="type" current={list.sort} dir={list.dir} href={sortHref(base, list, "type")} />
+                  <SortHeader label="Unit" sortKey="unit" current={list.sort} dir={list.dir} href={sortHref(base, list, "unit")} />
+                  <SortHeader label="Base price" sortKey="price" current={list.sort} dir={list.dir} href={sortHref(base, list, "price")} align="right" title="The normal price, excl. VAT (a promotion never changes it)" />
+                  <SortHeader label="Promotion" sortKey="promotion" current={list.sort} dir={list.dir} href={sortHref(base, list, "promotion")} />
+                  <SortHeader label="Promotion duration" sortKey="promotion_ends" current={list.sort} dir={list.dir} href={sortHref(base, list, "promotion_ends")} />
+                  <SortHeader label="Current price" sortKey="current_price" current={list.sort} dir={list.dir} href={sortHref(base, list, "current_price")} align="right" title="What is charged today, excl. VAT (customer discounts not included)" />
+                  <SortHeader label="VAT" sortKey="vat_rate" current={list.sort} dir={list.dir} href={sortHref(base, list, "vat_rate")} align="right" />
+                  <SortHeader label="Incl. VAT" sortKey="price_inc_vat" current={list.sort} dir={list.dir} href={sortHref(base, list, "price_inc_vat")} align="right" title="The current price incl. VAT: what a customer pays today" />
+                  <SortHeader label="On hand" sortKey="on_hand" current={list.sort} dir={list.dir} href={sortHref(base, list, "on_hand")} align="right" />
+                  <SortHeader label="Allocated" sortKey="allocated" current={list.sort} dir={list.dir} href={sortHref(base, list, "allocated")} align="right" />
+                  <SortHeader label="Available" sortKey="available" current={list.sort} dir={list.dir} href={sortHref(base, list, "available")} align="right" />
+                  <SortHeader label="Backordered" sortKey="committed" current={list.sort} dir={list.dir} href={sortHref(base, list, "committed")} align="right" />
+                  <SortHeader label="Incoming" sortKey="incoming" current={list.sort} dir={list.dir} href={sortHref(base, list, "incoming")} align="right" />
+                  <th className="py-1 pr-4">Stock</th>
+                  <SortHeader label="Status" sortKey="active" current={list.sort} dir={list.dir} href={sortHref(base, list, "active")} last />
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item) => (
+                  <tr
+                    key={item.id}
+                    data-testid="item-row"
+                    className="border-b border-zinc-200 dark:border-zinc-800"
+                  >
+                    <td className="py-1 pr-4 text-right" data-testid="record-number">
+                      {item.number}
+                    </td>
+                    <td className="py-1 pr-4">
+                      <Link href={`${base}/${item.id}`} className="underline">
+                        {item.name}
+                      </Link>
+                    </td>
+                    <td className="py-1 pr-4" data-testid="item-sku">
+                      {item.sku}
+                    </td>
+                    <td className="py-1 pr-4">{ITEM_TYPE_LABELS[item.type]}</td>
+                    <td className="py-1 pr-4">{item.unit}</td>
+                    {/* Every amount is exactly the string the backend sent: no parsing, rounding or arithmetic here. */}
+                    <td className="py-1 pr-4 text-right" data-testid="item-price">
+                      <DecimalText value={item.price_ex_vat} />
+                    </td>
+                    <td className="py-1 pr-4" data-testid="current-discount">
+                      {item.current_discount ? (
+                        <span className="text-red-700 dark:text-red-400">−{trimQuantity(item.current_discount.percent)}%</span>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className="py-1 pr-4" data-testid="promotion-duration">
+                      {item.current_discount
+                        ? `${formatShortDate(item.current_discount.starts_on)} – ${item.current_discount.ends_on ? formatShortDate(item.current_discount.ends_on) : "no end date"}`
+                        : "—"}
+                    </td>
+                    <td className="py-1 pr-4 text-right" data-testid="item-current-price">
+                      {item.current_price_ex_vat !== null && <DecimalText value={item.current_price_ex_vat} />}
+                    </td>
+                    <td className="py-1 pr-4 text-right" data-testid="item-vat">
+                      {trimQuantity(item.vat_rate)}%
+                    </td>
+                    <td className="py-1 pr-4 text-right" data-testid="item-price-inc-vat">
+                      {item.current_price_inc_vat !== null && <DecimalText value={item.current_price_inc_vat} />}
+                    </td>
+                    <StockCells figures={stock.get(item.id)} />
+                    <td className="py-1">
+                      <StatusBadge active={item.active} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <Pagination
+          page={list.page}
+          hasNext={hasNext}
+          hrefFor={(page) => listHref(base, list, { page })}
+        />
+      </div>
     </div>
   );
 }

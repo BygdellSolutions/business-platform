@@ -64,7 +64,7 @@ export function ReturnsPanel({ invoice, canHandle, today, timeZone }: { invoice:
   }
 
   return (
-    <section aria-label="Returns" data-testid="returns" className="flex max-w-4xl flex-col gap-3">
+    <section aria-label="Returns" data-testid="returns" className="panel flex max-w-4xl flex-col gap-3">
       <h2 className="text-lg font-semibold">Returns</h2>
       {invoice.returns.length === 0 && <p className="text-sm text-zinc-500">No return cases. Open one when a customer asks to send something back, so it is followed up.</p>}
       {invoice.returns.map((item) => (

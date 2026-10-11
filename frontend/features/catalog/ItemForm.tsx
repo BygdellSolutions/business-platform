@@ -249,7 +249,7 @@ export function ItemForm({ item }: { item?: Item }) {
       <form
         onSubmit={onSubmit}
         noValidate
-        className="flex flex-col gap-4"
+        className="panel flex max-w-3xl flex-col gap-4"
         aria-label={record ? "Edit item" : "New item"}
       >
         <SelectField

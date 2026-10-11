@@ -69,7 +69,7 @@ export function PaymentsPanel({ invoice, canRecord, today, timeZone }: { invoice
   }
 
   return (
-    <section aria-label="Payments" data-testid="payments-panel" className="flex max-w-3xl flex-col gap-3">
+    <section aria-label="Payments" data-testid="payments-panel" className="panel flex max-w-3xl flex-col gap-3">
       <h2 className="text-lg font-semibold">Payments</h2>
       <p className="text-sm">
         <span className="font-semibold" data-testid="payment-status">

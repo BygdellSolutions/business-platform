@@ -39,7 +39,7 @@ export function DraftHeader() {
 
   if (!editable) return null;
   return (
-    <section aria-label="Edit details" data-testid="draft-header" className="flex flex-col gap-3">
+    <section aria-label="Edit details" data-testid="draft-header" className="panel flex flex-col gap-3">
       {editing ? (
         <HeaderForm key={invoice.id} onClose={() => setEditing(false)} />
       ) : (

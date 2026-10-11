@@ -5,6 +5,7 @@ All notable changes to `business-platform` will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- **Each block of information sits in its own box.** Pages are a light grey background with white boxes: Inventory shows Stock, Backorders and Incoming as three boxes; a product shows its details, Stock, Incoming, Campaign discounts and History each boxed; an order its Details, Lines, Add line and Totals; an invoice its document, payments, returns and credit notes; list pages put the filters and the table in one box; settings, members and account forms likewise. One shared `panel` style (`app/globals.css`) draws every box.
 - **Friendlier look for people who are not technical.** The menu moved into a left sidebar (a top strip on phones), grouped under Sales, Contacts, Products, Equine and Organization, with an icon per page and the current page highlighted; the organization, your role, your email, Account and Sign out sit in the sidebar, the organization switcher above the page. One accent colour marks the main action: "New customer", "New order" and the other "New …" links are filled buttons, and every form's submit button (Save, Add, Record payment…) is the primary button; Leave and Transfer stay plain and Delete organization stays red. The bundled Noto Sans font is now actually used (a leftover `font-family: Arial` overrode it).
 
 ### Added

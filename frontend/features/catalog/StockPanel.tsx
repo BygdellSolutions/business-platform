@@ -86,7 +86,7 @@ export function StockPanel({
 
   const sorted = useSortedRows(stock.movements, SORT_COLUMNS);
   return (
-    <section aria-label="Stock" data-testid="stock-panel" className="flex max-w-3xl flex-col gap-3">
+    <section aria-label="Stock" data-testid="stock-panel" className="panel flex max-w-3xl flex-col gap-3">
       <h2 className="flex items-center gap-2 text-lg font-semibold">
         Stock {figures && <StockBadges states={figures.states} />}
       </h2>

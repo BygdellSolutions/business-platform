@@ -54,7 +54,7 @@ export function TransactionCreateForm({ today }: { today: string }) {
   }
 
   return (
-    <form onSubmit={onSubmit} noValidate aria-label="New order" className="flex max-w-xl flex-col gap-4">
+    <form onSubmit={onSubmit} noValidate aria-label="New order" className="panel flex max-w-xl flex-col gap-4">
       <EntityPicker label="Billing customer" name="billing_customer_id" value={customer} onChange={setCustomer} search={search} error={problems.byField.billing_customer_id} />
       <div className="-mt-2 text-sm">
         <button type="button" className="underline" disabled={pending} onClick={() => void walkIn()} data-testid="walk-in-customer">

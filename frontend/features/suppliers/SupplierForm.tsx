@@ -115,7 +115,7 @@ export function SupplierForm({ supplier }: { supplier?: Supplier }) {
           onChanged={(updated) => setRecord((current) => (current ? { ...current, active: updated.active, updated_at: updated.updated_at } : updated))}
         />
       )}
-      <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4" aria-label={record ? "Edit supplier" : "New supplier"}>
+      <form onSubmit={onSubmit} noValidate className="panel flex max-w-3xl flex-col gap-4" aria-label={record ? "Edit supplier" : "New supplier"}>
         <TextField label="Name" name="name" value={state.name} onChange={(value) => set("name", value)} error={problems.byField.name} autoComplete="off" />
         {text("contact_person", "Contact person")}
         {text("email", "Email", { inputMode: "email" })}

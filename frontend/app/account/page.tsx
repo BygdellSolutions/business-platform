@@ -26,7 +26,7 @@ export default async function AccountPage() {
           Signed in as {current.user.email}
         </p>
       </div>
-      <section className="flex flex-col gap-3" aria-label="Change password">
+      <section className="panel flex max-w-xl flex-col gap-3" aria-label="Change password">
         <h2 className="text-lg font-semibold">Change password</h2>
         {authMode() === "session" ? (
           <ChangePasswordForm />

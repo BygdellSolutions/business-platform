@@ -61,7 +61,7 @@ export function ItemDiscounts({ itemId, discounts, canManage }: { itemId: string
 
   const sorted = useSortedRows(discounts, SORT_COLUMNS);
   return (
-    <section aria-label="Discounts" data-testid="item-discounts" className="flex max-w-3xl flex-col gap-3">
+    <section aria-label="Discounts" data-testid="item-discounts" className="panel flex max-w-3xl flex-col gap-3">
       <h2 className="text-lg font-semibold">Campaign discounts</h2>
       {discounts.length === 0 ? (
         <p className="text-sm text-zinc-500" data-testid="no-discounts">

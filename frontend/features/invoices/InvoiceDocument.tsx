@@ -19,7 +19,7 @@ import type { Invoice, PartySnapshot } from "@/lib/api/types";
 export function InvoiceDocument({ invoice, orgId }: { invoice: Invoice; orgId: string }) {
   const heading = invoice.number_text !== null ? `Invoice ${invoice.number_text}` : "Draft invoice (no number yet)";
   return (
-    <article aria-label="Invoice" data-testid="invoice-document" data-status={invoice.status} className="flex flex-col gap-5">
+    <article aria-label="Invoice" data-testid="invoice-document" data-status={invoice.status} className="panel flex flex-col gap-5">
       <header className="flex flex-wrap items-center gap-3">
         <h2 data-testid="invoice-heading" className="text-xl font-semibold">
           {heading}

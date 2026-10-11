@@ -14,7 +14,7 @@ export function TotalsPanel() {
   const { totals } = transaction;
 
   return (
-    <section aria-label="Totals" aria-busy={refreshing} data-testid="totals" data-updating={refreshing || undefined} className={`flex flex-col gap-2 ${refreshing ? "opacity-50" : ""}`}>
+    <section aria-label="Totals" aria-busy={refreshing} data-testid="totals" data-updating={refreshing || undefined} className={`panel flex flex-col gap-2 ${refreshing ? "opacity-50" : ""}`}>
       <h2 className="text-lg font-medium">
         Totals {refreshing && <span className="text-sm font-normal text-zinc-500">(updating…)</span>}
       </h2>

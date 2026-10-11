@@ -150,7 +150,7 @@ export function HorseForm({ horse }: { horse?: Horse }) {
           onChanged={(updated) => setRecord((current) => (current ? { ...current, active: updated.active, updated_at: updated.updated_at } : updated))}
         />
       )}
-      <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4" aria-label={record ? "Edit horse" : "New horse"}>
+      <form onSubmit={onSubmit} noValidate className="panel flex max-w-3xl flex-col gap-4" aria-label={record ? "Edit horse" : "New horse"}>
         <TextField label="Name" name="name" value={state.name} onChange={(value) => set("name", value)} error={errorsFor("name")} autoComplete="off" />
         <EntityPicker label="Owner" name="owner_customer_id" value={state.owner} onChange={(owner) => set("owner", owner)} search={search} error={errorsFor("owner_customer_id")} />
         <EntityPicker

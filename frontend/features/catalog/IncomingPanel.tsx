@@ -170,7 +170,7 @@ export function IncomingPanel({
     <section
       aria-label="Incoming stock"
       data-testid="incoming-panel"
-      className="flex max-w-3xl flex-col gap-3"
+      className="panel flex max-w-3xl flex-col gap-3"
     >
       <h2 className="text-lg font-semibold">Incoming</h2>
       {incoming.length === 0 ? (

@@ -38,7 +38,7 @@ export default async function OrgLayout({
 
   return (
     <div className="flex min-h-full flex-col md:flex-row">
-      <aside className="flex shrink-0 flex-col gap-4 border-b border-zinc-200 bg-zinc-50 p-4 md:sticky md:top-0 md:h-screen md:w-60 md:overflow-y-auto md:border-r md:border-b-0 dark:border-zinc-800 dark:bg-zinc-900/40">
+      <aside className="flex shrink-0 flex-col gap-4 border-b border-zinc-200 bg-white p-4 md:sticky md:top-0 md:h-screen md:w-60 md:overflow-y-auto md:border-r md:border-b-0 dark:border-zinc-800 dark:bg-zinc-950">
         <div className="px-3">
           <div data-testid="org-name" className="text-lg leading-tight font-semibold">{organization.name}</div>
           <div className="text-sm text-zinc-500">
@@ -54,7 +54,7 @@ export default async function OrgLayout({
           {(mode === "dev" || mode === "session") && <SignOut mode={mode} />}
         </div>
       </aside>
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col bg-page">
         <div className="border-b border-zinc-200 px-4 py-2 md:px-8 dark:border-zinc-800">
           <OrgSwitcher organizations={result.memberships} currentId={orgId} canCreate={current.user.can_create_organizations} owned={{ count: current.user.owned_organizations, max: current.user.max_owned_organizations }} />
         </div>

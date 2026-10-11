@@ -51,7 +51,7 @@ export function MembersAdmin({ members, actorRole }: { members: Member[]; actorR
 
   const sorted = useSortedRows(members, SORT_COLUMNS);
   return (
-    <div className="flex flex-col gap-4">
+    <div className="panel flex flex-col gap-4">
       {message && (
         <Notice tone={message.tone} testId="members-message">
           {message.text}

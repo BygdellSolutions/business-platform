@@ -159,7 +159,7 @@ function AddLinePanel({ onClose }: { onClose: () => void }) {
         void submit();
       }}
       data-testid="add-line-form"
-      className="flex max-w-2xl flex-col gap-3 rounded border border-zinc-300 p-3 dark:border-zinc-700"
+      className="panel flex max-w-2xl flex-col gap-3"
     >
       <h3 className="text-sm font-medium">Add line</h3>
       <div role="group" aria-label="Kind of line" className="flex gap-4 text-sm">
