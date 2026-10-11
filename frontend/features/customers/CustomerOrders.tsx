@@ -81,8 +81,11 @@ export function CustomerOrders({
                     <td className="py-1" data-testid="customer-order-invoice">
                       {invoice && invoice.state !== "none" && invoice.invoice_id ? (
                         <Link href={`/o/${orgId}/invoices/${invoice.invoice_id}`} className="underline">
-                          {invoice.state === "invoiced" ? `Invoice ${invoice.number_text ?? ""}` : "Draft invoice"}
+                          {invoice.state === "draft" ? "Draft invoice" : `Invoice ${invoice.number_text ?? ""}`}
+                          {invoice.state === "partly" && " (partly; the rest when delivered)"}
                         </Link>
+                      ) : invoice?.state === "waiting" ? (
+                        <span className="text-zinc-500">Waiting for delivery</span>
                       ) : order.status === "completed" ? (
                         <span className="text-zinc-500">Not invoiced yet</span>
                       ) : (

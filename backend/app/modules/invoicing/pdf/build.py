@@ -107,6 +107,15 @@ def _notes(line: dict[str, Any], words: dict[str, str], separator: str) -> tuple
         notes.append(" · ".join(_text(part) for part in parts if part))
         if service.get("notes"):
             notes.append(_text(service["notes"]))
+    # Invoicing by delivery (template 11): a part of an order line says what was ordered and what still waits. Stored
+    # snapshots, printed as they are (nothing is computed).
+    ordered = line.get("ordered_quantity")
+    if ordered is not None and str(ordered) != str(line["quantity"]):
+        note = f"{words['ordered']} {trimmed(str(ordered), separator)}"
+        backordered = line.get("backordered_quantity")
+        if backordered is not None and trimmed(str(backordered), separator) != "0":
+            note += f" · {words['backordered']} {trimmed(str(backordered), separator)}"
+        notes.append(note)
     return tuple(_text(note) for note in notes)
 
 

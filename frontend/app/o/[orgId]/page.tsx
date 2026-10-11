@@ -68,15 +68,15 @@ export default async function Dashboard({
         <h2 className="text-lg font-semibold">To do</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <SummaryCard title="Draft orders" count={sales.drafts} href={`${base}/transactions?status=draft`} testId="card-drafts" />
-          {/* Orders are invoiced from the order itself; this only fills when a role that may not invoice completed one,
-              or the invoice step was refused. */}
+          {/* Orders are invoiced from the order itself, by delivery; this fills when a role that may not invoice completed or
+              delivered one, the invoice step was refused, or an order nobody has invoiced yet gets a later delivery. */}
           {invoicing.ready_to_invoice.count > 0 && (
             <SummaryCard
-              title="Completed, not invoiced"
+              title="Ready to invoice"
               count={invoicing.ready_to_invoice.count}
               amounts={invoicing.ready_to_invoice.amounts}
               href={`${base}/invoices/new`}
-              note="Completed orders that are on no invoice yet."
+              note="Delivered and not on an invoice yet (only what is delivered is invoiced)."
               testId="card-ready"
               tone="attention"
             />

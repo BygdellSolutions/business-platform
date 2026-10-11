@@ -14,7 +14,7 @@ import { LinesTable } from "@/features/transactions/LinesTable";
 import { TotalsPanel } from "@/features/transactions/TotalsPanel";
 import { TransactionStatusBadge } from "@/features/transactions/TransactionStatusBadge";
 import type { ApiResult, Problem } from "@/lib/api/errors";
-import type { LineFulfillment, StockDemand, Transaction } from "@/lib/api/types";
+import type { InvoiceStateOfOrder, LineFulfillment, StockDemand, Transaction } from "@/lib/api/types";
 
 /**
  * The transaction page's interactive part.
@@ -44,6 +44,7 @@ export function TransactionEditor({
   fields,
   canEdit,
   canInvoice = true,
+  invoiceState = "none",
   timeZone = null,
   stock = NO_STOCK,
   fulfillment = NO_FULFILLMENT,
@@ -53,6 +54,8 @@ export function TransactionEditor({
   canEdit: boolean;
   /** The role may make invoices ("Invoice" also puts the order on a draft invoice); presentation only. */
   canInvoice?: boolean;
+  /** Where the order stands with invoicing (from Invoicing); decides whether a completed order offers "Invoice". */
+  invoiceState?: InvoiceStateOfOrder["state"];
   timeZone?: string | null;
   stock?: StockDemand[];
   fulfillment?: LineFulfillment[];
@@ -227,7 +230,7 @@ export function TransactionEditor({
           </Notice>
         )}
 
-        {canEdit && <LifecycleBar canInvoice={canInvoice} />}
+        {canEdit && <LifecycleBar canInvoice={canInvoice} invoiceState={invoiceState} />}
         <HeaderEditor />
         <TransactionFields />
         <LinesTable />

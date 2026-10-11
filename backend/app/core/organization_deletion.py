@@ -34,6 +34,7 @@ TABLES_IN_DELETE_ORDER = (
     "invoice_lines",
     "invoice_transactions",
     "invoices",
+    "invoice_holds",
     "invoice_counters",
     "custom_field_values",
     "custom_field_options",

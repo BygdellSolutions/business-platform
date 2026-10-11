@@ -211,3 +211,23 @@ test("a new product can be created with what is on hand, and a product without t
   await page.getByTestId("submit").click();
   await expect(page.getByTestId("stock-panel")).toBeVisible();
 });
+
+test("invoicing an order not delivered in full asks first, then invoices only what is delivered", async ({ page, context }) => {
+  world = createWorld({ label: "By delivery" });
+  await signIn(context, world.email);
+  const item = await createItem(context, world.orgId, { name: "Saddle pad", type: "product", unit: "pcs", price_ex_vat: "100.00", track_stock: true });
+  expect((await context.request.post(bffUrl(world.orgId, `/items/${item.id}/stock`), { data: { kind: "count", quantity: "2" } })).status()).toBe(201);
+  const customer = await createCustomer(context, world.orgId, "Anna Andersson");
+  const tx = await createTransaction(context, world.orgId, { billing_customer_id: customer.id, lines: [{ item_id: item.id, quantity: "7" }] });
+
+  await page.goto(`/o/${world.orgId}/transactions/${tx.id}`);
+  await page.getByTestId("invoice-order").click();
+
+  const choice = page.getByTestId("partial-delivery-choice");
+  await expect(choice).toContainText("Saddle pad: 2 of 7 delivered, 5 backordered (unit: pcs)");
+  await choice.getByTestId("invoice-delivered-now").click();
+  await page.getByTestId("open-draft-invoice").click();
+
+  await expect(page.getByTestId("line-quantity")).toHaveText("2.000");
+  await expect(page.getByTestId("line-delivery")).toHaveText("Ordered 7.000 · Backordered 5.000");
+});

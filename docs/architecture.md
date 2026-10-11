@@ -1782,7 +1782,7 @@ atomic publish alone survives); the verifier's real `CREATE TABLE` probe and its
 * The pre-migration backup is a documented contract, not code; D5 proves the orchestration.
 * One new static-test count changed: the CI test that pins the number of artifact uploads now expects five (the drill workflow's failure log, under the same rules).
 
-## Invoicing by delivery (PROPOSED 2026-10-11, NOT implemented)
+## Invoicing by delivery (approved and built 2026-10-11)
 
 Asked by the owner on 2026-10-11 ("implement this so we are following the standard"). It replaces the decision of
 2026-10-08 that a whole order, backordered units included, goes on one invoice.
@@ -1858,3 +1858,35 @@ inherent to invoicing by delivery and is what other systems do.
      order goes onto the open draft).
    The choice is kept per order by Invoicing (a hold on the order, never a Sales status) and can be changed while
    nothing of the order is invoiced yet.
+
+### As built (slices 1 and 2)
+
+- `app/modules/invoicing/delivery.py` decides what may be invoiced now (`parts`): Inventory's delivered figure through
+  the core hook `stock.delivered` (untracked lines: their whole quantity), less what is on invoices, nothing for an
+  order with a hold until it is delivered in full. A whole line is copied verbatim; a part is priced with
+  `sales.pricing.calculate_line` (per line, half-up).
+- `invoice_transactions.completes_order` (taken when the draft is built) says whether the invoice completes its order,
+  so the order's state (none / waiting / draft / partly / invoiced) is read from Invoicing's own tables only.
+- Issuing re-checks each line against its order line (price columns, `ordered_quantity`, amounts for its quantity),
+  that it charges no more than was delivered (`more_than_delivered`), the hold, and `completes_order`.
+- `POST /api/invoices/for-order` answers `409 partial_delivery` (with the lines) the first time an order that is not
+  delivered in full is invoiced; `partial: true` invoices the delivered part (and ends a hold). `POST /api/invoices/holds`
+  and `DELETE /api/invoices/holds/{id}` set and end "wait until everything is delivered".
+- Deliver (`POST /api/inventory/items/{id}/allocation`) locks the sales concerned before the item (the order every
+  writer of a sale uses), commits, then calls the core hook `stock.delivered_later`; Invoicing puts the units onto the
+  customer's open draft for orders invoiced by delivery (already on an invoice) or waiting and now complete, when the
+  person may make invoices. Locking the sale makes Invoice and Deliver serialize: the draft always ends with every
+  delivered unit (natural race and gated twin in `test_invoices_concurrency.py`).
+- Ready to invoice (dashboard, New invoice page) lists completed orders on no draft with something delivered and not
+  invoiced, worth what would be invoiced now. shortcut: decided in Python over the candidates (orders not invoiced in
+  full) and paged after; move the delivered figures into SQL if the backlog grows to many thousands.
+- Database backstop: trigger `invoice_lines_within_order` (never more of an order line, over all invoices, than its
+  quantity; it locks the order line, so two invoicers serialize).
+
+### As built (slices 3 and 4)
+
+- PDF template 11: a line whose stored `ordered_quantity` differs from its quantity prints "Ordered 7 · Backordered 5"
+  ("Beställt 7 · Restnoterat 5") under its description, from the stored snapshot; nothing is computed.
+- Credit notes work per invoice line as before. Stock returns stay capped per ORDER line by Inventory (`stock.returnable`,
+  everything handed over less what came back), and an invoice line shows at most what is left to credit of it.
+

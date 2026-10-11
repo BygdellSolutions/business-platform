@@ -57,6 +57,7 @@ REQUIRED_TRIGGERS = {
     ("invoice_payments", "trg_invoice_payments_append_only"),
     ("stock_movements", "trg_stock_movements_append_only"),
     ("invoice_lines", "trg_invoice_lines_immutability"),
+    ("invoice_lines", "trg_invoice_lines_within_order"),
     ("invoice_pdfs", "trg_invoice_pdfs_guard"),
     ("invoice_transactions", "trg_invoice_transactions_immutability"),
     ("invoice_vat_rows", "trg_invoice_vat_rows_immutability"),
@@ -80,6 +81,7 @@ REQUIRED_FUNCTIONS = {
     "invoice_payments_append_only",
     "stock_movements_append_only",
     "invoice_children_immutability",
+    "invoice_lines_within_order",
     "invoice_pdfs_guard",
     "invoices_immutability",
     "organization_users_owner_limit",
@@ -89,7 +91,7 @@ REQUIRED_FUNCTIONS = {
     "assign_record_number",
 }
 TENANT_TABLES = {
-    "audit_events", "credit_note_lines", "credit_note_pdfs", "credit_note_vat_rows", "credit_notes", "custom_field_definitions", "custom_field_options", "custom_field_values", "customers", "horse_notes", "horses", "invoice_counters", "invoice_lines",
+    "audit_events", "credit_note_lines", "credit_note_pdfs", "credit_note_vat_rows", "credit_notes", "custom_field_definitions", "custom_field_options", "custom_field_values", "customers", "horse_notes", "horses", "invoice_counters", "invoice_holds", "invoice_lines",
     "invoice_payments", "invoice_pdfs", "invoice_return_events", "invoice_return_lines", "invoice_returns", "invoice_transactions", "invoice_vat_rows", "invoices", "item_discounts", "incoming_stock", "items", "line_fulfillments", "organization_creation_requests",
     "organization_invitations", "organization_users", "record_counters", "stock_movements", "suppliers", "transaction_lines", "transactions",
 }  # `security_events.organization_id` is deliberately nullable (an event may be about no organization)

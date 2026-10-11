@@ -59,11 +59,14 @@ export default async function TransactionPage({
       </div>
       {created === "1" && <Notice testId="created">Order created. Add its lines below.</Notice>}
       <RecordMeta record={transaction} people={history.history.people} timeZone={organization.timezone} />
-      {invoice && invoice.state !== "none" && invoice.invoice_id && (
-        <p className="text-sm" data-testid="order-invoice">
-          <Link href={`/o/${orgId}/invoices/${invoice.invoice_id}`} className="underline">
-            {invoice.state === "invoiced" ? `Invoice ${invoice.number_text ?? ""}` : "Draft invoice"}
-          </Link>
+      {invoice && invoice.invoices.length > 0 && (
+        // Invoicing by delivery: an order can be on several invoices, one per delivery.
+        <p className="flex flex-wrap gap-x-3 text-sm" data-testid="order-invoice">
+          {invoice.invoices.map((entry) => (
+            <Link key={entry.invoice_id} href={`/o/${orgId}/invoices/${entry.invoice_id}`} className="underline">
+              {entry.status === "issued" ? `Invoice ${entry.number_text ?? ""}` : "Draft invoice"}
+            </Link>
+          ))}
         </p>
       )}
       <TransactionEditor
@@ -71,6 +74,7 @@ export default async function TransactionPage({
         transaction={transaction}
         canEdit={canWriteRecords(role)}
         canInvoice={canMutateInvoices(role)}
+        invoiceState={invoice?.state ?? "none"}
         timeZone={organization.timezone}
         stock={stock}
         fulfillment={fulfillment}

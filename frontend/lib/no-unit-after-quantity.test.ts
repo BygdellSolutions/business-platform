@@ -19,7 +19,7 @@ function files(dir: string): string[] {
 }
 
 // A closing figure (`trimQuantity(...)}` or `<DecimalText ... />`) followed by a unit expression.
-const ADJACENT = /(\)\}|\/>)\s*\{[\w.]*unit\}/;
+const ADJACENT = /(\)\}|\/>)\s*\{[\w.?]*unit\}/;
 
 describe("units", () => {
   it("are never printed right after a quantity", () => {

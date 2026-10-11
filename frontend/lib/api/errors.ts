@@ -22,6 +22,20 @@ export interface Problem {
 /** Field errors keyed by dotted path without the leading "body": "name", "values.owner", "lines.1.item_id". */
 export type FieldErrors = Record<string, string[]>;
 
+/** A line of an order not delivered in full, as Invoicing reports it (quantities as stored strings). */
+export interface DeliveryLine {
+  description: string;
+  unit: string;
+  ordered: string;
+  delivered: string;
+  backordered: string;
+}
+
+function toDeliveryLine(line: Record<string, unknown>): DeliveryLine {
+  const text = (value: unknown) => (typeof value === "string" ? value : "");
+  return { description: text(line.description), unit: text(line.unit), ordered: text(line.ordered), delivered: text(line.delivered), backordered: text(line.backordered) };
+}
+
 export type ApiError =
   | { kind: "unauthorized"; status: 401; message: string }
   | { kind: "forbidden"; status: 403; message: string }
@@ -40,6 +54,8 @@ export type ApiError =
       currentVersion?: number;
       /** For conflicts about transactions (not invoiceable any more): the ids concerned. */
       transactionIds: string[];
+      /** For "partial_delivery": the lines not delivered in full (invoicing by delivery asks before invoicing). */
+      deliveryLines?: DeliveryLine[];
     }
   | {
       kind: "validation";
@@ -136,6 +152,7 @@ export function normalizeError(status: number, body: unknown): ApiError {
         problems: toProblems(detail.problems),
         currentVersion: typeof detail.current_version === "number" ? detail.current_version : undefined,
         transactionIds: Array.isArray(detail.transaction_ids) ? detail.transaction_ids.filter((id): id is string => typeof id === "string") : [],
+        deliveryLines: Array.isArray(detail.lines) ? detail.lines.filter(isRecord).map(toDeliveryLine) : undefined,
       };
     }
     return { kind: "conflict", status: 409, message: text ?? GENERIC[409], problems: [], transactionIds: [] };

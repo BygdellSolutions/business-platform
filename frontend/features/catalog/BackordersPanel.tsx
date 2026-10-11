@@ -6,6 +6,7 @@ import { useState } from "react";
 
 import { useOrgId } from "@/components/shell/org-context";
 import { Button } from "@/components/ui/Button";
+import { Notice } from "@/components/ui/Notice";
 import { ErrorSummary } from "@/components/ui/ErrorSummary";
 import { BACKORDER_STATES, BACKORDER_TONES } from "@/features/catalog/backorder-labels";
 import { apiFetch } from "@/lib/api/client";
@@ -36,6 +37,7 @@ export function BackordersPanel({ itemId, unit, backorders, canAllocate }: { ite
   const { pending, error, run } = useMutation();
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [onHand, setOnHand] = useState<string | null>(null);
+  const [delivered, setDelivered] = useState(false);
   const problems = problemsFrom(error, []);
 
   async function propose() {
@@ -54,14 +56,23 @@ export function BackordersPanel({ itemId, unit, backorders, canAllocate }: { ite
     if (done === null) return;
     setQuantities({});
     setOnHand(null);
+    setDelivered(true);
     router.refresh();
   }
 
   const sorted = useSortedRows(backorders, SORT_COLUMNS);
-  if (backorders.length === 0) return null;
+  // Invoicing by delivery: say where the delivered units went, also when nothing is waiting any more.
+  const deliveredNotice = delivered && (
+    <Notice testId="delivered-notice">
+      Delivered. For orders that are invoiced as they are delivered, the units were added to the customer&apos;s draft invoice; other orders wait
+      in Ready to invoice.
+    </Notice>
+  );
+  if (backorders.length === 0) return deliveredNotice || null;
   return (
     <section id="backorders" aria-label="Backorders" data-testid="backorders-panel" className="panel scroll-mt-4 flex max-w-5xl flex-col gap-3">
       <h2 className="text-lg font-semibold">Backorders</h2>
+      {deliveredNotice}
       <div className="overflow-x-auto">
         <table className="text-left text-sm">
           <thead>

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.entity_registry import Registry
 from app.core.lifecycle import CANCEL, REOPEN, Problem
 from app.core.tenant import TenantContext
+from app.modules.invoicing import service
 from app.modules.invoicing.models import Invoice, InvoiceStatus, InvoiceTransaction
 
 TRANSACTION = "transaction"
@@ -42,6 +43,12 @@ def _reserved_transaction_validator(
     return [Problem(code="invoice.reserved", message=message, entity_type=TRANSACTION, entity_id=str(entity_id), label=label)]
 
 
+def _after_delivery(db: Session, ctx: TenantContext, transaction_ids: list[uuid.UUID]) -> list[uuid.UUID]:
+    """Backordered units were delivered: invoice them by delivery (see service.invoice_deliveries)."""
+    return service.invoice_deliveries(db, ctx, transaction_ids)
+
+
 def register(registry: Registry) -> None:
-    """Add Invoicing's veto to the core lifecycle seam. Nothing else is exposed to other modules."""
+    """Add Invoicing's veto to the core lifecycle seam, and invoice later deliveries (invoicing by delivery)."""
     registry.add_validator(_reserved_transaction_validator)
+    registry.add_hook("stock.delivered_later", _after_delivery)

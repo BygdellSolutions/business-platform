@@ -412,23 +412,20 @@ def test_a_failure_after_the_number_was_allocated_rolls_the_allocation_back(clie
 
 
 def test_a_lost_race_for_a_transaction_gets_the_ordinary_already_invoiced_answer(client, db_session, sales, monkeypatch):
-    """The ordinary check sees nothing (as it would for a concurrent creator that has not committed
-    yet); the unique key on the source link is the last guard and answers the same 409."""
+    """The ordinary checks see nothing (as they would for a concurrent creator that has not committed yet): the
+    database's last guard (never more of an order line on invoices than was ordered) answers the same 409 code."""
+    from app.modules.invoicing import delivery
+
     tx = completed(db_session, sales.org, sales.billing)
     draft_invoice(client, sales.headers, tx)
     ordinary = client.post(INVOICES, json={"transaction_ids": [str(tx.id)]}, headers=sales.headers)
-    real = service._already_invoiced
-    calls: list[int] = []
-
-    def blind_once(*args, **kwargs):
-        calls.append(1)
-        return [] if len(calls) == 1 else real(*args, **kwargs)
-
-    monkeypatch.setattr(service, "_already_invoiced", blind_once)
+    monkeypatch.setattr(service, "_on_a_draft", lambda *args, **kwargs: [])
+    monkeypatch.setattr(delivery, "invoiced", lambda *args, **kwargs: {})
     raced = client.post(INVOICES, json={"transaction_ids": [str(tx.id)]}, headers=sales.headers)
 
     assert ordinary.status_code == raced.status_code == 409
-    assert raced.json() == ordinary.json()
+    assert raced.json()["detail"]["code"] == ordinary.json()["detail"]["code"] == "already_invoiced"
+    assert raced.json()["detail"]["transaction_ids"] == ordinary.json()["detail"]["transaction_ids"] == [str(tx.id)]
     assert row_count(db_session, Invoice) == 1  # the loser left nothing behind
 
 

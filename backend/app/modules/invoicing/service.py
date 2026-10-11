@@ -13,6 +13,11 @@ reads under them cannot change before it commits.
 No path holds a transaction lock while waiting for an invoice lock, so there is no cycle. Two
 orderings of "create" against "reopen" are both consistent: reopen first, so creation sees a
 draft and refuses; creation first, so the validator sees the link and refuses the reopen.
+
+Invoicing by delivery (2026-10-11): what is invoiced is what was delivered (see delivery.py). Delivered
+quantities only grow while an order is completed (a reopen or cancel, which would take deliveries back,
+is refused while the order is on an invoice), so reading them under the transaction lock is enough:
+a delivery that commits later is invoiced later.
 """
 
 import uuid
@@ -23,7 +28,7 @@ from decimal import Decimal
 from typing import Any
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -34,10 +39,11 @@ from app.core.tenant import TenantContext
 from app.core.tenant_scope import create_scoped, get_scoped, get_scoped_or_404, reference_error, scoped_select
 from app.models import Customer, Organization, User
 from app.modules.custom_fields import service as custom_fields
-from app.modules.invoicing import numbering, snapshots
+from app.modules.invoicing import delivery, numbering, snapshots
 from app.modules.invoicing import credits, payments, returns
 from app.modules.invoicing.models import (
     Invoice,
+    InvoiceHold,
     InvoiceLine,
     InvoiceStatus,
     InvoiceTransaction,
@@ -52,7 +58,7 @@ from app.modules.invoicing.schemas import (
     VatRowRead,
 )
 from app.modules.sales.models import Transaction, TransactionLine, TransactionStatus
-from app.modules.sales.pricing import calculate_totals
+from app.modules.sales.pricing import calculate_line, calculate_totals
 from app.modules.sales.versioning import ensure_current
 
 # Registry keys of the entities whose custom fields are flagged for invoices.
@@ -60,7 +66,7 @@ TRANSACTION = "transaction"
 TRANSACTION_LINE = "transaction_line"
 INVOICE_FLAG = "show_on_invoice"
 
-SOURCE_ONCE_CONSTRAINT = "uq_invoice_transactions_source_once"
+WITHIN_ORDER_TRIGGER = "invoice_lines_within_order"
 ZERO = Decimal("0.00")
 
 
@@ -103,12 +109,17 @@ def sum_lines(lines: Sequence[Any]) -> tuple[Decimal, Decimal, Decimal, dict[Dec
 # --- creating a draft ----------------------------------------------------------------------------------------
 
 
-def _already_invoiced(db: Session, ctx: TenantContext, transaction_ids: Sequence[uuid.UUID]) -> list[uuid.UUID]:
+def _on_a_draft(db: Session, ctx: TenantContext, transaction_ids: Sequence[uuid.UUID]) -> list[uuid.UUID]:
+    """The orders among `transaction_ids` that are on a DRAFT invoice (an order has at most one draft at a time)."""
     return list(
         db.scalars(
-            scoped_select(InvoiceTransaction, ctx)
-            .where(InvoiceTransaction.transaction_id.in_(list(transaction_ids)))
-            .with_only_columns(InvoiceTransaction.transaction_id)
+            select(InvoiceTransaction.transaction_id)
+            .join(Invoice, (Invoice.organization_id == InvoiceTransaction.organization_id) & (Invoice.id == InvoiceTransaction.invoice_id))
+            .where(
+                InvoiceTransaction.organization_id == ctx.organization_id,
+                InvoiceTransaction.transaction_id.in_(list(transaction_ids)),
+                Invoice.status == InvoiceStatus.DRAFT,
+            )
             .order_by(InvoiceTransaction.transaction_id)
         )
     )
@@ -161,9 +172,9 @@ def _check_invoiceable(db: Session, ctx: TenantContext, sources: Sequence[Transa
         )
     if len({t.currency for t in sources}) > 1:
         raise conflict("mixed_currencies", "All orders on an invoice must be in the same currency", ids)
-    reserved = _already_invoiced(db, ctx, ids)
+    reserved = _on_a_draft(db, ctx, ids)
     if reserved:
-        raise conflict("already_invoiced", "An order is already on a draft or issued invoice", reserved)
+        raise conflict("already_invoiced", "An order is already on a draft invoice", reserved)
 
 
 def _first_by_transaction(rows: Sequence[Any], key: str = "transaction_id") -> dict[uuid.UUID, list[Any]]:
@@ -212,12 +223,24 @@ def create_draft(db: Session, ctx: TenantContext, payload: InvoiceCreate) -> uui
     transaction_fields = custom_fields.read_values(db, ctx, TRANSACTION, [t.id for t in ordered], flag=INVOICE_FLAG)
     line_fields = custom_fields.read_values(db, ctx, TRANSACTION_LINE, [l.id for l in source_lines], flag=INVOICE_FLAG)
 
-    # 13. Totals are plain sums of the stored amounts being copied; Sales' own totals must agree.
-    flat_lines = [line for t in ordered for line in lines_of.get(t.id, [])]
-    net, vat, gross, by_rate = sum_lines(flat_lines)
-    sales_totals = calculate_totals(flat_lines)
-    if (net, vat, gross) != (sales_totals.net_amount, sales_totals.vat_amount, sales_totals.gross_amount):
-        raise RuntimeError("invoice totals disagree with the Sales totals of the same lines")  # never store this
+    # Invoicing by delivery: only what was delivered and is not invoiced yet goes on the invoice.
+    parts_of = delivery.parts(db, ctx, ordered, lines_of)
+    nothing = [t.id for t in ordered if not parts_of.get(t.id)]
+    if nothing:
+        raise conflict(
+            "nothing_to_invoice",
+            "Nothing of this order can be invoiced yet: nothing more has been delivered, or it waits until everything is delivered",
+            nothing,
+        )
+    flat_parts = [part for t in ordered for part in parts_of[t.id]]
+    complete = delivery.completes(db, ctx, ordered, lines_of, parts_of)
+
+    # 13. Totals are plain sums of the stored amounts; for whole lines, Sales' own totals must agree.
+    net, vat, gross, by_rate = sum_lines(flat_parts)
+    if all(part.whole for part in flat_parts):
+        sales_totals = calculate_totals([part.line for part in flat_parts])
+        if (net, vat, gross) != (sales_totals.net_amount, sales_totals.vat_amount, sales_totals.gross_amount):
+            raise RuntimeError("invoice totals disagree with the Sales totals of the same lines")  # never store this
 
     snapshot = snapshots.customer_snapshot(customer)
     try:
@@ -238,34 +261,69 @@ def create_draft(db: Session, ctx: TenantContext, payload: InvoiceCreate) -> uui
                 vat_amount=vat,
                 gross_amount=gross,
             )
-            _insert_children(db, ctx, invoice, ordered, lines_of, transaction_fields, line_fields, by_rate)
+            _insert_children(db, ctx, invoice, ordered, parts_of, complete, transaction_fields, line_fields, by_rate)
             audit.created(db, ctx, invoice, "invoice", fields=AUDITED_FIELDS)
     except IntegrityError as error:
-        # 10. UNIQUE (organization_id, transaction_id) is the last guard: whoever loses a race
-        # for a transaction gets the same answer as the ordinary "already reserved" check.
-        if _violated(error) == SOURCE_ONCE_CONSTRAINT:
-            raise conflict(
-                "already_invoiced",
-                "An order is already on a draft or issued invoice",
-                _already_invoiced(db, ctx, requested),
-            ) from error
+        # 10. The database's last guard: never more of an order line, over all invoices, than was ordered.
+        if _violated(error) == WITHIN_ORDER_TRIGGER:
+            raise conflict("already_invoiced", "An order is already invoiced", requested) from error
         raise
     invoice_id = invoice.id
     db.commit()  # 14
     return invoice_id
 
 
-def invoice_order(db: Session, ctx: TenantContext, transaction_id: uuid.UUID) -> uuid.UUID:
+def _has_invoice(db: Session, ctx: TenantContext, transaction_id: uuid.UUID) -> bool:
+    return (
+        db.scalar(
+            select(InvoiceTransaction.id).where(InvoiceTransaction.organization_id == ctx.organization_id, InvoiceTransaction.transaction_id == transaction_id).limit(1)
+        )
+        is not None
+    )
+
+
+def _partial_delivery(order: Transaction, short: list[tuple[TransactionLine, Decimal, Decimal]]) -> HTTPException:
+    """Not everything is delivered and nobody has chosen yet: the person decides (owner, 2026-10-11)."""
+    return HTTPException(
+        status.HTTP_409_CONFLICT,
+        detail={
+            "code": "partial_delivery",
+            "message": "Not everything on this order has been delivered. Invoice what is delivered now, or wait until everything is delivered?",
+            "transaction_ids": [str(order.id)],
+            "lines": [
+                {"description": line.description, "unit": line.unit, "ordered": f"{line.quantity:.3f}", "delivered": f"{handed:.3f}", "backordered": f"{left:.3f}"}
+                for line, handed, left in short
+            ],
+        },
+    )
+
+
+def invoice_order(db: Session, ctx: TenantContext, transaction_id: uuid.UUID, *, partial: bool = False) -> uuid.UUID:
     """Put a completed order on an invoice ("Invoice" on the order, 2026-10-10): onto the customer's open draft in the
     same currency, so a customer's orders can be collected and issued together, or onto a new draft. Commits.
 
     A draft's sources never change in place (its lines, totals and VAT rows are built from them once), so the open
     draft is rebuilt: deleted and created again with its orders plus this one, keeping its dates and description, in
     this one database transaction. If anything is refused, the old draft stays as it was.
+
+    Invoicing by delivery (2026-10-11): only what is delivered is invoiced. The first time an order that is not
+    delivered in full is invoiced, the person chooses: `partial` (invoice the delivered part now) or a hold (wait
+    until everything is delivered, see `hold`). Without `partial` that question is the answer (409 partial_delivery).
     """
     order = get_scoped(db, ctx, Transaction, transaction_id)
     if order is None:
         reference_error("transaction_id", "Order not found", "reference.not_found")
+    if order.status == TransactionStatus.COMPLETED:
+        lines = list(db.scalars(scoped_select(TransactionLine, ctx).where(TransactionLine.transaction_id == order.id)))
+        short = delivery.shortage(db, ctx, lines)
+        waiting = order.id in delivery.held(db, ctx, [order.id])
+        if short and not partial:
+            if waiting:
+                raise conflict("waiting_for_delivery", "This order waits until everything is delivered", [order.id])
+            if not _has_invoice(db, ctx, order.id):
+                raise _partial_delivery(order, short)
+        if partial and waiting:
+            db.execute(delete(InvoiceHold).where(InvoiceHold.organization_id == ctx.organization_id, InvoiceHold.transaction_id == order.id))
     draft = db.scalar(
         scoped_select(Invoice, ctx)
         .where(Invoice.status == InvoiceStatus.DRAFT, Invoice.customer_id == order.billing_customer_id, Invoice.currency == order.currency)
@@ -284,13 +342,60 @@ def invoice_order(db: Session, ctx: TenantContext, transaction_id: uuid.UUID) ->
         if draft is not None
         else []
     )
-    if draft is None or len(sources) >= MAX_TRANSACTIONS_PER_INVOICE or transaction_id in sources:
+    if draft is None or (len(sources) >= MAX_TRANSACTIONS_PER_INVOICE and transaction_id not in sources):
         return create_draft(db, ctx, InvoiceCreate(transaction_ids=[transaction_id]))
-    header = InvoiceCreate(transaction_ids=[*sources, transaction_id], invoice_date=draft.invoice_date, due_date=draft.due_date, description=draft.description)
+    # An order already on the draft is rebuilt with it: what was delivered since is added.
+    wanted = [*sources, transaction_id] if transaction_id not in sources else list(sources)
+    header = InvoiceCreate(transaction_ids=wanted, invoice_date=draft.invoice_date, due_date=draft.due_date, description=draft.description)
     audit.deleted(db, ctx, draft, "invoice", fields=AUDITED_FIELDS)
     db.delete(draft)
     db.flush()
     return create_draft(db, ctx, header)
+
+
+def hold(db: Session, ctx: TenantContext, transaction_id: uuid.UUID) -> None:
+    """"Wait until everything is delivered" for a completed order: nothing of it is invoiced before then. Commits."""
+    order = db.scalar(_fresh(scoped_select(Transaction, ctx).where(Transaction.id == transaction_id).with_for_update()))
+    if order is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Not found")
+    if order.status != TransactionStatus.COMPLETED or order.paid_at is not None:
+        raise conflict("not_invoiceable", "Only a completed order that is invoiced can wait for its delivery", [order.id])
+    if _on_a_draft(db, ctx, [order.id]):
+        raise conflict("already_invoiced", "The order is on a draft invoice; delete the draft first", [order.id])
+    if not delivery.held(db, ctx, [order.id]):
+        create_scoped(db, ctx, InvoiceHold, transaction_id=order.id, created_by=ctx.user.id, updated_by=ctx.user.id)
+    db.commit()
+
+
+def release(db: Session, ctx: TenantContext, transaction_id: uuid.UUID) -> None:
+    """Stop waiting: the order is invoiced by delivery again (nothing is invoiced by this). Commits."""
+    order = get_scoped(db, ctx, Transaction, transaction_id)
+    if order is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Not found")
+    db.execute(delete(InvoiceHold).where(InvoiceHold.organization_id == ctx.organization_id, InvoiceHold.transaction_id == order.id))
+    db.commit()
+
+
+INVOICING_ROLES = ("owner", "admin", "accountant")
+
+
+def invoice_deliveries(db: Session, ctx: TenantContext, transaction_ids: Sequence[uuid.UUID]) -> list[uuid.UUID]:
+    """After backordered units are delivered (owner, 2026-10-11): they go onto the customer's open draft invoice, for
+    every order that is invoiced by delivery (it is on an invoice already) and every order that waited and is now
+    delivered in full. An order nobody has invoiced yet waits in "Ready to invoice" (nobody chose for it), and so does
+    everything when the person delivering may not make invoices. Each order is its own step; one refusal (a draft that
+    is full, a currency missing) leaves that order in "Ready to invoice" and the others are still invoiced."""
+    if ctx.role not in INVOICING_ROLES:
+        return []
+    drafts: list[uuid.UUID] = []
+    for transaction_id in dict.fromkeys(transaction_ids):
+        if not (_has_invoice(db, ctx, transaction_id) or delivery.held(db, ctx, [transaction_id])):
+            continue
+        try:
+            drafts.append(invoice_order(db, ctx, transaction_id))
+        except HTTPException:
+            db.rollback()
+    return list(dict.fromkeys(drafts))
 
 
 def _violated(error: IntegrityError) -> str | None:
@@ -328,15 +433,17 @@ def _insert_children(
     ctx: TenantContext,
     invoice: Invoice,
     ordered: Sequence[Transaction],
-    lines_of: dict[uuid.UUID, list[TransactionLine]],
+    parts_of: dict[uuid.UUID, list[delivery.Part]],
+    complete: dict[uuid.UUID, bool],
     transaction_fields: dict[uuid.UUID, list[Any]],
     line_fields: dict[uuid.UUID, list[Any]],
     by_rate: dict[Decimal, list[Decimal]],
 ) -> None:
-    """Sources, lines (copied verbatim) and the stored VAT breakdown of a new invoice."""
-    services = _service_snapshots(db, ctx, [line for lines in lines_of.values() for line in lines])
+    """Sources, lines (whole lines copied verbatim, delivered parts priced the same way) and the stored VAT
+    breakdown of a new invoice. Only orders with something to invoice are sources."""
+    services = _service_snapshots(db, ctx, [part.line for parts in parts_of.values() for part in parts])
     position = 0
-    for index, source in enumerate(ordered, start=1):
+    for index, source in enumerate([t for t in ordered if parts_of.get(t.id)], start=1):
         # The unique key on the source is checked here, when the link row is flushed.
         create_scoped(
             db,
@@ -351,8 +458,10 @@ def _insert_children(
             source_version=source.version,
             position=index,
             fields=snapshots.custom_field_snapshot(transaction_fields.get(source.id, [])),
+            completes_order=complete[source.id],
         )
-        for line in lines_of.get(source.id, []):
+        for part in parts_of[source.id]:
+            line = part.line
             position += 1
             create_scoped(
                 db,
@@ -364,18 +473,20 @@ def _insert_children(
                 position=position,
                 description=line.description,
                 unit=line.unit,
-                quantity=line.quantity,
+                quantity=part.quantity,
                 unit_price_ex_vat=line.unit_price_ex_vat,
                 list_unit_price=line.list_unit_price,
                 catalog_discount_percent=line.catalog_discount_percent,
                 customer_discount_percent=line.customer_discount_percent,
                 line_discount_percent=line.line_discount_percent,
                 vat_rate=line.vat_rate,
-                net_amount=line.net_amount,
-                vat_amount=line.vat_amount,
-                gross_amount=line.gross_amount,
+                net_amount=part.net_amount,
+                vat_amount=part.vat_amount,
+                gross_amount=part.gross_amount,
                 fields=snapshots.custom_field_snapshot(line_fields.get(line.id, [])),
                 service=services.get(line.id),
+                ordered_quantity=part.ordered_quantity,
+                backordered_quantity=part.backordered_quantity,
             )
     for rate in sorted(by_rate):
         net, vat = by_rate[rate]
@@ -428,7 +539,13 @@ def read_invoice(db: Session, ctx: TenantContext, invoice_id: uuid.UUID) -> Invo
                 update={
                     "credited_quantity": credited_lines.get(row.id, Decimal("0.000")),
                     "creditable_quantity": row.quantity - credited_lines.get(row.id, Decimal("0.000")),
-                    "stock_returnable": returnable.get(row.source_line_id),
+                    # Per order line from Inventory; an order line can be on several invoices (invoicing by delivery),
+                    # so this line can return at most what is left to credit of it.
+                    "stock_returnable": (
+                        None
+                        if returnable.get(row.source_line_id) is None
+                        else min(returnable[row.source_line_id], row.quantity - credited_lines.get(row.id, Decimal("0.000")))
+                    ),
                 }
             )
             for row in lines
@@ -553,19 +670,55 @@ def _verify_unchanged(
             )
         )
     )
-    copied = {line.source_line_id: line for line in lines}
-    if {line.id for line in source_lines} != set(copied) or len(source_lines) != len(lines):
-        raise _source_changed("The lines of a source order were changed")
+    # Invoicing by delivery: each invoice line is (part of) a line of its source order, priced as that line, and
+    # together with every OTHER invoice it charges no more than was delivered (an order waiting until everything is
+    # delivered: nothing before then). A draft made before invoicing by delivery that charges undelivered units is
+    # refused here and has to be made again.
+    sources_of = {line.id: line for line in source_lines}
+    if len({line.source_line_id for line in lines}) != len(lines):
+        raise _source_changed("A line of a source order is on this invoice twice")
     columns = (
-        "description", "unit", "quantity", "unit_price_ex_vat", "list_unit_price", "catalog_discount_percent", "customer_discount_percent",
-        "line_discount_percent", "vat_rate", "net_amount", "vat_amount", "gross_amount",
+        "description", "unit", "unit_price_ex_vat", "list_unit_price", "catalog_discount_percent", "customer_discount_percent",
+        "line_discount_percent", "vat_rate",
     )
-    for source_line in source_lines:
-        copy = copied[source_line.id]
-        if copy.source_transaction_id != source_line.transaction_id or any(
+    for copy in lines:
+        source_line = sources_of.get(copy.source_line_id)
+        if source_line is None or copy.source_transaction_id != source_line.transaction_id or any(
             getattr(copy, column) != getattr(source_line, column) for column in columns
         ):
             raise _source_changed("A line of a source order was changed")
+        if copy.ordered_quantity is not None and copy.ordered_quantity != source_line.quantity:
+            raise _source_changed("A line of a source order was changed")
+        if copy.quantity == source_line.quantity:
+            expected = (source_line.net_amount, source_line.vat_amount, source_line.gross_amount)
+        else:
+            amounts = calculate_line(copy.quantity, source_line.unit_price_ex_vat, source_line.vat_rate)
+            expected = (amounts.net, amounts.vat, amounts.gross)
+        if (copy.net_amount, copy.vat_amount, copy.gross_amount) != expected:
+            raise _source_changed("A line's amounts do not match its quantity and price")
+    handed_over = delivery.delivered(db, ctx, [sources_of[line.source_line_id] for line in lines])
+    # Every line of the source orders, also those not on this invoice (needed to know whether this one completes them).
+    elsewhere = delivery.invoiced(db, ctx, [line.id for line in source_lines], except_invoice=invoice.id)
+    if any(elsewhere.get(line.source_line_id, Decimal("0")) + line.quantity > handed_over[line.source_line_id] for line in lines):
+        raise conflict(
+            "more_than_delivered",
+            "This draft invoice charges more than has been delivered. Delete it and invoice the order again: only what is delivered is invoiced.",
+        )
+    # Whether this invoice completes each order must still be true: a line added to or changed on an order since the
+    # draft was built would make the stored "completes the order" wrong.
+    now = {copy.source_line_id: copy.quantity for copy in lines}
+    for link in links:
+        order_lines = [line for line in source_lines if line.transaction_id == link.transaction_id]
+        complete = all(elsewhere.get(line.id, Decimal("0")) + now.get(line.id, Decimal("0")) >= line.quantity for line in order_lines)
+        if complete != link.completes_order:
+            raise _source_changed("The lines of a source order were changed")
+    waiting = delivery.held(db, ctx, list(by_id))
+    if any(
+        sources_of[line.source_line_id].transaction_id in waiting
+        and delivery.shortage(db, ctx, [s for s in source_lines if s.transaction_id == sources_of[line.source_line_id].transaction_id])
+        for line in lines
+    ):
+        raise conflict("waiting_for_delivery", "An order on this invoice waits until everything is delivered")
     # The stored header and VAT breakdown must still be the sums of the stored lines.
     net, vat, gross, by_rate = sum_lines(lines)
     if (net, vat, gross) != (invoice.net_amount, invoice.vat_amount, invoice.gross_amount):

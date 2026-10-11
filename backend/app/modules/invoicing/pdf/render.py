@@ -50,7 +50,9 @@ from app.modules.invoicing.pdf.labels import decimal_separator, labels
 #    paid, no due date and no payment section. Invoices and credit notes print as in 8.
 # 10: a receipt lists what is to be delivered later ("To be delivered later" / "Levereras senare": handed over at the
 #    purchase and still to come, per line) when a counter sale was not all in stock. Everything else prints as in 9.
-TEMPLATE_VERSION = 10
+# 11: invoicing by delivery: a line that is part of an order line prints "Ordered 7 · Backordered 5" /
+#    "Beställt 7 · Restnoterat 5" under its description. Everything else prints as in 10.
+TEMPLATE_VERSION = 11
 ACCENT = colors.HexColor("#1f4e5f")
 ACCENT_LIGHT = colors.HexColor("#e8f0f2")
 # Room for the footer columns (up to five lines each) above the page number.

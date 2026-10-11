@@ -83,6 +83,17 @@ export function InvoiceDocument({ invoice, orgId }: { invoice: Invoice; orgId: s
                     <td className="py-1 pr-3">{line.position}</td>
                     <td className="py-1 pr-3">
                       <div data-testid="line-description">{line.description}</div>
+                      {/* Invoicing by delivery: a part of an order line says so, from the stored snapshot (nothing computed). */}
+                      {line.ordered_quantity && line.ordered_quantity !== line.quantity && (
+                        <div className="text-xs text-secondary" data-testid="line-delivery">
+                          Ordered <DecimalText value={line.ordered_quantity} />
+                          {line.backordered_quantity && line.backordered_quantity !== "0.000" && (
+                            <>
+                              {" "}· Backordered <DecimalText value={line.backordered_quantity} />
+                            </>
+                          )}
+                        </div>
+                      )}
                       {line.service && (
                         <ServiceSummary subject={line.service.subject_label} when={line.service.performed_at_local} by={line.service.performed_by} notes={line.service.notes} />
                       )}

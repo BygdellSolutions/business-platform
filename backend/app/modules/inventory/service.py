@@ -329,6 +329,19 @@ def propose_allocation(db: Session, organization_id: uuid.UUID, item_id: uuid.UU
     return stock, proposal
 
 
+def lock_sales_of(db: Session, ctx: TenantContext, fulfillment_ids: Iterable[uuid.UUID]) -> None:
+    """Lock the sales that confirmed backorders belong to, in id order, BEFORE the item: the order every writer of a
+    sale uses (complete and reopen lock the sale, then its items), so a delivery serializes with invoicing the same
+    sale and never deadlocks with completing or reopening it. Unknown or foreign ids lock nothing (allocate refuses)."""
+    transaction_ids = select(LineFulfillment.transaction_id).where(LineFulfillment.organization_id == ctx.organization_id, LineFulfillment.id.in_(list(fulfillment_ids)))
+    db.execute(
+        select(Transaction.id)
+        .where(Transaction.organization_id == ctx.organization_id, Transaction.id.in_(transaction_ids))
+        .order_by(Transaction.id)
+        .with_for_update()
+    ).all()
+
+
 def allocate(db: Session, ctx: TenantContext, item: Item, allocations: list[tuple[uuid.UUID, Decimal]]) -> list[LineFulfillment]:
     """Deliver confirmed quantities to open backorders of `item` (whose row lock the caller holds).
 
@@ -412,6 +425,13 @@ def _returned_after_credit(db: Session, organization_id: uuid.UUID, row: LineFul
             StockMovement.created_at >= row.created_at,
         )
     )
+
+
+def delivered_so_far(db: Session, organization_id: uuid.UUID, transaction_line_ids: Iterable[uuid.UUID]) -> dict[uuid.UUID, Decimal]:
+    """Per stock-tracking line of a completed transaction: everything handed over so far (at completion and later).
+    What Invoicing may invoice of the line (invoicing by delivery). Lines not tracked are left out: for those, the
+    whole quantity counts as delivered once the transaction is completed."""
+    return {row.transaction_line_id: row.delivered + row.fulfilled_later for row in _active_fulfillments(db, organization_id, transaction_line_ids)}
 
 
 def split_at_completion(db: Session, organization_id: uuid.UUID, transaction_line_ids: Iterable[uuid.UUID]) -> dict[uuid.UUID, tuple[Decimal, Decimal]]:

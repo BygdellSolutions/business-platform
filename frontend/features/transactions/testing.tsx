@@ -6,7 +6,7 @@ import type { TransactionFields } from "@/features/transactions/editor-context";
 import { TransactionEditor } from "@/features/transactions/TransactionEditor";
 import { apiFetch } from "@/lib/api/client";
 import { normalizeError, type ApiResult } from "@/lib/api/errors";
-import type { Customer, Item, LineFulfillment, StockDemand, Transaction, TransactionLine } from "@/lib/api/types";
+import type { Customer, InvoiceStateOfOrder, Item, LineFulfillment, StockDemand, Transaction, TransactionLine } from "@/lib/api/types";
 import type { MoneyString, PercentString, QuantityString } from "@/lib/decimal";
 import { EMPTY_PROFILE } from "@/lib/profile";
 
@@ -193,6 +193,7 @@ export function Harness({
   // Off by default: "Invoice" then only completes (one request), which is what the lifecycle tests check. The
   // tests of the invoicing step turn it on.
   canInvoice = false,
+  invoiceState = "none",
   timeZone = null,
   stock = [],
   fulfillment = [],
@@ -202,6 +203,7 @@ export function Harness({
   fields?: TransactionFields;
   canEdit?: boolean;
   canInvoice?: boolean;
+  invoiceState?: InvoiceStateOfOrder["state"];
   timeZone?: string | null;
   stock?: StockDemand[];
   fulfillment?: LineFulfillment[];
@@ -217,7 +219,7 @@ export function Harness({
     <>
       <Gate />
       <OrgScope orgId={orgId}>
-        <TransactionEditor transaction={current} fields={fields} canEdit={canEdit} canInvoice={canInvoice} timeZone={timeZone} stock={stock} fulfillment={fulfillment} />
+        <TransactionEditor transaction={current} fields={fields} canEdit={canEdit} canInvoice={canInvoice} invoiceState={invoiceState} timeZone={timeZone} stock={stock} fulfillment={fulfillment} />
       </OrgScope>
     </>
   );

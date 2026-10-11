@@ -40,7 +40,7 @@ export default async function NewInvoicePage({
     <div className="flex flex-col gap-4">
       <h1 className="text-[28px] leading-tight font-semibold tracking-tight">New invoice</h1>
       {canMutate ? (
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">Choose completed orders of one billing customer and one currency. The draft reserves them; deleting the draft releases them.</p>
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">Choose completed orders of one billing customer and one currency. Only what is delivered is invoiced: the amounts are what goes on the invoice now, and the rest is invoiced when it is delivered. The draft reserves them; deleting the draft releases them.</p>
       ) : (
         <Notice testId="read-only">Only owners, admins and accountants can create invoices. You can see what is waiting to be invoiced.</Notice>
       )}

@@ -161,7 +161,7 @@ def test_a_receipt_says_what_is_still_to_be_delivered_and_keeps_saying_it_after_
 
     before = receipt()
     assert "To be delivered later" in before
-    assert "2 of 7 pcs handed over at purchase, 5 pcs to be delivered later" in before
+    assert "2 of 7 handed over at purchase, 5 to be delivered later (unit: pcs)" in " ".join(before.split())  # may wrap
     assert "bottles handed over" not in before  # the oil was all in stock
 
     # The 5 arrive and are delivered: the receipt still tells what happened at the purchase.

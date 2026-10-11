@@ -18,6 +18,8 @@ describe("TransactionStatusBadge", () => {
     expect(label({ status: "completed", invoice: "none" })).toBe("Not invoiced");
     expect(label({ status: "completed", invoice: "draft" })).toBe("Invoice draft");
     expect(label({ status: "completed", invoice: "invoiced" })).toBe("Invoiced");
+    expect(label({ status: "completed", invoice: "waiting" })).toBe("Waiting for delivery");
+    expect(label({ status: "completed", invoice: "partly" })).toBe("Partly invoiced");
     expect(label({ status: "completed" })).toBe("Completed"); // where invoicing is not known (the order page)
   });
 });

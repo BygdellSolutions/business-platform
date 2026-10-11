@@ -258,7 +258,7 @@ describe("lifecycle", () => {
     expect(screen.queryByTestId("pay-now-shortage")).toBeNull(); // only when paying
     await userEvent.click(screen.getByTestId("pay-now"));
     const warning = screen.getByTestId("pay-now-shortage");
-    expect(warning).toHaveTextContent("Saddle pad: 2 of 7 pcs in stock. The customer pays for all 7 now, takes 2 today and gets 5 when they arrive.");
+    expect(warning).toHaveTextContent("Saddle pad: 2 of 7 in stock (unit: pcs). The customer pays for all 7 now, takes 2 today and gets 5 when they arrive.");
     expect(warning).not.toHaveTextContent("Hoof oil"); // enough of it
 
     await userEvent.click(screen.getByTestId("pay-card"));
@@ -284,6 +284,57 @@ describe("lifecycle", () => {
       ["/invoices/for-order", { transaction_id: TX_ID }],
     ]);
     expect(await screen.findByTestId("open-draft-invoice")).toHaveAttribute("href", `/o/${ORG_A}/invoices/draft-1`);
+  });
+
+  it("Invoice asks first when not everything is delivered, then invoices what is delivered now", async () => {
+    const asked = { detail: { code: "partial_delivery", message: "Not everything…", transaction_ids: [TX_ID], lines: [{ description: "Saddle pad", unit: "pcs", ordered: "7.000", delivered: "2.000", backordered: "5.000" }] } };
+    installBackend((call) =>
+      call.path === "/invoices/for-order" ? ((call.body as { partial?: boolean }).partial ? ok({ id: "draft-1" }) : fail(409, asked)) : ok(tx({ status: "completed", version: 5 })),
+    );
+    server.tx = tx({ status: "completed", version: 5 });
+    render(<Harness initial={tx()} canInvoice />);
+
+    await userEvent.click(screen.getByTestId("invoice-order"));
+
+    const choice = await screen.findByTestId("partial-delivery-choice");
+    expect(choice).toHaveTextContent("Saddle pad: 2 of 7 delivered, 5 backordered (unit: pcs)");
+    expect(screen.queryByTestId("open-draft-invoice")).toBeNull(); // nothing invoiced until the person chooses
+    await userEvent.click(screen.getByTestId("invoice-delivered-now"));
+
+    expect(writes().map((call) => [call.path, call.body])).toEqual([
+      [`/transactions/${TX_ID}/complete`, undefined],
+      ["/invoices/for-order", { transaction_id: TX_ID }],
+      ["/invoices/for-order", { transaction_id: TX_ID, partial: true }],
+    ]);
+    expect(await screen.findByTestId("open-draft-invoice")).toHaveAttribute("href", `/o/${ORG_A}/invoices/draft-1`);
+    expect(screen.queryByTestId("partial-delivery-choice")).toBeNull();
+  });
+
+  it("Wait until everything is delivered makes a hold and invoices nothing", async () => {
+    const asked = { detail: { code: "partial_delivery", message: "Not everything…", transaction_ids: [TX_ID], lines: [{ description: "Saddle pad", unit: "pcs", ordered: "7.000", delivered: "2.000", backordered: "5.000" }] } };
+    installBackend((call) => (call.path === "/invoices/for-order" ? fail(409, asked) : call.path === "/invoices/holds" ? ok(null, 204) : ok(tx({ status: "completed", version: 5 }))));
+    server.tx = tx({ status: "completed", version: 5 });
+    render(<Harness initial={tx()} canInvoice />);
+
+    await userEvent.click(screen.getByTestId("invoice-order"));
+    await userEvent.click(await screen.findByTestId("wait-for-delivery"));
+
+    expect(writes().map((call) => [call.path, call.body]).at(-1)).toEqual(["/invoices/holds", { transaction_id: TX_ID }]);
+    expect(await screen.findByTestId("invoiced-notice")).toHaveTextContent("Waiting until everything is delivered");
+    expect(screen.queryByTestId("open-draft-invoice")).toBeNull();
+  });
+
+  it("a completed order offers Invoice only while something of it is still to invoice", () => {
+    for (const [state, offered] of [["none", "Invoice"], ["partly", "Invoice"], ["waiting", "Invoice what is delivered now"], ["draft", null], ["invoiced", null]] as const) {
+      const { unmount } = render(<Harness initial={tx({ status: "completed", version: 5 })} canInvoice invoiceState={state} />);
+      const button = screen.queryByTestId("invoice-completed-order");
+      if (offered === null) expect(button).toBeNull();
+      else expect(button).toHaveTextContent(offered);
+      unmount();
+    }
+    // Someone who may not invoice is never offered it.
+    render(<Harness initial={tx({ status: "completed", version: 5 })} canInvoice={false} invoiceState="none" />);
+    expect(screen.queryByTestId("invoice-completed-order")).toBeNull();
   });
 
   it("a walk-in customer's order can only be paid now", () => {

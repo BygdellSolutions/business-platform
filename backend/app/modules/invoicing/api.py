@@ -17,15 +17,17 @@ from app.core.query import contains_pattern
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import scoped_select
 from app.models import Customer, Role
-from app.modules.invoicing import credits, payments, receipts, returns, service
+from app.modules.invoicing import credits, delivery, payments, receipts, returns, service
 from app.modules.invoicing.pdf import service as pdf_service
 from app.modules.invoicing.pdf.document import DocumentTooLarge
 from app.modules.invoicing.pdf.fonts import UnsupportedCharacters
 from app.modules.invoicing.pdf.service import StoredPdf
 from app.modules.invoicing.pdf.filename import content_disposition
-from app.modules.invoicing.models import OPEN_RETURN_STATES, Invoice, InvoicePayment, InvoiceReturn, InvoiceStatus, InvoiceTransaction
+from app.modules.invoicing.models import OPEN_RETURN_STATES, Invoice, InvoiceLine, InvoicePayment, InvoiceReturn, InvoiceStatus, InvoiceTransaction
 from app.modules.invoicing.schemas import (
     InvoiceForOrder,
+    InvoiceHoldCreate,
+    InvoiceOfOrder,
     GoodsReceived,
     ReturnCreate,
     ReturnFollowUp,
@@ -62,6 +64,61 @@ mutators = roles_required(Role.OWNER, Role.ADMIN, Role.ACCOUNTANT)
 # --- what can be invoiced ----------------------------------------------------------------------------------------
 
 
+def _ready_conditions() -> tuple:
+    """Completed, invoiced (not paid at the counter, not the walk-in customer), with a currency, on no draft invoice,
+    and with a line not yet invoiced in full. Whether something of it is DELIVERED is decided after (`_parts_of`)."""
+    on_a_draft = (
+        select(InvoiceTransaction.id)
+        .join(Invoice, and_(Invoice.organization_id == InvoiceTransaction.organization_id, Invoice.id == InvoiceTransaction.invoice_id))
+        .where(
+            InvoiceTransaction.organization_id == Transaction.organization_id,
+            InvoiceTransaction.transaction_id == Transaction.id,
+            Invoice.status == InvoiceStatus.DRAFT,
+        )
+        .correlate(Transaction)
+        .exists()
+    )
+    invoiced_of_line = (
+        select(func.coalesce(func.sum(InvoiceLine.quantity), 0))
+        .where(InvoiceLine.organization_id == TransactionLine.organization_id, InvoiceLine.source_line_id == TransactionLine.id)
+        .correlate(TransactionLine)
+        .scalar_subquery()
+    )
+    open_line = (
+        select(TransactionLine.id)
+        .where(
+            TransactionLine.organization_id == Transaction.organization_id,
+            TransactionLine.transaction_id == Transaction.id,
+            TransactionLine.quantity > invoiced_of_line,
+        )
+        .correlate(Transaction)
+        .exists()
+    )
+    walk_in = (
+        select(Customer.id)
+        .where(Customer.organization_id == Transaction.organization_id, Customer.id == Transaction.billing_customer_id, Customer.walk_in.is_(True))
+        .correlate(Transaction)
+        .exists()
+    )
+    return (
+        Transaction.status == TransactionStatus.COMPLETED,
+        Transaction.currency.is_not(None),
+        Transaction.paid_at.is_(None),  # paid at the counter: a receipt, never an invoice
+        ~walk_in,
+        ~on_a_draft,
+        open_line,
+    )
+
+
+def _parts_of(db: Session, ctx: TenantContext, orders: list[Transaction]) -> dict[uuid.UUID, list[delivery.Part]]:
+    lines: dict[uuid.UUID, list[TransactionLine]] = {tx.id: [] for tx in orders}
+    if lines:
+        for line in db.scalars(scoped_select(TransactionLine, ctx).where(TransactionLine.transaction_id.in_(list(lines))).order_by(TransactionLine.position, TransactionLine.id)):
+            lines[line.transaction_id].append(line)
+    return delivery.parts(db, ctx, orders, lines)
+
+
+
 def _invoiceable_sorts() -> dict:
     """The new-invoice list's sort columns; amounts are sums of the stored line amounts, as the list shows them."""
     def line_sum(column):
@@ -94,11 +151,8 @@ def list_invoiceable_transactions(
     ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
 ) -> list[InvoiceableTransaction]:
-    """Completed transactions with a currency that are on no invoice, draft or issued."""
-    reserved = exists().where(
-        InvoiceTransaction.organization_id == Transaction.organization_id,
-        InvoiceTransaction.transaction_id == Transaction.id,
-    )
+    """Completed transactions with a currency that have something to invoice now (invoicing by delivery: delivered and
+    not on an invoice yet) and are on no draft. Totals are what would be invoiced now."""
     query = (
         scoped_select(Transaction, ctx)
         .add_columns(Customer)
@@ -106,13 +160,7 @@ def list_invoiceable_transactions(
             Customer,
             and_(Customer.organization_id == Transaction.organization_id, Customer.id == Transaction.billing_customer_id),
         )
-        .where(
-            Transaction.status == TransactionStatus.COMPLETED,
-            Transaction.currency.is_not(None),
-            ~reserved,
-            Transaction.paid_at.is_(None),  # paid at the counter: a receipt, never an invoice
-            Customer.walk_in.is_(False),
-        )
+        .where(*_ready_conditions())
     )
     if customer_id is not None:
         query = query.where(Transaction.billing_customer_id == customer_id)
@@ -121,18 +169,15 @@ def list_invoiceable_transactions(
     if date_to is not None:
         query = query.where(Transaction.transaction_date <= date_to)
     newest_first = (Transaction.transaction_date.desc(), Transaction.created_at.desc(), Transaction.id)
-    rows = db.execute(
-        sorted_by(query, sort, _invoiceable_sorts(), newest_first)
-        .limit(page.limit)
-        .offset(page.offset)
-    ).all()
-    lines: dict[uuid.UUID, list[TransactionLine]] = {tx.id: [] for tx, _ in rows}
-    if lines:
-        for line in db.scalars(scoped_select(TransactionLine, ctx).where(TransactionLine.transaction_id.in_(list(lines)))):
-            lines[line.transaction_id].append(line)
+    # shortcut: what was delivered is Inventory's, so "something to invoice now" is decided in Python over every
+    # candidate (completed, not fully invoiced) and paged after that; fine while the backlog is hundreds of orders,
+    # move the delivered figures into SQL (an Inventory sort-style expression hook) if it grows to many thousands.
+    candidates = db.execute(sorted_by(query, sort, _invoiceable_sorts(), newest_first)).all()
+    parts_of = _parts_of(db, ctx, [tx for tx, _ in candidates])
+    rows = [(tx, customer) for tx, customer in candidates if parts_of.get(tx.id)][page.offset : page.offset + page.limit]
     result = []
     for tx, customer in rows:
-        totals = calculate_totals(lines[tx.id])
+        totals = calculate_totals(parts_of[tx.id])
         result.append(
             InvoiceableTransaction(
                 id=tx.id,
@@ -141,7 +186,7 @@ def list_invoiceable_transactions(
                 billing_customer_id=tx.billing_customer_id,
                 billing_customer=CustomerRef.model_validate(customer),
                 currency=tx.currency,
-                line_count=len(lines[tx.id]),
+                line_count=len(parts_of[tx.id]),
                 version=tx.version,
                 totals=InvoiceableTotals(
                     net_amount=totals.net_amount, vat_amount=totals.vat_amount, gross_amount=totals.gross_amount
@@ -165,24 +210,15 @@ def invoicing_summary(
     today = organization_today(db, ctx.organization_id)
     month_start, month_end = month_range(month, today)
     year_start, year_end = year_range(month_start, today)
-    reserved = exists().where(InvoiceTransaction.organization_id == Transaction.organization_id, InvoiceTransaction.transaction_id == Transaction.id)
-    walk_in = exists().where(Customer.organization_id == Transaction.organization_id, Customer.id == Transaction.billing_customer_id, Customer.walk_in.is_(True))
-    ready = (
-        Transaction.organization_id == ctx.organization_id,
-        Transaction.status == TransactionStatus.COMPLETED,
-        Transaction.currency.is_not(None),
-        ~reserved,
-        Transaction.paid_at.is_(None),  # paid at the counter: never invoiced
-        ~walk_in,
-    )
-    ready_count = db.scalar(select(func.count()).select_from(Transaction).where(*ready))
-    ready_amounts = db.execute(
-        select(Transaction.currency, func.sum(TransactionLine.gross_amount))
-        .join(TransactionLine, and_(TransactionLine.organization_id == Transaction.organization_id, TransactionLine.transaction_id == Transaction.id))
-        .where(*ready)
-        .group_by(Transaction.currency)
-        .order_by(Transaction.currency)
-    ).all()
+    # Ready to invoice: what was delivered and is not invoiced yet (invoicing by delivery), worth what it would be invoiced at.
+    candidates = list(db.scalars(scoped_select(Transaction, ctx).where(*_ready_conditions())))
+    parts_of = _parts_of(db, ctx, candidates)
+    ready_orders = [tx for tx in candidates if parts_of.get(tx.id)]
+    ready_count = len(ready_orders)
+    by_currency: dict[str, Decimal] = {}
+    for tx in ready_orders:
+        by_currency[tx.currency] = by_currency.get(tx.currency, Decimal("0")) + sum((part.gross_amount for part in parts_of[tx.id]), Decimal("0"))
+    ready_amounts = sorted(by_currency.items())
 
     def invoices(*conditions) -> CountAndAmounts:
         where = (Invoice.organization_id == ctx.organization_id, *conditions)
@@ -308,28 +344,64 @@ def invoice_state_of_transactions(
             detail=[{"loc": ["query", "ids"], "msg": f"between 1 and {MAX_TRANSACTIONS_PER_INVOICE} ids", "type": "value_error"}],
         )
     rows = db.execute(
-        select(InvoiceTransaction.transaction_id, Invoice.id, Invoice.status, Invoice.number_text)
+        select(InvoiceTransaction.transaction_id, Invoice.id, Invoice.status, Invoice.number_text, InvoiceTransaction.completes_order)
         .join(
             Invoice,
             and_(Invoice.organization_id == InvoiceTransaction.organization_id, Invoice.id == InvoiceTransaction.invoice_id),
         )
         .where(InvoiceTransaction.organization_id == ctx.organization_id, InvoiceTransaction.transaction_id.in_(wanted))
-    )
-    found = {tx_id: (invoice_id, state, number_text) for tx_id, invoice_id, state, number_text in rows}
+        .order_by(Invoice.created_at, Invoice.id)
+    ).all()
+    invoices_of: dict[uuid.UUID, list[InvoiceOfOrder]] = {}
+    completed_by_issued: set[uuid.UUID] = set()
+    for tx_id, invoice_id, state, number_text, completes_order in rows:
+        invoices_of.setdefault(tx_id, []).append(InvoiceOfOrder(invoice_id=invoice_id, status=state, number_text=number_text))
+        if state == InvoiceStatus.ISSUED and completes_order:
+            completed_by_issued.add(tx_id)
+    waiting = delivery.held(db, ctx, wanted)
     result = []
     for tx_id in wanted:
-        invoice_id, state, number_text = found.get(tx_id, (None, None, None))
-        label = "none" if state is None else ("invoiced" if state == InvoiceStatus.ISSUED else "draft")
-        result.append(InvoiceStateRead(transaction_id=tx_id, state=label, invoice_id=invoice_id, number_text=number_text))
+        linked = invoices_of.get(tx_id, [])
+        draft = next((entry for entry in linked if entry.status == InvoiceStatus.DRAFT), None)
+        issued = [entry for entry in linked if entry.status == InvoiceStatus.ISSUED]
+        if draft is not None:
+            label, shown = "draft", draft
+        elif issued:
+            label, shown = ("invoiced" if tx_id in completed_by_issued else "partly"), issued[-1]
+        else:
+            label, shown = ("waiting" if tx_id in waiting else "none"), None
+        result.append(
+            InvoiceStateRead(
+                transaction_id=tx_id,
+                state=label,
+                invoice_id=shown.invoice_id if shown else None,
+                number_text=shown.number_text if shown else None,
+                invoices=linked,
+            )
+        )
     return result
 
 
 @router.post("/for-order", response_model=InvoiceRead)
 def invoice_order(payload: InvoiceForOrder, ctx: TenantContext = Depends(mutators), db: Session = Depends(get_db)) -> InvoiceRead:
-    """"Invoice" on a completed order: it goes onto the customer's open draft invoice in its currency (rebuilt with it)
-    or onto a new draft. The answer is that draft."""
-    invoice_id = service.invoice_order(db, ctx, payload.transaction_id)
+    """"Invoice" on a completed order: what of it was delivered goes onto the customer's open draft invoice in its
+    currency (rebuilt with it) or onto a new draft. The answer is that draft. Not everything delivered and nobody has
+    chosen yet: 409 `partial_delivery` (with the lines) until `partial` is sent or a hold is made."""
+    invoice_id = service.invoice_order(db, ctx, payload.transaction_id, partial=payload.partial)
     return service.read_invoice(db, ctx, invoice_id)
+
+
+@router.post("/holds", status_code=status.HTTP_204_NO_CONTENT)
+def hold_order(payload: InvoiceHoldCreate, ctx: TenantContext = Depends(mutators), db: Session = Depends(get_db)) -> None:
+    """"Wait until everything is delivered": nothing of the order is invoiced before then; when the last units are
+    delivered, the whole order goes onto the customer's open draft invoice."""
+    service.hold(db, ctx, payload.transaction_id)
+
+
+@router.delete("/holds/{transaction_id}", status_code=status.HTTP_204_NO_CONTENT)
+def release_order(transaction_id: uuid.UUID, ctx: TenantContext = Depends(mutators), db: Session = Depends(get_db)) -> None:
+    """Stop waiting: the order is invoiced as it is delivered again."""
+    service.release(db, ctx, transaction_id)
 
 
 @router.post("", response_model=InvoiceRead, status_code=status.HTTP_201_CREATED)

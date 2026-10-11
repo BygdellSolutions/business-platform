@@ -119,13 +119,14 @@ class Invoice(TenantOwned, Authored, Base):
 
 
 class InvoiceTransaction(TenantOwned, Base):
-    """A source transaction of an invoice. A row here IS the fact that the transaction is
-    reserved (draft invoice) or invoiced (issued invoice); Sales stores nothing about it."""
+    """A source transaction of an invoice. A row here IS the fact that (part of) the transaction is
+    reserved (draft invoice) or invoiced (issued invoice); Sales stores nothing about it. Invoicing by
+    delivery (2026-10-11): an order can be on several invoices, one per delivery; at most one of them is a
+    draft (checked under the order's row lock)."""
 
     __tablename__ = "invoice_transactions"
     __table_args__ = (
-        # The final guard against invoicing a transaction twice, even for two simultaneous creators.
-        UniqueConstraint("organization_id", "transaction_id", name="uq_invoice_transactions_source_once"),
+        Index("ix_invoice_transactions_organization_transaction", "organization_id", "transaction_id"),
         UniqueConstraint(
             "organization_id", "invoice_id", "transaction_id", name="uq_invoice_transactions_org_invoice_transaction"
         ),
@@ -165,14 +166,20 @@ class InvoiceTransaction(TenantOwned, Base):
     position: Mapped[int] = mapped_column(Integer)
     # Custom fields flagged for invoices, as they were (generic list; see snapshots.py).
     fields: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list, server_default=text("'[]'::jsonb"))
+    # Invoicing by delivery: with this invoice, every line of the order is invoiced in full (taken when the draft is
+    # built). An invoice from before invoicing by delivery always took the whole order.
+    completes_order: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
 
 
 class InvoiceLine(TenantOwned, Base):
-    """A copy of one Sales line: the same inputs and the three stored amounts, verbatim."""
+    """One Sales line, or the delivered part of it (invoicing by delivery, 2026-10-11): the same prices and
+    discount layers, the invoiced quantity, and the three amounts for that quantity. A whole line is copied
+    verbatim; a part is priced with the same rule (per line, half-up). The trigger `invoice_lines_within_order`
+    refuses more of a source line, over all invoices, than was ordered."""
 
     __tablename__ = "invoice_lines"
     __table_args__ = (
-        UniqueConstraint("organization_id", "source_line_id", name="uq_invoice_lines_source_line_once"),
+        Index("ix_invoice_lines_organization_source_line", "organization_id", "source_line_id"),
         # Target of composite foreign keys (a credit note line credits a line of an invoice of the same organization).
         UniqueConstraint("organization_id", "id", name="uq_invoice_lines_organization_id_id"),
         UniqueConstraint("organization_id", "invoice_id", "position", name="uq_invoice_lines_position"),
@@ -206,6 +213,11 @@ class InvoiceLine(TenantOwned, Base):
         CheckConstraint("gross_amount = net_amount + vat_amount", name="ck_invoice_lines_gross_amount"),
         CheckConstraint("jsonb_typeof(fields) = 'array'", name="ck_invoice_lines_fields_array"),
         CheckConstraint("service IS NULL OR jsonb_typeof(service) = 'object'", name="ck_invoice_lines_service_object"),
+        CheckConstraint("backordered_quantity >= 0", name="ck_invoice_lines_backordered_nonnegative"),
+        CheckConstraint(
+            "ordered_quantity IS NULL OR ordered_quantity >= quantity + backordered_quantity",
+            name="ck_invoice_lines_within_ordered",
+        ),
         *discount_constraints("invoice_lines"),
     )
 
@@ -230,6 +242,10 @@ class InvoiceLine(TenantOwned, Base):
     fields: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list, server_default=text("'[]'::jsonb"))
     # For a service line: when, by whom and for whom, as shown at invoicing (a snapshot, never resolved again).
     service: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))  # None is SQL NULL, not JSON null
+    # Snapshots taken when the draft is built (invoicing by delivery): the order line's quantity, and what of it was
+    # still waiting for delivery. NULL ordered_quantity: a line invoiced whole, before invoicing by delivery.
+    ordered_quantity: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+    backordered_quantity: Mapped[Decimal] = mapped_column(Numeric(12, 3), default=Decimal("0"), server_default=text("0"))
 
 
 class InvoiceVatRow(TenantOwned, Base):
@@ -562,3 +578,22 @@ class InvoiceReturnEvent(TenantOwned, Base):
     kind: Mapped[str] = mapped_column(String(16))
     note: Mapped[str | None] = mapped_column(String(2000))
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
+
+
+class InvoiceHold(TenantOwned, Authored, Base):
+    """"Wait until everything is delivered" (owner, 2026-10-11): an order that is not invoiced in parts. Nothing of it
+    is invoiceable until every line is delivered in full; then the whole order is. Invoicing's own record: Sales has
+    no invoicing state. Removed when the person chooses to invoice the delivered part after all."""
+
+    __tablename__ = "invoice_holds"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "transaction_id", name="uq_invoice_holds_transaction"),
+        ForeignKeyConstraint(
+            ["organization_id", "transaction_id"],
+            ["transactions.organization_id", "transactions.id"],
+            ondelete="CASCADE",
+            name="fk_invoice_holds_transaction",
+        ),
+    )
+
+    transaction_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))

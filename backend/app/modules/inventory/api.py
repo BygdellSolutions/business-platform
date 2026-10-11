@@ -10,6 +10,7 @@ from app.api.deps import Sorting, refuse_sort, sorting
 from app.core import clock
 from app.core.authz import record_writer
 from app.core.db import get_db
+from app.core.entity_registry import registry
 from app.core.query import contains_pattern
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import get_scoped, get_scoped_or_404, reference_error
@@ -345,10 +346,16 @@ def confirm_allocation(
     item_id: uuid.UUID, payload: AllocationConfirm, ctx: TenantContext = Depends(record_writer), db: Session = Depends(get_db)
 ) -> list[BackorderRead]:
     """A person confirms who gets what: each quantity is delivered to that backorder now (who and when are recorded)."""
+    # The sales first, then the item (see lock_sales_of): invoicing a sale and delivering to it serialize.
+    service.lock_sales_of(db, ctx, [allocation.fulfillment_id for allocation in payload.allocations])
     item = get_scoped_or_404(db, ctx, Item, item_id, for_update=True)
     service.ensure_tracked(item)
-    service.allocate(db, ctx, item, [(allocation.fulfillment_id, allocation.quantity) for allocation in payload.allocations])
+    delivered = service.allocate(db, ctx, item, [(allocation.fulfillment_id, allocation.quantity) for allocation in payload.allocations])
+    transaction_ids = [row.transaction_id for row in delivered]
     db.commit()
+    # After the delivery is committed: whoever invoices by delivery adds the delivered units to a draft invoice (core
+    # hook; Inventory does not know Invoicing). Their own steps: a refusal there never undoes the delivery.
+    registry.call_hooks("stock.delivered_later", db, ctx, transaction_ids)
     return list_backorders(item_id=item_id, include_closed=True, ctx=ctx, db=db)
 
 

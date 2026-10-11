@@ -9,13 +9,16 @@ const PAID = { label: "Paid", className: "tone-success" };
 /** A completed order (not paid at the counter) read by where its invoicing stands (owner, 2026-10-11). */
 const INVOICING: Record<InvoiceStateOfOrder["state"], { label: string; className: string }> = {
   none: { label: "Not invoiced", className: "tone-orange" },
+  waiting: { label: "Waiting for delivery", className: "tone-neutral" },
   draft: { label: "Invoice draft", className: "tone-info" },
+  partly: { label: "Partly invoiced", className: "tone-purple" },
   invoiced: { label: "Invoiced", className: "tone-primary" },
 };
 
 /**
  * The lifecycle status of a transaction, as the server reports it. Presentation only. With `invoice` (where Invoicing
- * says the order stands), a completed order reads by its invoicing instead: Not invoiced, Invoice draft or Invoiced.
+ * says the order stands), a completed order reads by its invoicing instead: Not invoiced, Waiting for delivery,
+ * Invoice draft, Partly invoiced or Invoiced.
  * The lifecycle status itself is unchanged (it is not an invoicing state).
  */
 export function TransactionStatusBadge({ status, paid = false, invoice }: { status: TransactionStatus; paid?: boolean; invoice?: InvoiceStateOfOrder["state"] }) {

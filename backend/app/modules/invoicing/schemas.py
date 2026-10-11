@@ -46,6 +46,16 @@ class InvoiceForOrder(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     transaction_id: uuid.UUID
+    # Invoicing by delivery (2026-10-11): the person chose to invoice the delivered part now (also ends a hold).
+    partial: bool = False
+
+
+class InvoiceHoldCreate(BaseModel):
+    """"Wait until everything is delivered" for one completed order."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    transaction_id: uuid.UUID
 
 
 class InvoiceUpdate(BaseModel):
@@ -98,6 +108,10 @@ class InvoiceLineRead(BaseModel):
     vat_amount: MoneyOut
     gross_amount: MoneyOut
     fields: list[dict[str, Any]]
+    # Invoicing by delivery: the order line's quantity and what of it still waited for delivery when the draft was built
+    # (null ordered_quantity: invoiced whole, before invoicing by delivery). Printed as "Ordered 7 · Backordered 5".
+    ordered_quantity: QuantityOut | None = None
+    backordered_quantity: QuantityOut = Decimal("0.000")
     # Credit notes: how much of the line has been credited, and (for a line whose stock Inventory tracks) how much can
     # still go back into stock; null when the line has no stock to return, so the credit form offers no "returned" tick.
     credited_quantity: QuantityOut = Decimal("0.000")
@@ -256,13 +270,24 @@ class InvoiceableTransaction(BaseModel):
     totals: InvoiceableTotals
 
 
+class InvoiceOfOrder(BaseModel):
+    invoice_id: uuid.UUID
+    status: Literal["draft", "issued"]
+    number_text: str | None
+
+
 class InvoiceStateRead(BaseModel):
-    """Whether a transaction is on an invoice. Derived from invoicing records only."""
+    """Where a transaction stands with invoicing. Derived from invoicing records only.
+
+    none: on no invoice · waiting: on no invoice, waits until everything is delivered · draft: on a draft invoice ·
+    partly: on issued invoices, more of it is still to be invoiced (when it is delivered) · invoiced: all of it is on
+    issued invoices. `invoice_id`/`number_text`: the draft, else the latest issued invoice; `invoices`: all of them."""
 
     transaction_id: uuid.UUID
-    state: Literal["none", "draft", "invoiced"]
+    state: Literal["none", "waiting", "draft", "partly", "invoiced"]
     invoice_id: uuid.UUID | None
     number_text: str | None
+    invoices: list[InvoiceOfOrder] = []
 
 
 

@@ -106,8 +106,8 @@ test("eligibility, the invoice-state view and the pages show only the active org
 
   const state = await context.request.get(bffUrl(a.orgId, `/invoices/by-transaction?ids=${m.b.free},${m.a.free}`));
   expect(await state.json()).toEqual([
-    { transaction_id: m.b.free, state: "none", invoice_id: null, number_text: null }, // a foreign id looks exactly like a free one
-    { transaction_id: m.a.free, state: "none", invoice_id: null, number_text: null },
+    { transaction_id: m.b.free, state: "none", invoice_id: null, number_text: null, invoices: [] }, // a foreign id looks exactly like a free one
+    { transaction_id: m.a.free, state: "none", invoice_id: null, number_text: null, invoices: [] },
   ]);
   const eligible = (await (await context.request.get(bffUrl(a.orgId, "/invoiceable-transactions"))).json()) as { id: string }[];
   expect(eligible.map((row) => row.id)).toEqual([m.a.free]);

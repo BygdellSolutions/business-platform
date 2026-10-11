@@ -667,6 +667,9 @@ export interface InvoiceLine {
   creditable_quantity: QuantityString | null;
   /** How much can still go back into stock on a credit note; null when the line has no stock to return. */
   stock_returnable: QuantityString | null;
+  /** Invoicing by delivery: the order line's quantity and what still waited for delivery (null: invoiced whole). */
+  ordered_quantity?: QuantityString | null;
+  backordered_quantity?: QuantityString;
 }
 
 export interface InvoiceSource {
@@ -860,12 +863,17 @@ export interface BoughtLine {
   gross_amount: MoneyString;
 }
 
-/** Whether an order is on an invoice (GET /api/invoices/by-transaction). */
+/**
+ * Where an order stands with invoicing (GET /api/invoices/by-transaction). Invoicing by delivery (2026-10-11):
+ * none · waiting (waits until everything is delivered) · draft · partly (on issued invoices, the rest is invoiced when
+ * it is delivered) · invoiced (all of it). `invoice_id`: the draft, else the latest issued invoice; `invoices`: all.
+ */
 export interface InvoiceStateOfOrder {
   transaction_id: string;
-  state: "none" | "draft" | "invoiced";
+  state: "none" | "waiting" | "draft" | "partly" | "invoiced";
   invoice_id: string | null;
   number_text: string | null;
+  invoices: { invoice_id: string; status: "draft" | "issued"; number_text: string | null }[];
 }
 
 /** A member's name as any member may see it (GET /api/members/people). */

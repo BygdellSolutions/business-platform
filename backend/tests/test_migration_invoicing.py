@@ -116,24 +116,25 @@ def test_migrated_data_can_be_invoiced_by_the_new_tables_and_is_protected_by_the
                     {"o": ids["org"], "i": ids["org"], "t": ids["tx_old"], "c": ids["customer"]},
                 )
         # Nor a transaction that is still a draft... at the database level a draft has the right
-        # customer and currency, so this is the application's rule (tested through the API); what the
-        # database does guarantee is that a transaction is on one invoice only.
-        with pytest.raises(IntegrityError, match="uq_invoice_transactions_source_once"):
-            with engine.begin() as c:
-                c.execute(
-                    text(
-                        "insert into invoices (id, organization_id, customer_id, currency, customer_snapshot, issuer_snapshot, customer_name, invoice_date, net_amount, vat_amount, gross_amount) "
-                        "values (gen_random_uuid(), :o, :c, 'SEK', '{}', '{}', 'Umeå HK', '2026-02-01', 0, 0, 0)"
-                    ),
-                    {"o": ids["org"], "c": ids["customer"]},
-                )
-                c.execute(
-                    text(
-                        "insert into invoice_transactions (organization_id, invoice_id, transaction_id, customer_id, currency, transaction_date, source_version, position) "
-                        "select :o, id, :t, :c, 'SEK', '2026-01-15', 1, 1 from invoices where id <> :i and organization_id = :o"
-                    ),
-                    {"o": ids["org"], "i": ids["org"], "t": ids["tx_done"], "c": ids["customer"]},
-                )
+        # customer and currency, so this is the application's rule (tested through the API). Since
+        # invoicing by delivery (b8d0f2a4c613) an order may be on several invoices; what the database
+        # guarantees is that an order LINE is never invoiced beyond its quantity (test_invoices_db).
+        with engine.begin() as c:
+            c.execute(
+                text(
+                    "insert into invoices (id, organization_id, customer_id, currency, customer_snapshot, issuer_snapshot, customer_name, invoice_date, net_amount, vat_amount, gross_amount) "
+                    "values (gen_random_uuid(), :o, :c, 'SEK', '{}', '{}', 'Umeå HK', '2026-02-01', 0, 0, 0)"
+                ),
+                {"o": ids["org"], "c": ids["customer"]},
+            )
+            second = c.execute(
+                text(
+                    "insert into invoice_transactions (organization_id, invoice_id, transaction_id, customer_id, currency, transaction_date, source_version, position) "
+                    "select :o, id, :t, :c, 'SEK', '2026-01-15', 1, 1 from invoices where id <> :i and organization_id = :o"
+                ),
+                {"o": ids["org"], "i": ids["org"], "t": ids["tx_done"], "c": ids["customer"]},
+            )
+            assert second.rowcount == 1
     finally:
         engine.dispose()
 
@@ -152,8 +153,8 @@ def test_downgrade_removes_exactly_what_the_upgrade_added_and_reupgrade_restores
 
     _upgrade(scratch_url, "head")
     assert INVOICE_TABLES <= _tables(scratch_url)
-    # Five from invoicing and the PDFs, one from payments (append-only).
-    assert _scalar(scratch_url, "select count(*) from pg_trigger where tgname like 'trg_invoice%' and not tgisinternal") == 6
+    # Five from invoicing and the PDFs, one from payments (append-only), one keeping invoiced lines within the order.
+    assert _scalar(scratch_url, "select count(*) from pg_trigger where tgname like 'trg_invoice%' and not tgisinternal") == 7
     assert _fingerprint(scratch_url) == before
 
 

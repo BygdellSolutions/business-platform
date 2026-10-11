@@ -216,15 +216,32 @@ def test_returned_goods_go_back_into_stock_at_most_what_was_delivered(client: Te
     assert too_many.status_code == 201  # 1 of 3 delivered units is still out: 0.5 can come back
     assert _on_hand(client, sales.headers, product) == "4.500"
     after = _read(client, sales.headers, invoice)
-    assert after["lines"][0]["stock_returnable"] == "0.500" and after["credit_status"] == "credited"
+    # Fully credited: no credit note can return anything more (0.5 delivered units are still out, but there is nothing
+    # left to credit them on). Since invoicing by delivery the figure is per invoice line, at most what is left to credit.
+    assert after["lines"][0]["stock_returnable"] == "0.000" and after["credit_status"] == "credited"
     movements = client.get(f"/api/items/{product.id}/stock", headers=sales.headers).json()["movements"]
     returns = [m for m in movements if m["reason"] == "return"]
     assert sorted(m["quantity_change"] for m in returns) == ["0.500", "2.000"] and all("Credit note" in m["note"] for m in returns)
 
 
 def test_goods_never_delivered_cannot_go_back_into_stock(client: TestClient, db_session: Session, sales):
+    # Since invoicing by delivery (2026-10-11) an invoice charges only what was delivered (here: 1 of 3). An invoice
+    # from before charged the backordered units too: recreate such a line (inside this rolled-back transaction) and
+    # show that crediting it still returns no more to stock than was handed over.
     product, invoice = _stocked_invoice(client, db_session, sales, quantity="3", on_hand="1")  # 1 delivered, 2 backordered
+    assert invoice["lines"][0]["quantity"] == "1.000"
+    db_session.execute(text("ALTER TABLE invoice_lines DISABLE TRIGGER USER"))
+    db_session.execute(
+        text(
+            "update invoice_lines set quantity = 3, net_amount = 360.00, vat_amount = 90.00, gross_amount = 450.00,"
+            " ordered_quantity = NULL, backordered_quantity = 0 where id = :id"
+        ),
+        {"id": invoice["lines"][0]["id"]},
+    )
+    db_session.execute(text("ALTER TABLE invoice_lines ENABLE TRIGGER USER"))
+    invoice = _read(client, sales.headers, invoice)
     line = invoice["lines"][0]
+    assert line["quantity"] == "3.000"
 
     response = _credit(client, sales.headers, invoice, (line["id"], "2", {"returned_to_stock": True}))
 
