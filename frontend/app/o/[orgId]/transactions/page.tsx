@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { PRIMARY_LINK } from "@/components/ui/Button";
 import { DecimalText } from "@/components/ui/DecimalText";
 import { ListFilters } from "@/components/ui/ListFilters";
 import { Pagination } from "@/components/ui/Pagination";
@@ -49,7 +50,7 @@ export default async function TransactionsPage({
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold">Orders</h1>
         {canWrite && (
-          <Link href={`${base}/new`} className="underline" data-testid="new-transaction">
+          <Link href={`${base}/new`} className={PRIMARY_LINK} data-testid="new-transaction">
             New order
           </Link>
         )}

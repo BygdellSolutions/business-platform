@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { BUTTON_VARIANTS, PRIMARY_LINK } from "@/components/ui/Button";
 import { SummaryCard } from "@/features/dashboard/SummaryCard";
 import type { InventorySummary, InvoicingSummary, Organization, SalesSummary } from "@/lib/api/types";
 import { getCredential } from "@/lib/auth/credential";
@@ -52,10 +53,10 @@ export default async function Dashboard({
         <div className="flex flex-wrap gap-3 text-sm" data-testid="quick-actions">
           {canWriteRecords(role) && (
             <>
-              <Link href={`${base}/transactions/new`} className="rounded border border-zinc-400 px-3 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-800">
+              <Link href={`${base}/transactions/new`} className={PRIMARY_LINK}>
                 New order
               </Link>
-              <Link href={`${base}/customers/new`} className="rounded border border-zinc-400 px-3 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-800">
+              <Link href={`${base}/customers/new`} className={BUTTON_VARIANTS.secondary}>
                 New customer
               </Link>
             </>

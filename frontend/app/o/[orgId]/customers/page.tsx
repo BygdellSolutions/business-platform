@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { PRIMARY_LINK } from "@/components/ui/Button";
 import { ListFilters } from "@/components/ui/ListFilters";
 import { Pagination } from "@/components/ui/Pagination";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -35,7 +36,7 @@ export default async function CustomersPage({
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold">Customers</h1>
         {canWrite && (
-          <Link href={`${base}/new`} className="underline" data-testid="new-customer">
+          <Link href={`${base}/new`} className={PRIMARY_LINK} data-testid="new-customer">
             New customer
           </Link>
         )}

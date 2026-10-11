@@ -4,19 +4,19 @@ import { NAV } from "@/components/shell/nav";
 
 describe("navigation", () => {
   it("links the organization settings", () => {
-    expect(NAV.find((item) => item.label === "Settings")).toEqual({ label: "Settings", path: "/settings", enabled: true });
+    expect(NAV.find((item) => item.label === "Settings")).toEqual({ label: "Settings", path: "/settings", enabled: true, section: "Organization" });
   });
 
   it("links the inventory overview (backorders and incoming stock)", () => {
-    expect(NAV.find((item) => item.label === "Inventory")).toEqual({ label: "Inventory", path: "/inventory", enabled: true });
+    expect(NAV.find((item) => item.label === "Inventory")).toEqual({ label: "Inventory", path: "/inventory", enabled: true, section: "Products" });
   });
 
   it("links the invoices", () => {
-    expect(NAV.find((item) => item.label === "Invoices")).toEqual({ label: "Invoices", path: "/invoices", enabled: true });
+    expect(NAV.find((item) => item.label === "Invoices")).toEqual({ label: "Invoices", path: "/invoices", enabled: true, section: "Sales" });
   });
 
   it("shows Members to owners and admins only (presentation; the backend decides)", () => {
-    expect(NAV.find((item) => item.label === "Members")).toEqual({ label: "Members", path: "/members", enabled: true, roles: ["owner", "admin"] });
+    expect(NAV.find((item) => item.label === "Members")).toEqual({ label: "Members", path: "/members", enabled: true, roles: ["owner", "admin"], section: "Organization" });
   });
 
   it("has unique labels and paths, all relative to the organization", () => {

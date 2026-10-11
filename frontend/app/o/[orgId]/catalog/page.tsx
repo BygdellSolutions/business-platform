@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { PRIMARY_LINK } from "@/components/ui/Button";
 import { DecimalText } from "@/components/ui/DecimalText";
 import { ListFilters } from "@/components/ui/ListFilters";
 import { Pagination } from "@/components/ui/Pagination";
@@ -84,7 +85,7 @@ export default async function CatalogPage({
         {canWrite && (
           <Link
             href={`${base}/new`}
-            className="underline"
+            className={PRIMARY_LINK}
             data-testid="new-item"
           >
             New item

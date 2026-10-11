@@ -7,6 +7,7 @@ import { loginPath, requireCredential } from "@/lib/auth/credential";
 import { getCurrentUser, getMemberships } from "@/lib/orgs";
 import { OrgScope } from "@/components/shell/org-context";
 import { OrgSwitcher } from "@/components/shell/OrgSwitcher";
+import { MainNav } from "@/components/shell/MainNav";
 import { NAV } from "@/components/shell/nav";
 import { SignOut } from "@/components/shell/SignOut";
 
@@ -36,39 +37,31 @@ export default async function OrgLayout({
   if (!organization) notFound();
 
   return (
-    <div className="flex min-h-full flex-col">
-      <header className="flex flex-col gap-2 border-b border-zinc-300 p-4 dark:border-zinc-700">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <div>
-            <span data-testid="org-name" className="text-xl font-semibold">{organization.name}</span>{" "}
-            <span data-testid="org-role" className="text-sm text-zinc-500">{organization.role}</span>
-          </div>
-          <div className="flex items-center gap-3 text-sm">
-            <span data-testid="user-email">{current.user.email}</span>
-            <a href="/account" className="underline" data-testid="account-link">
-              Account
-            </a>
-            {(mode === "dev" || mode === "session") && <SignOut mode={mode} />}
+    <div className="flex min-h-full flex-col md:flex-row">
+      <aside className="flex shrink-0 flex-col gap-4 border-b border-zinc-200 bg-zinc-50 p-4 md:sticky md:top-0 md:h-screen md:w-60 md:overflow-y-auto md:border-r md:border-b-0 dark:border-zinc-800 dark:bg-zinc-900/40">
+        <div className="px-3">
+          <div data-testid="org-name" className="text-lg leading-tight font-semibold">{organization.name}</div>
+          <div className="text-sm text-zinc-500">
+            Your role: <span data-testid="org-role" className="capitalize">{organization.role}</span>
           </div>
         </div>
-        <OrgSwitcher organizations={result.memberships} currentId={orgId} canCreate={current.user.can_create_organizations} owned={{ count: current.user.owned_organizations, max: current.user.max_owned_organizations }} />
-        <nav aria-label="Main" className="flex flex-wrap gap-4 text-sm">
-          {NAV.filter((item) => item.roles === undefined || item.roles.includes(organization.role)).map((item) =>
-            item.enabled ? (
-              <a key={item.label} href={`/o/${orgId}${item.path}`} className="underline">
-                {item.label}
-              </a>
-            ) : (
-              <span key={item.label} aria-disabled="true" className="text-zinc-400">
-                {item.label} (coming soon)
-              </span>
-            ),
-          )}
-        </nav>
-      </header>
-      <main className="flex-1 p-4">
-        <OrgScope orgId={orgId}>{children}</OrgScope>
-      </main>
+        <MainNav orgId={orgId} items={NAV.filter((item) => item.roles === undefined || item.roles.includes(organization.role))} />
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-zinc-200 px-3 pt-4 text-sm md:mt-auto dark:border-zinc-800">
+          <span data-testid="user-email" className="w-full truncate text-zinc-600 dark:text-zinc-400">{current.user.email}</span>
+          <a href="/account" className="underline" data-testid="account-link">
+            Account
+          </a>
+          {(mode === "dev" || mode === "session") && <SignOut mode={mode} />}
+        </div>
+      </aside>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="border-b border-zinc-200 px-4 py-2 md:px-8 dark:border-zinc-800">
+          <OrgSwitcher organizations={result.memberships} currentId={orgId} canCreate={current.user.can_create_organizations} owned={{ count: current.user.owned_organizations, max: current.user.max_owned_organizations }} />
+        </div>
+        <main className="flex-1 p-4 md:p-8">
+          <OrgScope orgId={orgId}>{children}</OrgScope>
+        </main>
+      </div>
     </div>
   );
 }

@@ -4,6 +4,9 @@ All notable changes to `business-platform` will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **Friendlier look for people who are not technical.** The menu moved into a left sidebar (a top strip on phones), grouped under Sales, Contacts, Products, Equine and Organization, with an icon per page and the current page highlighted; the organization, your role, your email, Account and Sign out sit in the sidebar, the organization switcher above the page. One accent colour marks the main action: "New customer", "New order" and the other "New …" links are filled buttons, and every form's submit button (Save, Add, Record payment…) is the primary button; Leave and Transfer stay plain and Delete organization stays red. The bundled Noto Sans font is now actually used (a leftover `font-family: Arial` overrode it).
+
 ### Added
 - **Counter sales: a draft order is either "Paid now" or "Invoice"** (decided 2026-10-10; there is no plain "Complete" on the order screen any more).
   - **Paid now** (Swish, card or cash): completes the order and records the payment in one step (`POST /api/transactions/{id}/pay-now`), with a receipt number from its own series (`record_counters` "receipts", from 1001) and a receipt PDF (`GET /api/invoices/receipts/{id}/pdf`, "Kvitto" / "Receipt", invoice template 9). A paid order is never invoiced and can never be reopened or cancelled (also a database CHECK); the order list shows it as "Paid".

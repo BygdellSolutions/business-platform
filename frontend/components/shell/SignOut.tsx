@@ -18,7 +18,7 @@ export function SignOut({ mode }: { mode: "dev" | "session" }) {
     return (
       <form action="/api/dev-session" method="post">
         <input type="hidden" name="logout" value="1" />
-        <Button type="submit">Sign out</Button>
+        <Button type="submit" variant="secondary">Sign out</Button>
       </form>
     );
   }

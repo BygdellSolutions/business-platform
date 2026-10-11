@@ -128,7 +128,7 @@ function LeaveSection({ soleOwner, passwordChecked }: { soleOwner: boolean; pass
         <PasswordField value={password} onChange={setPassword} checked={passwordChecked} name="leave_password" />
         {error && <Notice tone="error" testId="leave-error">{error}</Notice>}
         <div>
-          <Button type="submit" disabled={pending} data-testid="leave-organization">
+          <Button type="submit" disabled={pending} data-testid="leave-organization" variant="secondary">
             {pending ? "Leaving…" : "Leave organization"}
           </Button>
         </div>
@@ -173,7 +173,7 @@ function TransferSection({ members, passwordChecked, onTransferred }: { members:
           <PasswordField value={password} onChange={setPassword} checked={passwordChecked} name="transfer_password" />
           {error && <Notice tone="error" testId="transfer-error">{error}</Notice>}
           <div>
-            <Button type="submit" disabled={pending || target === ""} data-testid="transfer-ownership">
+            <Button type="submit" disabled={pending || target === ""} data-testid="transfer-ownership" variant="secondary">
               {pending ? "Transferring…" : "Transfer ownership"}
             </Button>
           </div>
@@ -222,7 +222,7 @@ function DeleteSection({ organizationName, passwordChecked }: { organizationName
         </label>
         {error && <Notice tone="error" testId="delete-error">{error}</Notice>}
         <div>
-          <Button type="submit" disabled={pending || !understood || typed === ""} data-testid="delete-organization" className="bg-red-700 text-white">
+          <Button type="submit" disabled={pending || !understood || typed === ""} data-testid="delete-organization" variant="danger">
             {pending ? "Deleting…" : "Delete this organization permanently"}
           </Button>
         </div>
