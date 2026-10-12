@@ -94,6 +94,37 @@ describe("the link secret", () => {
     expect(window.location.href).not.toContain(LINK);
   });
 
+  it("asks a new account (`?new`) for the person's own name, and a recovery link does not", async () => {
+    arrange();
+    openLink(`?new#${LINK}`);
+    const { unmount } = render(<SetupForm />);
+    await waitFor(() => expect(screen.getByTestId("setup-submit")).toBeEnabled());
+    await userEvent.type(screen.getByLabelText("Your name"), "  Ada Owner ");
+    await fill();
+    expect(JSON.parse(setupCall()![1].body as string)).toEqual({ token: LINK, name: "Ada Owner", password: PASSWORD });
+    unmount();
+
+    openLink();
+    render(<SetupForm />);
+    await waitFor(() => expect(screen.getByTestId("setup-submit")).toBeEnabled());
+    expect(screen.queryByLabelText("Your name")).toBeNull();
+  });
+
+  it("shows the name field when the backend still needs a name, and keeps the link", async () => {
+    let attempts = 0;
+    arrange(() => (++attempts === 1 ? reply(422, { detail: { code: "name_required", message: "Enter your name." } }) : reply(200, { next: "/" })));
+    openLink();
+    render(<SetupForm />);
+    await fill();
+    expect((await screen.findByTestId("setup-error")).textContent).toBe("Enter your name.");
+
+    await userEvent.type(screen.getByLabelText("Your name"), "Ada Owner");
+    await userEvent.click(screen.getByTestId("setup-submit"));
+    const calls = () => fetchMock.mock.calls.filter(([url]) => url === "/api/auth/setup");
+    await waitFor(() => expect(calls()).toHaveLength(2));
+    expect(JSON.parse(calls()[1][1].body)).toEqual({ token: LINK, name: "Ada Owner", password: PASSWORD }); // the same link, retried
+  });
+
   it("never touches browser storage", async () => {
     const setItem = vi.spyOn(Storage.prototype, "setItem");
     arrange();

@@ -31,9 +31,10 @@ export interface CurrentUser {
   id: string;
   email: string;
   name: string;
-  /** Computed by FastAPI: whether this account owns fewer organizations than it may. */
+  /** Computed by FastAPI: whether this account has created fewer organizations than it may create. */
   can_create_organizations: boolean;
-  owned_organizations: number;
+  created_organizations: number;
+  /** How many organizations it may create (historical name). Owning an existing organization never counts. */
   max_owned_organizations: number;
 }
 

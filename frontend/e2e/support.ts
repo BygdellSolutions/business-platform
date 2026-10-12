@@ -538,16 +538,15 @@ const ORGANIZATION_TABLES = [
 ];
 
 /**
- * A user of its own in the TEST database, with or without room to create organizations (`canCreate: true` = may own
- * five; `false` = may own exactly the organizations it is made owner of below, so it is at its limit),
+ * A user of its own in the TEST database, with or without room to create organizations (`canCreate: true` = may
+ * create five; `false` = may create none, like an invited person; owning the organizations below never counts),
  * optionally a member of existing organizations (a world's, say). `cleanup` also removes every organization this
  * account created through the application, with everything inside them.
  */
 export function createAccount(options: { canCreate: boolean; memberships?: { orgId: string; role: RoleName }[]; label?: string }): Account {
   const id = randomUUID();
   const email = `${options.label ?? "newcomer"}-${id.slice(0, 8)}@dev.test`;
-  const owned = (options.memberships ?? []).filter((membership) => membership.role === "owner").length;
-  const limit = options.canCreate ? 5 : owned;
+  const limit = options.canCreate ? 5 : 0;
   testRow(`insert into users (id, email, name, max_owned_organizations) values (${sql(id)}, ${sql(email)}, ${sql("Newcomer")}, ${limit})`);
   for (const membership of options.memberships ?? []) {
     testRow(`insert into organization_users (organization_id, user_id, role) values (${sql(membership.orgId)}, ${sql(id)}, ${sql(membership.role)})`);

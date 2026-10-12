@@ -21,6 +21,7 @@ rules, all enforced here and not at the edge:
 
 import hashlib
 import json
+import secrets
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -89,10 +90,9 @@ def create_organization(
                 raise RequestKeyConflict()
             return Created(organization, replayed=True)
 
-    # The account's entitlement, judged under the user-row lock taken above: creating makes the user an owner. After
-    # the replay check on purpose: a retry of a creation that already committed gets its organization back, although
-    # that first creation is what used up the allowance.
-    if ownership.owned_count(db, locked.id) >= locked.max_owned_organizations:
+    # The account's entitlement, judged under the user-row lock taken above. After the replay check on purpose: a
+    # retry of a creation that already committed gets its organization back, although that creation used the allowance.
+    if ownership.created_count(db, locked.id) >= locked.max_owned_organizations:
         raise CreationNotAllowed()
 
     with db.begin_nested():
@@ -101,8 +101,8 @@ def create_organization(
         db.flush()
         _between_inserts()
         db.add(OrganizationUser(organization_id=organization.id, user_id=locked.id, role=Role.OWNER))
-        if request_key is not None:
-            db.add(OrganizationCreationRequest(user_id=locked.id, request_key=request_key, request_hash=digest, organization_id=organization.id))
+        # Every creation is recorded (a random key when the client sent none): this row is what the creation limit counts.
+        db.add(OrganizationCreationRequest(user_id=locked.id, request_key=request_key or secrets.token_urlsafe(32), request_hash=digest, organization_id=organization.id))
         # Written here (not through `security_events.record`, which stays free of tenant concepts): who, which new
         # organization, when and from where. Never the form's contents.
         db.add(

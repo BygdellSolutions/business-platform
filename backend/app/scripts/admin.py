@@ -1,6 +1,6 @@
 """Operator commands: the only way to create the first user, recover one, or disable one.
 
-    python -m app.scripts.admin bootstrap-user --email owner@example.com --name "Ada Owner"
+    python -m app.scripts.admin bootstrap-user --email owner@example.com
     python -m app.scripts.admin reissue-setup-link --email owner@example.com
     python -m app.scripts.admin disable-user --email someone@example.com
     python -m app.scripts.admin enable-user --email someone@example.com
@@ -42,18 +42,18 @@ def _user_by_email(db: Session, email: str) -> User:
     return user
 
 
-def setup_link(token: str) -> str:
-    return f"{settings.public_origin.rstrip('/')}/setup#{token}"
+def setup_link(token: str, *, ask_name: bool = False) -> str:
+    # `?new` only tells the page to ask for the person's name (not a secret; the backend still decides).
+    return f"{settings.public_origin.rstrip('/')}/setup{'?new' if ask_name else ''}#{token}"
 
 
-def bootstrap_user(db: Session, *, email: str, name: str, can_create_organizations: bool = True) -> str:
+def bootstrap_user(db: Session, *, email: str, name: str = "", can_create_organizations: bool = True) -> str:
+    # Without a name the person enters their own on the setup page (an empty name until then).
     # can_create_organizations=False gives the account an owned-organization limit of 0 (it may own none).
     """Create a user WITHOUT a credential and return a single-use set-password link."""
     normalized = security_events.normalize_email(email)
     if not EMAIL.fullmatch(normalized) or len(normalized) > 320:
         raise OperatorError("That does not look like an email address.")
-    if not name.strip():
-        raise OperatorError("A name is required.")
     if db.scalar(select(User.id).where(User.email == normalized)) is not None:
         raise OperatorError("A user with that email already exists. Use reissue-setup-link to recover access.")
     user = User(email=normalized, name=name.strip(), max_owned_organizations=1 if can_create_organizations else 0)
@@ -61,7 +61,7 @@ def bootstrap_user(db: Session, *, email: str, name: str, can_create_organizatio
     db.flush()
     token = auth_service.issue_setup_token(db, user, clock.utcnow(), detail="bootstrap")
     db.commit()
-    return setup_link(token)
+    return setup_link(token, ask_name=not user.name)
 
 
 def reissue_setup_link(db: Session, *, email: str) -> str:
@@ -71,7 +71,7 @@ def reissue_setup_link(db: Session, *, email: str) -> str:
         raise OperatorError("That user is disabled. Enable the user first.")
     token = auth_service.issue_setup_token(db, user, clock.utcnow(), detail="reissue")
     db.commit()
-    return setup_link(token)
+    return setup_link(token, ask_name=not user.name)
 
 
 def disable_user(db: Session, *, email: str) -> int:
@@ -86,18 +86,18 @@ def enable_user(db: Session, *, email: str) -> None:
 
 
 def set_org_creation(db: Session, *, email: str, allowed: bool) -> bool:
-    """Compatibility with the former yes/no right: grant = room for one more owned organization than the account owns
-    now (never lowering a larger limit); revoke = exactly what it owns now (it keeps them, gains no more)."""
+    """Compatibility with the former yes/no right: grant = room to create one more organization than the account has
+    created (never lowering a larger limit); revoke = exactly what it has created (it keeps them, creates no more)."""
     user = _user_by_email(db, email)
-    owned = ownership.owned_count(db, user.id)
-    limit = max(user.max_owned_organizations, owned + 1) if allowed else owned
+    created = ownership.created_count(db, user.id)
+    limit = max(user.max_owned_organizations, created + 1) if allowed else created
     changed = auth_service.set_owned_limit(db, user, limit, clock.utcnow())
     db.commit()
     return changed
 
 
 def set_owned_limit(db: Session, *, email: str, limit: int) -> bool:
-    """How many organizations the account may own. Memberships and roles are never touched."""
+    """How many organizations the account may create. Memberships and roles are never touched."""
     if limit < 0:
         raise OperatorError("The limit cannot be negative.")
     changed = auth_service.set_owned_limit(db, _user_by_email(db, email), limit, clock.utcnow())
@@ -119,20 +119,20 @@ def build_parser() -> argparse.ArgumentParser:
 
     bootstrap = commands.add_parser("bootstrap-user", help="create a user without a password and print a single-use setup link")
     bootstrap.add_argument("--email", required=True)
-    bootstrap.add_argument("--name", required=True)
+    bootstrap.add_argument("--name", default="", help="optional: otherwise the person enters it on the setup page")
     bootstrap.add_argument("--no-org-creation", action="store_true", help="do not allow this user to create organizations")
 
     for name, help_text in (
         ("reissue-setup-link", "print a new single-use setup link for an existing user (recovery)"),
         ("disable-user", "disable a user and end all of their sessions"),
         ("enable-user", "enable a user again"),
-        ("grant-org-creation", "let a user own one more organization than now (raises the owned-organization limit if needed)"),
-        ("revoke-org-creation", "stop a user from owning more organizations (the limit becomes what they own now)"),
+        ("grant-org-creation", "let a user create one more organization than they have created (raises the limit if needed)"),
+        ("revoke-org-creation", "stop a user from creating more organizations (the limit becomes what they have created)"),
     ):
         command = commands.add_parser(name, help=help_text)
         command.add_argument("--email", required=True)
 
-    limit = commands.add_parser("set-owned-limit", help="set how many organizations a user may own (an account entitlement, not a role)")
+    limit = commands.add_parser("set-owned-limit", help="set how many organizations a user may create (an account entitlement, not a role)")
     limit.add_argument("--email", required=True)
     limit.add_argument("--limit", required=True, type=int)
 

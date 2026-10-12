@@ -15,14 +15,15 @@ export const POST = instrument(async function POST(request: NextRequest) {
   if (refused) return refused;
 
   const body = await readJsonObject(request);
-  if (body === null || typeof body.token !== "string" || typeof body.password !== "string" || body.password.length > 4096) {
+  const nameProblem = body !== null && body.name !== undefined && (typeof body.name !== "string" || body.name.length > 255);
+  if (body === null || typeof body.token !== "string" || typeof body.password !== "string" || body.password.length > 4096 || nameProblem) {
     return problem(400, "invalid_request", "This request could not be understood.");
   }
   if (!isToken(body.token)) return problem(400, "invalid_setup_link", "This link is invalid or has expired.");
 
   let upstream: Response;
   try {
-    upstream = await callAuthEndpoint(request, "/api/auth/setup", { token: body.token, password: body.password });
+    upstream = await callAuthEndpoint(request, "/api/auth/setup", { token: body.token, password: body.password, ...(typeof body.name === "string" ? { name: body.name } : {}) });
   } catch {
     return problem(502, "unavailable", "Setting a password is unavailable right now.");
   }
@@ -33,8 +34,9 @@ export const POST = instrument(async function POST(request: NextRequest) {
   }
   if (upstream.status === 400) return problem(400, "invalid_setup_link", "This link is invalid or has expired.");
   if (upstream.status === 422) {
-    // The backend's own password-policy wording is safe to show (it never contains a secret).
-    const detail = ((await upstream.json().catch(() => undefined)) as { detail?: { message?: unknown } } | undefined)?.detail;
+    // The backend's own password-policy (or missing-name) wording is safe to show (it never contains a secret).
+    const detail = ((await upstream.json().catch(() => undefined)) as { detail?: { code?: unknown; message?: unknown } } | undefined)?.detail;
+    if (detail?.code === "name_required") return problem(422, "name_required", "Enter your name.");
     const message = typeof detail?.message === "string" && detail.message.length <= 200 ? detail.message : "That password is not acceptable.";
     return problem(422, "password_policy", message);
   }

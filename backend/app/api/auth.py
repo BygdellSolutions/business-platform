@@ -27,7 +27,7 @@ def _issued(db: Session, issued: auth_service.SessionIssued) -> SessionResponse:
         token=issued.token,
         csrf_token=issued.csrf_token,
         expires_at=issued.expires_at,
-        user=AuthUser(id=str(user.id), email=user.email, name=user.name, can_create_organizations=ownership.owned_count(db, user.id) < user.max_owned_organizations),
+        user=AuthUser(id=str(user.id), email=user.email, name=user.name, can_create_organizations=ownership.created_count(db, user.id) < user.max_owned_organizations),
     )
 
 
@@ -76,11 +76,14 @@ def redeem_setup_link(payload: SetupRequest, request: Request, db: Session = Dep
             db,
             token=payload.token,
             password=payload.password,
+            name=payload.name,
             source=security_events.client_source(request),
             user_agent=request.headers.get("user-agent"),
         )
     except auth_service.PasswordProblem as error:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail={"code": "password_policy", "message": error.message})
+    except auth_service.NameRequired:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail={"code": "name_required", "message": "Enter your name."})
     except auth_service.InvalidSetupLink:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "invalid_setup_link", "message": "This link is invalid or has expired."})
     except auth_service.Throttled as error:

@@ -48,13 +48,17 @@ class PasswordProblem(Exception):
         self.message = message
 
 
+class NameRequired(Exception):
+    """A setup link for an account without a name was redeemed without one."""
+
+
 class WrongCurrentPassword(Exception):
     pass
 
 
 Throttled = throttle.Throttled
 
-__all__ = ["AuthBusy", "InvalidSetupLink", "LoginFailed", "PasswordProblem", "SessionIssued", "Throttled", "WrongCurrentPassword"]
+__all__ = ["AuthBusy", "InvalidSetupLink", "LoginFailed", "NameRequired", "PasswordProblem", "SessionIssued", "Throttled", "WrongCurrentPassword"]
 
 
 @dataclass(frozen=True)
@@ -184,7 +188,7 @@ def _setup_failure(db: Session, now: datetime, source: str) -> InvalidSetupLink:
     return InvalidSetupLink()
 
 
-def redeem_setup(db: Session, *, token: str, password: str, source: str, user_agent: str | None) -> SessionIssued:
+def redeem_setup(db: Session, *, token: str, password: str, name: str | None = None, source: str, user_agent: str | None) -> SessionIssued:
     """Use a set-password link: sets the password, ends the user's other sessions, signs the user in.
 
     The link is consumed by one conditional UPDATE, so two simultaneous redemptions cannot both succeed.
@@ -222,6 +226,10 @@ def redeem_setup(db: Session, *, token: str, password: str, source: str, user_ag
             user = lock_user(db, user_id)
             if user is None or not user.is_active or passwords.policy_problem(password, user.email) is not None:
                 raise InvalidSetupLink()
+            if name:
+                user.name = name
+            elif not user.name:
+                raise NameRequired()  # rolls the savepoint back: the link stays usable
             credential = db.get(UserCredential, user.id)
             if credential is None:
                 db.add(UserCredential(user_id=user.id, password_hash=new_hash, password_changed_at=now))

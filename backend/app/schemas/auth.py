@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class LoginRequest(BaseModel):
@@ -16,6 +16,13 @@ class SetupRequest(BaseModel):
 
     token: str = Field(max_length=256)
     password: str = Field(max_length=4096)
+    # Required only while the account has no name (created by the operator without one); otherwise it renames.
+    name: str | None = Field(default=None, max_length=255)
+
+    @field_validator("name")
+    @classmethod
+    def trimmed(cls, value: str | None) -> str | None:
+        return (value or "").strip() or None
 
 
 class ChangePasswordRequest(BaseModel):

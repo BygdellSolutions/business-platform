@@ -8,7 +8,7 @@ import { usePreAuth } from "@/features/auth/use-pre-auth";
 import { PRE_AUTH_HEADER, isToken } from "@/lib/auth/cookies";
 
 /**
- * Set a password with a single-use setup link (`/setup#<token>`): the first user, or recovery.
+ * Set a password (and, for a new account, the person's own name) with a single-use setup link (`/setup#<token>`): the first user, or recovery.
  *
  * The link secret lives in the URL FRAGMENT, which is never sent to a server. This page reads it ONCE, at once
  * removes it from the address and the history (`history.replaceState`), keeps it only in a ref (not in state,
@@ -22,6 +22,10 @@ export function SetupForm() {
   const [hasLink, setHasLink] = useState<boolean | null>(null);
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  // A new account's link is `/setup?new#<token>`; recovery of a named account does not ask again. The backend
+  // decides either way: if it still needs a name, its answer shows the field.
+  // (Read once on the client; nothing renders before the effect below has run, so the server's `false` is never shown.)
+  const [askName, setAskName] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("new"));
 
   useEffect(() => {
     // Take a new link from the fragment. Opening another link in the SAME tab only changes the fragment (no page
@@ -48,6 +52,7 @@ export function SetupForm() {
     const link = token.current;
     if (secret === null || link === null) return;
     const form = new FormData(event.currentTarget);
+    const name = askName ? String(form.get("name") ?? "").trim() : undefined;
     const password = String(form.get("password") ?? "");
     if (password !== String(form.get("confirm") ?? "")) {
       setMessage("The two passwords do not match.");
@@ -59,7 +64,7 @@ export function SetupForm() {
       const response = await fetch("/api/auth/setup", {
         method: "POST",
         headers: { "content-type": "application/json", [PRE_AUTH_HEADER]: secret },
-        body: JSON.stringify({ token: link, password }),
+        body: JSON.stringify({ token: link, name, password }),
         credentials: "same-origin",
         cache: "no-store",
       });
@@ -74,6 +79,9 @@ export function SetupForm() {
       if (response.status === 400) {
         token.current = null; // an invalid, used or expired link cannot be retried
         setHasLink(false);
+      } else if (response.status === 422 && body?.detail?.code === "name_required") {
+        setAskName(true);
+        setMessage("Enter your name.");
       } else if (response.status === 422) setMessage(body?.detail?.message ?? "That password is not acceptable.");
       else if (response.status === 429) setMessage("Too many attempts. Try again later.");
       else if (response.status === 403) {
@@ -97,6 +105,12 @@ export function SetupForm() {
   return (
     <form onSubmit={(event) => void submit(event)} className="flex flex-col gap-3" data-testid="setup-form" data-ready={preAuth.ready || undefined}>
       {message && <Notice tone="error" testId="setup-error">{message}</Notice>}
+      {askName && (
+        <label className="flex flex-col gap-1 text-sm">
+          Your name
+          <input name="name" type="text" autoComplete="name" required maxLength={255} className="rounded border border-zinc-400 px-2 py-1 dark:bg-zinc-900" />
+        </label>
+      )}
       <label className="flex flex-col gap-1 text-sm">
         New password
         <input name="password" type="password" autoComplete="new-password" required className="rounded border border-zinc-400 px-2 py-1 dark:bg-zinc-900" />

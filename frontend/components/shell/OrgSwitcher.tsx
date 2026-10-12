@@ -9,13 +9,13 @@ export function OrgSwitcher({
   organizations,
   currentId,
   canCreate = false,
-  owned,
+  created,
 }: {
   organizations: Membership[];
   currentId: string;
   canCreate?: boolean;
-  /** How many organizations this account owns and may own ("Owned 1 / 1"). */
-  owned?: { count: number; max: number };
+  /** How many organizations this account has created and may create ("Created 1 / 1"). */
+  created?: { count: number; max: number };
 }) {
   return (
     <nav aria-label="Organizations" data-testid="org-switcher" className="flex flex-wrap items-center gap-2 text-sm">
@@ -32,9 +32,9 @@ export function OrgSwitcher({
           </a>
         ),
       )}
-      {owned && (
-        <span className="text-xs text-muted" data-testid="owned-count">
-          Owned {owned.count} / {owned.max}
+      {created && (
+        <span className="text-xs text-muted" data-testid="created-count">
+          Created {created.count} / {created.max}
         </span>
       )}
       {canCreate && (

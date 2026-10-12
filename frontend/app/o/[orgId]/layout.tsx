@@ -62,7 +62,7 @@ export default async function OrgLayout({
       </aside>
       <div className="flex min-w-0 flex-1 flex-col bg-page">
         <header className="sticky top-0 z-10 flex min-h-14 flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b border-border bg-topbar px-4 py-2 md:px-6">
-          <OrgSwitcher organizations={result.memberships} currentId={orgId} canCreate={current.user.can_create_organizations} owned={{ count: current.user.owned_organizations, max: current.user.max_owned_organizations }} />
+          <OrgSwitcher organizations={result.memberships} currentId={orgId} canCreate={current.user.can_create_organizations} created={{ count: current.user.created_organizations, max: current.user.max_owned_organizations }} />
           <div className="flex items-center gap-4 text-sm">
             <span data-testid="user-email" className="hidden truncate text-muted sm:inline">{current.user.email}</span>
             <a href="/account" className="text-secondary hover:text-foreground" data-testid="account-link">

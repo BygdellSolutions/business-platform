@@ -7,7 +7,7 @@ import { getCurrentUser } from "@/lib/orgs";
 
 /**
  * Create an organization. Not under `/o/{id}`: there is no organization yet. Authentication identifies the user; the
- * account's owned-organization limit ("Owned 1 / 1") decides whether the form is shown. Hiding the form is a
+ * account's creation limit ("Created 1 / 1") decides whether the form is shown. Hiding the form is a
  * convenience: FastAPI refuses the request when the limit is reached.
  */
 export default async function NewOrganizationPage() {
@@ -26,8 +26,8 @@ export default async function NewOrganizationPage() {
         </>
       ) : (
         <Notice testId="creation-not-allowed">
-          You own {current.user.owned_organizations} of the {current.user.max_owned_organizations} organization(s) this account may own. Owning another
-          one needs a larger allowance: ask the person who runs this service.
+          This account has created {current.user.created_organizations} of the {current.user.max_owned_organizations} organization(s) it may create. Creating
+          another one needs a larger allowance: ask the person who runs this service.
         </Notice>
       )}
       {/* A plain anchor: leaving this page is a full navigation, like every organization switch. */}

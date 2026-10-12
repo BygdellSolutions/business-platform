@@ -25,8 +25,9 @@ test.afterEach(() => {
 function bootstrap(): { email: string; token: string } {
   const email = `setup-${randomUUID().slice(0, 8)}@example.test`;
   created.push(email);
-  const token = tokenFromCli(adminCli(["bootstrap-user", "--email", email, "--name", "Setup Person"]));
-  return { email, token };
+  const output = adminCli(["bootstrap-user", "--email", email]);
+  expect(output).toContain(`/setup?new#`); // a new account's link asks for the person's own name
+  return { email, token: tokenFromCli(output) };
 }
 
 const GOOD_PASSWORD = "a freshly chosen long passphrase";
@@ -36,27 +37,29 @@ test("the first user: the link becomes a password and a session, and the secret 
   const requests: { url: string; body: string | null }[] = [];
   page.on("request", (request) => requests.push({ url: request.url(), body: request.postData() }));
 
-  await page.goto(`/setup#${token}`);
+  await page.goto(`/setup?new#${token}`);
   await expect(page.getByTestId("setup-form")).toHaveAttribute("data-ready", "true");
 
   // Removed from the address bar and the history entry, before anything else.
-  expect(page.url()).toBe(`${BASE_URL}/setup`);
+  expect(page.url()).toBe(`${BASE_URL}/setup?new`);
   expect(await page.evaluate(() => location.hash)).toBe("");
   expect(await page.evaluate(() => document.documentElement.outerHTML.includes("#"))).toBe(false);
 
+  await page.getByLabel("Your name").fill("Setup Person");
   await page.getByLabel("New password").fill(GOOD_PASSWORD);
   await page.getByLabel("Repeat the password").fill(GOOD_PASSWORD);
   await page.getByTestId("setup-submit").click();
 
   await expect(page).toHaveURL(`${BASE_URL}/`);
   await expect(page.getByTestId("user-email")).toHaveText(email);
+  expect(testRow(`select name from users where email = ${sql(email)}`)).toBe("Setup Person"); // chosen by the person, not the operator
   await expect(page.getByTestId("no-organizations")).toBeVisible(); // organization onboarding is a later step
 
   // The secret travelled only in the body of the POST: in no URL, and not in any other request.
   for (const request of requests) expect(request.url).not.toContain(token);
   const setupPosts = requests.filter((request) => request.url.endsWith("/api/auth/setup"));
   expect(setupPosts).toHaveLength(1);
-  expect(JSON.parse(setupPosts[0].body!)).toEqual({ token, password: GOOD_PASSWORD });
+  expect(JSON.parse(setupPosts[0].body!)).toEqual({ token, name: "Setup Person", password: GOOD_PASSWORD });
   expect(requests.filter((request) => request.body?.includes(token))).toHaveLength(1);
 
   // A real session now, and the pre-auth secret was consumed.
@@ -69,7 +72,7 @@ test("the first user: the link becomes a password and a session, and the secret 
 test("the link is gone from history too: going back never shows it", async ({ page }) => {
   const { token } = bootstrap();
   await page.goto("/login");
-  await page.goto(`/setup#${token}`);
+  await page.goto(`/setup?new#${token}`);
   await expect(page.getByTestId("setup-form")).toHaveAttribute("data-ready", "true");
 
   await page.goBack();
@@ -81,16 +84,18 @@ test("the link is gone from history too: going back never shows it", async ({ pa
 
 test("the link works exactly once", async ({ page, context }) => {
   const { token } = bootstrap();
-  await page.goto(`/setup#${token}`);
+  await page.goto(`/setup?new#${token}`);
   await expect(page.getByTestId("setup-form")).toHaveAttribute("data-ready", "true");
+  await page.getByLabel("Your name").fill("Setup Person");
   await page.getByLabel("New password").fill(GOOD_PASSWORD);
   await page.getByLabel("Repeat the password").fill(GOOD_PASSWORD);
   await page.getByTestId("setup-submit").click();
   await expect(page).toHaveURL(`${BASE_URL}/`);
   await context.clearCookies();
 
-  await page.goto(`/setup#${token}`);
+  await page.goto(`/setup?new#${token}`);
   await expect(page.getByTestId("setup-form")).toHaveAttribute("data-ready", "true");
+  await page.getByLabel("Your name").fill("Setup Person");
   await page.getByLabel("New password").fill("another long passphrase here");
   await page.getByLabel("Repeat the password").fill("another long passphrase here");
   await page.getByTestId("setup-submit").click();
@@ -107,9 +112,10 @@ test("an expired link, a revoked link, an unknown link and a malformed link all 
   const messages: string[] = [];
 
   for (const token of [expired.token, reissued.token, "U".repeat(43), "short", ""]) {
-    await page.goto(token === "" ? "/setup" : `/setup#${token}`);
+    await page.goto(token === "" ? "/setup" : `/setup?new#${token}`);
     if (token.length === 43) {
       await expect(page.getByTestId("setup-form")).toHaveAttribute("data-ready", "true");
+      await page.getByLabel("Your name").fill("Setup Person");
       await page.getByLabel("New password").fill(GOOD_PASSWORD);
       await page.getByLabel("Repeat the password").fill(GOOD_PASSWORD);
       await page.getByTestId("setup-submit").click();
@@ -126,9 +132,10 @@ test("a mismatching repeat sends nothing, and a weak password shows the backend'
   page.on("request", (request) => {
     if (request.url().endsWith("/api/auth/setup")) posts.push(request.url());
   });
-  await page.goto(`/setup#${token}`);
+  await page.goto(`/setup?new#${token}`);
   await expect(page.getByTestId("setup-form")).toHaveAttribute("data-ready", "true");
 
+  await page.getByLabel("Your name").fill("Setup Person");
   await page.getByLabel("New password").fill(GOOD_PASSWORD);
   await page.getByLabel("Repeat the password").fill(GOOD_PASSWORD + "x");
   await page.getByTestId("setup-submit").click();
@@ -150,13 +157,14 @@ test("a mismatching repeat sends nothing, and a weak password shows the backend'
 
 test("recovery: a reissued link replaces the password and ends the old sessions", async ({ page, browser }) => {
   const first = bootstrap();
-  const response = await direct(`${BACKEND_URL}/api/auth/setup`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: first.token, password: E2E_PASSWORD }) });
+  const response = await direct(`${BACKEND_URL}/api/auth/setup`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: first.token, name: "Setup Person", password: E2E_PASSWORD }) });
   const oldSession = ((await response.json()) as { token: string }).token;
   expect((await direct(`${BACKEND_URL}/api/me/organizations`, { headers: { authorization: `Bearer ${oldSession}` } })).status).toBe(200);
 
   const recovery = tokenFromCli(adminCli(["reissue-setup-link", "--email", first.email]));
   await page.goto(`/setup#${recovery}`);
   await expect(page.getByTestId("setup-form")).toHaveAttribute("data-ready", "true");
+  await expect(page.getByLabel("Your name")).toHaveCount(0); // the name is already known
   await page.getByLabel("New password").fill(GOOD_PASSWORD);
   await page.getByLabel("Repeat the password").fill(GOOD_PASSWORD);
   await page.getByTestId("setup-submit").click();
@@ -171,7 +179,7 @@ test("recovery: a reissued link replaces the password and ends the old sessions"
 
 test("the setup API needs Origin and the pre-auth pair like login does", async ({ context }) => {
   const { token } = bootstrap();
-  const attempt = (headers: Record<string, string>) => context.request.post("/api/auth/setup", { headers, data: { token, password: GOOD_PASSWORD } });
+  const attempt = (headers: Record<string, string>) => context.request.post("/api/auth/setup", { headers, data: { token, name: "Setup Person", password: GOOD_PASSWORD } });
   expect((await attempt({})).status()).toBe(403);
   expect((await attempt({ origin: BASE_URL })).status()).toBe(403);
   expect((await attempt({ origin: BASE_URL, "x-pre-auth": "X".repeat(43) })).status()).toBe(403);

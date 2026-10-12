@@ -122,7 +122,7 @@ one-shot job of the backend image, configured like the backend (the command load
 variables as the backend service, with `DATABASE_URL` the app role):
 
 ```text
-python -m app.scripts.admin bootstrap-user --email owner@example.com --name "Ada Owner"
+python -m app.scripts.admin bootstrap-user --email owner@example.com   # the person enters their own name and password
 ```
 
 * It creates the user **without a password** (and allowed to create organizations; `--no-org-creation` to disable) and prints a **single-use link**

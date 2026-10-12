@@ -57,9 +57,9 @@ class SeedUser:
     email: str
     name: str
     memberships: tuple[tuple[uuid.UUID, Role], ...]
-    # How many organizations the account may own (an entitlement, not a role). Fredrik owns one and may own a
-    # second, so the development data can show "Create organization"; Maria has the default.
-    max_owned_organizations: int = 1
+    # How many organizations the account may create (an entitlement, not a role). Fredrik may create one, so the
+    # development data can show "Create organization"; Maria, like any invited person, may create none.
+    max_owned_organizations: int = 0
 
 
 ORGANIZATIONS = {
@@ -72,7 +72,7 @@ USERS = (
         "fredrik@dev.test",
         "Fredrik (dev)",
         ((ORG_HORSE_THERAPY_ID, Role.OWNER), (ORG_STABLE_SERVICES_ID, Role.ADMIN)),
-        max_owned_organizations=2,
+        max_owned_organizations=1,
     ),
     SeedUser("maria@dev.test", "Maria (dev)", ((ORG_STABLE_SERVICES_ID, Role.EMPLOYEE),)),
 )

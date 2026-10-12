@@ -30,7 +30,8 @@ def body(name: str | None = None, **extra) -> dict:
 
 
 def creator(db, **fields):
-    return make_user(db, **fields)  # the default account may own one organization
+    fields.setdefault("max_owned_organizations", 1)  # what `bootstrap-user` gives; an invited account may create none
+    return make_user(db, **fields)
 
 
 def as_user(user) -> dict[str, str]:
@@ -125,17 +126,22 @@ def test_an_account_that_may_own_none_is_refused_with_a_403_and_nothing_is_writt
     assert snapshot(db_session) == before
 
 
-def test_an_account_that_owns_its_one_organization_cannot_create_another(client, db_session):
-    user = make_user(db_session)  # Owned 1 / 1 after the next line
-    add_member(db_session, make_org(db_session, "Mine"), user, Role.OWNER)
+def test_owning_an_organization_it_did_not_create_does_not_use_the_allowance(client, db_session):
+    user = creator(db_session)  # may create one
+    add_member(db_session, make_org(db_session, "Taken over"), user, Role.OWNER)  # owner of an existing organization
 
-    assert client.post(URL, json=body(), headers=as_user(user)).status_code == 403
+    assert client.post(URL, json=body(), headers=as_user(user)).status_code == 201
+    assert client.post(URL, json=body(), headers=as_user(user)).status_code == 403  # Created 1 / 1
+
+
+def test_a_new_account_may_create_nothing_unless_the_operator_allows_it(client, db_session):
+    assert client.post(URL, json=body(), headers=as_user(make_user(db_session))).status_code == 403
 
 
 def test_creating_uses_up_the_allowance_and_a_larger_limit_allows_more(client, db_session):
     user = creator(db_session)
     assert client.post(URL, json=body(), headers=as_user(user)).status_code == 201
-    assert client.post(URL, json=body(), headers=as_user(user)).status_code == 403  # Owned 1 / 1
+    assert client.post(URL, json=body(), headers=as_user(user)).status_code == 403  # Created 1 / 1
     db_session.refresh(user)
     assert user.max_owned_organizations == 1  # creating never changes the entitlement
 
@@ -309,8 +315,8 @@ def test_a_replay_is_only_returned_to_a_user_who_is_still_a_member(client, db_se
 
 def test_a_replay_returns_the_committed_organization_even_after_the_limit_was_lowered_and_creates_nothing(client, db_session):
     """A retry reproduces a creation that already happened (while it was allowed); it grants nothing new. Since the
-    owned-organization limit replaced the yes/no flag, "revoked" and "used up the allowance" are the same state, and
-    the ordinary retry of a lost response at "Owned 1 / 1" must get its organization back."""
+    creation limit replaced the yes/no flag, "revoked" and "used up the allowance" are the same state, and the
+    ordinary retry of a lost response at "Created 1 / 1" must get its organization back."""
     user, request_key, payload = creator(db_session), key(), body("Lowered later")
     first = client.post(URL, json=payload, headers={**as_user(user), "Idempotency-Key": request_key})
     admin.set_owned_limit(db_session, email=user.email, limit=0)
@@ -382,7 +388,7 @@ def test_an_existing_organization_without_an_owner_is_left_exactly_as_it_is(clie
     # A fixed past timestamp: inside this one transaction now() never moves, so an untouched-or-touched check on the
     # default value would see nothing either way.
     db_session.execute(text("update organizations set updated_at = '2020-01-01 00:00:00+00' where id = :o"), {"o": legacy.id})
-    member = make_user(db_session)
+    member = creator(db_session)
     add_member(db_session, legacy, member, Role.EMPLOYEE)
     before = db_session.execute(text("select name, default_currency, updated_at from organizations where id = :o"), {"o": legacy.id}).one()
 
@@ -438,7 +444,7 @@ def test_the_operator_grants_and_revokes_the_account_right_without_touching_memb
     assert admin.set_org_creation(db_session, email=user.email.upper(), allowed=True) is True  # room for one: limit 1
     assert client.post(URL, json=body(), headers=as_user(user)).status_code == 201
     assert admin.set_owned_limit(db_session, email=user.email, limit=1) is False  # already 1
-    assert admin.set_org_creation(db_session, email=user.email, allowed=False) is False  # owns 1 = limit 1 already
+    assert admin.set_org_creation(db_session, email=user.email, allowed=False) is False  # created 1 = limit 1 already
     assert client.post(URL, json=body(), headers=as_user(user)).status_code == 403
 
     roles = db_session.execute(select(OrganizationUser.organization_id, OrganizationUser.role).where(OrganizationUser.user_id == user.id, OrganizationUser.organization_id == org.id)).all()
@@ -459,7 +465,7 @@ def test_the_operator_command_refuses_an_unknown_user(db_session):
 
 
 def test_there_is_no_endpoint_that_changes_the_flag_for_a_user(client, db_session):
-    user = make_user(db_session)
+    user = creator(db_session)
     for method, path in (("patch", "/api/me/user"), ("put", "/api/me/user"), ("post", "/api/me/user"), ("patch", f"/api/users/{user.id}")):
         response = getattr(client, method)(path, json={"max_owned_organizations": 9}, headers=as_user(user))
         assert response.status_code in (404, 405), (method, path)
@@ -472,4 +478,4 @@ def test_the_development_seed_gives_the_flag_to_the_owner_only(db_session):
 
     seed_dev.seed(db_session)
     limits = dict(db_session.execute(select(User.email, User.max_owned_organizations).where(User.email.in_(["fredrik@dev.test", "maria@dev.test"]))).all())
-    assert limits == {"fredrik@dev.test": 2, "maria@dev.test": 1}  # Fredrik owns one and may create a second
+    assert limits == {"fredrik@dev.test": 1, "maria@dev.test": 0}  # Fredrik may create one; Maria, like an invited person, none

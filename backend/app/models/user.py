@@ -31,9 +31,9 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(320), unique=True)
     name: Mapped[str] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
-    # How many organizations this account may OWN (an account entitlement, default 1: "Owned 1 / 1"). Only owner
-    # memberships count; membership in any number of organizations costs nothing. See app.core.ownership.
-    max_owned_organizations: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
+    # How many organizations this account may CREATE (historical name). 0 unless the operator grants it; owning an
+    # existing organization never counts. See app.core.ownership.
+    max_owned_organizations: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
