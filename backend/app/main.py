@@ -7,6 +7,7 @@ from sqlalchemy.exc import InterfaceError, OperationalError
 
 from app import registrations
 from app.api import auth, customers, health, history, invitations, items, me, members, organization, organizations, suppliers
+from app.core.admission import AdmissionMiddleware
 from app.core.config import settings
 from app.core.entity_registry import registry
 from app.core.internal_auth import InternalAuthMiddleware
@@ -21,7 +22,9 @@ app = FastAPI(title="business-platform")
 def configure_middleware(application: FastAPI, cors_origins: list[str]) -> None:
     """Middleware order: the LAST one added is the outermost. A request meets, in turn: the request context (id, the one
     safe log line, response headers; it also sees a refused request), CORS (development only), the BFF internal-secret
-    check, and only then routing and the application."""
+    check, admission (the innermost, so a request that is refused anyway never takes a slot), and only then routing and
+    the application."""
+    application.add_middleware(AdmissionMiddleware)
     application.add_middleware(InternalAuthMiddleware)
     if cors_origins:
         # Production configures none (the browser never calls FastAPI), and then the middleware is not installed at all.

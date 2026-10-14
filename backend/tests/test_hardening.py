@@ -11,6 +11,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DBAPIError
 
 from app.core import db, migration
+from app.core.admission import AdmissionMiddleware
 from app.core.internal_auth import InternalAuthMiddleware
 from app.core.request_context import RequestContextMiddleware
 from app.main import app, configure_middleware
@@ -68,17 +69,18 @@ def installed(application: FastAPI) -> list[type]:
 def test_without_cors_origins_the_cors_middleware_is_not_installed_at_all():
     application = FastAPI()
     configure_middleware(application, [])
-    assert installed(application) == [RequestContextMiddleware, InternalAuthMiddleware]  # outermost first
+    assert installed(application) == [RequestContextMiddleware, InternalAuthMiddleware, AdmissionMiddleware]  # outermost first
 
 
 def test_with_a_development_origin_cors_sits_between_the_context_and_the_secret_check():
     application = FastAPI()
     configure_middleware(application, ["http://localhost:3000"])
-    assert installed(application) == [RequestContextMiddleware, CORSMiddleware, InternalAuthMiddleware]
+    assert installed(application) == [RequestContextMiddleware, CORSMiddleware, InternalAuthMiddleware, AdmissionMiddleware]
 
 
 def test_the_real_application_has_the_context_and_secret_guards():
-    assert installed(app)[0] is RequestContextMiddleware and installed(app)[-1] is InternalAuthMiddleware
+    # admission is the innermost: a request the secret check refuses never takes a slot
+    assert installed(app)[0] is RequestContextMiddleware and installed(app)[-2:] == [InternalAuthMiddleware, AdmissionMiddleware]
 
 
 # --- the container runs Uvicorn the safe way -------------------------------------------------------------------------------------------------------------

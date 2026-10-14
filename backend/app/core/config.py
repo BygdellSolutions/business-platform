@@ -118,6 +118,14 @@ class Settings(BaseSettings):
     trust_client_ip_header: bool = False
     client_ip_header: str = "x-client-ip"
 
+    # --- request admission (app/core/admission.py) -----------------------------------------------------------------------------------
+    # Per PROCESS: at most `admission_max_running` requests run, at most `admission_max_waiting` more queue for at most
+    # `admission_wait_seconds`, and the rest get an immediate 503. These are the load test's starting values (12 / 48 / 1 s),
+    # not final: size them against the connection pool and the CPUs of the real server (TODO step 5).
+    admission_max_running: int = 12
+    admission_max_waiting: int = 48
+    admission_wait_seconds: float = 1.0
+
     # --- operator links and retention -----------------------------------------------------------------------------------------------
     setup_token_ttl_hours: int = 24
     invitation_ttl_days: int = 7  # how long an organization invitation can be accepted
@@ -159,6 +167,8 @@ class Settings(BaseSettings):
             ("argon2_parallelism", 1),
             ("argon2_max_concurrent", 1),
             ("argon2_max_waiting", 0),
+            ("admission_max_running", 1),
+            ("admission_max_waiting", 0),
             ("throttle_window_seconds", 1),
             ("throttle_source_max_failures", 1),
             ("throttle_pair_max_failures", 1),
@@ -173,6 +183,8 @@ class Settings(BaseSettings):
         ):
             if getattr(self, name) < minimum:
                 raise ValueError(f"{name.upper()} must be at least {minimum}")
+        if self.admission_wait_seconds <= 0:
+            raise ValueError("ADMISSION_WAIT_SECONDS must be greater than 0")
         if not 12 <= self.password_min_length <= self.password_max_length <= 1024:
             raise ValueError("password length limits must satisfy 12 <= min <= max <= 1024")
         return self
