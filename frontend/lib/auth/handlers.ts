@@ -8,11 +8,13 @@ import { credentialFromRequest } from "@/lib/auth/credential";
 import { clientAddress, originProblem, validPreAuth } from "@/lib/auth/request";
 import { clearPreAuthCookie, setSessionCookies } from "@/lib/auth/session-cookies";
 import { backendFetch } from "@/lib/backend";
+import { readBodyText } from "@/lib/request-body";
 
 /** Shared parts of the authentication route handlers (login, setup, logout). */
 
 export const NO_STORE = { "cache-control": "no-store" };
 const MAX_BODY_BYTES = 16_384;
+const BODY_DEADLINE_MS = 10_000;
 
 export function json(body: unknown, status = 200, headers: Record<string, string> = {}): NextResponse {
   return NextResponse.json(body, { status, headers: { ...NO_STORE, ...headers } });
@@ -41,8 +43,9 @@ export function preAuthProblem(request: NextRequest): NextResponse | null {
 /** The JSON object in the body, or null (wrong type, too large, not an object). */
 export async function readJsonObject(request: NextRequest): Promise<Record<string, unknown> | null> {
   if (!(request.headers.get("content-type") ?? "").toLowerCase().startsWith("application/json")) return null;
-  const text = await request.text();
-  if (text.length > MAX_BODY_BYTES) return null;
+  const read = await readBodyText(request, MAX_BODY_BYTES, BODY_DEADLINE_MS);
+  if (!read.ok) return null;
+  const text = read.text;
   try {
     const value: unknown = JSON.parse(text);
     return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : null;

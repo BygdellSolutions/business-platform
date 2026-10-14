@@ -6,6 +6,7 @@ import { credentialFromRequest, loginPath } from "@/lib/auth/credential";
 import { originProblem, validCsrf } from "@/lib/auth/request";
 import { isSameOrigin } from "@/lib/origin";
 import { instrument } from "@/lib/observability";
+import { BODY_REFUSAL_MESSAGE, BODY_REFUSAL_STATUS, readBodyText } from "@/lib/request-body";
 import { infrastructureFailure, isInfrastructureFailure, upstreamUnavailable } from "@/lib/upstream";
 import { pdfPassThrough, unexpected } from "@/lib/pdf-response";
 
@@ -40,6 +41,7 @@ import { pdfPassThrough, unexpected } from "@/lib/pdf-response";
 type Context = { params: Promise<{ orgId: string; path: string[] }> };
 
 const MAX_BODY_BYTES = 1_000_000;
+const BODY_DEADLINE_MS = 30_000;
 const NO_STORE = { "cache-control": "no-store" };
 
 function failure(status: number, detail: string): NextResponse {
@@ -86,8 +88,9 @@ async function handle(request: NextRequest, context: Context): Promise<NextRespo
   if (method !== "GET") {
     const declared = Number.parseInt(request.headers.get("content-length") ?? "0", 10);
     if (declared > MAX_BODY_BYTES) return failure(413, "Request body too large");
-    const text = await request.text();
-    if (text.length > MAX_BODY_BYTES) return failure(413, "Request body too large");
+    const read = await readBodyText(request, MAX_BODY_BYTES, BODY_DEADLINE_MS);
+    if (!read.ok) return failure(BODY_REFUSAL_STATUS[read.reason], BODY_REFUSAL_MESSAGE[read.reason]);
+    const text = read.text;
     if (text.length > 0) {
       const type = request.headers.get("content-type")?.toLowerCase() ?? "";
       if (!type.startsWith("application/json")) return failure(415, "Only JSON bodies are accepted");
