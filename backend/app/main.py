@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import InterfaceError, OperationalError
+from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 
 from app import registrations
 from app.api import auth, customers, health, history, invitations, items, me, members, organization, organizations, suppliers
@@ -45,11 +46,32 @@ configure_middleware(app, settings.cors_origins or [])
 @app.exception_handler(InterfaceError)
 async def database_unavailable(request: Request, error: Exception) -> JSONResponse:
     """A database that cannot be reached is a fixed, coarse 503 (never the driver's message, which can name the host)."""
-    log(logging.ERROR, "database_unavailable", error_type=type(error).__name__, request_id=request.scope.get("bp_request_id", ""))
+    # The SQLSTATE says WHY (57014 a statement ran too long, 55P03 a lock wait ran out, 57P01/08xxx the connection is gone)
+    # without any of the driver's message text.
+    sqlstate = getattr(getattr(error, "orig", None), "sqlstate", None)
+    log(
+        logging.ERROR,
+        "database_unavailable",
+        error_type=type(error).__name__,
+        sqlstate=sqlstate if isinstance(sqlstate, str) else "",
+        request_id=request.scope.get("bp_request_id", ""),
+    )
     return JSONResponse(
         {"detail": {"code": "service_unavailable", "message": "The service is temporarily unavailable."}},
         status_code=503,
         headers={"Retry-After": "5", "cache-control": "no-store"},
+    )
+
+
+@app.exception_handler(PoolTimeoutError)
+async def pool_exhausted(request: Request, error: Exception) -> JSONResponse:
+    """No database connection became free within the pool timeout: the process is saturated, so say so at once (a fixed 503
+    and a short Retry-After, the same answer admission gives) instead of letting the request hang or fail as a 500."""
+    log(logging.ERROR, "pool_exhausted", request_id=request.scope.get("bp_request_id", ""))
+    return JSONResponse(
+        {"detail": {"code": "overloaded", "message": "The service is busy. Try again in a moment."}},
+        status_code=503,
+        headers={"Retry-After": "1", "cache-control": "no-store"},
     )
 
 

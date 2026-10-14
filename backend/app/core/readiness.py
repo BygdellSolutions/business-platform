@@ -14,6 +14,7 @@ import threading
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import DBAPIError, OperationalError, SQLAlchemyError
+from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 
 from app.core import migration
 
@@ -30,6 +31,8 @@ def evaluate(engine: Engine, heads: tuple[str, ...]) -> str:
             if not connection.execute(text("SELECT to_regclass('alembic_version') IS NOT NULL")).scalar():
                 return "no_revision_table"
             revisions = connection.execute(text("SELECT version_num FROM alembic_version")).scalars().all()
+    except PoolTimeoutError:
+        return "pool_exhausted"  # saturated, not down: the database itself may be fine
     except SQLAlchemyError as error:
         # A refused connection or a timeout is "unreachable"; a malformed revision table is "unexpected".
         return "database_unreachable" if _is_connection_problem(error) else "unexpected_state"

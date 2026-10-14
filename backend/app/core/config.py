@@ -126,6 +126,19 @@ class Settings(BaseSettings):
     admission_max_waiting: int = 48
     admission_wait_seconds: float = 1.0
 
+    # --- database pool and timeouts (app/core/db.py) -------------------------------------------------------------------------------
+    # Per PROCESS. The pool must hold every request admission lets run, plus the probes: 12 running + a few spare. A request
+    # that cannot get a connection within `db_pool_timeout_seconds` is refused (503), never queued without limit. The three
+    # server-side timeouts are set on every runtime connection (never on the migration or operator connections): a statement
+    # that runs too long is cancelled, a lock wait that lasts too long fails, and a session idle inside a transaction is
+    # ended, which is what a stalled request would otherwise hold open (the load test found 15 such connections).
+    db_pool_size: int = 12
+    db_max_overflow: int = 4
+    db_pool_timeout_seconds: float = 3.0
+    db_statement_timeout_ms: int = 30_000
+    db_lock_timeout_ms: int = 10_000
+    db_idle_in_transaction_timeout_ms: int = 60_000
+
     # --- operator links and retention -----------------------------------------------------------------------------------------------
     setup_token_ttl_hours: int = 24
     invitation_ttl_days: int = 7  # how long an organization invitation can be accepted
@@ -168,6 +181,11 @@ class Settings(BaseSettings):
             ("argon2_max_concurrent", 1),
             ("argon2_max_waiting", 0),
             ("admission_max_running", 1),
+            ("db_pool_size", 1),
+            ("db_max_overflow", 0),
+            ("db_statement_timeout_ms", 100),
+            ("db_lock_timeout_ms", 100),
+            ("db_idle_in_transaction_timeout_ms", 1000),
             ("admission_max_waiting", 0),
             ("throttle_window_seconds", 1),
             ("throttle_source_max_failures", 1),
@@ -185,6 +203,8 @@ class Settings(BaseSettings):
                 raise ValueError(f"{name.upper()} must be at least {minimum}")
         if self.admission_wait_seconds <= 0:
             raise ValueError("ADMISSION_WAIT_SECONDS must be greater than 0")
+        if self.db_pool_timeout_seconds <= 0:
+            raise ValueError("DB_POOL_TIMEOUT_SECONDS must be greater than 0")
         if not 12 <= self.password_min_length <= self.password_max_length <= 1024:
             raise ValueError("password length limits must satisfy 12 <= min <= max <= 1024")
         return self
