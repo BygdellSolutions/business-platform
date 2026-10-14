@@ -7,7 +7,8 @@ from sqlalchemy.exc import InterfaceError, OperationalError
 from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 
 from app import registrations
-from app.api import auth, customers, health, history, invitations, items, me, members, organization, organizations, suppliers
+from app.api import auth, customers, health, history, invitations, items, me, members, metrics as metrics_api, organization, organizations, suppliers
+from app.core import metrics
 from app.core.admission import AdmissionMiddleware
 from app.core.config import settings
 from app.core.entity_registry import registry
@@ -48,6 +49,7 @@ async def database_unavailable(request: Request, error: Exception) -> JSONRespon
     """A database that cannot be reached is a fixed, coarse 503 (never the driver's message, which can name the host)."""
     # The SQLSTATE says WHY (57014 a statement ran too long, 55P03 a lock wait ran out, 57P01/08xxx the connection is gone)
     # without any of the driver's message text.
+    metrics.count("database_unavailable")
     sqlstate = getattr(getattr(error, "orig", None), "sqlstate", None)
     log(
         logging.ERROR,
@@ -67,6 +69,7 @@ async def database_unavailable(request: Request, error: Exception) -> JSONRespon
 async def pool_exhausted(request: Request, error: Exception) -> JSONResponse:
     """No database connection became free within the pool timeout: the process is saturated, so say so at once (a fixed 503
     and a short Retry-After, the same answer admission gives) instead of letting the request hang or fail as a 500."""
+    metrics.count("pool_exhausted")
     log(logging.ERROR, "pool_exhausted", request_id=request.scope.get("bp_request_id", ""))
     return JSONResponse(
         {"detail": {"code": "overloaded", "message": "The service is busy. Try again in a moment."}},
@@ -76,6 +79,7 @@ async def pool_exhausted(request: Request, error: Exception) -> JSONResponse:
 
 
 app.include_router(health.router)
+app.include_router(metrics_api.router)
 app.include_router(auth.router)
 app.include_router(me.router)
 app.include_router(customers.router)

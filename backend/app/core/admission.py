@@ -19,6 +19,7 @@ import logging
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from app.core import metrics
 from app.core.config import settings
 from app.core.internal_auth import EXEMPT_PATHS
 from app.core.logging_config import log
@@ -49,7 +50,9 @@ class AdmissionMiddleware:
             return
 
         reason = await self._admit()
+        metrics.gauge("admission_waiting", self.waiting)
         if reason is not None:
+            metrics.count(f"admission_rejected_{reason}")
             log(
                 logging.WARNING,
                 "admission_rejected",
@@ -67,11 +70,13 @@ class AdmissionMiddleware:
             return
 
         self.running += 1
+        metrics.gauge("admission_running", self.running)
         try:
             await self.app(scope, receive, send)
         finally:
             # A failed, cancelled or disconnected request gives its slot back like any other.
             self.running -= 1
+            metrics.gauge("admission_running", self.running)
             self._slots.release()
 
     async def _admit(self) -> str | None:
