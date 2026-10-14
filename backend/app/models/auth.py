@@ -16,7 +16,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.base import Base
 
-SESSION_REVOKED_REASONS = ("logout", "rotated", "password_changed", "cap", "disabled", "setup")
+SESSION_REVOKED_REASONS = ("logout", "rotated", "password_changed", "cap", "disabled", "setup", "operator")
 SETUP_PURPOSES = ("set_password",)
 # The only things a security event can say. A fixed list keeps rows small and meaningful.
 SECURITY_EVENT_TYPES = (
@@ -42,6 +42,7 @@ SECURITY_EVENT_TYPES = (
     "reauth_failure",
     "ownership_transferred",
     "organization_deleted",
+    "sessions_revoked_by_operator",
 )
 
 HEX64 = "^[0-9a-f]{64}$"

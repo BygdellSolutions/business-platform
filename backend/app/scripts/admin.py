@@ -6,6 +6,7 @@
     python -m app.scripts.admin enable-user --email someone@example.com
     python -m app.scripts.admin grant-org-creation --email someone@example.com
     python -m app.scripts.admin revoke-org-creation --email someone@example.com
+    python -m app.scripts.admin revoke-all-sessions --yes-end-all-sessions   # emergency, after a restore or an incident
     python -m app.scripts.admin purge
 
 There is no way to give anyone a password here, on purpose: a command line argument or an environment
@@ -105,6 +106,17 @@ def set_owned_limit(db: Session, *, email: str, limit: int) -> bool:
     return changed
 
 
+def revoke_all_sessions(db: Session) -> int:
+    """Emergency: end every active session of every user, in one transaction, and record one security event (the count, no
+    names, no token). Used after a restore from a backup or a suspected leak, so no restored or stolen session survives.
+    People sign in again with their passwords; nothing else changes (no user is disabled, no setup link is issued)."""
+    now = clock.utcnow()
+    ended = sessions.revoke_all(db, "operator", now)
+    security_events.record(db, "sessions_revoked_by_operator", now, detail=f"count={ended}")
+    db.commit()
+    return ended
+
+
 def purge(db: Session) -> dict[str, int]:
     now = clock.utcnow()
     counts = sessions.purge_records(db, now)
@@ -136,6 +148,9 @@ def build_parser() -> argparse.ArgumentParser:
     limit.add_argument("--email", required=True)
     limit.add_argument("--limit", required=True, type=int)
 
+    revoke_all = commands.add_parser("revoke-all-sessions", help="EMERGENCY: end every active session of every user (people sign in again)")
+    revoke_all.add_argument("--yes-end-all-sessions", action="store_true", dest="confirmed", help="required: confirms this ends every session")
+
     commands.add_parser("purge", help="delete expired sessions, used or expired setup tokens and old security events")
     return parser
 
@@ -161,6 +176,10 @@ def main(argv: list[str] | None = None) -> int:
             elif args.command == "set-owned-limit":
                 changed = set_owned_limit(db, email=args.email, limit=args.limit)
                 print(f"Owned-organization limit set to {args.limit}." + ("" if changed else " (no change)"))
+            elif args.command == "revoke-all-sessions":
+                if not args.confirmed:
+                    raise OperatorError("This ends EVERY session of EVERY user. Run it again with --yes-end-all-sessions to confirm.")
+                print(f"{revoke_all_sessions(db)} session(s) ended. Everyone signs in again.")
             elif args.command == "purge":
                 print(", ".join(f"{name}: {count}" for name, count in purge(db).items()))
     except OperatorError as error:

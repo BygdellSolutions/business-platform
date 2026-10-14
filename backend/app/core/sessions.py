@@ -94,6 +94,12 @@ def revoke(db: Session, session_id, reason: str, now: datetime) -> None:
     db.execute(update(AuthSession).where(AuthSession.id == session_id, AuthSession.revoked_at.is_(None)).values(revoked_at=now, revoked_reason=reason))
 
 
+def revoke_all(db: Session, reason: str, now: datetime) -> int:
+    """End EVERY active session of every user (the operator's emergency action). One statement, so it is atomic: either all
+    of them end or none do."""
+    return db.execute(update(AuthSession).where(AuthSession.revoked_at.is_(None)).values(revoked_at=now, revoked_reason=reason)).rowcount or 0
+
+
 def revoke_all_for_user(db: Session, user_id, reason: str, now: datetime, *, except_session_id=None) -> int:
     conditions = [AuthSession.user_id == user_id, AuthSession.revoked_at.is_(None)]
     if except_session_id is not None:

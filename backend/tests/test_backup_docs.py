@@ -89,8 +89,12 @@ def test_no_runbook_contains_a_credential_or_a_real_connection_string():
 KNOWN_FLAGS = {flag for flags, _ in TOOLS.values() for flag in flags} | {
     # other programs' options that the runbooks mention
     "--format", "--no-owner", "--no-acl", "--snapshot", "--single-transaction", "--exit-on-error", "--lock-timeout", "--list", "--email",
-    "--name", "--no-org-creation", "--exclude-table", "--wait",
+    "--name", "--no-org-creation", "--exclude-table", "--wait", "--yes-end-all-sessions",
 }
+
+
+def test_the_session_revocation_flag_the_runbooks_name_exists_in_the_admin_command():
+    assert "--yes-end-all-sessions" in source("admin")
 
 
 def test_every_option_the_runbooks_mention_is_a_real_one():
