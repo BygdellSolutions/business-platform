@@ -42,6 +42,20 @@ export function InvoiceDocument({ invoice, orgId }: { invoice: Invoice; orgId: s
         <dd data-testid="invoice-due-date">{invoice.due_date ?? "—"}</dd>
         <dt>Description</dt>
         <dd data-testid="invoice-description">{invoice.description ?? "—"}</dd>
+        {invoice.vat_exemption_reason !== null && (
+          <>
+            <dt>No VAT because</dt>
+            <dd data-testid="invoice-vat-exemption">{invoice.vat_exemption_reason}</dd>
+          </>
+        )}
+        {invoice.vat_amount_sek !== null && (
+          <>
+            <dt>VAT in SEK</dt>
+            <dd data-testid="invoice-vat-sek">
+              {invoice.vat_amount_sek} (rate {invoice.vat_exchange_rate} SEK per {invoice.currency})
+            </dd>
+          </>
+        )}
         {invoice.issued_at !== null && (
           <>
             <dt>Issued</dt>

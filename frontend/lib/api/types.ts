@@ -593,6 +593,12 @@ export interface InvoiceSummary {
   invoice_date: string;
   due_date: string | null;
   description: string | null;
+  /** Why no VAT is charged; required to issue an invoice with a 0 % VAT row. */
+  vat_exemption_reason: string | null;
+  /** SEK per 1 unit of the invoice currency (a decimal string with six decimals), typed on the draft; null when not needed. */
+  vat_exchange_rate: string | null;
+  /** The VAT amount in SEK of an invoice in another currency; calculated by the backend when the invoice is issued. */
+  vat_amount_sek: MoneyString | null;
   net_amount: MoneyString;
   vat_amount: MoneyString;
   gross_amount: MoneyString;
@@ -783,6 +789,8 @@ export interface InvoiceUpdate {
   invoice_date?: string;
   due_date?: string | null;
   description?: string | null;
+  vat_exemption_reason?: string | null;
+  vat_exchange_rate?: string | null;
 }
 
 /** One change to a record (GET /api/history). Values are the backend's strings, shown as received. */

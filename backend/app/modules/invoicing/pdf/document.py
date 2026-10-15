@@ -132,6 +132,9 @@ class PdfDocument(Frozen):
     due_date: str | None
     currency: str
     description: str | None
+    vat_exemption_reason: str | None = None  # printed under the VAT breakdown when stored
+    vat_sek: str | None = None  # the VAT amount in SEK of an invoice in another currency, with the rate that gave it
+    vat_rate_used: str | None = None
     issuer: PdfParty
     customer: PdfParty
     sources: tuple[PdfSource, ...]
@@ -204,7 +207,7 @@ def source_sha256(document: PdfDocument) -> str:
 
 def iter_strings(document: PdfDocument):
     yield from (document.number_text, *([document.payment_reference] if document.payment_reference else []), document.invoice_date, document.currency, document.net, document.vat, document.gross)
-    yield from (value for value in (document.due_date, document.description) if value is not None)
+    yield from (value for value in (document.due_date, document.description, document.vat_exemption_reason, document.vat_sek, document.vat_rate_used) if value is not None)
     yield from document.delivery_dates
     yield from document.order_numbers
     if document.credit is not None:

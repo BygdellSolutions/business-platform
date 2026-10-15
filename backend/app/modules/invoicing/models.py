@@ -107,6 +107,12 @@ class Invoice(TenantOwned, Authored, Base):
     invoice_date: Mapped[date] = mapped_column(Date)
     due_date: Mapped[date | None] = mapped_column(Date)
     description: Mapped[str | None] = mapped_column(String(2000))
+    # Why no VAT is charged, as the invoice states it (required to issue an invoice that has a 0 % VAT row).
+    vat_exemption_reason: Mapped[str | None] = mapped_column(String(255))
+    # An invoice in another currency states its VAT in SEK: the rate the seller used (SEK per 1 unit of the invoice currency, typed
+    # on the draft) and the result, calculated once when the invoice is issued and never again.
+    vat_exchange_rate: Mapped[Decimal | None] = mapped_column(Numeric(12, 6))
+    vat_amount_sek: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
     series: Mapped[str] = mapped_column(String(32), default=DEFAULT_SERIES, server_default=text("'default'"))
     number: Mapped[int | None] = mapped_column(BigInteger)
     number_text: Mapped[str | None] = mapped_column(String(64))

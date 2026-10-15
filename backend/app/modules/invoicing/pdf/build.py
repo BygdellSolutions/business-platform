@@ -150,6 +150,9 @@ def document_from_invoice(invoice: Any) -> PdfDocument:
         due_date=_text(data["due_date"]) if data.get("due_date") else None,
         currency=_text(data["currency"]),
         description=_text(data["description"]) if data.get("description") else None,
+        vat_exemption_reason=_text(data["vat_exemption_reason"]) if data.get("vat_exemption_reason") else None,
+        vat_sek=_text(data["vat_amount_sek"]) if data.get("vat_amount_sek") is not None else None,
+        vat_rate_used=_text(data["vat_exchange_rate"]) if data.get("vat_exchange_rate") is not None else None,
         issuer=_party(issuer, prefer_legal_name=True, words=words).model_copy(
             update={"reference": _text(f"{words['our_reference']}: {issuer['our_reference']}") if issuer.get("our_reference") else None}
         ),

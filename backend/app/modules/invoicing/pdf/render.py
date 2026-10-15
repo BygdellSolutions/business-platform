@@ -54,7 +54,10 @@ from app.modules.invoicing.pdf.labels import decimal_separator, labels
 #    "Beställt 7 · Restnoterat 5" under its description. Everything else prints as in 10.
 # 12: the payment reference is an OCR number (the invoice number, a length digit and a check digit) and the seller's registered
 #    office ("Säte") is printed with the organization number. Everything else prints as in 11.
-TEMPLATE_VERSION = 12
+# 13: an invoice with a stated ground for charging no VAT prints it under the VAT breakdown ("No VAT charged because" /
+#    "Ingen moms debiteras eftersom"). Everything else prints as in 12.
+# 14: an invoice in another currency prints its VAT amount in SEK and the exchange rate that gave it. Everything else prints as in 13.
+TEMPLATE_VERSION = 14
 ACCENT = colors.HexColor("#1f4e5f")
 ACCENT_LIGHT = colors.HexColor("#e8f0f2")
 # Room for the footer columns (up to five lines each) above the page number.
@@ -396,7 +399,13 @@ def _build(document: PdfDocument, fonts: font_layer.Registered) -> bytes:
         ]
         vat_table = Table(breakdown, colWidths=vat_widths, hAlign="RIGHT")
         vat_table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), ACCENT), ("LEFTPADDING", (0, 0), (-1, -1), 3), ("RIGHTPADDING", (0, 0), (-1, -1), 3)]))
-        closing += [vat_table, Spacer(1, 4 * mm)]
+        closing += [vat_table, Spacer(1, 2 * mm)]
+        if document.vat_exemption_reason:
+            closing += [printer.p(f"{words['vat_exemption']}: {document.vat_exemption_reason}", "due_note")]
+        closing += [Spacer(1, 4 * mm)]
+        if document.vat_sek is not None and document.vat_rate_used is not None:
+            note = words["vat_in_sek"].format(rate=trimmed(document.vat_rate_used, sep), currency=document.currency)
+            closing += [printer.p(f"{note}: {money(document.vat_sek, sep)}", "due_note"), Spacer(1, 4 * mm)]
     totals = Table(
         [
             [printer.p(words["net_total"].format(currency=document.currency), "total_label"), printer.p(money(document.net, sep), "total_value")],

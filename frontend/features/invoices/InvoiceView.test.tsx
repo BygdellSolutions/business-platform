@@ -77,13 +77,51 @@ describe("editing a draft's details", () => {
     expect(screen.queryByTestId("save-details")).toBeNull(); // the editor closed
   });
 
-  it("shows the three fields and nothing else: no sources, no lines, no amounts are editable", async () => {
+  it("sends the reason why no VAT is charged, and shows it", async () => {
+    installBackend(({ method }) => {
+      if (method !== "PATCH") return ok(null);
+      server.invoice = invoice({ vat_exemption_reason: "Reverse charge", version: 4 });
+      return ok(server.invoice);
+    });
+    render(<Harness initial={invoice()} />);
+
+    await openEditor();
+    type("Why no VAT is charged", "Reverse charge");
+    await userEvent.click(screen.getByTestId("save-details"));
+
+    expect(writes()).toEqual([{ method: "PATCH", path: INVOICE_PATH, body: { vat_exemption_reason: "Reverse charge" }, ifMatch: 3, orgId: ORG_A }]);
+    await waitFor(() => expect(text("invoice-vat-exemption")).toBe("Reverse charge"));
+  });
+
+  it("asks for the exchange rate only for an invoice in another currency, and sends it", async () => {
+    installBackend(({ method }) => {
+      if (method !== "PATCH") return ok(null);
+      server.invoice = invoice({ currency: "EUR", vat_exchange_rate: "11.234500", version: 4 });
+      return ok(server.invoice);
+    });
+    render(<Harness initial={invoice({ currency: "EUR" })} />);
+
+    await openEditor();
+    type("Exchange rate for the VAT in SEK (SEK per 1 EUR)", "11.2345");
+    await userEvent.click(screen.getByTestId("save-details"));
+
+    expect(writes()).toEqual([{ method: "PATCH", path: INVOICE_PATH, body: { vat_exchange_rate: "11.2345" }, ifMatch: 3, orgId: ORG_A }]);
+  });
+
+  it("does not show the exchange rate for an invoice in SEK", async () => {
+    render(<Harness initial={invoice()} />);
+    await openEditor();
+    expect(screen.queryByLabelText(/Exchange rate/)).toBeNull();
+  });
+
+  it("shows the four fields and nothing else: no sources, no lines, no amounts are editable", async () => {
     render(<Harness initial={invoice()} />);
     await openEditor();
     expect(screen.getByLabelText("Invoice date")).toHaveValue("2026-10-01");
     expect(screen.getByLabelText("Due date")).toHaveValue("2026-10-31");
     expect(screen.getByLabelText("Description")).toHaveValue("October work");
-    expect(screen.getAllByRole("textbox")).toHaveLength(1); // only the description is a text box; the dates are date inputs
+    expect(screen.getByLabelText("Why no VAT is charged")).toHaveValue("");
+    expect(screen.getAllByRole("textbox")).toHaveLength(2); // the description and the VAT reason; the dates are date inputs
     expect(document.querySelectorAll("input[type=date]")).toHaveLength(2);
     expect(screen.queryByLabelText(/quantity|price|currency|customer|amount/i)).toBeNull();
   });

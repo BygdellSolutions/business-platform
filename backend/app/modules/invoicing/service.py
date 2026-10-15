@@ -24,7 +24,7 @@ import uuid
 from collections import defaultdict
 from collections.abc import Sequence
 from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -76,7 +76,7 @@ ZERO = Decimal("0.00")
 # What an invoice's history records: the header a person sees and decides on. The frozen customer/issuer
 # snapshots and the lines are documents of their own, kept unchanged in the invoice itself.
 AUDITED_FIELDS = (
-    "status", "number_text", "customer_name", "currency", "invoice_date", "due_date", "description",
+    "status", "number_text", "customer_name", "currency", "invoice_date", "due_date", "description", "vat_exemption_reason", "vat_exchange_rate", "vat_amount_sek",
     "net_amount", "vat_amount", "gross_amount", "issued_at",
 )
 
@@ -257,6 +257,8 @@ def create_draft(db: Session, ctx: TenantContext, payload: InvoiceCreate) -> uui
                 invoice_date=invoice_date,
                 due_date=due_date,
                 description=payload.description,
+                vat_exemption_reason=payload.vat_exemption_reason,
+                vat_exchange_rate=payload.vat_exchange_rate,
                 net_amount=net,
                 vat_amount=vat,
                 gross_amount=gross,
@@ -346,7 +348,7 @@ def invoice_order(db: Session, ctx: TenantContext, transaction_id: uuid.UUID, *,
         return create_draft(db, ctx, InvoiceCreate(transaction_ids=[transaction_id]))
     # An order already on the draft is rebuilt with it: what was delivered since is added.
     wanted = [*sources, transaction_id] if transaction_id not in sources else list(sources)
-    header = InvoiceCreate(transaction_ids=wanted, invoice_date=draft.invoice_date, due_date=draft.due_date, description=draft.description)
+    header = InvoiceCreate(transaction_ids=wanted, invoice_date=draft.invoice_date, due_date=draft.due_date, description=draft.description, vat_exemption_reason=draft.vat_exemption_reason, vat_exchange_rate=draft.vat_exchange_rate)
     audit.deleted(db, ctx, draft, "invoice", fields=AUDITED_FIELDS)
     db.delete(draft)
     db.flush()
@@ -571,6 +573,9 @@ def summary_fields(
         invoice_date=invoice.invoice_date,
         due_date=invoice.due_date,
         description=invoice.description,
+        vat_exemption_reason=invoice.vat_exemption_reason,
+        vat_exchange_rate=invoice.vat_exchange_rate,
+        vat_amount_sek=invoice.vat_amount_sek,
         net_amount=invoice.net_amount,
         vat_amount=invoice.vat_amount,
         gross_amount=invoice.gross_amount,
@@ -754,6 +759,14 @@ def issue(db: Session, ctx: TenantContext, invoice_id: uuid.UUID, if_match: str 
 
     # 4. Same reservation, same sources, same lines, same amounts, or nothing is issued.
     _verify_unchanged(db, ctx, invoice, links, sources, lines)
+    # A 0 % VAT row needs its stated ground on the invoice (ML 2023:200 ch. 17): refuse before anything is numbered.
+    if not invoice.vat_exemption_reason and any(
+        row.vat_rate == 0 for row in db.scalars(_fresh(scoped_select(InvoiceVatRow, ctx).where(InvoiceVatRow.invoice_id == invoice.id)))
+    ):
+        reference_error("vat_exemption_reason", "An invoice with 0 % VAT must state why no VAT is charged", "invoice.vat_exemption_required")
+    # An invoice in another currency states its VAT in SEK (ML 2023:200 ch. 17): the rate is typed on the draft.
+    if invoice.currency != "SEK" and invoice.vat_amount != 0 and invoice.vat_exchange_rate is None:
+        reference_error("vat_exchange_rate", f"An invoice in {invoice.currency} must state the exchange rate that gives its VAT amount in SEK", "invoice.vat_exchange_rate_required")
 
     with db.begin_nested():  # a failure anywhere below leaves no trace, the counter included
         # 5. Historical content as of issuance.
@@ -778,6 +791,10 @@ def issue(db: Session, ctx: TenantContext, invoice_id: uuid.UUID, if_match: str 
         invoice.number_text = numbering.format_number(number)
         invoice.issued_at = datetime.now(timezone.utc)
         invoice.issued_by = ctx.user.id
+        if invoice.currency == "SEK":
+            invoice.vat_exchange_rate = None  # nothing to convert
+        elif invoice.vat_exchange_rate is not None:
+            invoice.vat_amount_sek = (invoice.vat_amount * invoice.vat_exchange_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         invoice.status = InvoiceStatus.ISSUED
         invoice.version += 1
         audit.updated(db, ctx, invoice, "invoice", before, action="issued", fields=AUDITED_FIELDS)

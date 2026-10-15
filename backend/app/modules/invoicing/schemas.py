@@ -7,12 +7,13 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_vali
 
 from app.modules.invoicing.models import InvoiceStatus
 from app.schemas.customer import CustomerRef
-from app.schemas.money import CountAndAmounts, MoneyIn, MoneyOut, PercentOut, QuantityOut
+from app.schemas.money import CountAndAmounts, MoneyIn, MoneyOut, PercentOut, QuantityOut, RateIn, RateOut
 from app.schemas.profile import optional_text
 
 MAX_TRANSACTIONS_PER_INVOICE = 200
 
 Description = optional_text(2000)  # blank means "no description"
+VatExemptionReason = optional_text(255)  # blank means "none stated"
 
 # As everywhere: no organization_id field and extra="forbid". The customer, the currency and the
 # amounts are never accepted: they are derived from the locked source transactions.
@@ -25,6 +26,8 @@ class InvoiceCreate(BaseModel):
     invoice_date: date | None = None  # defaults to today (UTC)
     due_date: date | None = None
     description: Description = None
+    vat_exemption_reason: VatExemptionReason = None
+    vat_exchange_rate: RateIn | None = None  # SEK per 1 unit of the invoice currency; needed to issue an invoice in another currency with VAT
 
     @field_validator("transaction_ids")
     @classmethod
@@ -67,6 +70,8 @@ class InvoiceUpdate(BaseModel):
     invoice_date: date | None = None
     due_date: date | None = None
     description: Description = None
+    vat_exemption_reason: VatExemptionReason = None
+    vat_exchange_rate: RateIn | None = None  # SEK per 1 unit of the invoice currency; needed to issue an invoice in another currency with VAT
 
     @field_validator("invoice_date")
     @classmethod
@@ -147,6 +152,9 @@ class InvoiceSummary(BaseModel):
     invoice_date: date
     due_date: date | None
     description: str | None
+    vat_exemption_reason: str | None
+    vat_exchange_rate: RateOut | None
+    vat_amount_sek: MoneyOut | None  # set when the invoice is issued
     net_amount: MoneyOut
     vat_amount: MoneyOut
     gross_amount: MoneyOut
