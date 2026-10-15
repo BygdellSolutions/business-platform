@@ -2,10 +2,10 @@ import Link from "next/link";
 
 import { BUTTON_VARIANTS, PRIMARY_LINK } from "@/components/ui/Button";
 import { SummaryCard } from "@/features/dashboard/SummaryCard";
-import type { InventorySummary, InvoicingSummary, Organization, SalesSummary } from "@/lib/api/types";
+import type { DraftOverview, InventorySummary, InvoicingSummary, Organization, SalesSummary } from "@/lib/api/types";
 import { getCredential } from "@/lib/auth/credential";
 import { getMemberships } from "@/lib/orgs";
-import { canWriteRecords } from "@/lib/roles";
+import { canUseJournal, canWriteRecords } from "@/lib/roles";
 import { serverRead } from "@/lib/server-api";
 
 /**
@@ -33,13 +33,15 @@ export default async function Dashboard({
   const credential = await getCredential();
   const result = credential ? await getMemberships(credential) : null;
   const organization = result?.status === "ok" ? result.memberships.find((m) => m.id === orgId) : undefined;
-  const [sales, invoicing, inventory] = await Promise.all([
+  const role = organization?.role;
+  const [sales, invoicing, inventory, journal] = await Promise.all([
     serverRead<SalesSummary>(orgId, "/api/transactions/summary", monthQuery),
     serverRead<InvoicingSummary>(orgId, "/api/invoices/summary", monthQuery),
     serverRead<InventorySummary>(orgId, "/api/inventory/summary"),
+    // Accountants and viewers have no journal: nothing is even asked of the backend for them.
+    canUseJournal(role) ? serverRead<DraftOverview>(orgId, "/api/journal/summary") : Promise.resolve(null),
   ]);
   const base = `/o/${orgId}`;
-  const role = organization?.role;
 
   return (
     <div className="flex flex-col gap-6">
@@ -78,6 +80,16 @@ export default async function Dashboard({
               href={`${base}/invoices/new`}
               note="Delivered and not on an invoice yet (only what is delivered is invoiced)."
               testId="card-ready"
+              tone="attention"
+            />
+          )}
+          {journal !== null && (
+            <SummaryCard
+              title="Draft journal entries"
+              count={journal.drafts}
+              href={`${base}/journal`}
+              note={role === "employee" ? "Your entries that are not finalized yet." : "Entries not finalized yet, of every horse."}
+              testId="card-draft-journals"
               tone="attention"
             />
           )}

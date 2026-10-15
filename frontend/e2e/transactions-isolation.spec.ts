@@ -1,28 +1,7 @@
 import { expect, test, type APIResponse, type Page } from "./fixtures";
 
 import { BASE_URL } from "./env";
-import {
-  addLine,
-  bffUrl,
-  choices,
-  createCustomer,
-  createItem,
-  createTransaction,
-  FREDRIK,
-  getTransaction,
-  ifMatch,
-  lifecycle,
-  MARIA,
-  openAddLine,
-  ORG_A,
-  ORG_B,
-  picker,
-  RANDOM_ORG,
-  signIn,
-  sql,
-  testRow,
-  unique,
-} from "./support";
+import { addLine, bffUrl, choices, createCustomer, createItem, createTransaction, FREDRIK, getTransaction, ifMatch, lifecycle, MARIA, openAddLine, ORG_A, ORG_B, picker, RANDOM_ORG, signIn, sql, testRow, unique, switchOrg } from "./support";
 
 /**
  * Tenant isolation for transactions, lines, versions and the pickers they use, as the browser
@@ -57,7 +36,7 @@ const ids: { a: Side; b: Side } = {
 
 const txUrl = (orgId: string, id: string) => `/o/${orgId}/transactions/${id}`;
 const rows = (page: Page) => page.getByTestId("line-row");
-const switchTo = (page: Page, org: { name: string }) => page.getByTestId("org-switcher").getByRole("link", { name: org.name }).click();
+const switchTo = (page: Page, org: { name: string }) => switchOrg(page, org.name);
 
 async function outcome(response: APIResponse) {
   return { status: response.status(), body: await response.text() };

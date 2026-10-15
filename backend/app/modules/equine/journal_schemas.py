@@ -139,6 +139,11 @@ class JournalSummary(BaseModel):
     version: int
     created_by: uuid.UUID | None
     created_by_name: str | None = None
+    horse_name: str | None = None  # filled in the organization-wide lists (the drafts overview), where the horse is not known from the address
+
+
+class DraftOverview(BaseModel):
+    drafts: int  # entries not finalized yet that this person can finish
 
 
 class JournalRead(BaseModel):

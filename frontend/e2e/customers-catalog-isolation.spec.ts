@@ -1,7 +1,7 @@
 import { expect, test, type APIResponse, type Page } from "./fixtures";
 
 import { BASE_URL } from "./env";
-import { FREDRIK, MARIA, ORG_A, ORG_B, RANDOM_ORG, bffUrl, createCustomer, createItem, signIn, sql, testRow, unique } from "./support";
+import { FREDRIK, MARIA, ORG_A, ORG_B, RANDOM_ORG, bffUrl, createCustomer, createItem, signIn, sql, testRow, unique, switchOrg } from "./support";
 
 /**
  * Tenant isolation for the Customers and Catalog screens, as the browser experiences it.
@@ -27,7 +27,7 @@ const customers = (orgId: string, query = "") => `/o/${orgId}/customers${query}`
 const catalog = (orgId: string, query = "") => `/o/${orgId}/catalog${query}`;
 const customerNames = (page: Page) => page.getByTestId("customer-row").locator("td:nth-child(2)").allTextContents() // after the No. column;
 const itemNames = (page: Page) => page.getByTestId("item-row").locator("td:nth-child(2)").allTextContents() // after the No. column;
-const switchTo = (page: Page, org: { name: string }) => page.getByTestId("org-switcher").getByRole("link", { name: org.name }).click();
+const switchTo = (page: Page, org: { name: string }) => switchOrg(page, org.name);
 
 async function outcome(response: APIResponse) {
   return { status: response.status(), body: await response.text() };
@@ -266,7 +266,7 @@ test.describe("switching organizations", () => {
     await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Customers" }).click();
 
     await expect(page.getByTestId("org-name")).toHaveText(ORG_B.name);
-    await expect(page.getByRole("search").getByLabel("Search")).toHaveValue("");
+    await expect(page.getByRole("search", { name: "Filter" }).getByLabel("Search")).toHaveValue("");
     const text = await page.locator("main").innerText();
     expect(text).not.toContain(ONLY_A_CUSTOMER);
     const links = await page.getByTestId("customer-row").getByRole("link").evaluateAll((anchors) => anchors.map((anchor) => anchor.getAttribute("href") ?? ""));
@@ -349,7 +349,7 @@ test.describe("browser history", () => {
     await expect(page.getByTestId("org-name")).toHaveText(ORG_A.name);
     await switchTo(page, ORG_B);
     await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Customers" }).click();
-    await page.getByRole("search").getByLabel("Search").fill(TAG);
+    await page.getByRole("search", { name: "Filter" }).getByLabel("Search").fill(TAG);
     await page.getByRole("button", { name: "Apply" }).click();
     await expect(page.getByTestId("org-name")).toHaveText(ORG_B.name);
     expect((await customerNames(page)).sort()).toEqual([ONLY_B_CUSTOMER, TWIN_CUSTOMER]);

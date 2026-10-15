@@ -317,12 +317,12 @@ test.describe("list, search and filters", () => {
     expect(await names(page)).toEqual([`${prefix} Saddle`]);
 
     await page.goto(list);
-    await page.getByRole("search").getByLabel("Search").fill(prefix);
-    await page.getByRole("search").getByLabel("Type").selectOption("service");
+    await page.getByRole("search", { name: "Filter" }).getByLabel("Search").fill(prefix);
+    await page.getByRole("search", { name: "Filter" }).getByLabel("Type").selectOption("service");
     await page.getByRole("button", { name: "Apply" }).click();
     await expect(page).toHaveURL(/type=service/);
     expect(await names(page)).toEqual([`${prefix} Massage`]);
-    await expect(page.getByRole("search").getByLabel("Type")).toHaveValue("service");
+    await expect(page.getByRole("search", { name: "Filter" }).getByLabel("Type")).toHaveValue("service");
   });
 
   test("a charge (travel, mileage) is created as its own type and filtered apart from products", async ({ page }) => {
@@ -356,7 +356,7 @@ test.describe("list, search and filters", () => {
   test("an unknown type in the address is ignored", async ({ page }) => {
     const response = await page.goto(`${list}?type=horse&active=maybe&page=0`);
     expect(response?.status()).toBe(200);
-    await expect(page.getByRole("search").getByLabel("Type")).toHaveValue("");
+    await expect(page.getByRole("search", { name: "Filter" }).getByLabel("Type")).toHaveValue("");
   });
 });
 

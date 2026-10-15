@@ -25,7 +25,7 @@ test("a heading sorts its table, a second click turns the order around, and pagi
   await expect(page).toHaveURL(/dir=desc/);
   await expect.poll(() => cells(page, "customer-row", 2)).toEqual(["Cia", "Bo", "anna"]);
   await expect(page.getByRole("columnheader", { name: /Name/ })).toHaveAttribute("aria-sort", "descending");
-  await page.getByRole("search").getByLabel("Search").fill("a");
+  await page.getByRole("search", { name: "Filter" }).getByLabel("Search").fill("a");
   await page.getByRole("button", { name: "Apply" }).click();
   await expect(page).toHaveURL(/sort=name.*dir=desc|dir=desc.*sort=name/); // filtering keeps the order
   await expect.poll(() => cells(page, "customer-row", 2)).toEqual(["Cia", "anna"]);

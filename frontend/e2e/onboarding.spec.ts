@@ -1,20 +1,7 @@
 import { expect, test } from "./fixtures";
 
 import { BASE_URL } from "./env";
-import {
-  ORG_A,
-  bffUrl,
-  createAccount,
-  createCustomer,
-  createWorld,
-  membersOf,
-  onboardingCounts,
-  signIn,
-  sql,
-  testRow,
-  unique,
-  type Account,
-} from "./support";
+import { ORG_A, bffUrl, createAccount, createCustomer, createWorld, membersOf, onboardingCounts, signIn, sql, testRow, unique, type Account, openOrgMenu } from "./support";
 
 /**
  * Organization onboarding, end to end: an authenticated user creates an organization and becomes its owner, then
@@ -85,13 +72,16 @@ test("the new organization is an ordinary membership: it appears in the switcher
 
   await page.goto(`/o/${world.orgId}`);
   await expect(page.getByTestId("org-role")).toHaveText("employee");
+  await openOrgMenu(page);
   await page.getByTestId("create-organization-link").click(); // the explicit path from the organization switcher
   await fillAndSubmit(page, name, "SEK");
   await expect(page).toHaveURL(UUID_URL);
 
+  await expect(page.getByTestId("org-switcher-current")).toHaveText(name); // the drop-down names the organization we are in
+  await openOrgMenu(page);
   const switcher = page.getByTestId("org-switcher");
-  await expect(switcher.getByText(name)).toHaveAttribute("aria-current", "true");
-  await expect(switcher.getByRole("link", { name: world.name })).toBeVisible();
+  await expect(switcher.getByRole("menuitem", { name })).toHaveAttribute("aria-current", "true");
+  await expect(switcher.getByRole("menuitem", { name: world.name })).toBeVisible();
 
   await page.goto("/");
   await expect(page.getByTestId("organization-list").getByText(`(owner)`)).toHaveCount(1);
@@ -130,7 +120,8 @@ test("a user without the right is shown no creation control and the backend refu
   const before = onboardingCounts();
 
   await page.goto(`/o/${world.orgId}`);
-  await expect(page.getByTestId("create-organization-link")).toHaveCount(0);
+  await openOrgMenu(page);
+  await expect(page.getByTestId("create-organization-link")).toHaveCount(0); // the menu is open and offers no way to create one
   await page.goto("/organizations/new");
   await expect(page.getByTestId("creation-not-allowed")).toBeVisible();
   await expect(page.getByTestId("create-organization-form")).toHaveCount(0);

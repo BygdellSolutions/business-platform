@@ -1,23 +1,6 @@
 import { expect, test, type BrowserContext, type Page } from "./fixtures";
 
-import {
-  addLine,
-  bffUrl,
-  createCustomer,
-  createTransaction,
-  editLine,
-  FREDRIK,
-  getTransaction,
-  ifMatch,
-  lifecycle,
-  openAddLine,
-  ORG_A,
-  ORG_B,
-  signIn,
-  sql,
-  testRow,
-  unique,
-} from "./support";
+import { addLine, bffUrl, createCustomer, createTransaction, editLine, FREDRIK, getTransaction, ifMatch, lifecycle, openAddLine, ORG_A, ORG_B, signIn, sql, testRow, unique, switchOrg } from "./support";
 
 /**
  * Optimistic concurrency as the BROWSER meets it: two tabs of one user (and API calls standing
@@ -347,7 +330,7 @@ test.describe("a change that is still running when the user leaves", () => {
     await fieldOf(a, "Description").fill("Saved while leaving");
     await a.getByTestId("save-line").click();
 
-    await a.getByTestId("org-switcher").getByRole("link", { name: ORG_B.name }).click();
+    await switchOrg(a, ORG_B.name);
     await expect(a).toHaveURL(`/o/${ORG_B.id}`);
 
     await expect.poll(() => testRow(`select description from transaction_lines where id = ${sql(first.id)}`)).toBe("Saved while leaving");

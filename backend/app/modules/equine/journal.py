@@ -29,7 +29,7 @@ from app.core.tenant import TenantContext
 from app.core.tenant_scope import create_scoped, get_scoped_or_404, reference_error, scoped_select
 from app.core.versioning import ensure_current
 from app.models import OrganizationUser, Role, User
-from app.modules.equine.journal_schemas import CorrectionRead, CorrectionWrite, JournalCreate, JournalRead, JournalSummary, JournalUpdate
+from app.modules.equine.journal_schemas import CorrectionRead, CorrectionWrite, DraftOverview, JournalCreate, JournalRead, JournalSummary, JournalUpdate
 from app.modules.equine.models import DIAGRAM_VERSION, JOURNAL_DRAFT, JOURNAL_FINAL, Horse, HorseJournalCorrection, HorseJournalEntry
 
 router = APIRouter(prefix="/{horse_id}/journal", tags=["horse journal"])
@@ -265,3 +265,55 @@ def delete_draft(
     db.delete(entry)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# --- the drafts of the whole organization, for the dashboard's to-do list -------------------------------------------------------
+
+overview = APIRouter(prefix="/api/journal", tags=["horse journal"])
+
+
+def _my_drafts(ctx: TenantContext):
+    """Drafts this person can finish: an owner or an admin any draft of the organization, an employee their own."""
+    query = scoped_select(HorseJournalEntry, ctx).where(HorseJournalEntry.status == JOURNAL_DRAFT)
+    if ctx.role not in CHANGE_ANY:
+        query = query.where(HorseJournalEntry.created_by == ctx.user.id)
+    return query
+
+
+@overview.get("/summary", response_model=DraftOverview)
+def draft_summary(ctx: TenantContext = Depends(journal_access), db: Session = Depends(get_db)) -> DraftOverview:
+    drafts = db.scalar(select(func.count()).select_from(_my_drafts(ctx).subquery()))
+    return DraftOverview(drafts=drafts or 0)
+
+
+@overview.get("/drafts", response_model=list[JournalSummary])
+def list_drafts(
+    page: Pagination = Depends(pagination),
+    sort: Sorting = Depends(sorting),
+    ctx: TenantContext = Depends(journal_access),
+    db: Session = Depends(get_db),
+) -> list[JournalSummary]:
+    """The drafts this person can finish, oldest visit first (what has waited longest), across all horses of the organization."""
+    columns = {
+        "number": HorseJournalEntry.number,
+        "horse": func.lower(Horse.name),
+        "visit": HorseJournalEntry.visit_at,
+        "by": func.lower(HorseJournalEntry.practitioner_name),
+        "marks": func.jsonb_array_length(HorseJournalEntry.marks),
+        "follow_up": HorseJournalEntry.follow_up_on,
+    }
+    query = (
+        _my_drafts(ctx)
+        .add_columns(Horse.name)
+        .join(Horse, (Horse.organization_id == HorseJournalEntry.organization_id) & (Horse.id == HorseJournalEntry.horse_id))
+    )
+    rows = db.execute(sorted_by(query, sort, columns, (HorseJournalEntry.visit_at.asc(), HorseJournalEntry.number.asc())).limit(page.limit).offset(page.offset)).all()
+    names = _names(db, [entry for entry, _ in rows])
+    return [
+        JournalSummary(
+            id=e.id, number=e.number, horse_id=e.horse_id, horse_name=horse_name, visit_at=e.visit_at, practitioner_name=e.practitioner_name,
+            status=e.status, follow_up_on=e.follow_up_on, mark_count=len(e.marks), preview=e.body.strip()[:PREVIEW_LENGTH], version=e.version,
+            created_by=e.created_by, created_by_name=names.get(e.created_by),
+        )
+        for e, horse_name in rows
+    ]

@@ -165,7 +165,7 @@ test.describe("the real workflow", () => {
       for (const reload of [false, true]) {
         if (reload) await page.reload();
         await expect(page.getByTestId("edit-fields")).toHaveCount(0);
-        await expect(page.getByRole("combobox")).toHaveCount(0);
+        await expect(page.getByRole("main").getByRole("combobox")).toHaveCount(0);
         await expect(linePanel(page).getByTestId("cf-owner")).toContainText("Anna Andersson");
         await expect(linePanel(page).getByTestId("cf-horse")).toContainText("Kalle");
       }

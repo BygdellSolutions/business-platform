@@ -1,6 +1,6 @@
 import { expect, test } from "./fixtures";
 
-import { FREDRIK, MARIA, ORG_A, ORG_B, signIn, signInViaUi } from "./support";
+import { FREDRIK, MARIA, ORG_A, ORG_B, signIn, signInViaUi, openUserMenu } from "./support";
 
 test.describe("development sign-in", () => {
   test("everything redirects to /dev-login without an identity", async ({ page }) => {
@@ -70,7 +70,8 @@ test.describe("development sign-in", () => {
     await signInViaUi(page, FREDRIK);
     await page.goto(`/o/${ORG_A.id}`);
 
-    await page.getByRole("button", { name: "Sign out" }).click();
+    await openUserMenu(page); // sign out is in the avatar menu of the top bar
+    await page.getByRole("menuitem", { name: "Sign out" }).click();
 
     await expect(page).toHaveURL(/\/dev-login$/);
     await page.goto(`/o/${ORG_A.id}`);

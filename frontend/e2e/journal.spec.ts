@@ -121,6 +121,50 @@ test("a draft can be deleted but a finalized entry cannot", async ({ page, conte
   expect(testRow(`select count(*) from horse_journal_entries where horse_id = ${sql(horse.id)}`)).toBe("1");
 });
 
+test("the dashboard's to-do list counts draft journal entries and leads to them", async ({ page, context }) => {
+  world = createWorld({ label: "JournalTodo" });
+  await signIn(context, world.email);
+  const horse = await createHorse(context, world.orgId, { name: "Kalle", owner_customer_id: (await createCustomer(context, world.orgId, "Anna Andersson")).id });
+
+  await page.goto(`/o/${world.orgId}`);
+  await expect(page.getByTestId("card-draft-journals-count")).toHaveText("0");
+  await startEntry(page, world.orgId, horse.id);
+  await page.getByLabel(/Observations/).fill("Still to finish");
+  await page.getByTestId("save-draft").click();
+  await expect(page.getByTestId("save-status")).toHaveText("All changes saved");
+
+  await page.goto(`/o/${world.orgId}`);
+  await expect(page.getByTestId("card-draft-journals-count")).toHaveText("1");
+  await page.getByTestId("card-draft-journals").click();
+  await expect(page.getByRole("heading", { name: "Draft journal entries" })).toBeVisible();
+  const row = page.getByTestId("journal-row");
+  await expect(row).toHaveCount(1);
+  await expect(row.getByTestId("entry-horse")).toHaveText("Kalle");
+  await expect(row).toContainText("Still to finish");
+  await row.getByTestId("journal-entry-link").click();
+  await expect(page.getByTestId("journal-editor")).toBeVisible();
+  await page.getByTestId("finalize").click();
+  await page.getByTestId("finalize-confirm").click();
+  await expect(page.getByTestId("entry-final")).toBeVisible();
+
+  await page.goto(`/o/${world.orgId}`);
+  await expect(page.getByTestId("card-draft-journals-count")).toHaveText("0"); // finalized: no longer a to-do
+  await page.goto(`/o/${world.orgId}/journal`);
+  await expect(page.getByTestId("empty")).toContainText("No draft journal entries");
+});
+
+test("an accountant and a viewer have no draft journal card or page", async ({ page, context }) => {
+  world = createWorld({ label: "JournalTodoRoles" });
+  for (const role of ["accountant", "viewer"] as const) {
+    await signIn(context, world.addMember(role));
+    await page.goto(`/o/${world.orgId}`);
+    await expect(page.getByTestId("dashboard-org")).toBeVisible();
+    await expect(page.getByTestId("card-draft-journals")).toHaveCount(0);
+    await page.goto(`/o/${world.orgId}/journal`);
+    await expect(page.getByTestId("journal-not-allowed")).toBeVisible();
+  }
+});
+
 test("the practitioner is chosen from the organization's members, like who performed a service on an order", async ({ page, context }) => {
   world = createWorld({ label: "JournalWho" });
   await signIn(context, world.email);

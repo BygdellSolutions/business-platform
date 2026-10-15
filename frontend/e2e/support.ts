@@ -12,6 +12,24 @@ export const FREDRIK = "fredrik@dev.test"; // owner of A, admin of B
 export const MARIA = "maria@dev.test"; // employee of B only
 export const RANDOM_ORG = "00000000-0000-4000-8000-00000000dead";
 
+/** The organization drop-down of the top bar, opened (its entries are only in the page while it is open). */
+export async function openOrgMenu(page: Page): Promise<void> {
+  const toggle = page.getByTestId("org-switcher-toggle");
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+}
+
+/** Switch organization through the drop-down (a full page load into the other organization). */
+export async function switchOrg(page: Page, name: string): Promise<void> {
+  await openOrgMenu(page);
+  await page.getByTestId("org-switcher").getByRole("menuitem", { name }).click();
+}
+
+/** The avatar menu of the top bar (account, sign out), opened. */
+export async function openUserMenu(page: Page): Promise<void> {
+  const toggle = page.getByTestId("user-menu-toggle");
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+}
+
 export const bffUrl = (orgId: string, path: string) => `/api/o/${orgId}${path}`;
 
 /**

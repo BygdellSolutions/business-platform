@@ -271,18 +271,18 @@ test.describe("list, search and filters", () => {
     await context.request.patch(bffUrl(ORG_A.id, `/customers/${two.id}`), { data: { active: false } });
 
     await page.goto(list);
-    await page.getByRole("search").getByLabel("Search").fill(prefix);
-    await page.getByRole("search").getByLabel("Status").selectOption("inactive");
+    await page.getByRole("search", { name: "Filter" }).getByLabel("Search").fill(prefix);
+    await page.getByRole("search", { name: "Filter" }).getByLabel("Status").selectOption("inactive");
     await page.getByRole("button", { name: "Apply" }).click();
 
     await expect(page).toHaveURL(`${list}?q=${encodeURIComponent(prefix).replaceAll("%20", "+")}&active=inactive`);
     expect(await names(page)).toEqual([`${prefix} Two`]);
-    await expect(page.getByRole("search").getByLabel("Search")).toHaveValue(prefix);
-    await expect(page.getByRole("search").getByLabel("Status")).toHaveValue("inactive");
+    await expect(page.getByRole("search", { name: "Filter" }).getByLabel("Search")).toHaveValue(prefix);
+    await expect(page.getByRole("search", { name: "Filter" }).getByLabel("Status")).toHaveValue("inactive");
 
     await page.getByRole("link", { name: "Clear" }).click();
     await expect(page).toHaveURL(list);
-    await expect(page.getByRole("search").getByLabel("Search")).toHaveValue("");
+    await expect(page.getByRole("search", { name: "Filter" }).getByLabel("Search")).toHaveValue("");
     expect(one.id).toBeTruthy();
   });
 

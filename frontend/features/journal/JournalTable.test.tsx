@@ -27,6 +27,17 @@ describe("the journal table", () => {
     expect(rows[1].textContent).toContain("Back to work");
   });
 
+  it("can show which horse each entry is of (the organization-wide drafts list) and opens it in that horse's journal", () => {
+    const other = "33333333-3333-4333-8333-333333333333";
+    render(<JournalTable orgId={ORG} entries={[row(5, { horse_name: "Kalle" }), row(6, { horse_id: other, horse_name: "Storm" })]} timeZone={null} showHorse />);
+    const headings = within(screen.getByTestId("journal-table")).getAllByRole("columnheader").map((heading) => heading.textContent?.trim());
+    expect(headings.slice(0, 3)).toEqual(["No.", "Horse", "Visit"]);
+    const rows = screen.getAllByTestId("journal-row");
+    expect(within(rows[0]).getByTestId("entry-horse").textContent).toBe("Kalle");
+    expect(within(rows[1]).getByTestId("entry-horse").querySelector("a")?.getAttribute("href")).toBe(`/o/${ORG}/horses/${other}`);
+    expect(within(rows[1]).getByTestId("journal-entry-link").getAttribute("href")).toBe(`/o/${ORG}/horses/${other}/journal/${row(6).id}`);
+  });
+
   it("opens the entry from its number", () => {
     render(<JournalTable orgId={ORG} horseId={HORSE} entries={[row(12)]} timeZone={null} />);
     expect(screen.getByTestId("journal-entry-link").getAttribute("href")).toBe(`/o/${ORG}/horses/${HORSE}/journal/${row(12).id}`);

@@ -1,7 +1,7 @@
 import { expect, test, type APIResponse, type Page } from "./fixtures";
 
 import { BASE_URL } from "./env";
-import { FREDRIK, MARIA, ORG_A, ORG_B, RANDOM_ORG, bffUrl, choices, createCustomer, createHorse, picker, pick, signIn, sql, testRow, unique } from "./support";
+import { FREDRIK, MARIA, ORG_A, ORG_B, RANDOM_ORG, bffUrl, choices, createCustomer, createHorse, picker, pick, signIn, sql, testRow, unique, switchOrg } from "./support";
 
 /**
  * Tenant isolation for the Horses screens and the entity picker, as the browser experiences
@@ -25,7 +25,7 @@ const ids = {
 
 const horses = (orgId: string, query = "") => `/o/${orgId}/horses${query}`;
 const horseNames = (page: Page) => page.getByTestId("horse-row").locator("td:nth-child(2)").allTextContents() // after the No. column;
-const switchTo = (page: Page, org: { name: string }) => page.getByTestId("org-switcher").getByRole("link", { name: org.name }).click();
+const switchTo = (page: Page, org: { name: string }) => switchOrg(page, org.name);
 const ownerId = (page: Page) => page.locator('input[type="hidden"][name="owner_customer_id"]').inputValue();
 
 async function outcome(response: APIResponse) {
@@ -306,7 +306,7 @@ test.describe("browser history", () => {
     await page.goto(horses(ORG_A.id, `?q=${encodeURIComponent(TAG)}`));
     await switchTo(page, ORG_B);
     await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Horses" }).click();
-    await page.getByRole("search").getByLabel("Search").fill(TAG);
+    await page.getByRole("search", { name: "Filter" }).getByLabel("Search").fill(TAG);
     await page.getByRole("button", { name: "Apply" }).click();
     await expect(page.getByTestId("org-name")).toHaveText(ORG_B.name);
     expect((await horseNames(page)).sort()).toEqual([ONLY_B_HORSE, TWIN_HORSE]);

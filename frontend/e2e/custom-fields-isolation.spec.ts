@@ -1,29 +1,6 @@
 import { expect, test, type APIResponse, type Page } from "./fixtures";
 
-import {
-  FREDRIK,
-  MARIA,
-  ORG_A,
-  ORG_B,
-  RANDOM_ORG,
-  addLine,
-  bffUrl,
-  choices,
-  createCustomer,
-  createHorse,
-  createTransaction,
-  definitionsOf,
-  idOf,
-  picker,
-  pick,
-  signIn,
-  sql,
-  storedValues,
-  testRow,
-  unique,
-  uniqueKey,
-  withDefinitions,
-} from "./support";
+import { FREDRIK, MARIA, ORG_A, ORG_B, RANDOM_ORG, addLine, bffUrl, choices, createCustomer, createHorse, createTransaction, definitionsOf, idOf, picker, pick, signIn, sql, storedValues, testRow, unique, uniqueKey, withDefinitions, switchOrg } from "./support";
 
 /**
  * Tenant isolation for custom fields. Both organizations have the SAME seeded Anna Andersson and
@@ -39,7 +16,7 @@ const txUrl = (orgId: string, id: string) => `/o/${orgId}/transactions/${id}`;
 const linePanel = (page: Page) => page.locator('[data-testid="custom-fields"][data-entity-type="transaction_line"]').first();
 const ownerBox = (page: Page) => picker(page, "owner").getByRole("combobox");
 const horseBox = (page: Page) => picker(page, "horse").getByRole("combobox");
-const switchTo = (page: Page, target: { name: string }) => page.getByTestId("org-switcher").getByRole("link", { name: target.name }).click();
+const switchTo = (page: Page, target: { name: string }) => switchOrg(page, target.name);
 
 async function outcome(response: APIResponse) {
   return { status: response.status(), body: await response.text() };

@@ -6,10 +6,11 @@ import { authMode } from "@/lib/auth/config";
 import { loginPath, requireCredential } from "@/lib/auth/credential";
 import { getCurrentUser, getMemberships, needsMfaSetup } from "@/lib/orgs";
 import { OrgScope } from "@/components/shell/org-context";
-import { OrgSwitcher } from "@/components/shell/OrgSwitcher";
+import { OrgMenu } from "@/components/shell/OrgMenu";
+import { QuickSearch } from "@/components/shell/QuickSearch";
+import { UserMenu } from "@/components/shell/UserMenu";
 import { MainNav } from "@/components/shell/MainNav";
 import { NAV } from "@/components/shell/nav";
-import { SignOut } from "@/components/shell/SignOut";
 
 /**
  * The organization shell. The organization comes from the URL and is checked against the
@@ -62,14 +63,13 @@ export default async function OrgLayout({
         <MainNav orgId={orgId} items={NAV.filter((item) => item.roles === undefined || item.roles.includes(organization.role))} />
       </aside>
       <div className="flex min-w-0 flex-1 flex-col bg-page">
-        <header className="sticky top-0 z-10 flex min-h-14 flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b border-border bg-topbar px-4 py-2 md:px-6">
-          <OrgSwitcher organizations={result.memberships} currentId={orgId} canCreate={current.user.can_create_organizations} created={{ count: current.user.created_organizations, max: current.user.max_owned_organizations }} />
-          <div className="flex items-center gap-4 text-sm">
-            <span data-testid="user-email" className="hidden truncate text-muted sm:inline">{current.user.email}</span>
-            <a href="/account" className="text-secondary hover:text-foreground" data-testid="account-link">
-              Account
-            </a>
-            {(mode === "dev" || mode === "session") && <SignOut mode={mode} />}
+        <header className="sticky top-0 z-20 grid min-h-14 grid-cols-[1fr_auto] items-center gap-x-3 gap-y-2 border-b border-border bg-topbar px-4 py-2 md:grid-cols-[1fr_minmax(0,36rem)_1fr] md:px-6">
+          <div className="order-2 col-span-2 flex justify-center md:order-none md:col-span-1 md:col-start-2">
+            <QuickSearch orgId={orgId} pages={NAV.filter((item) => item.enabled && (item.roles === undefined || item.roles.includes(organization.role))).map((item) => ({ label: item.label, path: item.path }))} />
+          </div>
+          <div className="order-1 col-start-2 flex items-center justify-end gap-3 md:order-none md:col-start-3">
+            <OrgMenu organizations={result.memberships} currentId={orgId} canCreate={current.user.can_create_organizations} created={{ count: current.user.created_organizations, max: current.user.max_owned_organizations }} />
+            <UserMenu name={current.user.name} email={current.user.email} mode={mode === "dev" || mode === "session" ? mode : null} />
           </div>
         </header>
         <main className="flex-1 p-4 md:p-6">

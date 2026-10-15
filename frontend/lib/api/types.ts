@@ -1011,6 +1011,13 @@ export interface JournalSummary {
   version: number;
   created_by: string | null;
   created_by_name: string | null;
+  /** Filled in the organization-wide lists (the drafts overview). */
+  horse_name?: string | null;
+}
+
+/** GET /api/journal/summary: the drafts this person can finish (an owner or admin: all; an employee: their own). */
+export interface DraftOverview {
+  drafts: number;
 }
 
 export interface JournalCorrection {

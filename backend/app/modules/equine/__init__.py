@@ -7,6 +7,7 @@ tests/test_module_boundaries.py enforces the import rules.
 """
 
 from app.modules.equine.api import router
+from app.modules.equine.journal import overview as journal_overview
 from app.modules.equine.registration import register
 
-__all__ = ["register", "router"]
+__all__ = ["journal_overview", "register", "router"]
