@@ -437,3 +437,81 @@ def test_the_backfill_gives_old_entries_their_author_as_practitioner_and_leaves_
     with pytest.raises(DBAPIError, match="finalized journal entry"):  # the freeze is back on
         db_session.execute(text("UPDATE horse_journal_entries SET body = 'x' WHERE id = :i"), {"i": final["id"]})
     nested.rollback()
+
+
+# --- deleting a draft (and only a draft) ----------------------------------------------------------------------------------------------
+
+
+def test_a_draft_can_be_deleted_by_its_author_an_admin_or_an_owner(client: TestClient, world):
+    _, horse, people = world
+    for who, deleter in (("employee", "employee"), ("employee", "admin"), ("employee2", "owner")):
+        entry = _create(client, horse, people[who], body="A draft to throw away", marks=[MARK])
+        gone = client.delete(_url(horse, entry), headers={**people[deleter], **_if_match(entry)})
+        assert gone.status_code == 204, (who, deleter, gone.text)
+        assert client.get(_url(horse, entry), headers=people["owner"]).status_code == 404
+    assert client.get(_url(horse), headers=people["owner"]).json() == []
+
+
+def test_a_finalized_entry_can_never_be_deleted_not_even_by_an_owner(client: TestClient, db_session: Session, world):
+    from sqlalchemy import text
+    from sqlalchemy.exc import DBAPIError
+
+    _, horse, people = world
+    final = _finalized(client, horse, people["owner"], body="Frozen")
+    refused = client.delete(_url(horse, final), headers={**people["owner"], **_if_match(final)})
+    assert refused.status_code == 409 and refused.json()["detail"]["code"] == "journal_entry_final"
+    assert client.get(_url(horse, final), headers=people["owner"]).json()["body"] == "Frozen"
+    nested = db_session.begin_nested()  # and the database itself refuses it as well
+    with pytest.raises(DBAPIError, match="finalized journal entry"):
+        db_session.execute(text("DELETE FROM horse_journal_entries WHERE id = :i"), {"i": final["id"]})
+    nested.rollback()
+
+
+def test_deleting_a_draft_needs_the_right_person_and_the_current_version(client: TestClient, world):
+    _, horse, people = world
+    entry = _create(client, horse, people["employee"], body="Mine")
+    assert client.delete(_url(horse, entry), headers={**people["employee2"], **_if_match(entry)}).status_code == 403  # someone else's draft
+    for role in ("accountant", "viewer"):
+        assert client.delete(_url(horse, entry), headers={**people[role], **_if_match(entry)}).status_code == 403
+    assert TestClient(client.app).delete(_url(horse, entry), headers=people["employee"]).status_code == 428  # no version
+    client.patch(_url(horse, entry), json={"body": "Changed meanwhile"}, headers={**people["owner"], **_if_match(entry)})
+    stale = client.delete(_url(horse, entry), headers={**people["employee"], **_if_match(entry)})
+    assert stale.status_code == 409 and stale.json()["detail"]["code"] == "stale_record"
+    assert client.get(_url(horse, entry), headers=people["owner"]).status_code == 200  # nothing was deleted by any of these
+
+
+def test_a_foreign_draft_cannot_be_deleted_and_the_history_notes_a_deletion_without_the_text(client: TestClient, db_session: Session, world):
+    _, horse, people = world
+    other_org = make_org(db_session, "Other")
+    other_horse = make_horse(db_session, other_org, "Kalle", owner=make_customer(db_session, other_org, "Anna Andersson"))
+    other_owner = _person(db_session, other_org, Role.OWNER, "Their Owner")
+    theirs = _create(client, other_horse, other_owner, body="Theirs")
+    assert client.delete(_url(horse, theirs), headers={**people["owner"], **_if_match(theirs)}).status_code == 404
+    assert client.get(_url(other_horse, theirs), headers=other_owner).status_code == 200
+
+    mine = _create(client, horse, people["owner"], body="Private words")
+    client.delete(_url(horse, mine), headers={**people["owner"], **_if_match(mine)})
+    events = client.get("/api/history", params={"entity_type": "horse", "entity_id": str(horse.id)}, headers=people["owner"]).json()["events"]
+    journal = [e for e in events if e["entity_type"] == "horse_journal_entry"]
+    assert {e["action"] for e in journal} == {"created", "deleted"} and "Private words" not in str(journal)
+
+
+# --- the entries are numbered and the list can be sorted ---------------------------------------------------------------------
+
+
+def test_entries_have_numbers_per_organization_and_the_list_sorts_by_its_columns(client: TestClient, world):
+    _, horse, people = world
+    a = _create(client, horse, people["owner"], visit_at="2026-10-01T10:00:00+00:00", body="b", marks=[MARK])
+    b = _create(client, horse, people["employee"], visit_at="2026-10-03T10:00:00+00:00", body="a")
+    c = _create(client, horse, people["admin"], visit_at="2026-10-02T10:00:00+00:00", body="c")
+    assert [a["number"], b["number"], c["number"]] == [1, 2, 3]
+
+    def order(**params) -> list[int]:
+        return [row["number"] for row in client.get(_url(horse), params=params, headers=people["owner"]).json()]
+
+    assert order() == [2, 3, 1]  # newest visit first
+    assert order(sort="number") == [1, 2, 3] and order(sort="number", dir="desc") == [3, 2, 1]
+    assert order(sort="visit") == [1, 3, 2]
+    assert order(sort="by") == [3, 2, 1]  # Admin, Employee, Owner
+    assert order(sort="marks", dir="desc")[0] == 1  # the one with a mark first
+    assert client.get(_url(horse), params={"sort": "preview"}, headers=people["owner"]).status_code == 422  # a column the list does not offer

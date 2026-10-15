@@ -108,7 +108,7 @@ JOURNAL_MAX_MARKS = 200
 DIAGRAM_VERSION = 2  # which bundled horse illustration the marks were drawn on (1: a simple line drawing, 2: an engraved horse; each entry keeps its own)
 
 
-class HorseJournalEntry(TenantOwned, Authored, Base):
+class HorseJournalEntry(TenantOwned, Numbered, Authored, Base):
     """One visit in a horse's journal: when, who, what was found and done (text), and drawing marks on the horse diagram.
 
     A therapy/self-evaluation journal of the practitioner, NOT a formal veterinary record. It is a DRAFT (editable, with `version`
@@ -123,6 +123,7 @@ class HorseJournalEntry(TenantOwned, Authored, Base):
             ["organization_id", "horse_id"], ["horses.organization_id", "horses.id"], ondelete="CASCADE", name="fk_horse_journal_entries_horse"
         ),
         UniqueConstraint("organization_id", "id", name="uq_horse_journal_entries_organization_id_id"),
+        UniqueConstraint("organization_id", "number", name="uq_horse_journal_entries_organization_number"),
         CheckConstraint("status IN ('draft', 'final')", name="ck_horse_journal_entries_status"),
         CheckConstraint("(status = 'final') = (finalized_at IS NOT NULL AND finalized_by IS NOT NULL)", name="ck_horse_journal_entries_final_stamped"),
         CheckConstraint(f"length(body) <= {JOURNAL_MAX_BODY}", name="ck_horse_journal_entries_body_length"),

@@ -20,7 +20,7 @@ const ok = <T,>(data: T): ApiResult<T> => ({ ok: true, status: 201, data });
 
 function entry(overrides: Partial<JournalEntry> = {}): JournalEntry {
   return {
-    id: ENTRY, horse_id: HORSE, visit_at: "2026-10-15T12:30:00Z", practitioner_user_id: null, practitioner_name: "Tina Therapist", body: "Treated the poll.", follow_up_on: "2026-10-29",
+    id: ENTRY, number: 12, horse_id: HORSE, visit_at: "2026-10-15T12:30:00Z", practitioner_user_id: null, practitioner_name: "Tina Therapist", body: "Treated the poll.", follow_up_on: "2026-10-29",
     marks: [{ id: "11111111-1111-4111-8111-111111111111", side: "right", tool: "o", points: [[0.5, 0.5]] }], diagram_version: 1, status: "final", version: 3,
     finalized_at: "2026-10-15T13:00:00Z", finalized_by: null, created_at: "", updated_at: "", created_by: null, updated_by: null, created_by_name: "Tina Therapist",
     finalized_by_name: "Tina Therapist", can_change: false, can_correct: true, corrections: [], ...overrides,

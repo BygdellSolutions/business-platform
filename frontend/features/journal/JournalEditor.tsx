@@ -48,13 +48,15 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
   const [tool, setTool] = useState<ActiveTool>("select");
   const [selected, setSelected] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [deleted, setDeleted] = useState(false);
 
   const dirty =
+    !deleted && (
     visitAt !== toLocalInput(saved.visit_at) ||
     practitioner !== (saved.practitioner_user_id ?? "") ||
     body !== saved.body ||
     followUp !== (saved.follow_up_on ?? "") ||
-    !sameMarks(editor.marks, saved.marks);
+    !sameMarks(editor.marks, saved.marks));
 
   useEffect(() => {
     const controller = new AbortController();
@@ -94,6 +96,14 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
     setSaved(result);
     setNotice("Draft saved.");
     return result;
+  }
+
+  async function deleteDraft() {
+    const gone = await run(() => apiFetch<null>(orgId, `/horses/${entry.horse_id}/journal/${entry.id}`, { method: "DELETE", ifMatch: saved.version }));
+    if (gone === null) return;
+    setDeleted(true);
+    router.push(`/o/${orgId}/horses/${entry.horse_id}/journal`);
+    router.refresh();
   }
 
   async function finalize() {
@@ -216,7 +226,7 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
         <p className="text-xs text-zinc-500">{body.length.toLocaleString("en")} of 20,000 characters. Refer to a mark by its number, for example “mark 2”.</p>
       </div>
 
-      <ErrorSummary messages={problems.general} />
+      <ErrorSummary messages={error?.kind === "validation" ? problems.general : []} />
       {stale && (
         <div role="alert" data-testid="stale" className="flex flex-col gap-2 rounded border border-amber-400 p-3 text-sm">
           <p>This entry was changed somewhere else, so nothing was saved. Reload to see the latest version (your unsaved changes here are lost).</p>
@@ -245,6 +255,14 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
           disabled={pending}
           onConfirm={() => void finalize()}
           testId="finalize"
+        />
+        <ConfirmButton
+          label="Delete draft"
+          question="Delete this draft for good? Only a draft can be deleted; once finalized an entry stays."
+          confirmLabel="Yes, delete it"
+          disabled={pending}
+          onConfirm={() => void deleteDraft()}
+          testId="delete-draft"
         />
         <span role="status" aria-live="polite" data-testid="save-status" className={dirty ? "text-sm font-medium text-amber-700" : "text-sm text-zinc-500"}>
           {status}

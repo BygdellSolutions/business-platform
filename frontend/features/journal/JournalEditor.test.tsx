@@ -21,7 +21,7 @@ const fail = <T,>(status: number, body: unknown): ApiResult<T> => ({ ok: false, 
 
 function entry(overrides: Partial<JournalEntry> = {}): JournalEntry {
   return {
-    id: ENTRY, horse_id: HORSE, visit_at: "2026-10-15T12:30:00Z", practitioner_user_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", practitioner_name: "Tina Therapist", body: "", follow_up_on: null, marks: [],
+    id: ENTRY, number: 12, horse_id: HORSE, visit_at: "2026-10-15T12:30:00Z", practitioner_user_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", practitioner_name: "Tina Therapist", body: "", follow_up_on: null, marks: [],
     diagram_version: 1, status: "draft", version: 1, finalized_at: null, finalized_by: null, created_at: "", updated_at: "", created_by: null, updated_by: null,
     created_by_name: "Tina Therapist", finalized_by_name: null, can_change: true, can_correct: false, corrections: [], ...overrides,
   };
@@ -40,6 +40,7 @@ beforeEach(() => {
   answers.length = 0;
   mocked.mockImplementation((async (_org: string, path: string) => (path.startsWith("/members/people") ? ok(COLLEAGUES) : (answers.shift() ?? fail(500, {})))) as never);
   router.refresh.mockReset();
+  router.push.mockReset();
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, width: 400, height: 300, right: 400, bottom: 300, x: 0, y: 0, toJSON: () => ({}) });
 });
 afterEach(() => vi.restoreAllMocks());
@@ -174,6 +175,28 @@ describe("when saving does not work", () => {
     await userEvent.type(screen.getByLabelText(/Observations/), "x");
     await userEvent.click(screen.getByTestId("save-draft"));
     expect(await screen.findByText(/at most 20000/)).toBeTruthy();
+  });
+});
+
+describe("deleting a draft", () => {
+  it("asks first, then deletes against the version it was opened on and goes back to the journal", async () => {
+    answers.push(ok(undefined));
+    mount(entry({ version: 4 }));
+    await userEvent.click(screen.getByTestId("delete-draft"));
+    expect(calls()).toHaveLength(0); // the first click only asks
+    await userEvent.click(screen.getByTestId("delete-draft-confirm"));
+    await waitFor(() => expect(calls()).toHaveLength(1));
+    expect(calls()[0]).toEqual([ORG, `/horses/${HORSE}/journal/${ENTRY}`, { method: "DELETE", ifMatch: 4 }]);
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith(`/o/${ORG}/horses/${HORSE}/journal`));
+  });
+
+  it("stays on the entry and says why when the draft was changed or finalized elsewhere", async () => {
+    answers.push(fail(409, { detail: { code: "journal_entry_final", message: "final" } }));
+    mount();
+    await userEvent.click(screen.getByTestId("delete-draft"));
+    await userEvent.click(screen.getByTestId("delete-draft-confirm"));
+    expect((await screen.findByRole("alert")).textContent).toContain("finalized elsewhere");
+    expect(router.push).not.toHaveBeenCalled();
   });
 });
 

@@ -128,6 +128,7 @@ class JournalSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    number: int  # per organization, from the database
     horse_id: uuid.UUID
     visit_at: datetime
     practitioner_name: str
@@ -144,6 +145,7 @@ class JournalRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    number: int  # per organization, from the database
     horse_id: uuid.UUID
     visit_at: datetime
     practitioner_user_id: uuid.UUID | None

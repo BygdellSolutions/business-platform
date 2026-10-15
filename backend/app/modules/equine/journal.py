@@ -16,11 +16,11 @@ otherwise); a finalized entry never changes through this API.
 import uuid
 from datetime import date, datetime, time, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import Pagination, pagination
+from app.api.deps import Pagination, Sorting, pagination, sorted_by, sorting
 from app.core import audit
 from app.core.authz import roles_required
 from app.core.db import get_db
@@ -120,21 +120,31 @@ def list_entries(
     date_from: date | None = Query(default=None, description="Visits on or after this day"),
     date_to: date | None = Query(default=None, description="Visits on or before this day"),
     page: Pagination = Depends(pagination),
+    sort: Sorting = Depends(sorting),
     ctx: TenantContext = Depends(journal_access),
     db: Session = Depends(get_db),
 ) -> list[JournalSummary]:
-    """The horse's entries, newest visit first; each row is a summary (open an entry for its text and marks)."""
+    """The horse's entries, newest visit first unless sorted (number, visit, by, status, marks); each row is a summary (open an entry
+for its text and marks)."""
     get_scoped_or_404(db, ctx, Horse, horse_id)
     query = scoped_select(HorseJournalEntry, ctx).where(HorseJournalEntry.horse_id == horse_id)
     if date_from is not None:
         query = query.where(HorseJournalEntry.visit_at >= datetime.combine(date_from, time.min, tzinfo=timezone.utc))
     if date_to is not None:
         query = query.where(HorseJournalEntry.visit_at < datetime.combine(date_to, time.min, tzinfo=timezone.utc) + timedelta(days=1))
-    entries = list(db.scalars(query.order_by(HorseJournalEntry.visit_at.desc(), HorseJournalEntry.id).limit(page.limit).offset(page.offset)))
+    columns = {
+        "number": HorseJournalEntry.number,
+        "visit": HorseJournalEntry.visit_at,
+        "by": func.lower(HorseJournalEntry.practitioner_name),
+        "status": HorseJournalEntry.status,
+        "marks": func.jsonb_array_length(HorseJournalEntry.marks),
+    }
+    ordered = sorted_by(query, sort, columns, (HorseJournalEntry.visit_at.desc(), HorseJournalEntry.id))
+    entries = list(db.scalars(ordered.limit(page.limit).offset(page.offset)))
     names = _names(db, entries)
     return [
         JournalSummary(
-            id=e.id, horse_id=e.horse_id, visit_at=e.visit_at, practitioner_name=e.practitioner_name, status=e.status,
+            id=e.id, number=e.number, horse_id=e.horse_id, visit_at=e.visit_at, practitioner_name=e.practitioner_name, status=e.status,
             follow_up_on=e.follow_up_on, mark_count=len(e.marks), preview=e.body.strip()[:PREVIEW_LENGTH], version=e.version,
             created_by=e.created_by, created_by_name=names.get(e.created_by),
         )
@@ -235,3 +245,22 @@ def add_correction(
     audit.created(db, ctx, correction, "horse_journal_correction", context=("horse", horse_id), fields=())
     commit_and_refresh(db, correction)
     return _read(db, ctx, entry)
+
+
+@router.delete("/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_draft(
+    horse_id: uuid.UUID,
+    entry_id: uuid.UUID,
+    if_match: str | None = Header(default=None),
+    ctx: TenantContext = Depends(journal_access),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Delete an entry that is still a DRAFT (its author, an admin or an owner). A finalized entry is never deleted: 409, and the
+    database refuses it too. It is gone for good; the horse's history records that it was deleted, not what it said."""
+    entry = _entry_or_404(db, ctx, horse_id, entry_id, lock=True)
+    _require_own_draft(ctx, entry)
+    ensure_current(if_match, entry.version, "horse_journal_entry", entry.id)
+    audit.deleted(db, ctx, entry, "horse_journal_entry", context=("horse", horse_id), fields=AUDITED)
+    db.delete(entry)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "./fixtures";
 
-import { createCustomer, createHorse, createWorld, signIn, type World } from "./support";
+import { bffUrl, createCustomer, createHorse, createWorld, signIn, sql, testRow, type World } from "./support";
 
 /**
  * The horse journal in the browser: an entry is started, drawn on, written, saved, reloaded, finalized and corrected; marks stay
@@ -69,6 +69,12 @@ test("an entry is drawn, written, saved, reloaded, finalized and corrected", asy
   await page.getByRole("link", { name: "All entries" }).click();
   await expect(page.getByTestId("journal-row")).toHaveCount(1);
   await expect(page.getByTestId("entry-status")).toHaveText("Finalized");
+  // a table like the other lists: No., Visit, By, Status, Marks, Notes
+  const headings = page.getByTestId("journal-table").getByRole("columnheader");
+  await expect(headings).toHaveCount(6);
+  for (const [index, label] of ["No.", "Visit", "By", "Status", "Marks", "Notes"].entries()) await expect(headings.nth(index)).toContainText(label);
+  await expect(page.getByTestId("journal-row").getByTestId("record-number")).toHaveText("1");
+  await expect(page.getByTestId("journal-row")).toContainText("Stiff left shoulder");
 
   // and the entry is listed in the journal section of the horse's own page
   await page.goto(`/o/${world.orgId}/horses/${horse.id}`);
@@ -82,6 +88,33 @@ test("an entry is drawn, written, saved, reloaded, finalized and corrected", asy
   const [a, b] = [await fresh.boundingBox(), await open.boundingBox()];
   expect(a && b && Math.abs(a.height - b.height) < 1).toBe(true);
   expect(await fresh.evaluate((e) => getComputedStyle(e).backgroundColor)).toBe(await open.evaluate((e) => getComputedStyle(e).backgroundColor));
+});
+
+test("a draft can be deleted but a finalized entry cannot", async ({ page, context }) => {
+  world = createWorld({ label: "JournalDelete" });
+  await signIn(context, world.email);
+  const horse = await createHorse(context, world.orgId, { name: "Kalle", owner_customer_id: (await createCustomer(context, world.orgId, "Anna Andersson")).id });
+
+  await startEntry(page, world.orgId, horse.id);
+  await page.getByLabel(/Observations/).fill("A draft I will throw away");
+  await page.getByTestId("save-draft").click();
+  await expect(page.getByTestId("save-status")).toHaveText("All changes saved");
+  await page.getByTestId("delete-draft").click();
+  await expect(page.getByText(/Only a draft can be deleted/)).toBeVisible(); // it asks first
+  await page.getByTestId("delete-draft-confirm").click();
+  await expect(page.getByTestId("empty")).toHaveText("No journal entries yet.");
+  expect(testRow(`select count(*) from horse_journal_entries where horse_id = ${sql(horse.id)}`)).toBe("0"); // really gone
+
+  await startEntry(page, world.orgId, horse.id);
+  await page.getByLabel(/Observations/).fill("This one is kept");
+  await page.getByTestId("finalize").click();
+  await page.getByTestId("finalize-confirm").click();
+  await expect(page.getByTestId("entry-final")).toBeVisible();
+  await expect(page.getByTestId("delete-draft")).toHaveCount(0); // no delete on a finalized entry
+  const entry = testRow(`select id from horse_journal_entries where horse_id = ${sql(horse.id)}`);
+  const forged = await context.request.delete(bffUrl(world.orgId, `/horses/${horse.id}/journal/${entry}`), { headers: { "if-match": '"2"' } });
+  expect(forged.status()).toBe(409);
+  expect(testRow(`select count(*) from horse_journal_entries where horse_id = ${sql(horse.id)}`)).toBe("1");
 });
 
 test("the practitioner is chosen from the organization's members, like who performed a service on an order", async ({ page, context }) => {

@@ -999,6 +999,8 @@ export interface JournalMark {
 
 export interface JournalSummary {
   id: string;
+  /** Per organization, handed out by the database (like horses and customers have). */
+  number: number;
   horse_id: string;
   visit_at: string;
   practitioner_name: string;
@@ -1022,6 +1024,8 @@ export interface JournalCorrection {
 
 export interface JournalEntry {
   id: string;
+  /** Per organization, handed out by the database. */
+  number: number;
   horse_id: string;
   visit_at: string;
   /** A member of the organization (null only for entries from before the list existed). */

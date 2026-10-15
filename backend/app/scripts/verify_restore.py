@@ -74,6 +74,7 @@ REQUIRED_TRIGGERS = {
     ("transactions", "transactions_record_number"),
     # The horse journal: a finalized entry is frozen, a correction is written once.
     ("horse_journal_entries", "trg_horse_journal_entries_final_immutable"),
+    ("horse_journal_entries", "horse_journal_entries_record_number"),
     ("horse_journal_corrections", "trg_horse_journal_corrections_append_only"),
     # The job queue (Procrastinate's vendored schema): a restored database without them would accept jobs and never run them.
     ("procrastinate_jobs", "procrastinate_jobs_notify_queue_job_inserted_v1"),

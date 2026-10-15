@@ -32,7 +32,7 @@ export default async function JournalEntryPage({ params }: { params: Promise<{ o
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-[28px] leading-tight font-semibold tracking-tight">
-          Journal entry: {horse.name}
+          Journal entry no. {entry.number}: {horse.name}
           {entry.status === "draft" && <span className="ml-2 rounded bg-amber-100 px-2 text-sm font-normal text-amber-900">Draft</span>}
         </h1>
         <Link href={`${base}/journal`} className="text-sm underline">
