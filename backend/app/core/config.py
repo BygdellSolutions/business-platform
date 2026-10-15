@@ -139,6 +139,13 @@ class Settings(BaseSettings):
     db_lock_timeout_ms: int = 10_000
     db_idle_in_transaction_timeout_ms: int = 60_000
 
+    # --- request budgets for signed-in traffic (app/core/rate_limit.py) -------------------------------------------------------------
+    # Per PROCESS and per minute (a sliding window). Generous on purpose: a person using the application normally makes a few
+    # requests a second; these stop a runaway script or one organization from using the process up for everybody.
+    rate_limit_user_per_minute: int = 1200
+    rate_limit_org_per_minute: int = 6000
+    rate_limit_heavy_per_minute: int = 60  # PDFs and the dashboard summary, per person, on top of the general budgets
+
     # --- operator links and retention -----------------------------------------------------------------------------------------------
     setup_token_ttl_hours: int = 24
     invitation_ttl_days: int = 7  # how long an organization invitation can be accepted
@@ -181,6 +188,9 @@ class Settings(BaseSettings):
             ("argon2_max_concurrent", 1),
             ("argon2_max_waiting", 0),
             ("admission_max_running", 1),
+            ("rate_limit_user_per_minute", 1),
+            ("rate_limit_org_per_minute", 1),
+            ("rate_limit_heavy_per_minute", 1),
             ("db_pool_size", 1),
             ("db_max_overflow", 0),
             ("db_statement_timeout_ms", 100),

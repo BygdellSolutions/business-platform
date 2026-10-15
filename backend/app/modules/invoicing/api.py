@@ -10,6 +10,7 @@ from sqlalchemy import and_, case, exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import Pagination, Sorting, pagination, sorted_by, sorting
+from app.core import rate_limit
 from app.core.authz import roles_required
 from app.core.db import get_db
 from app.core.org_time import MONTH_PATTERN, month_range, organization_today, organization_zone, year_range
@@ -199,7 +200,7 @@ def list_invoiceable_transactions(
 # --- invoices ------------------------------------------------------------------------------------------------------
 
 
-@router.get("/summary", response_model=InvoicingSummary)
+@router.get("/summary", response_model=InvoicingSummary, dependencies=[Depends(rate_limit.heavy)])
 def invoicing_summary(
     month: str | None = Query(default=None, pattern=MONTH_PATTERN, description="YYYY-MM; the current month when absent"),
     ctx: TenantContext = Depends(get_tenant_context),
@@ -645,6 +646,7 @@ def read_credit_note(credit_note_id: uuid.UUID, ctx: TenantContext = Depends(get
 @router.get(
     "/credit-notes/{credit_note_id}/pdf",
     response_class=Response,
+    dependencies=[Depends(rate_limit.heavy)],
     responses={200: {"content": {"application/pdf": {}}, "description": "The frozen PDF of a credit note"}},
 )
 def download_credit_note_pdf(credit_note_id: uuid.UUID, ctx: TenantContext = Depends(get_tenant_context), db: Session = Depends(get_db)) -> Response:
@@ -655,6 +657,7 @@ def download_credit_note_pdf(credit_note_id: uuid.UUID, ctx: TenantContext = Dep
 @router.get(
     "/receipts/{transaction_id}/pdf",
     response_class=Response,
+    dependencies=[Depends(rate_limit.heavy)],
     responses={200: {"content": {"application/pdf": {}}, "description": "The receipt of an order paid at the counter"}},
 )
 def download_receipt_pdf(transaction_id: uuid.UUID, ctx: TenantContext = Depends(get_tenant_context), db: Session = Depends(get_db)) -> Response:
@@ -678,6 +681,7 @@ def read_invoice(
 @router.get(
     "/{invoice_id}/pdf",
     response_class=Response,
+    dependencies=[Depends(rate_limit.heavy)],
     responses={200: {"content": {"application/pdf": {}}, "description": "The frozen PDF of an issued invoice"}},
 )
 def download_invoice_pdf(

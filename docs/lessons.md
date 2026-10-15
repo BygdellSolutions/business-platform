@@ -164,3 +164,12 @@ Wrapping rows came back on the invoice list after the catalog fix, because the r
 and badge groups never `flex-wrap`; `lib/list-rows-one-line.test.ts` checks the lists.
 - **A box must hold what is put in it, with real data.** Boxing the page sections looked fine on empty sections, but a product's Incoming table (supplier, reference, cost) stuck out past its box. Screenshots of empty pages prove nothing about width: every table inside a box sits in a sideways scroller, and `e2e/boxes-fit.spec.ts` fills the pages with long data and fails when anything sticks out of a `.panel`, at laptop and phone width (with a control that shows the check can see a spill).
 - **Ask what a limit is FOR before deciding what it counts.** The owned-organization limit counted every owner role, so the default of 1 let every invited member create an organization, and a cap of 0 would have blocked promotions and transfers. The owner meant a right to CREATE organizations, given only by the operator; owning an existing organization was never the concern. Name the action being rationed, count only that, and check what every kind of account (bootstrapped, invited, seeded) gets by default.
+
+## A browser robot is not a user (2026-10-15)
+
+Per-user and per-organization request budgets passed every backend test and then failed two or three browser specs per full run:
+the end-to-end suites drive one account at robot speed, far past any person, so a shared budget ran out partway through a
+suite and the page under test showed an error for a reason that was not its own. The cause was found by running the same full
+suite with the budgets effectively off (404 and 291 passed) and with the defaults (2 and 1 failures), not by guessing. Rule: a
+new global guard (rate limit, admission, timeout) gets its own tests, and the browser suites switch its numbers up in their
+configuration with a comment saying why; check the guard's effect with a full run both ways before blaming flakiness.

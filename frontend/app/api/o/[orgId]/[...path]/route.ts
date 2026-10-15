@@ -129,9 +129,15 @@ async function handle(request: NextRequest, context: Context): Promise<NextRespo
   }
 
   const bodyless = upstream.status === 204 || upstream.status === 205;
+  // A 429 keeps FastAPI's Retry-After (a plain number of seconds only), so the browser knows when to try again.
+  const wait = upstream.status === 429 ? upstream.headers.get("retry-after") : null;
   return new NextResponse(bodyless ? null : await upstream.text(), {
     status: upstream.status,
-    headers: { "content-type": upstream.headers.get("content-type") ?? "application/json", ...NO_STORE },
+    headers: {
+      "content-type": upstream.headers.get("content-type") ?? "application/json",
+      ...NO_STORE,
+      ...(wait !== null && /^[0-9]{1,5}$/.test(wait) ? { "retry-after": wait } : {}),
+    },
   });
 }
 

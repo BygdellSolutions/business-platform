@@ -243,6 +243,20 @@ describe("methods and bodies", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("keeps FastAPI's Retry-After on a 429 (a plain number only) so the browser knows when to try again", async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ detail: { code: "rate_limited" } }), { status: 429, headers: { "content-type": "application/json", "retry-after": "7" } })));
+    const response = await call("GET");
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("7");
+  });
+
+  it("does not pass on a Retry-After that is not a plain number", async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(new Response("{}", { status: 429, headers: { "content-type": "application/json", "retry-after": "Wed, 21 Oct 2026 07:28:00 GMT" } })));
+
+    expect((await call("GET")).headers.get("retry-after")).toBeNull();
+  });
+
   it("refuses oversized bodies", async () => {
     const response = await call("POST", { body: JSON.stringify({ x: "y".repeat(1_100_000) }), headers: { "content-type": "application/json" } });
 
