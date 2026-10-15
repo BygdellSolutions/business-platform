@@ -146,6 +146,15 @@ class Settings(BaseSettings):
     rate_limit_org_per_minute: int = 6000
     rate_limit_heavy_per_minute: int = 60  # PDFs and the dashboard summary, per person, on top of the general budgets
 
+    # --- second factor (app/core/mfa.py) -----------------------------------------------------------------------------------------
+    mfa_issuer: str = "Business Platform"  # the name an authenticator app shows
+    mfa_challenge_ttl_seconds: int = 300  # how long a correct password may wait for its code
+    mfa_max_attempts_per_challenge: int = 5
+    mfa_max_failures: int = 5  # wrong codes per person in the throttle window (the same window as login failures)
+    # Owners and admins must have a second factor. None = decide by environment: required in production, not elsewhere (so
+    # development and the test suites run without enrolling every account); set true/false to override either way.
+    mfa_required_for_admins: bool | None = None
+
     # --- operator links and retention -----------------------------------------------------------------------------------------------
     setup_token_ttl_hours: int = 24
     invitation_ttl_days: int = 7  # how long an organization invitation can be accepted
@@ -189,6 +198,9 @@ class Settings(BaseSettings):
             ("argon2_max_waiting", 0),
             ("admission_max_running", 1),
             ("rate_limit_user_per_minute", 1),
+            ("mfa_challenge_ttl_seconds", 30),
+            ("mfa_max_attempts_per_challenge", 1),
+            ("mfa_max_failures", 1),
             ("rate_limit_org_per_minute", 1),
             ("rate_limit_heavy_per_minute", 1),
             ("db_pool_size", 1),

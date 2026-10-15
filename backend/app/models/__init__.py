@@ -1,6 +1,6 @@
 # Import every model here so Alembic autogenerate sees it on Base.metadata.
 from app.models.audit import AuditEvent
-from app.models.auth import AuthSession, SecurityEvent, UserCredential, UserSetupToken
+from app.models.auth import AuthSession, MfaChallenge, SecurityEvent, UserCredential, UserMfa, UserRecoveryCode, UserSetupToken
 from app.models.customer import Customer, CustomerType
 from app.models.item import Item, ItemDiscount, ItemType
 from app.models.invitation import OrganizationInvitation
@@ -15,7 +15,10 @@ __all__ = [
     "AuditEvent",
     "AuthSession",
     "SecurityEvent",
+    "MfaChallenge",
     "UserCredential",
+    "UserMfa",
+    "UserRecoveryCode",
     "UserSetupToken",
     "Customer",
     "CustomerType",

@@ -7,6 +7,7 @@
     python -m app.scripts.admin grant-org-creation --email someone@example.com
     python -m app.scripts.admin revoke-org-creation --email someone@example.com
     python -m app.scripts.admin revoke-all-sessions --yes-end-all-sessions   # emergency, after a restore or an incident
+    python -m app.scripts.admin reset-mfa --email someone@example.com   # lost the authenticator and the recovery codes
     python -m app.scripts.admin purge
 
 There is no way to give anyone a password here, on purpose: a command line argument or an environment
@@ -117,6 +118,14 @@ def revoke_all_sessions(db: Session) -> int:
     return ended
 
 
+def reset_mfa(db: Session, *, email: str) -> None:
+    """For a person who lost both their authenticator and their recovery codes: remove the second factor and end every session of
+    theirs. They sign in with their password and set it up again (an owner or admin cannot work until they do)."""
+    from app.core import mfa_service
+
+    mfa_service.reset_by_operator(db, _user_by_email(db, email), clock.utcnow())
+
+
 def purge(db: Session) -> dict[str, int]:
     now = clock.utcnow()
     counts = sessions.purge_records(db, now)
@@ -148,6 +157,9 @@ def build_parser() -> argparse.ArgumentParser:
     limit.add_argument("--email", required=True)
     limit.add_argument("--limit", required=True, type=int)
 
+    reset = commands.add_parser("reset-mfa", help="remove a person's second factor and end their sessions (they lost the app and the recovery codes)")
+    reset.add_argument("--email", required=True)
+
     revoke_all = commands.add_parser("revoke-all-sessions", help="EMERGENCY: end every active session of every user (people sign in again)")
     revoke_all.add_argument("--yes-end-all-sessions", action="store_true", dest="confirmed", help="required: confirms this ends every session")
 
@@ -176,6 +188,9 @@ def main(argv: list[str] | None = None) -> int:
             elif args.command == "set-owned-limit":
                 changed = set_owned_limit(db, email=args.email, limit=args.limit)
                 print(f"Owned-organization limit set to {args.limit}." + ("" if changed else " (no change)"))
+            elif args.command == "reset-mfa":
+                reset_mfa(db, email=args.email)
+                print("Second factor removed and every session ended. The person signs in with their password and sets it up again.")
             elif args.command == "revoke-all-sessions":
                 if not args.confirmed:
                     raise OperatorError("This ends EVERY session of EVERY user. Run it again with --yes-end-all-sessions to confirm.")

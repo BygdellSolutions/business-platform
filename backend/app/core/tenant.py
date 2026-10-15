@@ -63,6 +63,11 @@ def get_tenant_context(
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Organization not found")
 
     context = TenantContext(user=user, organization_id=membership.organization_id, role=Role(membership.role))
+    from app.core import mfa_policy
+
+    if context.role in mfa_policy.ADMIN_ROLES and not mfa_policy.satisfied(db, user):
+        # Enforced here, on the server: an owner or admin without a second factor reaches nothing of an organization.
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail={"code": "mfa_required", "message": "Set up a second factor to continue."})
     # Imported here: rate_limit itself depends on this module's TenantContext.
     from app.core import rate_limit
 

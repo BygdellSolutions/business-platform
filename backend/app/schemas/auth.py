@@ -42,6 +42,48 @@ class SessionInfo(BaseModel):
     current: bool
 
 
+class MfaRequiredResponse(BaseModel):
+    """The password was right but a second factor is needed: no session yet, only a short-lived challenge."""
+
+    mfa_required: bool = True
+    challenge: str
+    expires_at: datetime
+
+
+class MfaLoginRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    challenge: str = Field(max_length=256)
+    code: str = Field(max_length=64)
+
+
+class MfaPasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    password: str = Field(max_length=4096)
+
+
+class MfaCodeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str = Field(max_length=64)
+
+
+class MfaStatus(BaseModel):
+    enabled: bool
+    required: bool  # this person must have one (an owner or admin, with the policy on)
+    recovery_codes_left: int
+
+
+class MfaEnrollment(BaseModel):
+    secret: str  # base32, for typing into an authenticator app by hand
+    uri: str  # otpauth:// link (shown as a QR code by the page)
+
+
+class RecoveryCodes(BaseModel):
+    recovery_codes: list[str]
+
+
 class SessionsEnded(BaseModel):
     ended: int
 

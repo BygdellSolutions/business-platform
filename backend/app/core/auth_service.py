@@ -24,7 +24,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from app.core import clock, passwords, security_events, sessions, throttle
+from app.core import clock, mfa_service, passwords, security_events, sessions, throttle
 from app.core.config import settings
 from app.core.passwords import AuthBusy, admission
 from app.core.tokens import hash_token, looks_like_token, new_token
@@ -58,7 +58,7 @@ class WrongCurrentPassword(Exception):
 
 Throttled = throttle.Throttled
 
-__all__ = ["AuthBusy", "InvalidSetupLink", "LoginFailed", "NameRequired", "PasswordProblem", "SessionIssued", "Throttled", "WrongCurrentPassword"]
+__all__ = ["AuthBusy", "InvalidSetupLink", "LoginFailed", "MfaRequired", "NameRequired", "PasswordProblem", "SessionIssued", "Throttled", "WrongCurrentPassword"]
 
 
 @dataclass(frozen=True)
@@ -67,6 +67,14 @@ class SessionIssued:
     csrf_token: str
     expires_at: datetime  # the absolute end; the idle limit can end it sooner
     user: User
+
+
+@dataclass(frozen=True)
+class MfaRequired:
+    """The password was right, but this person has a second factor: no session yet, only a short-lived challenge to spend with a code."""
+
+    challenge: str
+    expires_at: datetime
 
 
 def lock_user(db: Session, user_id) -> User | None:
@@ -82,9 +90,40 @@ def _housekeeping(db: Session, now: datetime) -> None:
     """A small bounded batch of expired records is removed whenever someone logs in."""
     security_events.purge_events(db, now, batch=200, max_batches=1)
     sessions.purge_records(db, now, batch=200, max_batches=1)
+    mfa_service.purge_challenges(db, now)
 
 
-def login(db: Session, *, email: str, password: str, source: str, user_agent: str | None, presented_token: str | None) -> SessionIssued:
+def _start_session(db: Session, user: User, now: datetime, *, source: str, user_agent: str | None, presented_token: str | None, ident_hash: str) -> SessionIssued:
+    """The one place a successful sign-in becomes a session (password alone, or password plus second factor)."""
+    if presented_token is not None and looks_like_token(presented_token):
+        db.execute(
+            update(sessions.AuthSession)
+            .where(sessions.AuthSession.token_hash == hash_token(presented_token), sessions.AuthSession.revoked_at.is_(None))
+            .values(revoked_at=now, revoked_reason="rotated")
+        )
+    issued = _issue(db, user, now, user_agent=user_agent, source=source)
+    security_events.record(db, "login_success", now, actor_user_id=user.id, source=source, ident_hash=ident_hash)
+    _housekeeping(db, now)
+    db.commit()
+    return issued
+
+
+def complete_login(db: Session, *, challenge: str, code: str, source: str, user_agent: str | None, presented_token: str | None) -> SessionIssued:
+    """Second step of a sign-in: spend the challenge with a code from the app (or a recovery code). Wrong in any way is one
+    generic failure; too many wrong codes is throttling."""
+    now = clock.utcnow()
+    try:
+        user = mfa_service.complete_challenge(db, challenge, code, now, source)
+    except (mfa_service.ChallengeInvalid, mfa_service.NotEnabled, mfa_service.InvalidCode):
+        raise LoginFailed()
+    locked = lock_user(db, user.id)
+    if locked is None or not locked.is_active:
+        raise LoginFailed()
+    ident_hash = security_events.identifier_hash(security_events.normalize_email(locked.email))
+    return _start_session(db, locked, now, source=source, user_agent=user_agent, presented_token=presented_token, ident_hash=ident_hash)
+
+
+def login(db: Session, *, email: str, password: str, source: str, user_agent: str | None, presented_token: str | None) -> SessionIssued | MfaRequired:
     now = clock.utcnow()
     identifier = security_events.normalize_email(email)
     ident_hash = security_events.identifier_hash(identifier)
@@ -113,17 +152,11 @@ def login(db: Session, *, email: str, password: str, source: str, user_agent: st
         else:
             if new_hash is not None:
                 db.execute(update(UserCredential).where(UserCredential.user_id == locked.id).values(password_hash=new_hash))
-            if presented_token is not None and looks_like_token(presented_token):
-                db.execute(
-                    update(sessions.AuthSession)
-                    .where(sessions.AuthSession.token_hash == hash_token(presented_token), sessions.AuthSession.revoked_at.is_(None))
-                    .values(revoked_at=now, revoked_reason="rotated")
-                )
-            issued = _issue(db, locked, now, user_agent=user_agent, source=source)
-            security_events.record(db, "login_success", now, actor_user_id=locked.id, source=source, ident_hash=ident_hash)
-            _housekeeping(db, now)
-            db.commit()
-            return issued
+            if mfa_service.is_enabled(db, locked.id):
+                token, expires_at = mfa_service.create_challenge(db, locked, now, source)
+                db.commit()
+                return MfaRequired(challenge=token, expires_at=expires_at)
+            return _start_session(db, locked, now, source=source, user_agent=user_agent, presented_token=presented_token, ident_hash=ident_hash)
 
     if decision.record_failures:  # 5
         security_events.record(db, "login_failure", now, source=source, ident_hash=ident_hash)

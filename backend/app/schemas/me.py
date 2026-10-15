@@ -29,6 +29,8 @@ class MyUser(BaseModel):
     can_create_organizations: bool
     created_organizations: int
     max_owned_organizations: int  # how many it may create (historical name; app.core.ownership)
+    mfa_enabled: bool = False
+    mfa_required: bool = False  # an owner or admin, with the policy on: the application sends them to set it up first
 
 
 class MeOrganization(BaseModel):

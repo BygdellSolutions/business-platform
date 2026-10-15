@@ -45,7 +45,19 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Rows that use the new values would violate the old lists: they are removed/relabelled first so the downgrade can run.
+    # Sessions that ended with the new reason are relabelled so the narrower list can hold them. Security events are append-only
+    # (recent ones cannot be deleted): the narrower event list is restored only when no event of the new kind exists.
     op.execute("UPDATE auth_sessions SET revoked_reason = 'disabled' WHERE revoked_reason = 'operator'")
-    op.execute("DELETE FROM security_events WHERE event_type = 'sessions_revoked_by_operator'")
-    _replace(OLD_REASONS, OLD_TYPES)
+    op.drop_constraint("ck_auth_sessions_revoked_reason", "auth_sessions", type_="check")
+    op.create_check_constraint("ck_auth_sessions_revoked_reason", "auth_sessions", f"revoked_reason IS NULL OR revoked_reason IN ({_in(OLD_REASONS)})")
+    op.execute(
+        f"""
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM security_events WHERE event_type = 'sessions_revoked_by_operator') THEN
+                ALTER TABLE security_events DROP CONSTRAINT ck_security_events_type;
+                ALTER TABLE security_events ADD CONSTRAINT ck_security_events_type CHECK (event_type IN ({_in(OLD_TYPES)}));
+            END IF;
+        END $$
+        """
+    )

@@ -15,7 +15,7 @@ from app.core.config import settings
 from app.core.db import get_db
 from app.models import User
 from app.models.auth import AuthSession
-from app.schemas.auth import AuthUser, ChangePasswordRequest, LoginRequest, SessionInfo, SessionResponse, SessionsEnded, SetupRequest
+from app.schemas.auth import AuthUser, ChangePasswordRequest, LoginRequest, MfaLoginRequest, MfaRequiredResponse, SessionInfo, SessionResponse, SessionsEnded, SetupRequest
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -51,8 +51,8 @@ def _busy() -> HTTPException:
     )
 
 
-@router.post("/login", response_model=SessionResponse, dependencies=[Depends(session_mode_only)])
-def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)) -> SessionResponse:
+@router.post("/login", response_model=SessionResponse | MfaRequiredResponse, dependencies=[Depends(session_mode_only)])
+def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)) -> SessionResponse | MfaRequiredResponse:
     """Password login. Wrong credentials of every kind look identical (401); see `app.core.auth_service`."""
     try:
         issued = auth_service.login(
@@ -69,6 +69,28 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
         raise _throttled(error)
     except auth_service.AuthBusy:
         raise _busy()
+    if isinstance(issued, auth_service.MfaRequired):
+        return MfaRequiredResponse(challenge=issued.challenge, expires_at=issued.expires_at)
+    return _issued(db, issued)
+
+
+@router.post("/login/mfa", response_model=SessionResponse, dependencies=[Depends(session_mode_only)])
+def login_with_second_factor(payload: MfaLoginRequest, request: Request, db: Session = Depends(get_db)) -> SessionResponse:
+    """Second step of a sign-in for a person with a second factor: the challenge from the first step and a code (or a recovery code).
+    Wrong in any way is the same 401; too many wrong codes is a 429."""
+    try:
+        issued = auth_service.complete_login(
+            db,
+            challenge=payload.challenge,
+            code=payload.code,
+            source=security_events.client_source(request),
+            user_agent=request.headers.get("user-agent"),
+            presented_token=sessions.bearer_token(request),
+        )
+    except auth_service.LoginFailed:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired code")
+    except auth_service.Throttled as error:
+        raise _throttled(error)
     return _issued(db, issued)
 
 
