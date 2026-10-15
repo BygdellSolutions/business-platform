@@ -3,7 +3,7 @@ from datetime import date
 from decimal import Decimal
 from enum import StrEnum
 
-from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKeyConstraint, Index, Numeric, String, Text, UniqueConstraint, text
+from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKeyConstraint, Index, Integer, Numeric, String, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -36,6 +36,7 @@ class Item(TenantOwned, Numbered, Authored, Base):
         CheckConstraint("NOT track_stock OR type = 'product'", name="ck_items_track_stock_product"),
         CheckConstraint("sku IS NULL OR length(btrim(sku)) > 0", name="ck_items_sku_not_blank"),
         CheckConstraint("low_stock_threshold IS NULL OR low_stock_threshold >= 0", name="ck_items_low_stock_threshold"),
+        CheckConstraint("version >= 1", name="ck_items_version_positive"),
         # An article number identifies one item within its organization (another organization may use the same).
         Index("uq_items_organization_sku", "organization_id", "sku", unique=True, postgresql_where=text("sku IS NOT NULL")),
     )
@@ -57,6 +58,8 @@ class Item(TenantOwned, Numbered, Authored, Base):
     track_stock: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     # Below this quantity on hand the product is "low stock" (only meaningful while it tracks stock).
     low_stock_threshold: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+    # Optimistic concurrency (see app/core/versioning.py): +1 per edit that changes something.
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
 
 
 class ItemDiscount(TenantOwned, Authored, Base):

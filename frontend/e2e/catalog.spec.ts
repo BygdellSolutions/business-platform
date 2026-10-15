@@ -305,7 +305,7 @@ test.describe("list, search and filters", () => {
     await createItem(context, ORG_A.id, { name: `${prefix} Massage`, type: "service" });
     await createItem(context, ORG_A.id, { name: `${prefix} Saddle`, type: "product" });
     const old = await createItem(context, ORG_A.id, { name: `${prefix} Old saddle`, type: "product" });
-    await context.request.patch(bffUrl(ORG_A.id, `/items/${old.id}`), { data: { active: false } });
+    await context.request.patch(bffUrl(ORG_A.id, `/items/${old.id}`), { data: { active: false }, headers: { "if-match": '"1"' } });
 
     await page.goto(`${list}?q=${encodeURIComponent(prefix)}`);
     expect((await names(page)).sort()).toEqual([`${prefix} Massage`, `${prefix} Old saddle`, `${prefix} Saddle`]);

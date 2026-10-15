@@ -327,7 +327,7 @@ test.describe("an issued invoice is a stored document", () => {
     testRow(`update custom_field_values set value_text = 'changed text' where organization_id = ${org} and value_text is not null`);
     testRow(`set local session_replication_role = replica; delete from customers where id = ${sql(anna)}`);
     testRow(`update organizations set legal_name = 'Renamed Org AB', city = 'Elsewhere' where id = ${org}`);
-    await context.request.patch(bffUrl(world.orgId, `/items/${item.id}`), { data: { name: "Renamed again" } });
+    await context.request.patch(bffUrl(world.orgId, `/items/${item.id}`), { data: { name: "Renamed again" }, headers: { "if-match": '"1"' } });
 
     await page.reload();
     await expect(page.getByTestId("invoice-document")).toHaveText(before); // the very same document

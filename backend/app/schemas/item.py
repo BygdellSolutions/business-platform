@@ -95,6 +95,7 @@ class ItemRead(BaseModel):
     sku: str | None
     track_stock: bool
     low_stock_threshold: QuantityOut | None
+    version: int  # send it back as If-Match when changing the item
     created_at: datetime
     updated_at: datetime
     # Who created it and who changed it last (null: not recorded, e.g. before authors were kept).

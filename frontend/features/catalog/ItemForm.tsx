@@ -204,7 +204,7 @@ export function ItemForm({ item }: { item?: Item }) {
       return;
     }
     const saved = await run(() =>
-      apiFetch<Item>(orgId, `/items/${current.id}`, { method: "PATCH", body }),
+      apiFetch<Item>(orgId, `/items/${current.id}`, { method: "PATCH", body, ifMatch: current.version }),
     );
     if (saved === null) return;
     setRecord(saved);
@@ -233,6 +233,7 @@ export function ItemForm({ item }: { item?: Item }) {
           path={`/items/${record.id}`}
           active={record.active}
           noun="item"
+          version={record.version}
           onChanged={(updated) =>
             setRecord((current) =>
               current
@@ -240,6 +241,7 @@ export function ItemForm({ item }: { item?: Item }) {
                     ...current,
                     active: updated.active,
                     updated_at: updated.updated_at,
+                    version: updated.version,
                   }
                 : updated,
             )

@@ -58,7 +58,7 @@ from app.modules.sales.schemas import (
     TransactionUpdate,
     VatBreakdownRead,
 )
-from app.modules.sales.versioning import ensure_current
+from app.core.versioning import ensure_current
 from app.schemas.customer import CustomerRef
 from app.schemas.money import CountAndAmounts, CurrencyAmount
 

@@ -113,7 +113,10 @@ export async function createHorse(
 
 /** Deactivate or reactivate any record through the BFF. */
 export async function setActive(context: BrowserContext, orgId: string, area: "customers" | "items" | "horses", id: string, active: boolean) {
-  const response = await context.request.patch(bffUrl(orgId, `/${area}/${id}`), { data: { active } });
+  // Items guard changes with If-Match: send the version as it is now.
+  const headers: Record<string, string> = {};
+  if (area === "items") headers["if-match"] = `"${(await (await context.request.get(bffUrl(orgId, `/items/${id}`))).json()).version}"`;
+  const response = await context.request.patch(bffUrl(orgId, `/${area}/${id}`), { data: { active }, headers });
   expect(response.status(), await response.text()).toBe(200);
 }
 

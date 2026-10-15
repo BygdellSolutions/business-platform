@@ -21,6 +21,7 @@ function item(overrides: Partial<Item> = {}): Item {
   return {
     id: "22222222-2222-4222-8222-222222222222",
     number: 1,
+    version: 1,
     type: "service",
     name: "Horse massage",
     description: null,
@@ -242,7 +243,7 @@ describe("editing an item", () => {
     await userEvent.type(screen.getByLabelText("Name"), "Deep tissue massage");
     await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
-    expect(mocked).toHaveBeenCalledWith(A, "/items/22222222-2222-4222-8222-222222222222", { method: "PATCH", body: { name: "Deep tissue massage" } });
+    expect(mocked).toHaveBeenCalledWith(A, "/items/22222222-2222-4222-8222-222222222222", { method: "PATCH", body: { name: "Deep tissue massage" }, ifMatch: 1 });
   });
 
   it("makes no request when nothing changed", async () => {
@@ -279,7 +280,7 @@ describe("editing an item", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Deactivate item" }));
 
-    expect(mocked).toHaveBeenCalledWith(A, "/items/22222222-2222-4222-8222-222222222222", { method: "PATCH", body: { active: false } });
+    expect(mocked).toHaveBeenCalledWith(A, "/items/22222222-2222-4222-8222-222222222222", { method: "PATCH", body: { active: false }, ifMatch: 1 });
     expect(await screen.findByRole("button", { name: "Reactivate item" })).toBeInTheDocument();
   });
 });

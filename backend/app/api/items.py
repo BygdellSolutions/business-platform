@@ -1,7 +1,7 @@
 import uuid
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
@@ -16,6 +16,7 @@ from app.core.org_time import organization_today
 from app.core.query import commit_and_refresh, contains_pattern, delete_or_409, number_matches
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import create_scoped, get_scoped_or_404, reference_error, scoped_select
+from app.core.versioning import ensure_current
 from app.models import Item, ItemDiscount, ItemType, Role
 from app.schemas.item import ItemCreate, ItemDiscountCreate, ItemDiscountRead, ItemRead, ItemUpdate
 
@@ -81,10 +82,12 @@ def read_item(
 def update_item(
     item_id: uuid.UUID,
     payload: ItemUpdate,
+    if_match: str | None = Header(default=None),
     ctx: TenantContext = Depends(record_writer),
     db: Session = Depends(get_db),
 ) -> ItemRead:
-    item = get_scoped_or_404(db, ctx, Item, item_id)
+    item = get_scoped_or_404(db, ctx, Item, item_id, for_update=True)  # the lock makes the version check and the change one step
+    ensure_current(if_match, item.version, "item", item.id)
     values = payload.model_dump(exclude_unset=True)
     # The rule is about the item as it will be, so a change of type alone is checked too.
     if values.get("track_stock", item.track_stock) and values.get("type", item.type) != ItemType.PRODUCT:
@@ -93,6 +96,8 @@ def update_item(
         _ensure_sku_free(db, ctx, values["sku"], item.id)
     if "price_inc_vat" in values:
         values["price_ex_vat"] = price_ex_vat_from_inc(values.pop("price_inc_vat"), values.get("vat_rate", item.vat_rate))
+    if any(getattr(item, field) != value for field, value in values.items()):  # a no-op save must not move the version
+        values["version"] = item.version + 1
     audit.apply_audited_update(db, ctx, item, "item", values)
     return _with_discounts(db, ctx, [item])[0]
 

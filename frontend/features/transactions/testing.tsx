@@ -124,6 +124,7 @@ export function item(id: string, name: string, overrides: Partial<Item> = {}): I
   return {
     id,
     number: 1,
+    version: 1,
     type: "service",
     name,
     description: null,

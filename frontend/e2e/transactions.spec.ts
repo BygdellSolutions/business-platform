@@ -197,7 +197,7 @@ test.describe("lines from the catalog", () => {
 
     // The catalog changes afterwards.
     const renamed = `${name} renamed`;
-    const edit = await context.request.patch(bffUrl(ORG_A.id, `/items/${item.id}`), { data: { name: renamed, price_ex_vat: "200.00", vat_rate: "6", unit: "visit" } });
+    const edit = await context.request.patch(bffUrl(ORG_A.id, `/items/${item.id}`), { data: { name: renamed, price_ex_vat: "200.00", vat_rate: "6", unit: "visit" }, headers: { "if-match": '"1"' } });
     expect(edit.status()).toBe(200);
     await page.reload();
 

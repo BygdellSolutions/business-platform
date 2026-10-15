@@ -229,6 +229,8 @@ export interface Item {
   track_stock: boolean;
   /** Below this quantity on hand the product is "low stock" (null: no threshold). */
   low_stock_threshold: QuantityString | null;
+  /** Optimistic concurrency: sent as If-Match when the item is changed. */
+  version: number;
   /** The temporary discount active today, if any (the price above never changes). */
   current_discount: ItemDiscount | null;
   /** Computed by the backend (never here): the base price incl. VAT, and while a temporary discount runs, the

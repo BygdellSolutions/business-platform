@@ -31,6 +31,7 @@ const customer: Customer = {
 const item: Item = {
   id: "i1",
   number: 1,
+  version: 1,
   type: "service",
   name: "Horse massage",
   description: null,

@@ -59,7 +59,7 @@ from app.modules.invoicing.schemas import (
 )
 from app.modules.sales.models import Transaction, TransactionLine, TransactionStatus
 from app.modules.sales.pricing import calculate_line, calculate_totals
-from app.modules.sales.versioning import ensure_current
+from app.core.versioning import ensure_current
 
 # Registry keys of the entities whose custom fields are flagged for invoices.
 TRANSACTION = "transaction"

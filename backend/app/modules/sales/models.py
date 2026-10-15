@@ -110,7 +110,7 @@ class Transaction(TenantOwned, Numbered, Authored, Base):
     status: Mapped[str] = mapped_column(
         String(16), default=TransactionStatus.DRAFT, server_default=text("'draft'")
     )
-    # Optimistic concurrency (see app/modules/sales/versioning.py). `version` changes with
+    # Optimistic concurrency (see app/core/versioning.py). `version` changes with
     # ANY change to the transaction: header, lines or status. `header_version` changes only
     # with the header (billing customer, date), so editing the header is not blocked by a
     # line that someone else changed.

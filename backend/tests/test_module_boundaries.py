@@ -69,7 +69,7 @@ def importers_of(prefix: str, *, allowed_dirs: tuple[Path, ...] = ()) -> list[st
 # The ONE deliberate exception: Invoicing builds on Sales and Custom Fields, so it may import these
 # submodules of theirs (and nothing else of theirs). The reverse is forbidden below.
 INVOICING_MAY_IMPORT = {
-    "app.modules.sales": ("models", "pricing", "versioning"),
+    "app.modules.sales": ("models", "pricing"),
     "app.modules.custom_fields": ("service", "schemas"),
 }
 

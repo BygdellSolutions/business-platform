@@ -16,6 +16,7 @@ function item(overrides: Partial<Item>): Item {
   return {
     id: "i1",
     number: 1,
+    version: 1,
     type: "service",
     name: "Horse massage",
     description: null,

@@ -50,7 +50,7 @@ Decided with this list: backup targets are up to 24 h of data lost and a restore
 | G10 | P | Rate limits beyond login (PDF, search, exports, account creation) | tests plus load run | 4 |
 | G11 | P | GDPR procedures: access, correction, erasure, export-before-delete, retention schedule, backup expiry stated | a sample request fulfilled; schedule published | 4 |
 | G12 | P | Dashboard, invoice eligibility and inventory summary fast on REALISTIC invoice, payment and stock histories | query plans; parity tests for rounding, delivery and credit rules; benchmark | 5 |
-| G13 | P | Conflict detection (`If-Match`) on prices (organization settings may follow launch) | two-tab tests | 5 |
+| G13 | P | Conflict detection (`If-Match`) on prices: DONE for items 2026-10-15 (organization settings may follow launch) | two-tab tests | 5 |
 | G15 | B | Swedish invoice requirements (SEK VAT, 0 % reason, registered office, OCR) | PDF checked against the requirement list AND reviewed by someone who knows the Swedish rules (for example the accountant) | 7a |
 | G16 | B | Horse journal J1-J5 with the agreed access rules | cross-tenant, role (owner/admin/employee yes; accountant/viewer no), own-entry finalize and correction tests; browser run on desktop and touch | 7b |
 | G17 | P | Password recovery and email verification work end to end | e2e plus throttle tests; no token logged | 8 |
@@ -272,7 +272,7 @@ Paying automatically creates the account and its setup link, replacing the opera
 - Custom-field values are last-writer-wins: saving a record's fields sends only what changed, but two tabs editing the same field overwrite each other. The same `version` + `If-Match` pattern as Sales can be added when needed.
 - A record's custom fields save together (the backend enforces required fields on every write), so a required field can never be set on its own while another required field is empty: the form saves, the backend answers 422 on the empty one.
 - Custom numbers come back from the backend normalized (`0.10` is stored and shown as `0.1`); the frontend shows exactly what it receives.
-- Optimistic concurrency covers Sales only. Customers, Items, Horses and custom-field values are still last-writer-wins; extend the same `version` + `If-Match` pattern when a screen needs it. Adding a line takes no version by design.
+- Optimistic concurrency covers Sales and Items (price, 2026-10-15; the helper now lives in `app/core/versioning.py`; adding or removing a temporary discount does not move the item's version). Customers, Horses and custom-field values are still last-writer-wins; extend the same `version` + `If-Match` pattern when a screen needs it. Adding a line takes no version by design.
 - Transaction editor V1: no change-item or detach on an existing line (the API supports both), no "delete draft" in the UI (Cancel exists), no line reordering, no autosave, and a stale line editor can only discard-and-reload (no "apply my edits on top of the latest").
 - A tab that is not looked at stays stale until it is (visibility refresh only, no polling), so a long-unattended tab can show an old transaction until someone returns to it.
 - EntityPicker V1: shows the first 20 matches (typing narrows; no "more results" hint or paging), searches on every keystroke (aborting the previous request, no debounce), has no inline "create a new customer", and its listbox has no Home/End/PageUp/PageDown keys. Reuse it for the billing customer, items and custom-field references; those need only a `search` function and a mapping to `{id, label}`.
