@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { PRIMARY_LINK } from "@/components/ui/Button";
 import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import type { JournalSummary } from "@/lib/api/types";
 import { formatTimestamp } from "@/lib/timestamps";
@@ -28,7 +29,12 @@ export function HorseJournalSection({
   const base = `/o/${orgId}/horses/${horseId}/journal`;
   return (
     <CollapsibleSection title="Journal of visits and treatments" count={entries.length} testId="journal-section" toggleTestId="journal-toggle">
-      <NewJournalEntry horseId={horseId} />
+      {/* The two things to do here, as the same kind of button: start a new entry, or open the whole journal. */}
+      <NewJournalEntry horseId={horseId}>
+        <Link href={base} className={PRIMARY_LINK} data-testid="journal-all">
+          {hasMore ? "Open the whole journal" : "Open the journal"}
+        </Link>
+      </NewJournalEntry>
       {entries.length === 0 ? (
         <p className="text-sm text-zinc-500" data-testid="no-journal-entries">
           No journal entries yet.
@@ -65,11 +71,7 @@ export function HorseJournalSection({
           </table>
         </div>
       )}
-      <p className="text-sm">
-        <Link href={base} className="underline" data-testid="journal-all">
-          {hasMore ? "All entries (there are more)" : "Open the journal"}
-        </Link>
-      </p>
+      {hasMore && <p className="text-sm text-zinc-500">Showing the latest {entries.length} entries; the journal has more.</p>}
     </CollapsibleSection>
   );
 }

@@ -33,12 +33,12 @@ const COLLEAGUES = [
 ];
 const answers: ApiResult<unknown>[] = [];
 /** The calls the editor made about the entry itself (not the list of colleagues it loads). */
-const calls = () => mocked.mock.calls.filter((call) => call[1] !== "/members/people");
+const calls = () => mocked.mock.calls.filter((call) => !String(call[1]).startsWith("/members/people"));
 
 beforeEach(() => {
   mocked.mockReset();
   answers.length = 0;
-  mocked.mockImplementation((async (_org: string, path: string) => (path === "/members/people" ? ok(COLLEAGUES) : (answers.shift() ?? fail(500, {})))) as never);
+  mocked.mockImplementation((async (_org: string, path: string) => (path.startsWith("/members/people") ? ok(COLLEAGUES) : (answers.shift() ?? fail(500, {})))) as never);
   router.refresh.mockReset();
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, width: 400, height: 300, right: 400, bottom: 300, x: 0, y: 0, toJSON: () => ({}) });
 });
@@ -138,10 +138,17 @@ describe("the practitioner", () => {
     expect(calls()[0][2]).toMatchObject({ method: "PATCH", body: { practitioner_user_id: COLLEAGUES[1].user_id }, ifMatch: 1 });
   });
 
-  it("shows the name of an old entry's practitioner who is not on the list, and sends nothing for it", async () => {
+  it("asks only for the people who work with the journal, and offers nobody else", async () => {
+    mount();
+    await screen.findByLabelText("Practitioner");
+    expect(mocked.mock.calls.some((call) => call[1] === "/members/people?journal=true")).toBe(true);
+    expect(mocked.mock.calls.some((call) => call[1] === "/members/people")).toBe(false); // not the list of every member
+  });
+
+  it("asks to choose someone for an old entry that has no practitioner on the list, and sends nothing for it", async () => {
     mount(entry({ practitioner_user_id: null, practitioner_name: "Former Colleague" }));
     const select = (await screen.findByLabelText("Practitioner")) as HTMLSelectElement;
-    expect(select.options[0].text).toBe("Former Colleague (not on the list)");
+    expect(select.options[0].text).toBe("Choose a practitioner"); // no confusing second copy of a name
     await userEvent.type(screen.getByLabelText(/Observations/), "x");
     answers.push(ok(entry({ body: "x", version: 2 })));
     await userEvent.click(screen.getByTestId("save-draft"));

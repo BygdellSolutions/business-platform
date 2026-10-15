@@ -237,6 +237,16 @@ def test_someone_who_is_not_a_member_cannot_be_chosen_and_the_free_text_name_is_
     assert client.post(_url(horse), json={"practitioner_name": "Typed by hand"}, headers=people["owner"]).status_code == 422
 
 
+def test_only_people_who_work_with_the_journal_can_be_the_practitioner_and_the_list_says_who(client: TestClient, world):
+    _, horse, people = world
+    for role in ("accountant", "viewer"):  # they have no journal, so they cannot be the one who did the work either
+        assert client.post(_url(horse), json={"practitioner_user_id": _id(people[role])}, headers=people["owner"]).status_code == 422
+    listed = client.get("/api/members/people", params={"journal": "true"}, headers=people["employee"]).json()
+    assert sorted(p["name"] for p in listed) == ["Admin Person", "Employee Person", "Other Employee", "Owner Person"]
+    everyone = client.get("/api/members/people", headers=people["employee"]).json()
+    assert len(everyone) == 6  # without the filter (used for services on orders) every member is listed
+
+
 def test_an_old_entry_keeps_the_name_the_practitioner_had(client: TestClient, db_session: Session, world):
     from sqlalchemy import text
 
@@ -392,3 +402,38 @@ def test_deleting_the_organization_removes_its_journals_even_the_finalized_ones(
 
     for table in ("horse_journal_entries", "horse_journal_corrections"):
         assert db_session.scalar(text(f"SELECT count(*) FROM {table} WHERE organization_id = :o"), {"o": org.id}) == 0
+
+
+def test_the_backfill_gives_old_entries_their_author_as_practitioner_and_leaves_the_freeze_in_place(client: TestClient, db_session: Session, world):
+    import importlib.util
+    from pathlib import Path
+
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    from sqlalchemy import text
+    from sqlalchemy.exc import DBAPIError
+
+    _, horse, people = world
+    mine = _create(client, horse, people["employee"], body="Draft by the employee")
+    final = _finalized(client, horse, people["owner"], body="Final by the owner")
+    renamed = _create(client, horse, people["admin"], body="Written under another name")
+    # make them look like entries from before the list existed
+    db_session.execute(text("ALTER TABLE horse_journal_entries DISABLE TRIGGER trg_horse_journal_entries_final_immutable"))
+    db_session.execute(text("UPDATE horse_journal_entries SET practitioner_user_id = NULL WHERE id IN (:a, :b, :c)"), {"a": mine["id"], "b": final["id"], "c": renamed["id"]})
+    db_session.execute(text("UPDATE horse_journal_entries SET practitioner_name = 'Someone Else' WHERE id = :c"), {"c": renamed["id"]})
+    db_session.execute(text("ALTER TABLE horse_journal_entries ENABLE TRIGGER trg_horse_journal_entries_final_immutable"))
+
+    path = Path(__file__).resolve().parents[1] / "alembic" / "versions" / "b8d0f2a4c6e7_journal_practitioner_backfill.py"
+    spec = importlib.util.spec_from_file_location("backfill", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    with Operations.context(MigrationContext.configure(db_session.connection())):
+        module.upgrade()
+
+    ids = {row[0]: row[1] for row in db_session.execute(text("SELECT id::text, practitioner_user_id::text FROM horse_journal_entries"))}
+    assert ids[mine["id"]] == _id(people["employee"]) and ids[final["id"]] == _id(people["owner"])  # the author, where the name says so
+    assert ids[renamed["id"]] is None  # a name that is not the author's stays a name
+    nested = db_session.begin_nested()
+    with pytest.raises(DBAPIError, match="finalized journal entry"):  # the freeze is back on
+        db_session.execute(text("UPDATE horse_journal_entries SET body = 'x' WHERE id = :i"), {"i": final["id"]})
+    nested.rollback()

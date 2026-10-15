@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -67,14 +67,22 @@ def read_members(ctx: TenantContext = Depends(roles_required(Role.OWNER, Role.AD
 
 
 @router.get("/people", response_model=list[Colleague])
-def read_colleagues(ctx: TenantContext = Depends(get_tenant_context), db: Session = Depends(get_db)) -> list[Colleague]:
-    """Every member's name, for any member (who performed a service). The full list stays owners' and admins'."""
-    rows = db.execute(
+def read_colleagues(
+    journal: bool = Query(default=False, description="Only those who work with the horse journal (owner, admin, employee)"),
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: Session = Depends(get_db),
+) -> list[Colleague]:
+    """Every member's name, for any member (who performed a service). The full list stays owners' and admins'.
+    With `journal`, only the people who can be the practitioner of a journal entry (an accountant or a viewer has no journal)."""
+    query = (
         select(User.id, User.name)
         .join(OrganizationUser, OrganizationUser.user_id == User.id)
         .where(OrganizationUser.organization_id == ctx.organization_id)
         .order_by(User.name, User.id)
-    ).all()
+    )
+    if journal:
+        query = query.where(OrganizationUser.role.in_([Role.OWNER.value, Role.ADMIN.value, Role.EMPLOYEE.value]))
+    rows = db.execute(query).all()
     return [Colleague(user_id=user_id, name=name) for user_id, name in rows]
 
 

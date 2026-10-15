@@ -34,7 +34,8 @@ from app.modules.equine.models import DIAGRAM_VERSION, JOURNAL_DRAFT, JOURNAL_FI
 
 router = APIRouter(prefix="/{horse_id}/journal", tags=["horse journal"])
 
-journal_access = roles_required(Role.OWNER, Role.ADMIN, Role.EMPLOYEE)
+JOURNAL_ROLES = (Role.OWNER, Role.ADMIN, Role.EMPLOYEE)
+journal_access = roles_required(*JOURNAL_ROLES)
 CHANGE_ANY = (Role.OWNER, Role.ADMIN)
 PREVIEW_LENGTH = 160
 # What the horse's history records of an entry. The text and the marks are the journal's own content and are not copied into the
@@ -43,9 +44,12 @@ AUDITED = ("visit_at", "practitioner_user_id", "practitioner_name", "follow_up_o
 
 
 def _practitioner(db: Session, ctx: TenantContext, user_id: uuid.UUID) -> User:
-    """The chosen practitioner: a member of THIS organization (anyone else, or a made-up id, is refused alike)."""
+    """The chosen practitioner: a member of THIS organization who works with the journal (owner, admin or employee: an accountant or
+    a viewer has no journal), anyone else or a made-up id being refused alike."""
     member = db.scalar(
-        select(User).join(OrganizationUser, OrganizationUser.user_id == User.id).where(OrganizationUser.organization_id == ctx.organization_id, User.id == user_id)
+        select(User)
+        .join(OrganizationUser, OrganizationUser.user_id == User.id)
+        .where(OrganizationUser.organization_id == ctx.organization_id, OrganizationUser.role.in_([role.value for role in JOURNAL_ROLES]), User.id == user_id)
     )
     if member is None:
         reference_error("practitioner_user_id", "Choose a member of this organization", "reference.not_found")

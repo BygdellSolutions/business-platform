@@ -76,6 +76,12 @@ test("an entry is drawn, written, saved, reloaded, finalized and corrected", asy
   await page.getByTestId("journal-toggle").getByRole("heading", { name: /Journal of visits and treatments/ }).click();
   await expect(page.getByTestId("journal-section").getByTestId("journal-row")).toHaveCount(1);
   await expect(page.getByTestId("journal-section").getByTestId("entry-status")).toHaveText("Finalized");
+  // the two things to do here look alike: "New entry" and "Open the journal" are the same kind of button
+  const [fresh, open] = [page.getByTestId("new-journal-entry"), page.getByTestId("journal-all")];
+  await expect(open).toHaveText("Open the journal");
+  const [a, b] = [await fresh.boundingBox(), await open.boundingBox()];
+  expect(a && b && Math.abs(a.height - b.height) < 1).toBe(true);
+  expect(await fresh.evaluate((e) => getComputedStyle(e).backgroundColor)).toBe(await open.evaluate((e) => getComputedStyle(e).backgroundColor));
 });
 
 test("the practitioner is chosen from the organization's members, like who performed a service on an order", async ({ page, context }) => {

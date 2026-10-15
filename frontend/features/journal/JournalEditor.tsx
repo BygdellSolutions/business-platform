@@ -58,7 +58,7 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
 
   useEffect(() => {
     const controller = new AbortController();
-    void apiFetch<Colleague[]>(orgId, "/members/people", { signal: controller.signal }).then((result) => {
+    void apiFetch<Colleague[]>(orgId, "/members/people?journal=true", { signal: controller.signal }).then((result) => {
       if (result.ok) setColleagues(result.data);
     });
     return () => controller.abort();
@@ -134,7 +134,7 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
           <FieldShell label="Practitioner" name="practitioner_user_id" error={problems.byField.practitioner_user_id}>
             {(control) => (
               <select {...control} value={practitioner} onChange={(event) => setPractitioner(event.target.value)} className={CONTROL}>
-                {saved.practitioner_user_id === null && <option value="">{saved.practitioner_name} (not on the list)</option>}
+                {saved.practitioner_user_id === null && <option value="">Choose a practitioner</option>}
                 {colleagues.length === 0 && saved.practitioner_user_id !== null && <option value={saved.practitioner_user_id}>{saved.practitioner_name}</option>}
                 {colleagues.map((colleague) => (
                   <option key={colleague.user_id} value={colleague.user_id}>
