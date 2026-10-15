@@ -126,6 +126,22 @@ describe("saving marks", () => {
   });
 });
 
+describe("the visit date", () => {
+  it("is a day, not a time: shown as a date, and a changed day is saved as noon of that day", async () => {
+    answers.push(ok(entry({ visit_at: "2026-11-03T12:00:00Z", version: 2 })));
+    mount();
+    const field = screen.getByLabelText("Visit date") as HTMLInputElement;
+    expect(field.type).toBe("date");
+    expect(field.value).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(screen.queryByLabelText(/Visit date and time/)).toBeNull();
+    fireEvent.change(field, { target: { value: "2026-11-03" } });
+    await userEvent.click(screen.getByTestId("save-draft"));
+    const sent = (calls()[0][2] as { body: { visit_at: string } }).body.visit_at;
+    expect(new Date(sent).getHours()).toBe(12); // noon in the browser's own time zone
+    expect(sent.startsWith("2026-11-03") || sent.startsWith("2026-11-02") || sent.startsWith("2026-11-04")).toBe(true);
+  });
+});
+
 describe("the practitioner", () => {
   it("is chosen from the organization's members, like who performed a service on an order, and saved by id", async () => {
     answers.push(ok(entry({ practitioner_user_id: COLLEAGUES[1].user_id, practitioner_name: "Erik Employee", version: 2 })));

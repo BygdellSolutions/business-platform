@@ -21,12 +21,15 @@ const TOOLS: { tool: ActiveTool; label: string }[] = [
   ...(["line", "arrow", "x", "o"] as MarkTool[]).map((tool) => ({ tool, label: TOOL_LABELS[tool] })),
 ];
 
-/** An ISO instant as the value of a `datetime-local` input (the browser's own time zone). */
+/** The day of a stored instant as the value of a date input (the browser's own time zone). The time of day is not kept track of. */
 function toLocalInput(iso: string): string {
   const date = new Date(iso);
   const part = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${part(date.getMonth() + 1)}-${part(date.getDate())}T${part(date.getHours())}:${part(date.getMinutes())}`;
+  return `${date.getFullYear()}-${part(date.getMonth() + 1)}-${part(date.getDate())}`;
 }
+
+/** A chosen day as the instant that is stored: noon that day, so a day is the same day wherever it is shown. */
+const noonOf = (day: string): string => new Date(`${day}T12:00:00`).toISOString();
 
 /**
  * Writing a journal entry (a draft): when and who, one horse diagram per side with drawing marks, and one text. Nothing is saved
@@ -79,7 +82,7 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
 
   function changes(): JournalUpdate {
     const update: JournalUpdate = {};
-    if (visitAt !== toLocalInput(saved.visit_at) && visitAt !== "") update.visit_at = new Date(visitAt).toISOString();
+    if (visitAt !== toLocalInput(saved.visit_at) && visitAt !== "") update.visit_at = noonOf(visitAt);
     if (practitioner !== (saved.practitioner_user_id ?? "") && practitioner !== "") update.practitioner_user_id = practitioner;
     if (body !== saved.body) update.body = body;
     if (followUp !== (saved.follow_up_on ?? "")) update.follow_up_on = followUp === "" ? null : followUp;
@@ -138,8 +141,8 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
       <div className="panel flex flex-col gap-3">
         <h2 className="text-lg font-semibold">Visit</h2>
         <div className="grid gap-3 sm:grid-cols-3">
-          <FieldShell label="Visit date and time" name="visit_at" error={problems.byField.visit_at}>
-            {(control) => <input type="datetime-local" {...control} value={visitAt} onChange={(event) => setVisitAt(event.target.value)} className={CONTROL} />}
+          <FieldShell label="Visit date" name="visit_at" error={problems.byField.visit_at}>
+            {(control) => <input type="date" {...control} value={visitAt} onChange={(event) => setVisitAt(event.target.value)} className={CONTROL} />}
           </FieldShell>
           <FieldShell label="Practitioner" name="practitioner_user_id" error={problems.byField.practitioner_user_id}>
             {(control) => (
@@ -158,7 +161,7 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
             {(control) => <input type="date" {...control} value={followUp} onChange={(event) => setFollowUp(event.target.value)} className={CONTROL} />}
           </FieldShell>
         </div>
-        <p className="text-xs text-zinc-500">The visit time is in your own time zone.</p>
+        
       </div>
 
       <div className="panel flex flex-col gap-3">

@@ -10,7 +10,7 @@ import { TextAreaField } from "@/components/ui/Field";
 import { apiFetch } from "@/lib/api/client";
 import type { JournalEntry } from "@/lib/api/types";
 import { problemsFrom, useMutation } from "@/lib/forms";
-import { formatTimestamp } from "@/lib/timestamps";
+import { formatDay, formatTimestamp } from "@/lib/timestamps";
 import { DiagramCanvas } from "./DiagramCanvas";
 import { describe, numberOf, SIDE_LABELS } from "./marks";
 
@@ -37,7 +37,7 @@ export function JournalEntryView({ entry, timeZone }: { entry: JournalEntry; tim
     <div className="flex max-w-3xl flex-col gap-4" data-testid="journal-entry">
       <div className="panel flex flex-col gap-1 text-sm">
         <p data-testid="entry-visit">
-          <strong>Visit:</strong> {formatTimestamp(entry.visit_at, timeZone)} · <strong>Practitioner:</strong> {entry.practitioner_name}
+          <strong>Visit:</strong> {formatDay(entry.visit_at, timeZone)} · <strong>Practitioner:</strong> {entry.practitioner_name}
         </p>
         {entry.follow_up_on && (
           <p data-testid="entry-follow-up">

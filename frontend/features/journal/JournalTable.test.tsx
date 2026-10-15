@@ -15,11 +15,11 @@ describe("the journal table", () => {
   it("has the columns No., Visit, By, Status, Marks and Notes, one row per entry", () => {
     render(<JournalTable orgId={ORG} horseId={HORSE} entries={[row(12, { follow_up_on: "2026-10-29" }), row(11, { status: "final", mark_count: 0, preview: "Back to work" })]} timeZone="Europe/Stockholm" />);
     const headings = within(screen.getByTestId("journal-table")).getAllByRole("columnheader").map((heading) => heading.textContent?.trim());
-    expect(headings).toEqual(["No.", "Visit", "By", "Status", "Marks", "Follow-up", "Notes"]);
+    expect(headings).toEqual(["No.", "Visit", "Follow-up", "By", "Status", "Marks", "Notes"]);
     const rows = screen.getAllByTestId("journal-row");
     expect(rows).toHaveLength(2);
     expect(within(rows[0]).getByTestId("record-number").textContent).toBe("12");
-    expect(within(rows[0]).getByTestId("entry-visit").textContent).toBe("2026-10-15 14:30"); // in the organization's time zone
+    expect(within(rows[0]).getByTestId("entry-visit").textContent).toBe("2026-10-15"); // the day only, in the organization's time zone
     expect(within(rows[0]).getByTestId("entry-status").textContent).toBe("Draft");
     expect(within(rows[0]).getByTestId("entry-follow-up").textContent).toBe("2026-10-29"); // the follow-up date is in the table
     expect(within(rows[1]).getByTestId("entry-follow-up").textContent).toBe(""); // none set: nothing

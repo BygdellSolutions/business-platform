@@ -140,7 +140,7 @@ for its text and marks)."""
         "marks": func.jsonb_array_length(HorseJournalEntry.marks),
         "follow_up": HorseJournalEntry.follow_up_on,
     }
-    ordered = sorted_by(query, sort, columns, (HorseJournalEntry.visit_at.desc(), HorseJournalEntry.id))
+    ordered = sorted_by(query, sort, columns, (HorseJournalEntry.visit_at.desc(), HorseJournalEntry.number.desc()))
     entries = list(db.scalars(ordered.limit(page.limit).offset(page.offset)))
     names = _names(db, entries)
     return [

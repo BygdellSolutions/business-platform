@@ -73,10 +73,11 @@ test("an entry is drawn, written, saved, reloaded, finalized and corrected", asy
   // a table like the other lists: No., Visit, By, Status, Marks, Notes
   const headings = page.getByTestId("journal-table").getByRole("columnheader");
   await expect(headings).toHaveCount(7);
-  for (const [index, label] of ["No.", "Visit", "By", "Status", "Marks", "Follow-up", "Notes"].entries()) await expect(headings.nth(index)).toContainText(label);
+  for (const [index, label] of ["No.", "Visit", "Follow-up", "By", "Status", "Marks", "Notes"].entries()) await expect(headings.nth(index)).toContainText(label);
   await expect(page.getByTestId("journal-row").getByTestId("record-number")).toHaveText("1");
   await expect(page.getByTestId("journal-row").getByTestId("entry-follow-up")).toHaveText("2026-11-12"); // the follow-up date is in the list
   await expect(page.getByTestId("journal-row")).toContainText("Stiff left shoulder");
+  await expect(page.getByTestId("journal-row").getByTestId("entry-visit")).toHaveText(/^\d{4}-\d{2}-\d{2}$/); // the day, no time of day
 
   // and the entry is listed in the journal section of the horse's own page
   await page.goto(`/o/${world.orgId}/horses/${horse.id}`);

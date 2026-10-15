@@ -5,6 +5,7 @@ All notable changes to `business-platform` will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- In the journal the visit is a day, not a time: the table and the entry show the date only, the editor asks for a "Visit date" (saved as noon of that day), and the Follow-up column now comes right after Visit. Entries of the same day are listed highest number first.
 - The journal table (the journal page and the quick view on the horse's page) has a Follow-up column with the follow-up date of each entry, sortable on the journal page (entries without one come last).
 - The journal as a table like the other lists (No., Visit, By, Status, Marks, Notes): sortable headings, a date range and 25 to a page on the journal page, the same table in the section on the horse's page. Every entry has a number per organization (1, 2, 3 ...; migration c9e1a3b5d7f8). A DRAFT can be deleted ("Delete draft", with a question first, by its author, an admin or an owner, against the version seen); a finalized entry can never be deleted, not even by an owner, and the database refuses it too. The horse history records a deletion, not the text.
 - Numbered marks in the journal: every mark has a number shown in a badge on the horse picture and in the list below it, so the notes can say "see mark 3". A number stays with its mark (deleting mark 2 does not turn mark 3 into 2) and is never given to another mark of the entry; marks sent without a number are numbered by the backend.
