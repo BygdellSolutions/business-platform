@@ -2,9 +2,10 @@ import { redirect } from "next/navigation";
 
 import { Notice } from "@/components/ui/Notice";
 import { ChangePasswordForm } from "@/features/account/ChangePasswordForm";
+import { SessionsPanel } from "@/features/account/SessionsPanel";
 import { authMode } from "@/lib/auth/config";
 import { loginPath, requireCredential } from "@/lib/auth/credential";
-import { getCurrentUser } from "@/lib/orgs";
+import { getCurrentUser, getOwnSessions } from "@/lib/orgs";
 
 export const dynamic = "force-dynamic"; // depends on AUTH_MODE at run time, never on the build's environment
 
@@ -17,6 +18,9 @@ export default async function AccountPage() {
   const current = await getCurrentUser(credential);
   if (current.status === "unauthorized") redirect(loginPath("/account"));
   if (current.status === "unavailable") throw new Error("The backend is unavailable");
+
+  const own = authMode() === "session" ? await getOwnSessions(credential) : null;
+  if (own?.status === "unauthorized") redirect(loginPath("/account"));
 
   return (
     <main className="mx-auto flex max-w-xl flex-col gap-6 p-8">
@@ -34,6 +38,12 @@ export default async function AccountPage() {
           <Notice testId="no-passwords">This environment uses the development sign-in, which has no passwords.</Notice>
         )}
       </section>
+      {authMode() === "session" && (
+        <section className="panel flex max-w-xl flex-col gap-3" aria-label="Where you are signed in">
+          <h2 className="text-lg font-semibold">Where you are signed in</h2>
+          {own?.status === "ok" ? <SessionsPanel initial={own.sessions} /> : <Notice tone="error" testId="sessions-unavailable">Your sessions could not be loaded.</Notice>}
+        </section>
+      )}
       {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
       <a href="/" className="text-sm underline">Back to your organizations</a>
     </main>

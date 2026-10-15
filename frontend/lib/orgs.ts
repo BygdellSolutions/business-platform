@@ -4,6 +4,7 @@ import { cache } from "react";
 
 import type { Credential } from "@/lib/auth/credential";
 import { backendFetch } from "@/lib/backend";
+import { parseSessionList, type OwnSession } from "@/lib/auth/own-sessions";
 import type { Membership } from "@/lib/api/types";
 
 export type MembershipsResult =
@@ -37,6 +38,21 @@ export interface CurrentUser {
   /** How many organizations it may create (historical name). Owning an existing organization never counts. */
   max_owned_organizations: number;
 }
+
+export type OwnSessionsResult = { status: "ok"; sessions: OwnSession[] } | { status: "unauthorized" } | { status: "unavailable" };
+
+/** The signed-in person's own sessions (FastAPI scopes them to the caller), reduced to the fields the account page shows. */
+export const getOwnSessions = cache(async (credential: Credential): Promise<OwnSessionsResult> => {
+  let response: Response;
+  try {
+    response = await backendFetch({ credential }, "/api/auth/sessions");
+  } catch {
+    return { status: "unavailable" };
+  }
+  if (response.status === 401) return { status: "unauthorized" };
+  const sessions = response.ok ? parseSessionList(await response.json().catch(() => null)) : null;
+  return sessions === null ? { status: "unavailable" } : { status: "ok", sessions };
+});
 
 export type CurrentUserResult = { status: "ok"; user: CurrentUser } | { status: "unauthorized" } | { status: "unavailable" };
 

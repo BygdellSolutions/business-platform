@@ -32,6 +32,20 @@ class ChangePasswordRequest(BaseModel):
     new_password: str = Field(max_length=4096)
 
 
+class SessionInfo(BaseModel):
+    """One of the caller's own signed-in browsers. Never a token, a hash or an address: only what a person can recognise."""
+
+    id: str
+    created_at: datetime
+    last_used_at: datetime
+    user_agent: str | None
+    current: bool
+
+
+class SessionsEnded(BaseModel):
+    ended: int
+
+
 class AuthUser(BaseModel):
     id: str
     email: str

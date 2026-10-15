@@ -160,7 +160,7 @@ The worker foundation moved to its own section above; email delivery needs it fi
 - [ ] Links in email stay one-time credentials: token in the URL fragment, short expiry, single use, never logged by the application; check the provider's logging/retention of message bodies
 - [ ] Provider credential is a secret of the backend only (runtime-only Coolify variable), with a send-failure path that never blocks or leaks the token (the copy-link flow remains as a fallback)
 
-## Common-password blocklist (decided by the owner 2026-10-13; not started)
+## Common-password blocklist (BUILT 2026-10-15, see CHANGELOG; the requirement list below is kept for reference)
 - [ ] Reject new passwords that appear on a list of common/breached passwords, in addition to the 12-character minimum (NIST SP 800-63B). Requirements:
   - **Local list only, no network call** (decided: people must never wait for an outside API, and sign-up must not depend on one). The HIBP API was considered and rejected for that reason.
   - A top 10k–100k common-password file shipped with the backend, loaded once into an in-memory set at startup; compare case-insensitively after trimming.
@@ -180,7 +180,7 @@ Items already tracked elsewhere (D5 client address, global session revocation, s
 - [ ] **Email verification** (depends on email delivery): copy-link invitations never prove the user owns the address.
 - [ ] **Rate limits beyond login**, per user and per organization: PDF generation, exports, list/search endpoints, account creation. Per-source limits need the D5 client address.
 - [ ] **Alerting on security events**: notify the operator on bursts of failed logins, throttling, lockouts, owner changes; today they are only recorded.
-- [ ] **Account screens**: the password change page exists (`/account`, slice 4); still missing: a list of one's sessions and "sign out everywhere" (the backend has the data).
+- [x] **Account screens (2026-10-15):** `/account` now has the password change AND "Where you are signed in": the person's own sessions (browser, signed in, last active, this browser marked), sign out one, sign out all others, sign out everywhere (this browser included). Backend `GET /api/auth/sessions`, `DELETE /api/auth/sessions/{id}`, `POST /api/auth/sessions/end-others|end-all`, scoped to the caller (another person's id is a 404).
 - [ ] Before growth: an external penetration test; `security.txt` and a way to report vulnerabilities. SSO only when a customer asks.
 
 ## SaaS-owner administration dashboard (idea agreed 2026-10-13; not implemented)

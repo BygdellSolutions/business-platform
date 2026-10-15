@@ -44,7 +44,7 @@ describe("client code and the session", () => {
   it.each(CLIENT.map((file) => [rel(file), file]))("%s never names the session cookie or reads cookies other than the CSRF cookie", (_name, file) => {
     const source = read(file);
     expect(source).not.toMatch(/bp_session|__Host-bp_session|bp_dev_user|bp_pre/);
-    if (/document\.cookie/.test(source)) expect(["lib/api/client.ts", "components/shell/SignOut.tsx", "features/account/ChangePasswordForm.tsx"]).toContain(rel(file)); // the CSRF cookie only
+    if (/document\.cookie/.test(source)) expect(["lib/api/client.ts", "components/shell/SignOut.tsx", "features/account/ChangePasswordForm.tsx", "features/account/SessionsPanel.tsx"]).toContain(rel(file)); // the CSRF cookie only
   });
 
   it("the shared cookie constants name the CSRF cookie only (never the session cookie)", () => {

@@ -5,7 +5,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { authConfig } from "@/lib/auth/config";
 import { isToken } from "@/lib/auth/cookies";
 import { credentialFromRequest } from "@/lib/auth/credential";
-import { clientAddress, originProblem, validPreAuth } from "@/lib/auth/request";
+import { clientAddress, originProblem, validCsrf, validPreAuth } from "@/lib/auth/request";
 import { clearPreAuthCookie, setSessionCookies } from "@/lib/auth/session-cookies";
 import { backendFetch } from "@/lib/backend";
 import { readBodyText } from "@/lib/request-body";
@@ -51,6 +51,30 @@ export async function readJsonObject(request: NextRequest): Promise<Record<strin
     return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * A call to one of the signed-in person's OWN session endpoints (list, end one, end the others, end all). A change must pass
+ * the same Origin and CSRF double-submit checks as every other state change; the credential comes from the cookie. Returns the
+ * answer to send when the request is refused here, or FastAPI's answer to interpret (a fixed set of statuses, never its text).
+ */
+export async function callOwnSessions(request: NextRequest, path: string, method: "GET" | "POST" | "DELETE"): Promise<{ refused: NextResponse } | { upstream: Response }> {
+  const notSession = sessionModeOnly();
+  if (notSession) return { refused: notSession };
+  let csrf: string | undefined;
+  if (method !== "GET") {
+    if (originProblem(request) !== null) return { refused: problem(403, "forbidden_origin", "This request was not accepted.") };
+    const valid = validCsrf(request);
+    if (valid === null) return { refused: problem(403, "csrf_failed", "This request could not be verified.") };
+    csrf = valid;
+  }
+  const credential = credentialFromRequest(request);
+  if (credential === null) return { refused: problem(401, "unauthenticated", "Sign in again.") };
+  try {
+    return { upstream: await backendFetch({ credential }, path, { method, csrf }) };
+  } catch {
+    return { refused: problem(502, "unavailable", "Your sessions are unavailable right now.") };
   }
 }
 

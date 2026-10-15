@@ -3,7 +3,10 @@
 Called by the BFF, never by a browser. They answer "who is this?" and never anything about organizations.
 """
 
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core import auth_service, clock, ownership, security_events, sessions
@@ -11,7 +14,8 @@ from app.core.auth import get_current_user
 from app.core.config import settings
 from app.core.db import get_db
 from app.models import User
-from app.schemas.auth import AuthUser, ChangePasswordRequest, LoginRequest, SessionResponse, SetupRequest
+from app.models.auth import AuthSession
+from app.schemas.auth import AuthUser, ChangePasswordRequest, LoginRequest, SessionInfo, SessionResponse, SessionsEnded, SetupRequest
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -133,3 +137,51 @@ def change_password(
     except auth_service.AuthBusy:
         raise _busy()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# --- the caller's own sessions ---------------------------------------------------------------------------------------------------------------------
+# A person sees and ends only THEIR sessions: every query is scoped to the authenticated user, and another user's session id
+# answers 404 exactly like an unknown one. Ending is a mutating request, so get_current_user also demands the CSRF token.
+
+
+@router.get("/sessions", response_model=list[SessionInfo], dependencies=[Depends(session_mode_only)])
+def list_sessions(request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> list[SessionInfo]:
+    current = sessions.current_session(request)
+    rows = db.scalars(
+        select(AuthSession).where(AuthSession.user_id == user.id, *sessions.usable(clock.utcnow())).order_by(AuthSession.last_used_at.desc(), AuthSession.id)
+    )
+    return [SessionInfo(id=str(row.id), created_at=row.created_at, last_used_at=row.last_used_at, user_agent=row.user_agent, current=row.id == current.id) for row in rows]
+
+
+@router.post("/sessions/end-others", response_model=SessionsEnded, dependencies=[Depends(session_mode_only)])
+def end_other_sessions(request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> SessionsEnded:
+    """Sign out everywhere else: every session of the caller except this one."""
+    now = clock.utcnow()
+    ended = sessions.revoke_all_for_user(db, user.id, "logout", now, except_session_id=sessions.current_session(request).id)
+    security_events.record(db, "logout", now, actor_user_id=user.id, source=security_events.client_source(request), detail=f"others={ended}")
+    db.commit()
+    return SessionsEnded(ended=ended)
+
+
+@router.post("/sessions/end-all", response_model=SessionsEnded, dependencies=[Depends(session_mode_only)])
+def end_all_sessions(request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> SessionsEnded:
+    """Sign out everywhere, this browser included."""
+    now = clock.utcnow()
+    ended = sessions.revoke_all_for_user(db, user.id, "logout", now)
+    security_events.record(db, "logout", now, actor_user_id=user.id, source=security_events.client_source(request), detail=f"all={ended}")
+    db.commit()
+    return SessionsEnded(ended=ended)
+
+
+@router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(session_mode_only)])
+def end_session(session_id: uuid.UUID, request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> Response:
+    """End one of the caller's sessions (another person's, an ended one and an unknown one are all the same 404)."""
+    now = clock.utcnow()
+    row = db.scalar(select(AuthSession).where(AuthSession.id == session_id, AuthSession.user_id == user.id, *sessions.usable(now)))
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Not found")
+    sessions.revoke(db, row.id, "logout", now)
+    security_events.record(db, "logout", now, actor_user_id=user.id, source=security_events.client_source(request), detail="one")
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
