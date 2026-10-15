@@ -124,7 +124,7 @@ def list_entries(
     ctx: TenantContext = Depends(journal_access),
     db: Session = Depends(get_db),
 ) -> list[JournalSummary]:
-    """The horse's entries, newest visit first unless sorted (number, visit, by, status, marks); each row is a summary (open an entry
+    """The horse's entries, newest visit first unless sorted (number, visit, by, status, marks, follow_up); each row is a summary (open an entry
 for its text and marks)."""
     get_scoped_or_404(db, ctx, Horse, horse_id)
     query = scoped_select(HorseJournalEntry, ctx).where(HorseJournalEntry.horse_id == horse_id)
@@ -138,6 +138,7 @@ for its text and marks)."""
         "by": func.lower(HorseJournalEntry.practitioner_name),
         "status": HorseJournalEntry.status,
         "marks": func.jsonb_array_length(HorseJournalEntry.marks),
+        "follow_up": HorseJournalEntry.follow_up_on,
     }
     ordered = sorted_by(query, sort, columns, (HorseJournalEntry.visit_at.desc(), HorseJournalEntry.id))
     entries = list(db.scalars(ordered.limit(page.limit).offset(page.offset)))

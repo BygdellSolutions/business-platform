@@ -514,4 +514,6 @@ def test_entries_have_numbers_per_organization_and_the_list_sorts_by_its_columns
     assert order(sort="visit") == [1, 3, 2]
     assert order(sort="by") == [3, 2, 1]  # Admin, Employee, Owner
     assert order(sort="marks", dir="desc")[0] == 1  # the one with a mark first
+    client.patch(_url(horse, b), json={"follow_up_on": "2026-11-20"}, headers={**people["owner"], **_if_match(b)})
+    assert order(sort="follow_up")[0] == 2 and order(sort="follow_up", dir="desc")[0] == 2  # entries without a follow-up date come last either way
     assert client.get(_url(horse), params={"sort": "preview"}, headers=people["owner"]).status_code == 422  # a column the list does not offer

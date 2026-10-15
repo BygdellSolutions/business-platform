@@ -13,14 +13,16 @@ const row = (number: number, overrides: Partial<JournalSummary> = {}): JournalSu
 
 describe("the journal table", () => {
   it("has the columns No., Visit, By, Status, Marks and Notes, one row per entry", () => {
-    render(<JournalTable orgId={ORG} horseId={HORSE} entries={[row(12), row(11, { status: "final", mark_count: 0, preview: "Back to work" })]} timeZone="Europe/Stockholm" />);
+    render(<JournalTable orgId={ORG} horseId={HORSE} entries={[row(12, { follow_up_on: "2026-10-29" }), row(11, { status: "final", mark_count: 0, preview: "Back to work" })]} timeZone="Europe/Stockholm" />);
     const headings = within(screen.getByTestId("journal-table")).getAllByRole("columnheader").map((heading) => heading.textContent?.trim());
-    expect(headings).toEqual(["No.", "Visit", "By", "Status", "Marks", "Notes"]);
+    expect(headings).toEqual(["No.", "Visit", "By", "Status", "Marks", "Follow-up", "Notes"]);
     const rows = screen.getAllByTestId("journal-row");
     expect(rows).toHaveLength(2);
     expect(within(rows[0]).getByTestId("record-number").textContent).toBe("12");
     expect(within(rows[0]).getByTestId("entry-visit").textContent).toBe("2026-10-15 14:30"); // in the organization's time zone
     expect(within(rows[0]).getByTestId("entry-status").textContent).toBe("Draft");
+    expect(within(rows[0]).getByTestId("entry-follow-up").textContent).toBe("2026-10-29"); // the follow-up date is in the table
+    expect(within(rows[1]).getByTestId("entry-follow-up").textContent).toBe(""); // none set: nothing
     expect(within(rows[1]).getByTestId("entry-status").textContent).toBe("Finalized");
     expect(rows[1].textContent).toContain("Back to work");
   });
@@ -31,7 +33,7 @@ describe("the journal table", () => {
   });
 
   it("sorts by a column through its heading when it is given the addresses, and has plain headings otherwise", () => {
-    const hrefs = { number: "/n", visit: "/v", by: "/b", status: "/s", marks: "/m" };
+    const hrefs = { number: "/n", visit: "/v", by: "/b", status: "/s", marks: "/m", follow_up: "/f" };
     const { unmount } = render(<JournalTable orgId={ORG} horseId={HORSE} entries={[row(1)]} timeZone={null} sort={{ current: "visit", dir: "desc", hrefs }} />);
     expect(screen.getByRole("link", { name: /Visit/ }).getAttribute("href")).toBe("/v");
     expect(screen.getByRole("columnheader", { name: /Visit/ }).getAttribute("aria-sort")).toBe("descending");

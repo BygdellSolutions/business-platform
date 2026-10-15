@@ -11,7 +11,7 @@ import { backendQuery, listHref, pageOf, parseListParams, sortHref } from "@/lib
 import { canUseJournal } from "@/lib/roles";
 import { requireUuid, serverRead } from "@/lib/server-api";
 
-const SORTS = ["number", "visit", "by", "status", "marks"] as const;
+const SORTS = ["number", "visit", "by", "status", "marks", "follow_up"] as const;
 
 /** The horse's journal as a table like the other lists: sortable columns, a date range, 25 to a page. Accountants and viewers have no access. */
 export default async function JournalPage({

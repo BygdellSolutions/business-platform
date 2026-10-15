@@ -45,6 +45,7 @@ test("an entry is drawn, written, saved, reloaded, finalized and corrected", asy
   await expect(page.getByTestId("marks-list").locator("li").first()).toContainText("1. X on the horse's left side");
   await expect(page.getByTestId("marks-list").locator("li").nth(1)).toContainText("2. Arrow on the horse's left side");
 
+  await page.getByLabel("Follow-up date (optional)").fill("2026-11-12");
   await page.getByLabel(/Observations/).fill("Stiff left shoulder.\nTreated with massage; better afterwards.");
   await expect(page.getByTestId("save-status")).toHaveText("Unsaved changes");
   await page.getByTestId("save-draft").click();
@@ -71,9 +72,10 @@ test("an entry is drawn, written, saved, reloaded, finalized and corrected", asy
   await expect(page.getByTestId("entry-status")).toHaveText("Finalized");
   // a table like the other lists: No., Visit, By, Status, Marks, Notes
   const headings = page.getByTestId("journal-table").getByRole("columnheader");
-  await expect(headings).toHaveCount(6);
-  for (const [index, label] of ["No.", "Visit", "By", "Status", "Marks", "Notes"].entries()) await expect(headings.nth(index)).toContainText(label);
+  await expect(headings).toHaveCount(7);
+  for (const [index, label] of ["No.", "Visit", "By", "Status", "Marks", "Follow-up", "Notes"].entries()) await expect(headings.nth(index)).toContainText(label);
   await expect(page.getByTestId("journal-row").getByTestId("record-number")).toHaveText("1");
+  await expect(page.getByTestId("journal-row").getByTestId("entry-follow-up")).toHaveText("2026-11-12"); // the follow-up date is in the list
   await expect(page.getByTestId("journal-row")).toContainText("Stiff left shoulder");
 
   // and the entry is listed in the journal section of the horse's own page
@@ -82,6 +84,7 @@ test("an entry is drawn, written, saved, reloaded, finalized and corrected", asy
   await page.getByTestId("journal-toggle").getByRole("heading", { name: /Journal of visits and treatments/ }).click();
   await expect(page.getByTestId("journal-section").getByTestId("journal-row")).toHaveCount(1);
   await expect(page.getByTestId("journal-section").getByTestId("entry-status")).toHaveText("Finalized");
+  await expect(page.getByTestId("journal-section").getByTestId("entry-follow-up")).toHaveText("2026-11-12"); // and in the quick view on the horse page
   // the two things to do here look alike: "New entry" and "Open the journal" are the same kind of button
   const [fresh, open] = [page.getByTestId("new-journal-entry"), page.getByTestId("journal-all")];
   await expect(open).toHaveText("Open the journal");

@@ -13,7 +13,7 @@ export interface JournalSort {
 }
 
 /**
- * The journal's entries as a table like the other lists: No., Visit, By, Status, Marks and Notes (the start of the text). With `sort`
+ * The journal's entries as a table like the other lists: No., Visit, By, Status, Marks, Follow-up (the date set for it, if any) and Notes (the start of the text). With `sort`
  * the headings sort the list (the journal page); without it they are plain headings (the section on the horse's page).
  */
 export function JournalTable({ orgId, horseId, entries, timeZone, sort }: { orgId: string; horseId: string; entries: JournalSummary[]; timeZone: string | null; sort?: JournalSort }) {
@@ -30,6 +30,7 @@ export function JournalTable({ orgId, horseId, entries, timeZone, sort }: { orgI
             {heading("By", "by")}
             {heading("Status", "status")}
             {heading("Marks", "marks", "right")}
+            {heading("Follow-up", "follow_up")}
             <th className="py-1">Notes</th>
           </tr>
         </thead>
@@ -49,6 +50,9 @@ export function JournalTable({ orgId, horseId, entries, timeZone, sort }: { orgI
                 {entry.status === "draft" ? "Draft" : "Finalized"}
               </td>
               <td className="py-1 pr-4 text-right">{entry.mark_count}</td>
+              <td className="py-1 pr-4 whitespace-nowrap" data-testid="entry-follow-up">
+                {entry.follow_up_on ?? ""}
+              </td>
               <td className="py-1 text-zinc-700 dark:text-zinc-300">{entry.preview}</td>
             </tr>
           ))}
