@@ -35,10 +35,10 @@ const sent = (index = 0) => {
   return { url, body: JSON.parse(String(init.body)) as Record<string, unknown> };
 };
 
-function mount(role: Role, members: Member[] = []) {
+function mount(role: Role, members: Member[] = [], recentExport = false) {
   return render(
     <OrgScope orgId={ORG}>
-      <DangerZone organizationName="Umeå Häst & Rehab" role={role} members={members} passwordChecked />
+      <DangerZone organizationName="Umeå Häst & Rehab" role={role} members={members} passwordChecked recentExport={recentExport} />
     </OrgScope>,
   );
 }
@@ -147,11 +147,13 @@ describe("deleting the organization", () => {
     const form = screen.getByRole("form", { name: "Delete organization" });
     await userEvent.type(within(form).getByLabelText(/Type the organization/), "Umeå Häst & Rehab");
     expect(button).toBeDisabled();
-    await userEvent.click(within(form).getByRole("checkbox"));
+    await userEvent.click(within(form).getByLabelText(/I understand/));
+    expect(button).toBeDisabled(); // still: no copy was downloaded and none was declined
+    await userEvent.click(within(form).getByTestId("without-copy"));
     await userEvent.type(within(form).getByLabelText("Your password"), "secret");
     await userEvent.click(button);
     await waitFor(() => expect(assign).toHaveBeenCalledWith("/"));
-    expect(sent()).toEqual({ url: `/api/o/${ORG}/organization/delete`, body: { confirm_name: "Umeå Häst & Rehab", password: "secret" } });
+    expect(sent()).toEqual({ url: `/api/o/${ORG}/organization/delete`, body: { confirm_name: "Umeå Häst & Rehab", password: "secret", without_copy: true } });
   });
 
   it("shows a name mismatch from the backend and stays", async () => {
@@ -159,9 +161,120 @@ describe("deleting the organization", () => {
     mount("owner", [member("Olle", "owner", true)]);
     const form = screen.getByRole("form", { name: "Delete organization" });
     await userEvent.type(within(form).getByLabelText(/Type the organization/), "Umeå");
-    await userEvent.click(within(form).getByRole("checkbox"));
+    await userEvent.click(within(form).getByLabelText(/I understand/));
+    await userEvent.click(within(form).getByTestId("without-copy"));
     await userEvent.click(screen.getByTestId("delete-organization"));
     expect(await screen.findByTestId("delete-error")).toHaveTextContent(/exactly as shown/);
+    expect(assign).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("a copy of the data, and deleting", () => {
+  const zip = () =>
+    Promise.resolve(new Response(new Blob(["PK"]), { status: 200, headers: { "content-type": "application/zip", "content-disposition": 'attachment; filename="export-ume-hast-rehab-2026-10-15.zip"' } }));
+  let click: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    URL.createObjectURL = vi.fn(() => "blob:copy");
+    URL.revokeObjectURL = vi.fn();
+    click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+  });
+  afterEach(() => click.mockRestore());
+
+  const typeAndTick = async (form: HTMLElement) => {
+    await userEvent.type(within(form).getByLabelText(/Type the organization/), "Umeå Häst & Rehab");
+    await userEvent.click(within(form).getByLabelText(/I understand/));
+  };
+
+  it("is only for owners", () => {
+    mount("admin", [member("Ada", "admin", true)]);
+
+    expect(screen.queryByTestId("download-copy")).toBeNull();
+  });
+
+  it("asks for the password, saves the ZIP under its own name and says so", async () => {
+    fetchMock.mockImplementation(() => zip());
+    mount("owner", [member("Olle", "owner", true)]);
+    const form = screen.getByRole("form", { name: "Download a copy of your data" });
+
+    await userEvent.type(within(form).getByLabelText("Your password"), "secret");
+    await userEvent.click(within(form).getByTestId("download-copy"));
+
+    expect(await screen.findByTestId("export-done")).toHaveTextContent("export-ume-hast-rehab-2026-10-15.zip");
+    expect(sent()).toEqual({ url: `/api/o/${ORG}/organization/export`, body: { password: "secret" } });
+    expect(click).toHaveBeenCalledTimes(1);
+    expect((within(form).getByLabelText("Your password") as HTMLInputElement).value).toBe(""); // the password is not kept
+  });
+
+  it("explains a refusal and saves nothing", async () => {
+    fetchMock.mockImplementation(() => reply(403, { detail: { code: "reauthentication_failed", message: "Confirm with your password: it was missing or not correct." } }));
+    mount("owner", [member("Olle", "owner", true)]);
+
+    await userEvent.type(screen.getByLabelText("Your password", { selector: "input[name=export_password]" }), "wrong");
+    await userEvent.click(screen.getByTestId("download-copy"));
+
+    expect(await screen.findByTestId("export-error")).toHaveTextContent(/password/);
+    expect(click).not.toHaveBeenCalled();
+  });
+
+  it("says when too many copies were asked for", async () => {
+    fetchMock.mockImplementation(() => reply(429, { detail: { code: "rate_limited", message: "x" } }));
+    mount("owner", [member("Olle", "owner", true)]);
+
+    await userEvent.click(screen.getByTestId("download-copy"));
+
+    expect(await screen.findByTestId("export-error")).toHaveTextContent(/several copies/);
+  });
+
+  it("a downloaded copy counts at once for deleting: no 'no copy' choice is shown and none is sent", async () => {
+    fetchMock.mockImplementation((url: string) => (url.endsWith("/organization/export") ? zip() : reply(204)));
+    mount("owner", [member("Olle", "owner", true)]);
+    const exportForm = screen.getByRole("form", { name: "Download a copy of your data" });
+    expect(screen.getByTestId("without-copy")).toBeInTheDocument();
+
+    await userEvent.click(within(exportForm).getByTestId("download-copy"));
+    await screen.findByTestId("export-done");
+
+    expect(screen.queryByTestId("without-copy")).toBeNull();
+    expect(screen.getByTestId("copy-made")).toBeInTheDocument();
+    const form = screen.getByRole("form", { name: "Delete organization" });
+    await typeAndTick(form);
+    await userEvent.click(screen.getByTestId("delete-organization"));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("/"));
+    expect(sent(1).body).toMatchObject({ without_copy: false });
+  });
+
+  it("a copy the server already knows about (the last day) does not ask again", async () => {
+    fetchMock.mockImplementation(() => reply(204));
+    mount("owner", [member("Olle", "owner", true)], true);
+
+    expect(screen.queryByTestId("without-copy")).toBeNull();
+    const form = screen.getByRole("form", { name: "Delete organization" });
+    await typeAndTick(form);
+    expect(screen.getByTestId("delete-organization")).toBeEnabled();
+  });
+
+  it("deleting is not possible until a copy is downloaded or declined", async () => {
+    mount("owner", [member("Olle", "owner", true)]);
+    const form = screen.getByRole("form", { name: "Delete organization" });
+
+    await typeAndTick(form);
+
+    expect(screen.getByTestId("delete-organization")).toBeDisabled();
+    await userEvent.click(within(form).getByTestId("without-copy"));
+    expect(screen.getByTestId("delete-organization")).toBeEnabled();
+  });
+
+  it("shows the server's 'copy first' answer in plain words and stays", async () => {
+    fetchMock.mockImplementation(() => reply(409, { detail: { code: "export_required", message: "x" } }));
+    mount("owner", [member("Olle", "owner", true)], true); // the page believed a copy existed; the server disagrees
+    const form = screen.getByRole("form", { name: "Delete organization" });
+
+    await typeAndTick(form);
+    await userEvent.click(screen.getByTestId("delete-organization"));
+
+    expect(await screen.findByTestId("delete-error")).toHaveTextContent(/Download a copy of your data first/);
     expect(assign).not.toHaveBeenCalled();
   });
 });

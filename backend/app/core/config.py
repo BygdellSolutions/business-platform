@@ -145,6 +145,8 @@ class Settings(BaseSettings):
     rate_limit_user_per_minute: int = 1200
     rate_limit_org_per_minute: int = 6000
     rate_limit_heavy_per_minute: int = 60  # PDFs and the dashboard summary, per person, on top of the general budgets
+    rate_limit_export_per_hour: int = 5  # complete copies of an organization's data, per organization
+    export_render_limit: int = 100  # documents without a stored PDF that one copy renders first (the rest are reported as missing)
 
     # --- second factor (app/core/mfa.py) -----------------------------------------------------------------------------------------
     mfa_issuer: str = "Business Platform"  # the name an authenticator app shows
@@ -203,6 +205,8 @@ class Settings(BaseSettings):
             ("mfa_max_failures", 1),
             ("rate_limit_org_per_minute", 1),
             ("rate_limit_heavy_per_minute", 1),
+            ("rate_limit_export_per_hour", 1),
+            ("export_render_limit", 0),
             ("db_pool_size", 1),
             ("db_max_overflow", 0),
             ("db_statement_timeout_ms", 100),

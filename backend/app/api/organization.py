@@ -3,22 +3,30 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.members import require_recent_authentication, run_membership_change
-from app.core import clock, memberships
+from datetime import timedelta
+
+from fastapi.responses import StreamingResponse
+
+from app.core import clock, memberships, rate_limit
 from app.core.authz import roles_required
 from app.core.currency import CURRENCY_LOCKED, default_currency_lock_reason
+from app.core.config import settings
 from app.core.db import get_db
+from app.core.entity_registry import registry
 from app.core.org_time import today_in
 from app.core.organization_deletion import ConfirmationMismatch, delete_organization
+from app.core.organization_export import archive_name, stream_export
 from app.core.query import apply_update
 from app.core.security_events import client_source
 from app.core.tenant import TenantContext, get_tenant_context
 from app.models import Organization, Role
-from app.schemas.members import OrganizationDeletion, OwnershipTransfer
+from app.schemas.members import OrganizationDeletion, OwnershipTransfer, RecentAuthentication
 from app.schemas.organization import OrganizationRead, OrganizationUpdate
 
 router = APIRouter(prefix="/api/organization", tags=["organization"])
 
 SETTINGS_ROLES = (Role.OWNER, Role.ADMIN)
+EXPORT_VALID_FOR = timedelta(hours=24)  # how long a downloaded copy counts when the organization is deleted
 
 
 def read_organization_profile(db: Session, organization: Organization) -> OrganizationRead:
@@ -34,6 +42,7 @@ def read_organization_profile(db: Session, organization: Organization) -> Organi
         default_currency_locked=reason is not None,
         default_currency_lock_reason=reason,
         today=today_in(organization.timezone),
+        recent_export=organization.last_export_at is not None and clock.utcnow() - organization.last_export_at <= EXPORT_VALID_FOR,
     )
 
 
@@ -100,12 +109,44 @@ def transfer_ownership(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+
+@router.post("/export", response_class=StreamingResponse, responses={200: {"content": {"application/zip": {}}, "description": "A complete copy of the organization's data"}})
+def export_organization_data(
+    payload: RecentAuthentication,
+    request: Request,
+    ctx: TenantContext = Depends(roles_required(Role.OWNER)),
+    db: Session = Depends(get_db),
+) -> StreamingResponse:
+    """A complete copy of the organization's data as a ZIP (owner only, recent authentication, a few per hour). Streamed: nothing
+    is built in memory, and the organization counts as exported only when the whole archive has been sent."""
+    require_recent_authentication(db, ctx, payload.password, request)
+    rate_limit.export_copy(ctx)
+    registry.call_hooks("organization.prepare_export", db, ctx, limit=settings.export_render_limit)  # modules freeze documents that have no stored PDF yet
+    organization = _active_organization(db, ctx)
+    now = clock.utcnow()
+    name, organization_id = organization.name, organization.id
+    db.commit()  # end (only read) this request's own transaction, so its connection is not held idle for the whole download
+    return StreamingResponse(
+        stream_export(organization_id=organization_id, organization_name=name, now=now),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{archive_name(name, now)}"', "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+    )
+
+
 @router.post("/delete", status_code=status.HTTP_204_NO_CONTENT)
 def delete_this_organization(
     payload: OrganizationDeletion, request: Request, ctx: TenantContext = Depends(get_tenant_context), db: Session = Depends(get_db)
 ) -> Response:
-    """Delete the organization and ALL its data for good (owner only, recent authentication, the name typed)."""
+    """Delete the organization and ALL its data for good (owner only, recent authentication, the name typed). Nothing is kept, so the
+    owner must either have downloaded a complete copy in the last day or say explicitly that they want none."""
     require_recent_authentication(db, ctx, payload.password, request)
+    if not payload.without_copy:
+        exported = db.scalar(select(Organization.last_export_at).where(Organization.id == ctx.organization_id))
+        if exported is None or clock.utcnow() - exported > EXPORT_VALID_FOR:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail={"code": "export_required", "message": "Download a copy of your data first, or choose to delete without a copy."},
+            )
     try:
         run_membership_change(
             lambda: delete_organization(

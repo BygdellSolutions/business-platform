@@ -61,6 +61,8 @@ class Organization(BusinessProfile, Base):
     approved_for_f_tax: Mapped[bool | None] = mapped_column(Boolean)
     # The language of the organization's documents (invoice PDFs): 'sv' or 'en'. NULL: English, as before.
     document_language: Mapped[str | None] = mapped_column(String(2))
+    # When a complete copy of the organization's data was last streamed to the owner (see app.core.organization_export).
+    last_export_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

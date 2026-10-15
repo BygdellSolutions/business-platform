@@ -45,6 +45,8 @@ class OwnershipTransfer(RecentAuthentication):
 class OrganizationDeletion(RecentAuthentication):
     # The organization's name, typed by the person as the last confirmation.
     confirm_name: str = Field(max_length=255)
+    # Deletion keeps nothing. Unless the owner downloaded a copy in the last day, they must say in so many words that they want none.
+    without_copy: bool = False
 
 
 class Colleague(BaseModel):

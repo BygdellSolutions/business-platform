@@ -158,3 +158,45 @@ export async function apiDownloadPdf(orgId: string, path: string, signal?: Abort
   if (error.kind === "unauthorized") onUnauthorized(loginPathOf(body));
   return { ok: false, error };
 }
+
+const EXPORT_FILENAME = /^export-[a-z0-9-]{1,48}-\d{4}-\d{2}-\d{2}\.zip$/;
+
+/** The filename from the BFF's Content-Disposition, only if it has the one expected shape. */
+export function exportFilename(disposition: string | null): string {
+  const found = /^attachment;\s*filename="([^"\\\r\n]*)"$/.exec(disposition ?? "");
+  return found && EXPORT_FILENAME.test(found[1]) ? found[1] : "export.zip";
+}
+
+/**
+ * The complete copy of the organization's data (a ZIP) through the BFF, as a Blob, after the owner confirmed with the password.
+ * Never throws for HTTP or network failures; a 200 is accepted only if it really is a ZIP.
+ */
+export async function apiDownloadExport(orgId: string, password: string): Promise<ApiResult<DownloadedFile>> {
+  let response: Response;
+  try {
+    response = await fetch(bffPath(orgId, "/organization/export"), {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/zip, application/json;q=0.9", ...csrfHeader("POST") },
+      body: JSON.stringify({ password }),
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+  } catch {
+    return { ok: false, error: networkError() };
+  }
+
+  if (response.ok) {
+    if ((response.headers.get("content-type") ?? "").toLowerCase().trim() !== "application/zip") return { ok: false, error: normalizeError(502, undefined) };
+    return { ok: true, status: response.status, data: { blob: await response.blob(), filename: exportFilename(response.headers.get("content-disposition")) } };
+  }
+
+  let body: unknown = undefined;
+  try {
+    body = JSON.parse(await response.text());
+  } catch {
+    body = undefined;
+  }
+  const error = normalizeError(response.status, body);
+  if (error.kind === "unauthorized") onUnauthorized(loginPathOf(body));
+  return { ok: false, error };
+}

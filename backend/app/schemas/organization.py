@@ -97,6 +97,10 @@ class OrganizationRead(ProfileRead):
     legal_name: str | None
     default_currency: str | None
     # Whether the currency can still be changed, and if not, why (shown next to the field).
+    # When the owner last downloaded a complete copy of the organization's data (None: never).
+    last_export_at: datetime | None = None
+    # Whether that copy is recent enough for deleting the organization without saying 'no copy' (decided here, not by the browser).
+    recent_export: bool = False
     default_currency_locked: bool
     default_currency_lock_reason: str | None
     timezone: str | None

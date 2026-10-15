@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { expect, test } from "./fixtures";
 
 import { E2E_PASSWORD } from "./auth-support";
@@ -48,12 +50,28 @@ test("an owner deletes the organization with an issued invoice in it; everything
   await issueInvoiceApi(context, world.orgId, await createInvoiceApi(context, world.orgId, [tx.id]));
   await page.goto(`/o/${world.orgId}/settings`);
 
+  // A copy first: downloaded through the real BFF stream, and it counts for the deletion below.
+  const copy = page.getByRole("form", { name: "Download a copy of your data" });
+  await copy.getByLabel("Your password").fill(E2E_PASSWORD);
+  const downloading = page.waitForEvent("download");
+  await copy.getByTestId("download-copy").click();
+  const download = await downloading;
+  expect(download.suggestedFilename()).toMatch(/^export-[a-z0-9-]+-\d{4}-\d{2}-\d{2}\.zip$/);
+  const archive = readFileSync((await download.path())!);
+  expect(archive.subarray(0, 4).toString("latin1")).toBe("PK\u0003\u0004"); // a ZIP
+  for (const name of ["manifest.json", "data/customers.jsonl", "data/invoices.jsonl", "members.jsonl"]) expect(archive.includes(Buffer.from(name)), name).toBe(true);
+  expect(archive.includes(Buffer.from(".pdf"))).toBe(true); // the issued invoice's stored PDF is in it
+  await expect(page.getByTestId("export-done")).toBeVisible();
+  expect(testRow(`select count(*) from organizations where id = ${sql(world.orgId)} and last_export_at is not null`)).toBe("1");
+
   const form = page.getByRole("form", { name: "Delete organization" });
   await expect(page.getByTestId("delete-warning")).toContainText("issued invoices and their PDFs");
   await expect(form.getByTestId("delete-organization")).toBeDisabled();
+  await expect(form.getByTestId("copy-made")).toBeVisible();
+  await expect(form.getByTestId("without-copy")).toHaveCount(0); // a copy exists: nothing to decline
   await form.getByLabel(/Type the organization/).fill(world.name);
   await form.getByLabel("Your password").fill(E2E_PASSWORD);
-  await form.getByRole("checkbox").check();
+  await form.getByLabel(/I understand/).check();
   await form.getByTestId("delete-organization").click();
 
   await expect(page).toHaveURL(/\/$/);
@@ -63,6 +81,17 @@ test("an owner deletes the organization with an issued invoice in it; everything
   }
 });
 
+test("the server refuses a deletion that neither follows a copy nor says none is wanted", async ({ context }) => {
+  world = createWorld({ label: "NoCopyNoDelete" });
+  await signIn(context, world.email);
+
+  const refused = await context.request.post(bffUrl(world.orgId, "/organization/delete"), { data: { confirm_name: world.name, password: E2E_PASSWORD } });
+
+  expect(refused.status()).toBe(409);
+  expect(JSON.stringify(await refused.json())).toContain("export_required");
+  expect(testRow(`select count(*) from organizations where id = ${sql(world.orgId)}`)).toBe("1");
+});
+
 test("a mistyped name deletes nothing", async ({ page, context }) => {
   world = createWorld({ label: "NoDelete" });
   await signIn(context, world.email);
@@ -70,7 +99,8 @@ test("a mistyped name deletes nothing", async ({ page, context }) => {
   const form = page.getByRole("form", { name: "Delete organization" });
   await form.getByLabel(/Type the organization/).fill("not the name");
   await form.getByLabel("Your password").fill(E2E_PASSWORD);
-  await form.getByRole("checkbox").check();
+  await form.getByLabel(/I understand/).check();
+  await form.getByTestId("without-copy").check();
   await form.getByTestId("delete-organization").click();
   await expect(page.getByTestId("delete-error")).toContainText("exactly as shown");
   expect(testRow(`select count(*) from organizations where id = ${sql(world.orgId)}`)).toBe("1");

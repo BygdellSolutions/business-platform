@@ -137,6 +137,10 @@ export interface SupplierRef {
 
 /** The active organization's settings (GET /api/organization). */
 export interface Organization extends Profile {
+  /** When the owner last downloaded a complete copy of the organization's data (null: never). */
+  last_export_at?: string | null;
+  /** Whether that copy is recent enough for deleting without saying "no copy" (FastAPI decides). */
+  recent_export?: boolean;
   id: string;
   /** The display name used in the app. */
   name: string;

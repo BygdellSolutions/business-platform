@@ -57,11 +57,11 @@ class SlidingWindow:
             self._hits.clear()
 
 
-_windows = {"user": SlidingWindow(), "org": SlidingWindow(), "heavy": SlidingWindow()}
+_windows = {"user": SlidingWindow(), "org": SlidingWindow(), "heavy": SlidingWindow(), "export": SlidingWindow()}
 
 
-def enforce(bucket: str, key: str, limit: int) -> None:
-    retry_after = _windows[bucket].hit(key, limit)
+def enforce(bucket: str, key: str, limit: int, window: float = WINDOW_SECONDS) -> None:
+    retry_after = _windows[bucket].hit(key, limit, window)
     if retry_after is not None:
         metrics.count(f"rate_limited_{bucket}")
         raise HTTPException(
@@ -80,6 +80,11 @@ def tenant_request(ctx: TenantContext) -> None:
 def heavy(ctx: TenantContext = Depends(get_tenant_context)) -> None:
     """An expensive endpoint (a PDF, the dashboard summary): a tighter per-person budget on top of the general ones."""
     enforce("heavy", f"u:{ctx.user.id}", settings.rate_limit_heavy_per_minute)
+
+
+def export_copy(ctx: TenantContext) -> None:
+    """A complete copy of an organization's data is the most expensive thing a person can ask for: a few per hour per organization."""
+    enforce("export", f"o:{ctx.organization_id}", settings.rate_limit_export_per_hour, window=3600.0)
 
 
 def reset() -> None:

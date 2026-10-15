@@ -6,7 +6,7 @@ import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useOrgId } from "@/components/shell/org-context";
 import { Button } from "@/components/ui/Button";
 import { Notice } from "@/components/ui/Notice";
-import { apiFetch } from "@/lib/api/client";
+import { apiDownloadExport, apiFetch } from "@/lib/api/client";
 import type { ApiError } from "@/lib/api/errors";
 import type { Member, Role } from "@/lib/api/types";
 
@@ -19,6 +19,7 @@ export function DangerZone({
   role,
   members,
   passwordChecked,
+  recentExport = false,
 }: {
   organizationName: string;
   role: Role | undefined;
@@ -26,10 +27,14 @@ export function DangerZone({
   members: Member[];
   /** False in the development sign-in, which has no passwords (the field is then not checked). */
   passwordChecked: boolean;
+  /** A complete copy was downloaded recently enough that deleting needs no "no copy" statement (FastAPI decided). */
+  recentExport?: boolean;
 }) {
   // Kept here, above the sections: after a transfer the page refreshes and the transfer section itself is gone
   // (the person is no longer an owner), but the confirmation must stay.
   const [transferred, setTransferred] = useState(false);
+  // Whether a copy of the data was downloaded in the last day (the rule FastAPI applies when the organization is deleted).
+  const [copyMade, setCopyMade] = useState(recentExport);
   const isOwner = role === "owner";
   const owners = members.filter((member) => member.role === "owner").length;
   const soleOwner = isOwner && owners <= 1;
@@ -39,7 +44,8 @@ export function DangerZone({
       {transferred && <Notice testId="transferred">Ownership transferred. You are now an admin.</Notice>}
       <LeaveSection soleOwner={soleOwner} passwordChecked={passwordChecked} />
       {isOwner && <TransferSection members={members.filter((member) => !member.is_you && member.role !== "owner")} passwordChecked={passwordChecked} onTransferred={() => setTransferred(true)} />}
-      {isOwner && <DeleteSection organizationName={organizationName} passwordChecked={passwordChecked} />}
+      {isOwner && <ExportSection passwordChecked={passwordChecked} onDownloaded={() => setCopyMade(true)} />}
+      {isOwner && <DeleteSection organizationName={organizationName} passwordChecked={passwordChecked} copyMade={copyMade} />}
     </section>
   );
 }
@@ -183,16 +189,77 @@ function TransferSection({ members, passwordChecked, onTransferred }: { members:
   );
 }
 
-function DeleteSection({ organizationName, passwordChecked }: { organizationName: string; passwordChecked: boolean }) {
+function ExportSection({ passwordChecked, onDownloaded }: { passwordChecked: boolean; onDownloaded: () => void }) {
+  const orgId = useOrgId();
+  const [password, setPassword] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+  const inFlight = useRef(false);
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setPending(true);
+    setError(null);
+    setDone(null);
+    try {
+      const result = await apiDownloadExport(orgId, password);
+      if (!result.ok) {
+        setError(result.error.status === 429 ? "You have downloaded several copies recently. Try again in a while." : explainCommon(result.error));
+        return;
+      }
+      const url = URL.createObjectURL(result.data.blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = result.data.filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setPassword("");
+      setDone(result.data.filename);
+      onDownloaded();
+    } finally {
+      inFlight.current = false;
+      setPending(false);
+    }
+  }
+  return (
+    <Part title="Download a copy of your data">
+      <form onSubmit={submit} className="flex flex-col gap-2" aria-label="Download a copy of your data">
+        <p className="text-sm">
+          A ZIP with everything this organization has: customers, products, horses, orders, invoices with their PDFs, payments, stock and
+          history. It contains your customers&apos; personal data, so keep it somewhere safe.
+        </p>
+        <PasswordField value={password} onChange={setPassword} checked={passwordChecked} name="export_password" />
+        {error && <Notice tone="error" testId="export-error">{error}</Notice>}
+        {done && <Notice testId="export-done">Downloaded {done}.</Notice>}
+        <div>
+          <Button type="submit" disabled={pending} data-testid="download-copy" variant="secondary">
+            {pending ? "Preparing the copy…" : "Download a copy"}
+          </Button>
+        </div>
+      </form>
+    </Part>
+  );
+}
+
+function DeleteSection({ organizationName, passwordChecked, copyMade }: { organizationName: string; passwordChecked: boolean; copyMade: boolean }) {
   const { pending, error, run } = useAction();
+  const [withoutCopy, setWithoutCopy] = useState(false);
   const [typed, setTyped] = useState("");
   const [password, setPassword] = useState("");
   const [understood, setUnderstood] = useState(false);
   async function submit(event: FormEvent) {
     event.preventDefault();
     const explain = (failure: ApiError) =>
-      failure.kind === "validation" ? "Type the organization's name exactly as shown." : explainCommon(failure);
-    if (await run("/organization/delete", { confirm_name: typed, password }, explain)) {
+      failure.kind === "validation"
+        ? "Type the organization's name exactly as shown."
+        : failure.kind === "conflict" && failure.code === "export_required"
+          ? "Download a copy of your data first, or choose to delete without a copy."
+          : explainCommon(failure);
+    if (await run("/organization/delete", { confirm_name: typed, password, without_copy: !copyMade && withoutCopy }, explain)) {
       // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.assign("/");
     }
@@ -216,13 +283,21 @@ function DeleteSection({ organizationName, passwordChecked }: { organizationName
           <input name="confirm_name" value={typed} onChange={(event) => setTyped(event.target.value)} autoComplete="off" className="rounded border border-zinc-400 px-2 py-1 font-normal dark:bg-zinc-900" />
         </label>
         <PasswordField value={password} onChange={setPassword} checked={passwordChecked} name="delete_password" />
+        {copyMade ? (
+          <Notice testId="copy-made">A copy of your data was downloaded in the last 24 hours.</Notice>
+        ) : (
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" name="without_copy" checked={withoutCopy} onChange={(event) => setWithoutCopy(event.target.checked)} data-testid="without-copy" />
+            I do not want a copy: delete without downloading one (download a copy above first if you might need anything).
+          </label>
+        )}
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" name="understood" checked={understood} onChange={(event) => setUnderstood(event.target.checked)} />
           I understand that everything is deleted permanently.
         </label>
         {error && <Notice tone="error" testId="delete-error">{error}</Notice>}
         <div>
-          <Button type="submit" disabled={pending || !understood || typed === ""} data-testid="delete-organization" variant="danger">
+          <Button type="submit" disabled={pending || !understood || typed === "" || !(copyMade || withoutCopy)} data-testid="delete-organization" variant="danger">
             {pending ? "Deleting…" : "Delete this organization permanently"}
           </Button>
         </div>

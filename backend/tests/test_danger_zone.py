@@ -165,7 +165,7 @@ def test_an_owner_deletes_the_organization_and_everything_it_owns_and_nothing_el
     other_before = _rows_of(db_session, other.id)
     assert _rows_of(db_session, team.org.id)["invoice_pdfs"] == 1  # control: there is something to delete
 
-    response = team.client.post(DELETE, json={"confirm_name": "Umeå Häst & Rehab", "password": PASSWORD}, headers=team.owner.h)
+    response = team.client.post(DELETE, json={"confirm_name": "Umeå Häst & Rehab", "password": PASSWORD, "without_copy": True}, headers=team.owner.h)
 
     assert response.status_code == 204, response.text
     db_session.expire_all()
@@ -179,20 +179,20 @@ def test_an_owner_deletes_the_organization_and_everything_it_owns_and_nothing_el
 
 @pytest.mark.parametrize("name", ["umeå häst & rehab", "Umeå Häst", "", "Something else"])
 def test_the_name_must_be_typed_exactly(team, db_session: Session, name):
-    response = team.client.post(DELETE, json={"confirm_name": name, "password": PASSWORD}, headers=team.owner.h)
+    response = team.client.post(DELETE, json={"confirm_name": name, "password": PASSWORD, "without_copy": True}, headers=team.owner.h)
     assert response.status_code == 422
     assert db_session.get(Organization, team.org.id) is not None
 
 
 def test_deletion_needs_the_password(team, db_session: Session):
-    response = team.client.post(DELETE, json={"confirm_name": "Umeå Häst & Rehab", "password": OTHER_PASSWORD}, headers=team.owner.h)
+    response = team.client.post(DELETE, json={"confirm_name": "Umeå Häst & Rehab", "password": OTHER_PASSWORD, "without_copy": True}, headers=team.owner.h)
     assert response.status_code == 403 and _code(response) == "reauthentication_failed"
     assert db_session.get(Organization, team.org.id) is not None
 
 
 @pytest.mark.parametrize("who", ["admin", "employee"])
 def test_only_an_owner_can_delete(team, db_session: Session, who):
-    response = team.client.post(DELETE, json={"confirm_name": "Umeå Häst & Rehab", "password": PASSWORD}, headers=getattr(team, who).h)
+    response = team.client.post(DELETE, json={"confirm_name": "Umeå Häst & Rehab", "password": PASSWORD, "without_copy": True}, headers=getattr(team, who).h)
     assert response.status_code == 403 and _code(response) == "not_owner"
     assert db_session.get(Organization, team.org.id) is not None
 
