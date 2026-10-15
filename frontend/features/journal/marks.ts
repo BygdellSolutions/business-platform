@@ -23,6 +23,12 @@ export type EditorAction =
   | { type: "redo" }
   | { type: "load"; marks: JournalMark[] };
 
+/** The number the next mark gets: after the highest in use (a number is never given to a different mark while the entry is open). */
+export const nextNumber = (marks: JournalMark[]): number => Math.max(0, ...marks.map((mark) => mark.number ?? 0)) + 1;
+
+/** The number to show for a mark: its own, or (for a mark from before numbers existed) its place in the entry. */
+export const numberOf = (mark: JournalMark, marks: JournalMark[]): number => mark.number ?? marks.findIndex((other) => other.id === mark.id) + 1;
+
 export const initialState = (marks: JournalMark[] = []): EditorState => ({ marks, past: [], future: [] });
 
 function commit(state: EditorState, marks: JournalMark[]): EditorState {
@@ -33,7 +39,7 @@ function commit(state: EditorState, marks: JournalMark[]): EditorState {
 export function editorReducer(state: EditorState, action: EditorAction): EditorState {
   switch (action.type) {
     case "add":
-      return state.marks.length >= MAX_MARKS ? state : commit(state, [...state.marks, action.mark]);
+      return state.marks.length >= MAX_MARKS ? state : commit(state, [...state.marks, { ...action.mark, number: action.mark.number ?? nextNumber(state.marks) }]);
     case "replace":
       return commit(
         state,
@@ -52,6 +58,25 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
     case "load":
       return initialState(action.marks);
   }
+}
+
+/** Whether two lists hold the same marks. Compared mark by mark, NOT as JSON text: the backend writes a mark's fields in its own order, and the
+ * same marks in another key order must not make a saved entry look changed. */
+export function sameMarks(a: JournalMark[], b: JournalMark[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((mark, index) => {
+      const other = b[index];
+      return (
+        mark.id === other.id &&
+        (mark.number ?? null) === (other.number ?? null) &&
+        mark.side === other.side &&
+        mark.tool === other.tool &&
+        mark.points.length === other.points.length &&
+        mark.points.every((point, at) => point[0] === other.points[at][0] && point[1] === other.points[at][1])
+      );
+    })
+  );
 }
 
 export const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));

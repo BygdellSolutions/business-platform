@@ -990,6 +990,8 @@ export type MarkTool = "line" | "arrow" | "x" | "o";
 /** One drawing mark: fractions (0 to 1) of the diagram's width and height, so it stays aligned at any size. */
 export interface JournalMark {
   id: string;
+  /** Its number within the entry, so the notes can say "mark 3" (kept for as long as the entry exists; older marks may lack one). */
+  number?: number;
   side: MarkSide;
   tool: MarkTool;
   points: number[][];

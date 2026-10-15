@@ -40,6 +40,10 @@ test("an entry is drawn, written, saved, reloaded, finalized and corrected", asy
   await page.mouse.move(area.x + area.width * 0.55, area.y + area.height * 0.4, { steps: 4 });
   await page.mouse.up();
   await expect(page.getByTestId("marks-list").locator("li")).toHaveCount(2);
+  // each mark carries a number on the picture and in the list, so the text can refer to "mark 2"
+  await expect(page.getByTestId("diagram-left").getByTestId("mark-number")).toHaveText(["1", "2"]);
+  await expect(page.getByTestId("marks-list").locator("li").first()).toContainText("1. X on the horse's left side");
+  await expect(page.getByTestId("marks-list").locator("li").nth(1)).toContainText("2. Arrow on the horse's left side");
 
   await page.getByLabel(/Observations/).fill("Stiff left shoulder.\nTreated with massage; better afterwards.");
   await expect(page.getByTestId("save-status")).toHaveText("Unsaved changes");
@@ -48,6 +52,7 @@ test("an entry is drawn, written, saved, reloaded, finalized and corrected", asy
 
   await page.reload();
   await expect(page.getByTestId("marks-list").locator("li")).toHaveCount(2); // the marks came back from the database
+  await expect(page.getByTestId("diagram-left").getByTestId("mark-number")).toHaveText(["1", "2"]); // with their numbers
   await expect(page.getByLabel(/Observations/)).toHaveValue(/Stiff left shoulder/);
 
   await page.getByTestId("finalize").click();

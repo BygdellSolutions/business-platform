@@ -108,6 +108,16 @@ describe("selecting and moving", () => {
     expect(screen.getByTestId("diagram-left").getAttribute("viewBox")).toBe("0 0 1000 711");
   });
 
+  it("writes each mark's number in a badge on the picture, the same number as in the list and the notes", () => {
+    const marks: JournalMark[] = [
+      { id: "11111111-1111-4111-8111-111111111111", number: 3, side: "left", tool: "x", points: [[0.5, 0.5]] },
+      { id: "22222222-2222-4222-8222-222222222222", number: 7, side: "left", tool: "arrow", points: [[0.2, 0.2], [0.4, 0.4]] },
+      { id: "33333333-3333-4333-8333-333333333333", side: "left", tool: "o", points: [[0.7, 0.7]] }, // from before numbers: its place, 3
+    ];
+    render(<DiagramCanvas side="left" marks={marks} />);
+    expect(screen.getAllByTestId("mark-number").map((badge) => badge.textContent)).toEqual(["3", "7", "3"]);
+  });
+
   it("mirrors the picture for the right side, so the head is on the right", () => {
     render(<DiagramCanvas side="right" marks={[]} />);
     expect(document.querySelector("image")?.parentElement?.getAttribute("transform")).toBe("translate(1000 0) scale(-1 1)");

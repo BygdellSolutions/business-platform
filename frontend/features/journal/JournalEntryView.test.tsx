@@ -45,7 +45,7 @@ describe("a finalized entry", () => {
     expect(screen.getByTestId("entry-body").textContent).toBe("Treated the poll.");
     expect(screen.getByTestId("entry-final").textContent).toContain("by Tina Therapist");
     expect(screen.getByTestId("entry-follow-up").textContent).toContain("2026-10-29");
-    expect(screen.getByText("O on the horse's right side, at 50 % across, 50 % down")).toBeTruthy();
+    expect(screen.getByText("1. O on the horse's right side, at 50 % across, 50 % down")).toBeTruthy(); // numbered like the notes refer to it
     expect(screen.getByTestId("no-corrections")).toBeTruthy();
   });
 

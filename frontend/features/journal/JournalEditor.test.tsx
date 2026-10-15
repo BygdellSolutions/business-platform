@@ -112,6 +112,19 @@ describe("writing an entry", () => {
   });
 });
 
+describe("saving marks", () => {
+  it("is shown as saved when the backend answers with the same marks written in its own field order", async () => {
+    mount();
+    await userEvent.click(screen.getByTestId("tool-x"));
+    tap(200, 150);
+    const drawn = (JSON.parse(JSON.stringify(document.querySelector('[data-testid="mark"]')?.getAttribute("data-mark-id") ?? "")) as string);
+    // the backend writes id, number, side, tool, points (the browser built them in another order)
+    answers.push(ok(entry({ version: 2, marks: [{ points: [[0.5, 0.5]], tool: "x", side: "left", number: 1, id: drawn } as never] })));
+    await userEvent.click(screen.getByTestId("save-draft"));
+    await waitFor(() => expect(status()).toBe("All changes saved"));
+  });
+});
+
 describe("the practitioner", () => {
   it("is chosen from the organization's members, like who performed a service on an order, and saved by id", async () => {
     answers.push(ok(entry({ practitioner_user_id: COLLEAGUES[1].user_id, practitioner_name: "Erik Employee", version: 2 })));

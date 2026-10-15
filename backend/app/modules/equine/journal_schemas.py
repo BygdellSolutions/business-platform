@@ -26,6 +26,10 @@ class Mark(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: uuid.UUID
+    # The mark's number within its entry, so the text can say "see mark 3". Given by the browser when a mark is drawn and kept for
+    # as long as the entry exists (deleting mark 2 does not turn mark 3 into 2); a mark that arrives without one is numbered by the
+    # backend (journal.py). Unique within an entry.
+    number: int | None = Field(default=None, ge=1, le=9999)
     side: Side
     tool: Tool
     points: list[Annotated[list[float], Field(min_length=2, max_length=2)]]
@@ -50,6 +54,9 @@ def _marks(value: list[Mark]) -> list[Mark]:
         raise ValueError(f"at most {JOURNAL_MAX_MARKS} marks per entry")
     if len({mark.id for mark in value}) != len(value):
         raise ValueError("mark ids must be unique within an entry")
+    numbers = [mark.number for mark in value if mark.number is not None]
+    if len(set(numbers)) != len(numbers):
+        raise ValueError("mark numbers must be unique within an entry")
     return value
 
 

@@ -13,7 +13,7 @@ import { apiFetch } from "@/lib/api/client";
 import type { Colleague, JournalEntry, JournalUpdate, MarkSide, MarkTool } from "@/lib/api/types";
 import { problemsFrom, useMutation } from "@/lib/forms";
 import { DiagramCanvas, type ActiveTool } from "./DiagramCanvas";
-import { describe, editorReducer, initialState, SIDE_LABELS, TOOL_LABELS } from "./marks";
+import { describe, editorReducer, initialState, numberOf, sameMarks, SIDE_LABELS, TOOL_LABELS } from "./marks";
 
 const CONTROLS = ["visit_at", "practitioner_user_id", "body", "follow_up_on", "marks"] as const;
 const TOOLS: { tool: ActiveTool; label: string }[] = [
@@ -54,7 +54,7 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
     practitioner !== (saved.practitioner_user_id ?? "") ||
     body !== saved.body ||
     followUp !== (saved.follow_up_on ?? "") ||
-    JSON.stringify(editor.marks) !== JSON.stringify(saved.marks);
+    !sameMarks(editor.marks, saved.marks);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -81,7 +81,7 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
     if (practitioner !== (saved.practitioner_user_id ?? "") && practitioner !== "") update.practitioner_user_id = practitioner;
     if (body !== saved.body) update.body = body;
     if (followUp !== (saved.follow_up_on ?? "")) update.follow_up_on = followUp === "" ? null : followUp;
-    if (JSON.stringify(editor.marks) !== JSON.stringify(saved.marks)) update.marks = editor.marks;
+    if (!sameMarks(editor.marks, saved.marks)) update.marks = editor.marks;
     return update;
   }
 
@@ -196,12 +196,12 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
             </p>
           ) : (
             <ol className="flex flex-col gap-1 text-sm" data-testid="marks-list">
-              {marksHere.map((mark, index) => (
+              {marksHere.map((mark) => (
                 <li key={mark.id} className="flex items-center gap-2">
                   <button type="button" className={`text-left underline ${mark.id === selected ? "font-semibold" : ""}`} onClick={() => { setTool("select"); setSelected(mark.id); }}>
-                    {index + 1}. {describe(mark)}
+                    {numberOf(mark, editor.marks)}. {describe(mark)}
                   </button>
-                  <Button type="button" onClick={() => { dispatch({ type: "remove", id: mark.id }); if (selected === mark.id) setSelected(null); }} aria-label={`Delete mark ${index + 1}`} data-testid="delete-listed-mark">
+                  <Button type="button" onClick={() => { dispatch({ type: "remove", id: mark.id }); if (selected === mark.id) setSelected(null); }} aria-label={`Delete mark ${numberOf(mark, editor.marks)}`} data-testid="delete-listed-mark">
                     Delete
                   </Button>
                 </li>
@@ -213,7 +213,7 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
 
       <div className="panel flex flex-col gap-3">
         <TextAreaField label="Observations, assessment, treatment, response, advice and follow-up" name="body" rows={10} value={body} onChange={setBody} error={problems.byField.body} />
-        <p className="text-xs text-zinc-500">{body.length.toLocaleString("en")} of 20,000 characters.</p>
+        <p className="text-xs text-zinc-500">{body.length.toLocaleString("en")} of 20,000 characters. Refer to a mark by its number, for example “mark 2”.</p>
       </div>
 
       <ErrorSummary messages={problems.general} />

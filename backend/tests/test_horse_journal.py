@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app.models import Role
 from tests.factories import add_member, make_customer, make_horse, make_org, make_user
 
-MARK = {"id": "11111111-1111-4111-8111-111111111111", "side": "left", "tool": "arrow", "points": [[0.25, 0.5], [0.75, 0.5]]}
+MARK = {"id": "11111111-1111-4111-8111-111111111111", "number": 1, "side": "left", "tool": "arrow", "points": [[0.25, 0.5], [0.75, 0.5]]}
 
 
 IDS: dict[str, uuid.UUID] = {}  # the user id behind each set of headers, by email
@@ -141,7 +141,7 @@ def test_an_empty_entry_cannot_be_finalized(client: TestClient, world):
 
 def test_marks_round_trip_exactly(client: TestClient, world):
     _, horse, people = world
-    marks = [MARK, {"id": str(uuid.uuid4()), "side": "right", "tool": "x", "points": [[0.1, 0.9]]}, {"id": str(uuid.uuid4()), "side": "right", "tool": "o", "points": [[0, 1]]}]
+    marks = [MARK, {"id": str(uuid.uuid4()), "number": 2, "side": "right", "tool": "x", "points": [[0.1, 0.9]]}, {"id": str(uuid.uuid4()), "number": 3, "side": "right", "tool": "o", "points": [[0, 1]]}]
     entry = _create(client, horse, people["owner"], marks=marks)
     assert client.get(_url(horse, entry), headers=people["owner"]).json()["marks"] == marks
     replaced = client.patch(_url(horse, entry), json={"marks": [MARK]}, headers={**people["owner"], **_if_match(entry)})
@@ -184,6 +184,32 @@ def test_the_visit_time_must_say_its_time_zone_and_defaults_to_now(client: TestC
     stated = _create(client, horse, people["owner"], visit_at="2026-10-15T14:30:00+02:00")
     assert stated["visit_at"].startswith("2026-10-15T12:30:00")
     assert _create(client, horse, people["owner"])["visit_at"]
+
+
+# --- marks carry numbers so the text can refer to them ----------------------------------------------------------------------------
+
+
+def _plain(tool: str = "x", **more) -> dict:
+    return {"id": str(uuid.uuid4()), "side": "left", "tool": tool, "points": [[0.5, 0.5]], **more}
+
+
+def test_marks_without_numbers_are_numbered_in_order_and_given_numbers_are_kept(client: TestClient, world):
+    _, horse, people = world
+    entry = _create(client, horse, people["owner"], marks=[_plain(), _plain(), _plain()])
+    assert [m["number"] for m in entry["marks"]] == [1, 2, 3]
+    kept = _create(client, horse, people["owner"], marks=[_plain(number=7), _plain(), _plain(number=2)])
+    assert [m["number"] for m in kept["marks"]] == [7, 8, 2]  # the new one goes after the highest, whatever was deleted before
+
+
+def test_a_number_stays_with_its_mark_when_another_is_deleted_and_is_never_shared(client: TestClient, world):
+    _, horse, people = world
+    first, second, third = _plain(number=1), _plain(number=2), _plain(number=3)
+    entry = _create(client, horse, people["owner"], marks=[first, second, third])
+    after = client.patch(_url(horse, entry), json={"marks": [first, third]}, headers={**people["owner"], **_if_match(entry)}).json()
+    assert [m["number"] for m in after["marks"]] == [1, 3]  # mark 3 is still mark 3
+    assert client.post(_url(horse), json={"marks": [_plain(number=2), _plain(number=2)]}, headers=people["owner"]).status_code == 422
+    for bad in (0, -1, 10_000, "two"):
+        assert client.post(_url(horse), json={"marks": [_plain(number=bad)]}, headers=people["owner"]).status_code == 422
 
 
 # --- the practitioner is a member chosen from a list -----------------------------------------------------------------------------

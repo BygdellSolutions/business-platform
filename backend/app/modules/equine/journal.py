@@ -52,6 +52,19 @@ def _practitioner(db: Session, ctx: TenantContext, user_id: uuid.UUID) -> User:
     return member
 
 
+def _numbered(marks: list[dict]) -> list[dict]:
+    """Every mark gets a number: the ones that have one keep it, the others take the next free numbers in the order they came."""
+    taken = [mark["number"] for mark in marks if mark.get("number") is not None]
+    following = (max(taken) if taken else 0) + 1
+    result = []
+    for mark in marks:
+        if mark.get("number") is None:
+            mark = {**mark, "number": following}
+            following += 1
+        result.append(mark)
+    return result
+
+
 def _may_change(ctx: TenantContext, entry: HorseJournalEntry) -> bool:
     return ctx.role in CHANGE_ANY or entry.created_by == ctx.user.id
 
@@ -139,7 +152,7 @@ def create_entry(horse_id: uuid.UUID, payload: JournalCreate, ctx: TenantContext
         practitioner_name=practitioner.name,
         body=payload.body,
         follow_up_on=payload.follow_up_on,
-        marks=[mark.model_dump(mode="json") for mark in payload.marks],
+        marks=_numbered([mark.model_dump(mode="json", exclude_none=False) for mark in payload.marks]),
         diagram_version=DIAGRAM_VERSION,
         status=JOURNAL_DRAFT,
     )
@@ -167,7 +180,7 @@ def update_entry(
     ensure_current(if_match, entry.version, "horse_journal_entry", entry.id)
     values = {field: getattr(payload, field) for field in payload.model_fields_set}
     if "marks" in values:
-        values["marks"] = [mark.model_dump(mode="json") for mark in values["marks"]]
+        values["marks"] = _numbered([mark.model_dump(mode="json") for mark in values["marks"]])
     if "practitioner_user_id" in values:
         chosen = _practitioner(db, ctx, values["practitioner_user_id"])
         values["practitioner_name"] = chosen.name  # the name as it is now, kept with the entry

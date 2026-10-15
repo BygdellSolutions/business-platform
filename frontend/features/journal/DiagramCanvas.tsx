@@ -4,7 +4,7 @@ import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 
 import type { JournalMark, MarkSide, MarkTool } from "@/lib/api/types";
 import { illustrationOf, LATEST_DIAGRAM } from "./HorseDiagram";
-import { clamp01, length, MIN_LINE_LENGTH, moved, newMark, SIDE_LABELS } from "./marks";
+import { clamp01, length, MIN_LINE_LENGTH, moved, newMark, numberOf, SIDE_LABELS } from "./marks";
 
 export type ActiveTool = "select" | MarkTool;
 
@@ -52,6 +52,32 @@ function MarkShape({ mark, selected, width, height }: { mark: JournalMark; selec
     case "o":
       return <circle cx={px(a[0])} cy={py(a[1])} r={size} {...common} />;
   }
+}
+
+/** Where a mark's number badge sits: up and to the right of a symbol, or just beyond the tail of a line or arrow. */
+function badgeAt(mark: JournalMark, width: number, height: number): [number, number] {
+  const { k, px, py } = geometry(width, height);
+  const [a, b] = mark.points;
+  if (!b) return [px(a[0]) + 15 * k, py(a[1]) - 15 * k];
+  const dx = px(a[0]) - px(b[0]);
+  const dy = py(a[1]) - py(b[1]);
+  const away = Math.hypot(dx, dy) || 1;
+  return [px(a[0]) + (dx / away) * 14 * k, py(a[1]) + (dy / away) * 14 * k];
+}
+
+/** The mark's number in a small round badge, the same number the list under the picture and the text use. */
+function NumberBadge({ mark, number, selected, width, height }: { mark: JournalMark; number: number; selected: boolean; width: number; height: number }) {
+  const k = width / 400;
+  const [x, y] = badgeAt(mark, width, height);
+  const color = selected ? SELECTED_COLOR : MARK_COLOR;
+  return (
+    <g aria-hidden="true" data-testid="mark-number">
+      <circle cx={x} cy={y} r={9 * k} fill="#ffffff" stroke={color} strokeWidth={1.5 * k} />
+      <text x={x} y={y} fontSize={11 * k} fontWeight={700} fill={color} textAnchor="middle" dominantBaseline="central">
+        {number}
+      </text>
+    </g>
+  );
 }
 
 /**
@@ -178,6 +204,7 @@ export function DiagramCanvas({
             <MarkHit mark={mark} width={width} height={height} />
           </g>
           <MarkShape mark={mark} selected={mark.id === selectedId} width={width} height={height} />
+          <NumberBadge mark={mark} number={numberOf(mark, marks)} selected={mark.id === selectedId} width={width} height={height} />
         </g>
       ))}
       {preview && <MarkShape mark={preview} selected width={width} height={height} />}

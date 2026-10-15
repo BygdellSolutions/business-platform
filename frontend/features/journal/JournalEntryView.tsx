@@ -12,7 +12,7 @@ import type { JournalEntry } from "@/lib/api/types";
 import { problemsFrom, useMutation } from "@/lib/forms";
 import { formatTimestamp } from "@/lib/timestamps";
 import { DiagramCanvas } from "./DiagramCanvas";
-import { describe, SIDE_LABELS } from "./marks";
+import { describe, numberOf, SIDE_LABELS } from "./marks";
 
 /**
  * A finalized entry: exactly what was frozen (text and marks on both sides of the horse), who finalized it and when, and the dated
@@ -63,7 +63,9 @@ export function JournalEntryView({ entry, timeZone }: { entry: JournalEntry; tim
             <DiagramCanvas side={side} marks={entry.marks} version={entry.diagram_version} />
             <ul className="text-sm">
               {entry.marks.filter((mark) => mark.side === side).map((mark) => (
-                <li key={mark.id}>{describe(mark)}</li>
+                <li key={mark.id}>
+                  {numberOf(mark, entry.marks)}. {describe(mark)}
+                </li>
               ))}
             </ul>
           </div>
