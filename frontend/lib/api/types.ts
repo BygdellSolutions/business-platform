@@ -158,6 +158,7 @@ export interface Organization extends Profile {
   /** Contact and payment details for documents (all optional; IBAN and BIC as the backend normalized them). */
   phone: string | null;
   email: string | null;
+  registered_office: string | null;
   website: string | null;
   bankgiro: string | null;
   plusgiro: string | null;
@@ -174,7 +175,7 @@ export interface Organization extends Profile {
 }
 
 export type DocumentLanguage = "sv" | "en";
-export type SellerTextField = "phone" | "email" | "website" | "bankgiro" | "plusgiro" | "iban" | "bic";
+export type SellerTextField = "phone" | "email" | "registered_office" | "website" | "bankgiro" | "plusgiro" | "iban" | "bic";
 
 /**
  * The body of organization creation. There is deliberately no owner, user, role or id: the backend makes the

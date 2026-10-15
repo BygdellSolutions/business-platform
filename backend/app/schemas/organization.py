@@ -34,6 +34,7 @@ def _compact_upper(value):
 Phone = optional_text(64)
 Email = optional_text(255)
 Website = optional_text(255)
+RegisteredOffice = optional_text(128)
 GiroNumber = optional_text(32)
 Iban = Annotated[Annotated[str, StringConstraints(pattern=r"^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$")] | None, BeforeValidator(_compact_upper)]
 Bic = Annotated[Annotated[str, StringConstraints(pattern=r"^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$")] | None, BeforeValidator(_compact_upper)]
@@ -73,6 +74,7 @@ class OrganizationUpdate(ProfileIn):
     # Contact and payment details for documents; null (or blank) clears one.
     phone: Phone = None
     email: Email = None
+    registered_office: RegisteredOffice = None
     website: Website = None
     bankgiro: GiroNumber = None
     plusgiro: GiroNumber = None
@@ -106,6 +108,7 @@ class OrganizationRead(ProfileRead):
     timezone: str | None
     phone: str | None
     email: str | None
+    registered_office: str | None
     website: str | None
     bankgiro: str | None
     plusgiro: str | None

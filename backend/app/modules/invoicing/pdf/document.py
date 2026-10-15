@@ -95,7 +95,7 @@ class PdfPayment(Frozen):
     iban: str | None = None
     bic: str | None = None
     terms_days: str | None = None
-    reference: str  # the invoice number
+    reference: str  # what to write when paying: the OCR number made from the invoice number
 
 
 class PdfCredit(Frozen):
@@ -127,6 +127,7 @@ class PdfReceipt(Frozen):
 
 class PdfDocument(Frozen):
     number_text: str
+    payment_reference: str | None = None  # what to write when paying (OCR); older documents fall back to number_text
     invoice_date: str
     due_date: str | None
     currency: str
@@ -202,7 +203,7 @@ def source_sha256(document: PdfDocument) -> str:
 
 
 def iter_strings(document: PdfDocument):
-    yield from (document.number_text, document.invoice_date, document.currency, document.net, document.vat, document.gross)
+    yield from (document.number_text, *([document.payment_reference] if document.payment_reference else []), document.invoice_date, document.currency, document.net, document.vat, document.gross)
     yield from (value for value in (document.due_date, document.description) if value is not None)
     yield from document.delivery_dates
     yield from document.order_numbers

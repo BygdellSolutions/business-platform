@@ -3,12 +3,13 @@ import type { FieldErrors } from "@/lib/api/errors";
 import type { DocumentLanguage, Organization, OrganizationUpdate, SellerTextField } from "@/lib/api/types";
 import { blankToNull } from "@/lib/forms";
 
-export const SELLER_TEXT_FIELDS: readonly SellerTextField[] = ["phone", "email", "website", "bankgiro", "plusgiro", "iban", "bic"];
+export const SELLER_TEXT_FIELDS: readonly SellerTextField[] = ["phone", "email", "registered_office", "website", "bankgiro", "plusgiro", "iban", "bic"];
 export const SELLER_CONTROLS = [...SELLER_TEXT_FIELDS, "payment_terms_days", "approved_for_f_tax", "document_language"] as const;
 
 export const SELLER_LABELS: Record<SellerTextField, string> = {
   phone: "Phone",
   email: "Email",
+  registered_office: "Registered office (säte)",
   website: "Website",
   bankgiro: "Bankgiro",
   plusgiro: "Plusgiro",
@@ -17,6 +18,7 @@ export const SELLER_LABELS: Record<SellerTextField, string> = {
 };
 
 const HINTS: Partial<Record<SellerTextField, string>> = {
+  registered_office: "Where a limited company has its registered office (a municipality); printed next to the organization number.",
   iban: "Spaces are fine; it is stored without them.",
   bic: "8 or 11 characters.",
 };

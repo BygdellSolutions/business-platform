@@ -54,7 +54,7 @@ def test_the_response_has_no_secrets_or_foreign_ids(client, db_session):
         "default_currency_lock_reason", "address_line1", "address_line2", "postal_code", "city",
         "country_code", "registration_number", "vat_number", "timezone", "today", "created_at", "updated_at",
         # The seller's contact and payment details (shown on documents; no secret among them).
-        "phone", "email", "website", "bankgiro", "plusgiro", "iban", "bic", "payment_terms_days", "approved_for_f_tax", "document_language",
+        "phone", "email", "registered_office", "website", "bankgiro", "plusgiro", "iban", "bic", "payment_terms_days", "approved_for_f_tax", "document_language",
         # When the owner last downloaded a copy of the data, and whether that is recent enough to delete without saying "no copy".
         "last_export_at", "recent_export",
     }

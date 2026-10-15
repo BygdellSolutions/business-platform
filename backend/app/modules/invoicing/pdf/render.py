@@ -52,7 +52,9 @@ from app.modules.invoicing.pdf.labels import decimal_separator, labels
 #    purchase and still to come, per line) when a counter sale was not all in stock. Everything else prints as in 9.
 # 11: invoicing by delivery: a line that is part of an order line prints "Ordered 7 · Backordered 5" /
 #    "Beställt 7 · Restnoterat 5" under its description. Everything else prints as in 10.
-TEMPLATE_VERSION = 11
+# 12: the payment reference is an OCR number (the invoice number, a length digit and a check digit) and the seller's registered
+#    office ("Säte") is printed with the organization number. Everything else prints as in 11.
+TEMPLATE_VERSION = 12
 ACCENT = colors.HexColor("#1f4e5f")
 ACCENT_LIGHT = colors.HexColor("#e8f0f2")
 # Room for the footer columns (up to five lines each) above the page number.
@@ -283,7 +285,7 @@ def _build(document: PdfDocument, fonts: font_layer.Registered) -> bytes:
     elif credit:
         due.append(printer.p(f"{words['credits_invoice']} {credit.invoice_number}", "due_note"))
     else:
-        due.append(printer.p(f"{words['reference']} {document.number_text}", "due_note"))
+        due.append(printer.p(f"{words['reference']} {document.payment_reference or document.number_text}", "due_note"))
     parties = Table(
         [[[printer.p(words["customer" if receipt else "billed_to"], "box_label"), Spacer(1, 2), *_party_flowables(printer, document.customer, "bold")], due]],
         colWidths=[width * 0.58, width * 0.42],
@@ -434,7 +436,7 @@ def _build(document: PdfDocument, fonts: font_layer.Registered) -> bytes:
         doc.build(story, canvasmaker=_numbered_canvas(footer))
         return _checked(buffer.getvalue())
     payment = document.payment
-    rows: list[tuple[str, str]] = [(words["reference"], document.number_text)]
+    rows: list[tuple[str, str]] = [(words["reference"], document.payment_reference or document.number_text)]
     if document.due_date is not None:
         rows.append((words["due_date"], document.due_date))
     if payment is not None:

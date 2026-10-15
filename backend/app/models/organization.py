@@ -46,6 +46,8 @@ class Organization(BusinessProfile, Base):
     # The IANA time zone the organization works in (e.g. Europe/Stockholm). It decides what "today" is for
     # date defaults. NULL until an owner or admin sets it: then dates default to UTC, as before (no assumed zone).
     timezone: Mapped[str | None] = mapped_column(String(64))
+    # Where a limited company has its registered office (säte): a municipality, shown on its invoices next to the organization number.
+    registered_office: Mapped[str | None] = mapped_column(String(128))
     # The seller's contact and payment details as documents show them. All optional free text, except the shapes of
     # IBAN and BIC (international standards). Bankgiro and plusgiro are Swedish payment numbers, kept as typed.
     phone: Mapped[str | None] = mapped_column(String(64))

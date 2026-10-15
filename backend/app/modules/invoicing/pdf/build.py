@@ -9,6 +9,7 @@ nothing downstream could look them up.
 
 from typing import Any
 
+from app.modules.invoicing.ocr import ocr_reference
 from app.modules.invoicing.pdf.document import PdfCredit, PdfDocument, PdfField, PdfLine, PdfParty, PdfPayment, PdfSource, PdfVatRow, clean_text
 from app.modules.invoicing.pdf.format import money, trimmed
 from app.modules.invoicing.pdf.labels import decimal_separator, labels
@@ -48,7 +49,7 @@ def _party(snapshot: dict[str, Any], *, prefer_legal_name: bool, words: dict[str
     return PdfParty(name=_text(name), lines=tuple(cleaned for cleaned in (_text(line) for line in lines if line) if cleaned))
 
 
-def _payment(issuer: dict[str, Any], number_text: str) -> PdfPayment | None:
+def _payment(issuer: dict[str, Any], reference: str) -> PdfPayment | None:
     """The payment block, when the issuer snapshot (schema 2) stores a way to pay. Schema 1 never does."""
     ways = {key: issuer.get(key) for key in ("bankgiro", "plusgiro", "iban", "bic")}
     if not any(ways.values()):
@@ -57,7 +58,7 @@ def _payment(issuer: dict[str, Any], number_text: str) -> PdfPayment | None:
     return PdfPayment(
         **{key: _text(value) if value else None for key, value in ways.items()},
         terms_days=_text(days) if days is not None else None,
-        reference=_text(number_text),
+        reference=_text(reference),
     )
 
 
@@ -73,6 +74,7 @@ def _footer(issuer: dict[str, Any], words: dict[str, str]) -> tuple[tuple[str, .
     ]
     tax = [
         f"{words['registration']} {issuer['registration_number']}" if issuer.get("registration_number") else None,
+        f"{words['registered_office']} {issuer['registered_office']}" if issuer.get("registered_office") else None,
         f"{words['vat_no']} {issuer['vat_number']}" if issuer.get("vat_number") else None,
         words["f_tax"] if issuer.get("approved_for_f_tax") is True else None,
     ]
@@ -119,6 +121,13 @@ def _notes(line: dict[str, Any], words: dict[str, str], separator: str) -> tuple
     return tuple(_text(note) for note in notes)
 
 
+def _payment_reference(data: dict[str, Any]) -> str:
+    """What the customer writes when paying: the OCR number made from the invoice number (a bank can check it), or the printed
+    number text when the stored invoice has no integer number."""
+    number = data.get("number")
+    return ocr_reference(number) if isinstance(number, int) and not isinstance(number, bool) and number > 0 else data["number_text"]
+
+
 def document_from_invoice(invoice: Any) -> PdfDocument:
     """`invoice` is an InvoiceRead (or anything with the same JSON form)."""
     data = invoice.model_dump(mode="json") if hasattr(invoice, "model_dump") else invoice
@@ -132,7 +141,8 @@ def document_from_invoice(invoice: Any) -> PdfDocument:
         language=language if language in ("en", "sv") else "en",
         delivery_dates=tuple(sorted({_text(source["transaction_date"]) for source in data["transactions"]})),
         order_numbers=tuple(str(source["transaction_number"]) for source in data["transactions"] if source.get("transaction_number") is not None),
-        payment=_payment(issuer, data["number_text"]),
+        payment=_payment(issuer, _payment_reference(data)),
+        payment_reference=_payment_reference(data),
         approved_for_f_tax=issuer.get("approved_for_f_tax") is True,
         issuer_footer=_footer(issuer, words),
         number_text=_text(data["number_text"]),

@@ -33,6 +33,7 @@ function organization(overrides: Partial<Organization> = {}): Organization {
     ...EMPTY_PROFILE,
     phone: null,
     email: null,
+    registered_office: null,
     website: null,
     bankgiro: null,
     plusgiro: null,

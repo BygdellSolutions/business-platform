@@ -109,6 +109,26 @@ def test_the_sender_is_labelled_and_the_footer_has_the_standard_columns():
     assert "Från" in text and text.index("Från") < text.index("Fredrik Horse Therapy AB")
 
 
+def test_the_registered_office_is_printed_next_to_the_organization_number_in_the_documents_language():
+    swedish = document_from_invoice(_swedish(registered_office="Umeå"))
+    assert ("Org.nr 556000-0001", "Säte Umeå", "Momsreg.nr SE556000000101", "Godkänd för F-skatt") in swedish.issuer_footer
+    assert "Säte Umeå" in pdf_text(render_pdf(swedish))
+    english = document_from_invoice(_swedish(registered_office="Umeå", document_language="en"))
+    assert any("Registered office Umeå" in column for column in english.issuer_footer)
+    assert not any("Säte" in line for column in document_from_invoice(_swedish()).issuer_footer for line in column)  # nothing stored: not printed
+
+
+def test_the_customer_is_told_to_pay_with_the_ocr_number_not_the_invoice_number():
+    from app.modules.invoicing.ocr import ocr_reference
+
+    document = document_from_invoice(_swedish())  # invoice number 7
+    ocr = ocr_reference(7)
+    assert ocr != "7" and document.payment.reference == ocr and document.payment_reference == ocr
+    text = pdf_text(render_pdf(document))
+    assert f"Betalningsreferens {ocr}" in text and text.count(ocr) >= 2  # in the header note and in the payment section
+    assert document.number_text == "7"  # the invoice number itself is unchanged
+
+
 def test_a_footer_column_with_nothing_stored_is_left_out():
     document = document_from_invoice(stored())  # no contact or payment details stored
     assert [column[0] for column in document.issuer_footer] == ["Fredrik Horse Therapy AB", "Registration no. 556000-0001"]

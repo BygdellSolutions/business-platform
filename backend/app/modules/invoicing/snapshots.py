@@ -20,8 +20,9 @@ PROFILE_FIELDS = (
     "registration_number",
     "vat_number",
 )
-# What schema 2 of the issuer snapshot adds: how to reach and pay the seller, and the documents' language.
+# What schema 2 of the issuer snapshot adds (schema 4 adds the registered office): how to reach and pay the seller, and the documents' language.
 ISSUER_FIELDS = (
+    "registered_office",
     "phone",
     "email",
     "website",
