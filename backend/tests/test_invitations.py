@@ -506,6 +506,16 @@ def session_team(db_session, session_client):
     return SimpleNamespace(team=team, invite=make_invitation, client=session_client)
 
 
+def test_a_new_account_cannot_start_with_a_common_password_and_the_invitation_stays_pending(session_team, db_session):
+    made = session_team.invite("common.password@invitees.invalid")
+
+    refused = accept_new(session_team.client, made["token"], password="Password123456")
+
+    assert refused.status_code in (400, 422) and "too common" in refused.text.lower()
+    assert db_session.scalar(select(User).where(User.email == "common.password@invitees.invalid")) is None
+    assert accept_new(session_team.client, made["token"]).status_code == 200  # the invitation was not consumed
+
+
 def test_a_new_account_is_created_with_the_invited_email_a_membership_and_a_session(session_team, db_session):
     made = session_team.invite("brand.new@invitees.invalid", "accountant")
 
