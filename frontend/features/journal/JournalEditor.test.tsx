@@ -1,0 +1,150 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { OrgScope } from "@/components/shell/org-context";
+import { normalizeError, type ApiResult } from "@/lib/api/errors";
+import type { JournalEntry } from "@/lib/api/types";
+import { JournalEditor } from "./JournalEditor";
+
+const router = { push: vi.fn(), refresh: vi.fn() };
+vi.mock("next/navigation", () => ({ useRouter: () => router }));
+vi.mock("@/lib/api/client", () => ({ apiFetch: vi.fn() }));
+import { apiFetch } from "@/lib/api/client";
+
+const ORG = "00000000-0000-4000-8000-0000000000a1";
+const HORSE = "99999999-9999-4999-8999-999999999999";
+const ENTRY = "88888888-8888-4888-8888-888888888888";
+const mocked = vi.mocked(apiFetch);
+const ok = <T,>(data: T): ApiResult<T> => ({ ok: true, status: 200, data });
+const fail = <T,>(status: number, body: unknown): ApiResult<T> => ({ ok: false, error: normalizeError(status, body) });
+
+function entry(overrides: Partial<JournalEntry> = {}): JournalEntry {
+  return {
+    id: ENTRY, horse_id: HORSE, visit_at: "2026-10-15T12:30:00Z", practitioner_name: "Tina Therapist", body: "", follow_up_on: null, marks: [],
+    diagram_version: 1, status: "draft", version: 1, finalized_at: null, finalized_by: null, created_at: "", updated_at: "", created_by: null, updated_by: null,
+    created_by_name: "Tina Therapist", finalized_by_name: null, can_change: true, can_correct: false, corrections: [], ...overrides,
+  };
+}
+
+beforeEach(() => {
+  mocked.mockReset();
+  router.refresh.mockReset();
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, width: 400, height: 300, right: 400, bottom: 300, x: 0, y: 0, toJSON: () => ({}) });
+});
+afterEach(() => vi.restoreAllMocks());
+
+const mount = (value = entry()) =>
+  render(
+    <OrgScope orgId={ORG}>
+      <JournalEditor entry={value} />
+    </OrgScope>,
+  );
+const status = () => screen.getByTestId("save-status").textContent;
+const tap = (x: number, y: number) => fireEvent.pointerDown(screen.getByTestId("diagram-left"), { clientX: x, clientY: y, pointerId: 1 });
+
+describe("writing an entry", () => {
+  it("says there are no unsaved changes until something changes, and then says so", async () => {
+    mount();
+    expect(status()).toBe("All changes saved");
+    expect((screen.getByTestId("save-draft") as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.type(screen.getByLabelText(/Observations/), "Stiff left shoulder");
+    expect(status()).toBe("Unsaved changes");
+    expect((screen.getByTestId("save-draft") as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("saves only what changed, against the version the draft was opened on, and then shows it saved", async () => {
+    mocked.mockResolvedValueOnce(ok(entry({ body: "Stiff", version: 2 })));
+    mount();
+    await userEvent.type(screen.getByLabelText(/Observations/), "Stiff");
+    await userEvent.click(screen.getByTestId("save-draft"));
+    expect(mocked).toHaveBeenCalledWith(ORG, `/horses/${HORSE}/journal/${ENTRY}`, { method: "PATCH", body: { body: "Stiff" }, ifMatch: 1 });
+    await waitFor(() => expect(status()).toBe("All changes saved"));
+    expect(screen.getByTestId("saved").textContent).toBe("Draft saved.");
+  });
+
+  it("draws a mark with a tool, lists it in words, and can undo, redo and delete it", async () => {
+    mount();
+    await userEvent.click(screen.getByTestId("tool-x"));
+    tap(100, 75);
+    expect(screen.getByTestId("marks-list").textContent).toContain("X on the horse's left side, at 25 % across, 25 % down");
+    expect(status()).toBe("Unsaved changes");
+
+    await userEvent.click(screen.getByTestId("undo"));
+    expect(screen.getByTestId("no-marks")).toBeTruthy();
+    expect(status()).toBe("All changes saved"); // back to what is saved
+    await userEvent.click(screen.getByTestId("redo"));
+    expect(screen.getAllByTestId("mark")).toHaveLength(1);
+    await userEvent.click(screen.getByTestId("delete-listed-mark"));
+    expect(screen.queryByTestId("marks-list")).toBeNull();
+  });
+
+  it("keeps the marks of each side apart", async () => {
+    mount();
+    await userEvent.click(screen.getByTestId("tool-o"));
+    tap(100, 75);
+    await userEvent.click(screen.getByTestId("side-right"));
+    expect(screen.getByTestId("no-marks")).toBeTruthy();
+    expect(screen.getByTestId("diagram-right")).toBeTruthy();
+    await userEvent.click(screen.getByTestId("side-left"));
+    expect(screen.getAllByTestId("mark")).toHaveLength(1);
+  });
+
+  it("sends the marks with the save", async () => {
+    mocked.mockResolvedValueOnce(ok(entry({ version: 2 })));
+    mount();
+    await userEvent.click(screen.getByTestId("tool-x"));
+    tap(200, 150);
+    await userEvent.click(screen.getByTestId("save-draft"));
+    const body = (mocked.mock.calls[0][2] as { body: { marks: { tool: string; points: number[][] }[] } }).body;
+    expect(body.marks).toHaveLength(1);
+    expect(body.marks[0]).toMatchObject({ tool: "x", points: [[0.5, 0.5]] });
+  });
+});
+
+describe("when saving does not work", () => {
+  it("a change made elsewhere is refused, said plainly, and nothing is shown as saved", async () => {
+    mocked.mockResolvedValueOnce(fail(409, { detail: { code: "stale_record", message: "stale", current_version: 3 } }));
+    mount();
+    await userEvent.type(screen.getByLabelText(/Observations/), "x");
+    await userEvent.click(screen.getByTestId("save-draft"));
+    expect((await screen.findByTestId("stale")).textContent).toContain("changed somewhere else");
+    expect(status()).toBe("Unsaved changes");
+    await userEvent.click(screen.getByRole("button", { name: "Reload" }));
+    expect(router.refresh).toHaveBeenCalled();
+  });
+
+  it("a validation message from the backend appears at the control", async () => {
+    mocked.mockResolvedValueOnce(fail(422, { detail: [{ loc: ["body", "body"], msg: "String should have at most 20000 characters", type: "string_too_long" }] }));
+    mount();
+    await userEvent.type(screen.getByLabelText(/Observations/), "x");
+    await userEvent.click(screen.getByTestId("save-draft"));
+    expect(await screen.findByText(/at most 20000/)).toBeTruthy();
+  });
+});
+
+describe("finalizing", () => {
+  it("asks first, saves the unsaved changes, then finalizes with the new version and shows the frozen entry", async () => {
+    mocked.mockResolvedValueOnce(ok(entry({ body: "Done", version: 2 }))).mockResolvedValueOnce(ok(entry({ body: "Done", version: 3, status: "final" })));
+    mount();
+    await userEvent.type(screen.getByLabelText(/Observations/), "Done");
+    await userEvent.click(screen.getByTestId("finalize"));
+    expect(mocked).not.toHaveBeenCalled(); // the first click only asks
+    await userEvent.click(screen.getByTestId("finalize-confirm"));
+    await waitFor(() => expect(mocked).toHaveBeenCalledTimes(2));
+    expect(mocked.mock.calls[0][2]).toMatchObject({ method: "PATCH", ifMatch: 1 });
+    expect(mocked.mock.calls[1]).toEqual([ORG, `/horses/${HORSE}/journal/${ENTRY}/finalize`, { method: "POST", ifMatch: 2 }]);
+    await waitFor(() => expect(router.refresh).toHaveBeenCalled());
+  });
+
+  it("does not finalize when the save before it fails", async () => {
+    mocked.mockResolvedValueOnce(fail(409, { detail: { code: "stale_record", message: "stale", current_version: 3 } }));
+    mount();
+    await userEvent.type(screen.getByLabelText(/Observations/), "x");
+    await userEvent.click(screen.getByTestId("finalize"));
+    await userEvent.click(screen.getByTestId("finalize-confirm"));
+    await screen.findByTestId("stale");
+    expect(mocked).toHaveBeenCalledTimes(1);
+    expect(router.refresh).not.toHaveBeenCalled();
+  });
+});

@@ -177,13 +177,13 @@ test.describe("direct navigation to another organization's horse", () => {
 });
 
 test.describe("edit attempts against foreign ids cannot mutate", () => {
-  test("PATCH and DELETE on a foreign horse answer 404 exactly as for a random id, and change nothing", async ({ context }) => {
+  test("PATCH on a foreign horse answers 404 exactly as for a random id (and DELETE does not exist for horses at all), and nothing changes", async ({ context }) => {
     const before = testRow(`select name || '|' || owner_customer_id || '|' || active::text from horses where id = ${sql(ids.b.horse)}`);
 
     for (const [method, data] of [["patch", { name: "HACKED", active: false }], ["patch", { owner_customer_id: ids.a.owner }], ["delete", undefined]] as const) {
       const viaA = await outcome(await context.request[method](bffUrl(ORG_A.id, `/horses/${ids.b.horse}`), { data }));
       const random = await outcome(await context.request[method](bffUrl(ORG_A.id, `/horses/${RANDOM_ORG}`), { data }));
-      expect(viaA.status).toBe(404);
+      expect(viaA.status).toBe(method === "delete" ? 405 : 404); // a horse is only active or inactive: there is no delete route
       expect(viaA).toEqual(random);
     }
     expect(testRow(`select name || '|' || owner_customer_id || '|' || active::text from horses where id = ${sql(ids.b.horse)}`)).toBe(before);

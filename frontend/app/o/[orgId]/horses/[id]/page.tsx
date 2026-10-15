@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { RecordHistory } from "@/components/history/RecordHistory";
 import { RecordMeta } from "@/components/history/RecordMeta";
 import { ServiceList } from "@/components/history/ServiceList";
@@ -8,7 +10,7 @@ import { Notice } from "@/components/ui/Notice";
 import { readActiveRole } from "@/lib/active-role";
 import type { Horse, HorseNote, Organization, ServiceRecord } from "@/lib/api/types";
 import { readRecordHistory } from "@/lib/history-server";
-import { canWriteRecords } from "@/lib/roles";
+import { canUseJournal, canWriteRecords } from "@/lib/roles";
 import { requireUuid, serverRead } from "@/lib/server-api";
 
 /** A foreign, random or malformed horse id all end in the same generic not-found page. */
@@ -42,6 +44,13 @@ export default async function HorsePage({
       {created === "1" && <Notice testId="created">Horse created.</Notice>}
       <RecordMeta record={horse} people={history.history.people} timeZone={organization.timezone} />
       {canWriteRecords(role) ? <HorseForm key={horse.id} horse={horse} /> : <HorseDetails orgId={orgId} horse={horse} />}
+      {canUseJournal(role) && (
+        <p>
+          <Link href={`/o/${orgId}/horses/${horse.id}/journal`} className="underline" data-testid="journal-link">
+            Journal of visits and treatments
+          </Link>
+        </p>
+      )}
       <HorseNotes horseId={horse.id} notes={notes} canWrite={canWriteRecords(role)} timeZone={organization.timezone} />
       <ServiceList orgId={orgId} services={services} timeZone={organization.timezone} title="Services performed on this horse" />
       <RecordHistory data={history} entityType="horse" timeZone={organization.timezone} />

@@ -105,7 +105,7 @@ class HorseNote(TenantOwned, Authored, Base):
 JOURNAL_DRAFT, JOURNAL_FINAL = "draft", "final"
 JOURNAL_MAX_BODY = 20_000
 JOURNAL_MAX_MARKS = 200
-DIAGRAM_VERSION = 1  # which bundled horse illustration the marks were drawn on (kept, so old marks can be shown on their own picture)
+DIAGRAM_VERSION = 2  # which bundled horse illustration the marks were drawn on (1: a simple line drawing, 2: an engraved horse; each entry keeps its own)
 
 
 class HorseJournalEntry(TenantOwned, Authored, Base):

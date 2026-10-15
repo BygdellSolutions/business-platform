@@ -53,6 +53,7 @@ def test_owner_admin_and_employee_read_and_write(client: TestClient, world, role
     _, horse, people = world
     entry = _create(client, horse, people[role], body="Stiff left shoulder.", marks=[MARK])
     assert entry["status"] == "draft" and entry["practitioner_name"] == f"{role.title()} Person" and entry["version"] == 1
+    assert entry["diagram_version"] == 2  # new entries are drawn on the newest illustration
     assert client.get(_url(horse, entry), headers=people["owner"]).json()["body"] == "Stiff left shoulder."
     assert [row["id"] for row in client.get(_url(horse), headers=people[role]).json()] == [entry["id"]]
 

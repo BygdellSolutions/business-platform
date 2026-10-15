@@ -62,5 +62,5 @@ test("a product cannot be chosen as a service, and a horse with a service cannot
 
   expect((await line(liniment.id)).status()).toBe(422);
   expect((await line(massage.id)).status()).toBe(201);
-  expect((await context.request.delete(bffUrl(world.orgId, `/horses/${horse.id}`))).status()).toBe(409);
+  expect((await context.request.delete(bffUrl(world.orgId, `/horses/${horse.id}`))).status()).toBe(405);
 });

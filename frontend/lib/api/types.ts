@@ -978,3 +978,73 @@ export interface HorseNote {
   created_by_name: string | null;
   updated_by_name: string | null;
 }
+
+
+// --- the horse journal (backend: app/modules/equine/journal*.py) ----------------------------------------------------
+
+export type MarkSide = "left" | "right";
+export type MarkTool = "line" | "arrow" | "x" | "o";
+
+/** One drawing mark: fractions (0 to 1) of the diagram's width and height, so it stays aligned at any size. */
+export interface JournalMark {
+  id: string;
+  side: MarkSide;
+  tool: MarkTool;
+  points: number[][];
+}
+
+export interface JournalSummary {
+  id: string;
+  horse_id: string;
+  visit_at: string;
+  practitioner_name: string;
+  status: "draft" | "final";
+  follow_up_on: string | null;
+  mark_count: number;
+  preview: string;
+  version: number;
+  created_by: string | null;
+  created_by_name: string | null;
+}
+
+export interface JournalCorrection {
+  id: string;
+  entry_id: string;
+  body: string;
+  created_at: string;
+  created_by: string | null;
+  created_by_name: string | null;
+}
+
+export interface JournalEntry {
+  id: string;
+  horse_id: string;
+  visit_at: string;
+  practitioner_name: string;
+  body: string;
+  follow_up_on: string | null;
+  marks: JournalMark[];
+  diagram_version: number;
+  status: "draft" | "final";
+  /** Sent back as If-Match when the draft is changed or finalized. */
+  version: number;
+  finalized_at: string | null;
+  finalized_by: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+  created_by_name: string | null;
+  finalized_by_name: string | null;
+  can_change: boolean;
+  can_correct: boolean;
+  corrections: JournalCorrection[];
+}
+
+export interface JournalUpdate {
+  visit_at?: string;
+  practitioner_name?: string;
+  body?: string;
+  follow_up_on?: string | null;
+  marks?: JournalMark[];
+}

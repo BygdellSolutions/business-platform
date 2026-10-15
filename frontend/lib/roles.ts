@@ -17,6 +17,16 @@ export function canMutateInvoices(role: Role | undefined): boolean {
  */
 export const RECORD_WRITER_ROLES: readonly Role[] = ["owner", "admin", "accountant", "employee"];
 
+/**
+ * Who sees the horse journal: owner, admin and employee. An accountant or a viewer has no access at all. Presentation only; FastAPI
+ * refuses the other roles whatever the screen shows.
+ */
+export const JOURNAL_ROLES: readonly Role[] = ["owner", "admin", "employee"];
+
+export function canUseJournal(role: Role | undefined): boolean {
+  return role !== undefined && JOURNAL_ROLES.includes(role);
+}
+
 export function canWriteRecords(role: Role | undefined): boolean {
   return role !== undefined && RECORD_WRITER_ROLES.includes(role);
 }
