@@ -65,8 +65,10 @@ def test_create_read_list_update_delete_roundtrip(client: TestClient, setup):
     assert updated.json()["breed"] == "Swedish Warmblood"  # untouched
     assert updated.json()["owner"] == horse["owner"]  # untouched
 
-    assert client.delete(f"/api/horses/{horse['id']}", headers=headers).status_code == 204
-    assert client.get(f"/api/horses/{horse['id']}", headers=headers).status_code == 404
+    # There is no delete: a horse is active or inactive (so its journal and history can only go with the whole organization).
+    assert client.delete(f"/api/horses/{horse['id']}", headers=headers).status_code == 405
+    assert client.get(f"/api/horses/{horse['id']}", headers=headers).status_code == 200
+    assert client.patch(f"/api/horses/{horse['id']}", json={"active": False}, headers=headers).json()["active"] is False
 
 
 def test_only_name_and_owner_are_required(client: TestClient, setup):

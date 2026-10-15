@@ -17,7 +17,8 @@ GENERIC_409 = {
     "horse": "Horse is referenced by other records",
     "supplier": "Supplier is referenced by other records",
 }
-DELETE_PATH = {"customer": "/api/customers", "horse": "/api/horses", "supplier": "/api/suppliers"}
+DELETE_PATH = {"customer": "/api/customers", "supplier": "/api/suppliers"}
+NEVER_DELETED = {"horse"}  # a horse is only active or inactive (decided 2026-10-14): it has no delete route to guard
 
 
 def _supplier(db, org):
@@ -127,21 +128,14 @@ def test_a_customer_pointed_at_by_a_live_value_cannot_be_deleted(client: TestCli
     assert client.get(f"/api/customers/{cf.anna.id}", headers=cf.headers).status_code == 200
 
 
-def test_a_horse_pointed_at_by_a_live_value_cannot_be_deleted(client: TestClient, cf):
+def test_a_horse_cannot_be_deleted_at_all_even_when_nothing_points_at_it(client: TestClient, cf):
     put(client, cf, cf.lines[0], owner=str(cf.anna.id), horse=str(cf.kalle.id))
-
-    response = client.delete(f"/api/horses/{cf.kalle.id}", headers=cf.headers)
-
-    assert response.status_code == 409 and response.json()["detail"] == GENERIC_409["horse"]
-
-
-def test_the_record_can_be_deleted_once_nothing_points_at_it(client: TestClient, cf):
-    put(client, cf, cf.lines[0], owner=str(cf.anna.id), horse=str(cf.kalle.id))
-    assert client.delete(f"/api/horses/{cf.kalle.id}", headers=cf.headers).status_code == 409
+    assert client.delete(f"/api/horses/{cf.kalle.id}", headers=cf.headers).status_code == 405
 
     put(client, cf, cf.lines[0], horse=None)
 
-    assert client.delete(f"/api/horses/{cf.kalle.id}", headers=cf.headers).status_code == 204
+    assert client.delete(f"/api/horses/{cf.kalle.id}", headers=cf.headers).status_code == 405  # a horse is active or inactive, never deleted
+    assert client.get(f"/api/horses/{cf.kalle.id}", headers=cf.headers).status_code == 200
 
 
 def test_values_of_deleted_records_do_not_block_anything(client: TestClient, db_session: Session, cf):
@@ -164,9 +158,8 @@ def test_deleting_a_whole_draft_transaction_releases_its_references(client: Test
 
     assert client.delete(f"/api/transactions/{cf.tx.id}", headers=cf.headers).status_code == 204
 
-    # Erik still owns Storm (a foreign key), so release that first
-    client.delete(f"/api/horses/{cf.storm.id}", headers=cf.headers)
-    assert client.delete(f"/api/customers/{cf.erik.id}", headers=cf.headers).status_code == 204
+    # The draft's references are released, but Erik still owns Storm (a foreign key) and a horse is never deleted: he stays
+    assert client.delete(f"/api/customers/{cf.erik.id}", headers=cf.headers).status_code == 409
 
 
 def test_header_level_references_protect_their_targets_too(client: TestClient, db_session: Session, cf):
@@ -191,7 +184,7 @@ def test_a_refused_delete_does_not_break_the_session(client: TestClient, cf):
 def test_every_referenceable_entity_type_has_a_guarded_delete_path_in_this_suite():
     # Add a new referenceable entity -> this fails until its delete route is covered below.
     referenceable = {e.key for e in registry.all() if e.reference is not None}
-    assert referenceable == set(DELETE_PATH)
+    assert referenceable == set(DELETE_PATH) | NEVER_DELETED
 
 
 @pytest.mark.parametrize("source", sorted(DELETE_PATH))
@@ -199,7 +192,6 @@ def test_deleting_any_referenceable_record_goes_through_the_guard(client: TestCl
     make_definition(db_session, cf.org, key=f"ref_{source}", field_type="reference", reference_source=source, position=40)
     targets = {
         "customer": lambda: make_customer(db_session, cf.org, "Target AB"),
-        "horse": lambda: make_horse(db_session, cf.org, "Target", owner=cf.anna),
         "supplier": lambda: _supplier(db_session, cf.org),
     }
     target = targets[source]()

@@ -96,10 +96,12 @@ def test_a_note_of_one_horse_cannot_be_reached_through_another(client: TestClien
 
 
 def test_the_notes_go_with_the_horse(client: TestClient, db_session: Session):
+    # No API deletes a horse any more; the database still removes its notes with it (an organization's whole deletion).
     org, owner = _world(db_session)
     horse = _horse(db_session, org)
     client.post(f"/api/horses/{horse.id}/notes", json={"body": "Note"}, headers=owner)
 
-    assert client.delete(f"/api/horses/{horse.id}", headers=owner).status_code == 204
+    db_session.delete(horse)
+    db_session.flush()
     db_session.expire_all()
     assert db_session.scalar(select(HorseNote).where(HorseNote.horse_id == horse.id)) is None

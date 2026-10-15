@@ -142,7 +142,7 @@ def test_services_list_under_their_subject_and_their_billing_customer(client: Te
 
 def test_a_subject_of_a_service_cannot_be_deleted(client: TestClient, world):
     _service(client, world)
-    assert client.delete(f"/api/horses/{world.horse.id}", headers=world.h).status_code == 409
+    assert client.delete(f"/api/horses/{world.horse.id}", headers=world.h).status_code == 405
 
 
 def test_an_invoice_keeps_a_snapshot_of_the_service(client: TestClient, db_session: Session, world):

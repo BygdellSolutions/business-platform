@@ -8,7 +8,7 @@ from app.api.deps import Pagination, Sorting, pagination, sorted_by, sorting
 from app.core import audit
 from app.core.authz import record_writer
 from app.core.db import get_db
-from app.core.query import commit_and_refresh, contains_pattern, delete_or_409, number_matches
+from app.core.query import commit_and_refresh, contains_pattern, number_matches
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import (
     create_scoped,
@@ -152,16 +152,8 @@ def update_horse(
     return _read_one(db, ctx, horse_id)
 
 
-@router.delete("/{horse_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_horse(
-    horse_id: uuid.UUID,
-    ctx: TenantContext = Depends(record_writer),
-    db: Session = Depends(get_db),
-) -> Response:
-    horse = get_scoped_or_404(db, ctx, Horse, horse_id)
-    delete_or_409(db, horse, "Horse is referenced by other records", after_delete=audit.deletion(db, ctx, horse, "horse"))
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
-
+# There is deliberately NO delete for a horse (owner decision 2026-10-14): a horse is active or inactive, so its history (journal,
+# notes, services, invoices) can only disappear together with its whole organization.
 
 
 # --- notes: any member reads them, record writers add, change and delete them ------------------------------------

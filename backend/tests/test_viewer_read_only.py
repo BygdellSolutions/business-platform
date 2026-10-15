@@ -126,7 +126,6 @@ WRITES: dict[str, Write] = {
     "delete item": Write("DELETE", lambda w: f"/api/items/{w.spare_item.id}"),
     "create horse": Write("POST", lambda w: "/api/horses", lambda w: {"name": "New", "owner_customer_id": str(w.customer.id)}),
     "update horse": Write("PATCH", lambda w: f"/api/horses/{w.horse.id}", lambda w: {"name": "Renamed"}),
-    "delete horse": Write("DELETE", lambda w: f"/api/horses/{w.horse.id}"),
     "create transaction": Write("POST", lambda w: "/api/transactions", lambda w: {"billing_customer_id": str(w.customer.id)}),
     "update transaction": Write(
         "PATCH", lambda w: f"/api/transactions/{w.draft.id}", lambda w: {"transaction_date": "2026-10-02"}, lambda w: w.draft.header_version
