@@ -47,6 +47,7 @@ def test_a_customers_products_and_ad_hoc_lines_newest_first_without_cancelled_or
         (str(old.id), "Fly spray", "pcs", "2.000", "completed"),
     ]
     assert rows[1]["item_id"] == str(spray.id) and rows[0]["item_id"] is None
+    assert [r["transaction_number"] for r in rows] == [new.number, old.number]  # each line says which order it is on
     assert rows[1]["unit_price_ex_vat"] == "150.00" and rows[1]["gross_amount"] == "375.00"
 
 

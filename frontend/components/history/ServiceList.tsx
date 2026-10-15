@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 
 import { DecimalText } from "@/components/ui/DecimalText";
 import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
+import { OrderCells, OrderHeaders } from "@/components/history/OrderColumns";
 import type { ServiceRecord } from "@/lib/api/types";
 import { formatDay } from "@/lib/timestamps";
 import { SortHeader } from "@/components/ui/SortHeader";
@@ -12,11 +12,12 @@ import { useSortedRows } from "@/lib/use-sorted-rows";
 
 /** What each sortable column sorts by (display only). */
 const SORT_COLUMNS: Record<string, (r: ServiceRecord) => SortValue> = {
-  when: (r) => ({ text: r.performed_at }),
+  number: (r) => ({ number: r.transaction_number }),
+  date: (r) => ({ text: r.performed_at }),
+  status: (r) => ({ text: r.status }),
   service: (r) => ({ text: r.description }),
   for: (r) => ({ text: r.subject_label }),
   by: (r) => ({ text: r.performed_by_name }),
-  order: (r) => ({ decimal: String(r.transaction_number) }),
   amount: (r) => ({ decimal: r.gross_amount }),
 };
 
@@ -37,32 +38,25 @@ export function ServiceList({ orgId, services, timeZone, title }: { orgId: strin
           <table className="text-left text-sm">
             <thead>
               <tr className="border-b border-zinc-300 dark:border-zinc-700">
-                <SortHeader label="When" {...sorted.header("when")} />
+                <OrderHeaders header={sorted.header} />
                 <SortHeader label="Service" {...sorted.header("service")} />
                 <SortHeader label="For" {...sorted.header("for")} />
                 <SortHeader label="By" {...sorted.header("by")} />
-                <SortHeader label="Amount" {...sorted.header("amount")} align="right" />
-                <SortHeader label="Order no." {...sorted.header("order")} align="right" last />
+                <SortHeader label="Amount" {...sorted.header("amount")} align="right" last />
               </tr>
             </thead>
             <tbody>
               {sorted.rows.map((service) => (
                 <tr key={service.line_id} data-testid="service-row" className="border-b border-zinc-200 align-top dark:border-zinc-800">
-                  <td className="py-1 pr-4">{formatDay(service.performed_at, timeZone)}</td>
+                  <OrderCells orgId={orgId} transactionId={service.transaction_id} number={service.transaction_number} date={formatDay(service.performed_at, timeZone)} status={service.status} />
                   <td className="py-1 pr-4">
                     {service.description}
                     {service.notes && <span className="block text-xs italic text-zinc-500">{service.notes}</span>}
                   </td>
                   <td className="py-1 pr-4">{service.subject_label ?? <span className="text-zinc-500">no longer exists</span>}</td>
                   <td className="py-1 pr-4">{service.performed_by_name ?? <span className="text-zinc-500">not recorded</span>}</td>
-                  <td className="py-1 pr-4 text-right">
+                  <td className="py-1 text-right">
                     <DecimalText value={service.gross_amount} /> {service.currency ?? ""}
-                  </td>
-                  <td className="py-1 text-right" data-testid="order-number">
-                    <Link href={`/o/${orgId}/transactions/${service.transaction_id}`} className="underline">
-                      {service.transaction_number}
-                    </Link>{" "}
-                    <span className="text-xs text-zinc-500">{service.status}</span>
                   </td>
                 </tr>
               ))}

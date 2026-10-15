@@ -1,6 +1,6 @@
 import { expect, test } from "./fixtures";
 
-import { createCompletedTransaction, createCustomer, createInvoiceApi, createItem, createWorld, issueInvoiceApi, signIn, type World } from "./support";
+import { bffUrl, createCompletedTransaction, createCustomer, createInvoiceApi, createItem, createTransaction, createWorld, ifMatch, issueInvoiceApi, signIn, type World } from "./support";
 
 /**
  * A customer's page shows the customer's orders (with their invoice) and what was bought besides services, so
@@ -24,22 +24,34 @@ test("the customer's orders and the products bought are listed on the customer's
     lines: [{ description: "Delivery", unit: "trip", quantity: "1", unit_price_ex_vat: "90.00", vat_rate: "25" }],
   });
   const invoice = await issueInvoiceApi(context, world.orgId, await createInvoiceApi(context, world.orgId, [invoiced.id]));
+  // an order paid directly at the counter (a draft with lines, paid now with a card)
+  const counter = await createTransaction(context, world.orgId, {
+    billing_customer_id: customer.id,
+    transaction_date: "2026-10-04",
+    lines: [{ description: "Brush", unit: "pcs", quantity: "1", unit_price_ex_vat: "100.00", vat_rate: "25" }],
+  });
+  const paying = await context.request.post(bffUrl(world.orgId, `/transactions/${counter.id}/pay-now`), { headers: ifMatch(counter.version), data: { method: "card" } });
+  expect(paying.status(), await paying.text()).toBe(200);
 
   await page.goto(`/o/${world.orgId}/customers/${customer.id}`);
 
   const orders = page.getByTestId("customer-orders");
   await expect(orders.getByTestId("orders-toggle")).not.toHaveAttribute("open"); // closed until wanted
-  await orders.getByRole("heading", { name: "Orders (2)" }).click();
-  await expect(orders.getByTestId("customer-order")).toHaveCount(2);
-  await expect(orders.getByTestId("customer-order").first()).toContainText("2026-10-03");
-  await expect(orders.getByTestId("customer-order-invoice").first()).toHaveText("Not invoiced yet");
-  await expect(orders.getByTestId("customer-order-invoice").last()).toHaveText(`Invoice ${invoice.number_text}`);
+  await orders.getByRole("heading", { name: "Orders (3)" }).click();
+  await expect(orders.getByTestId("customer-order")).toHaveCount(3);
+  await expect(orders.getByTestId("customer-order-invoice").filter({ hasText: "Not invoiced yet" })).toHaveCount(1);
+  await expect(orders.getByTestId("customer-order-invoice").filter({ hasText: `Invoice ${invoice.number_text}` })).toHaveCount(1);
+  await expect(orders.getByTestId("customer-order-paid")).toContainText("Paid directly · Card · receipt"); // paid at the counter is shown too
+  const columns = async (section: string) => (await page.getByTestId(section).getByRole("columnheader").allTextContents()).map((text) => text.replace(/[▲▼↕]/g, "").trim());
+  expect((await columns("customer-orders")).slice(0, 3)).toEqual(["Order no.", "Date", "Status"]);
 
   const bought = page.getByTestId("customer-bought");
   await expect(bought.getByTestId("bought-toggle")).not.toHaveAttribute("open"); // each section opens on its own
   await bought.getByRole("heading", { name: /Products and other lines bought/ }).click();
-  await expect(bought.getByTestId("bought-row")).toHaveCount(2);
-  await expect(bought.getByTestId("bought-row").last()).toContainText("Fly spray");
+  await expect(bought.getByTestId("bought-row")).toHaveCount(3);
+  await expect(bought.getByTestId("bought-row").filter({ hasText: "Fly spray" })).toHaveCount(1);
+  expect((await columns("customer-bought")).slice(0, 3)).toEqual(["Order no.", "Date", "Status"]); // the same first columns as the orders
+  await expect(bought.getByTestId("bought-row").first().getByTestId("order-number")).toHaveText(/^\d{4,}$/); // each line says which order it is on
   await bought.getByRole("link", { name: "Fly spray" }).click();
   await expect(page).toHaveURL(new RegExp(`/catalog/${spray.id}$`));
 });

@@ -612,8 +612,8 @@ def list_bought(
     ).all()
     return [
         BoughtLine(
-            transaction_id=tx.id, transaction_date=tx.transaction_date, status=tx.status, currency=tx.currency, line_id=line.id,
-            item_id=line.item_id, description=line.description, unit=line.unit, quantity=line.quantity,
+            transaction_id=tx.id, transaction_number=tx.number, transaction_date=tx.transaction_date, status=tx.status, currency=tx.currency,
+            line_id=line.id, item_id=line.item_id, description=line.description, unit=line.unit, quantity=line.quantity,
             unit_price_ex_vat=line.unit_price_ex_vat, gross_amount=line.gross_amount,
         )
         for line, tx in rows

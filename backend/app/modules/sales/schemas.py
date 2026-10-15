@@ -273,6 +273,7 @@ class BoughtLine(BaseModel):
     page: what, how many, at what price, and in which order."""
 
     transaction_id: uuid.UUID
+    transaction_number: int  # the order's own number, per organization
     transaction_date: date
     status: TransactionStatus
     currency: str | None

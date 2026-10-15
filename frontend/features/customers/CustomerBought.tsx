@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { DecimalText } from "@/components/ui/DecimalText";
 import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
+import { OrderCells, OrderHeaders } from "@/components/history/OrderColumns";
 import type { BoughtLine } from "@/lib/api/types";
 import { trimQuantity } from "@/lib/decimal";
 import { SortHeader } from "@/components/ui/SortHeader";
@@ -14,6 +15,7 @@ import { useSortedRows } from "@/lib/use-sorted-rows";
 const SORT_COLUMNS: Record<string, (r: BoughtLine) => SortValue> = {
   number: (r) => ({ number: r.transaction_number }),
   date: (r) => ({ text: r.transaction_date }),
+  status: (r) => ({ text: r.status }),
   description: (r) => ({ text: r.description }),
   quantity: (r) => ({ decimal: r.quantity }),
   unit: (r) => ({ text: r.unit }),
@@ -38,8 +40,7 @@ export function CustomerBought({ orgId, lines }: { orgId: string; lines: BoughtL
           <table className="text-left text-sm">
             <thead>
               <tr className="border-b border-zinc-300 dark:border-zinc-700">
-                <SortHeader label="Order no." {...sorted.header("number")} align="right" />
-                <SortHeader label="Date" {...sorted.header("date")} />
+                <OrderHeaders header={sorted.header} />
                 <SortHeader label="Description" {...sorted.header("description")} />
                 <SortHeader label="Qty" {...sorted.header("quantity")} align="right" />
                 <SortHeader label="Unit" {...sorted.header("unit")} />
@@ -50,15 +51,7 @@ export function CustomerBought({ orgId, lines }: { orgId: string; lines: BoughtL
             <tbody>
               {sorted.rows.map((line) => (
                 <tr key={line.line_id} data-testid="bought-row" className="border-b border-zinc-200 dark:border-zinc-800">
-                  <td className="py-1 pr-4 text-right" data-testid="order-number">
-                    <Link href={`/o/${orgId}/transactions/${line.transaction_id}`} className="underline">
-                      {line.transaction_number}
-                    </Link>
-                  </td>
-                  <td className="py-1 pr-4" data-testid="order-date">
-                    {line.transaction_date}{" "}
-                    <span className="text-xs text-zinc-500">{line.status}</span>
-                  </td>
+                  <OrderCells orgId={orgId} transactionId={line.transaction_id} number={line.transaction_number} date={line.transaction_date} status={line.status} />
                   <td className="py-1 pr-4">
                     {line.item_id ? (
                       <Link href={`/o/${orgId}/catalog/${line.item_id}`} className="underline">
