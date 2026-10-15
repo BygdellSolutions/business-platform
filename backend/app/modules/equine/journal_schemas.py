@@ -16,7 +16,6 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_vali
 from app.modules.equine.models import JOURNAL_MAX_BODY, JOURNAL_MAX_MARKS
 
 Body = Annotated[str, StringConstraints(max_length=JOURNAL_MAX_BODY)]
-Practitioner = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
 
 Side = Literal["left", "right"]  # the horse's own left and right side
 Tool = Literal["line", "arrow", "x", "o"]
@@ -64,7 +63,7 @@ class JournalCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     visit_at: datetime | None = None  # defaults to now
-    practitioner_name: Practitioner | None = None  # defaults to the author's name
+    practitioner_user_id: uuid.UUID | None = None  # a member of the organization; defaults to the author
     body: Body = ""
     follow_up_on: date | None = None
     marks: list[Mark] = Field(default_factory=list, max_length=JOURNAL_MAX_MARKS)
@@ -79,7 +78,7 @@ class JournalUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     visit_at: datetime | None = None
-    practitioner_name: Practitioner | None = None
+    practitioner_user_id: uuid.UUID | None = None
     body: Body | None = None
     follow_up_on: date | None = None
     marks: list[Mark] | None = Field(default=None, max_length=JOURNAL_MAX_MARKS)
@@ -93,7 +92,7 @@ class JournalUpdate(BaseModel):
 
     @model_validator(mode="after")
     def _not_null(self) -> "JournalUpdate":
-        for field in ("visit_at", "practitioner_name", "body", "marks"):
+        for field in ("visit_at", "practitioner_user_id", "body", "marks"):
             if field in self.model_fields_set and getattr(self, field) is None:
                 raise ValueError(f"{field} cannot be cleared")
         return self
@@ -140,6 +139,7 @@ class JournalRead(BaseModel):
     id: uuid.UUID
     horse_id: uuid.UUID
     visit_at: datetime
+    practitioner_user_id: uuid.UUID | None
     practitioner_name: str
     body: str
     follow_up_on: date | None

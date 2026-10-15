@@ -16,6 +16,7 @@ const SORT_COLUMNS: Record<string, (r: ServiceRecord) => SortValue> = {
   service: (r) => ({ text: r.description }),
   for: (r) => ({ text: r.subject_label }),
   by: (r) => ({ text: r.performed_by_name }),
+  order: (r) => ({ decimal: String(r.transaction_number) }),
   amount: (r) => ({ decimal: r.gross_amount }),
 };
 
@@ -41,7 +42,7 @@ export function ServiceList({ orgId, services, timeZone, title }: { orgId: strin
                 <SortHeader label="For" {...sorted.header("for")} />
                 <SortHeader label="By" {...sorted.header("by")} />
                 <SortHeader label="Amount" {...sorted.header("amount")} align="right" />
-                <th className="py-1">Order</th>
+                <SortHeader label="Order no." {...sorted.header("order")} align="right" last />
               </tr>
             </thead>
             <tbody>
@@ -57,9 +58,9 @@ export function ServiceList({ orgId, services, timeZone, title }: { orgId: strin
                   <td className="py-1 pr-4 text-right">
                     <DecimalText value={service.gross_amount} /> {service.currency ?? ""}
                   </td>
-                  <td className="py-1">
+                  <td className="py-1 text-right" data-testid="order-number">
                     <Link href={`/o/${orgId}/transactions/${service.transaction_id}`} className="underline">
-                      {service.transaction_date}
+                      {service.transaction_number}
                     </Link>{" "}
                     <span className="text-xs text-zinc-500">{service.status}</span>
                   </td>

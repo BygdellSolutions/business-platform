@@ -26,9 +26,9 @@ from app.core.authz import roles_required
 from app.core.db import get_db
 from app.core.query import commit_and_refresh
 from app.core.tenant import TenantContext
-from app.core.tenant_scope import create_scoped, get_scoped_or_404, scoped_select
+from app.core.tenant_scope import create_scoped, get_scoped_or_404, reference_error, scoped_select
 from app.core.versioning import ensure_current
-from app.models import Role, User
+from app.models import OrganizationUser, Role, User
 from app.modules.equine.journal_schemas import CorrectionRead, CorrectionWrite, JournalCreate, JournalRead, JournalSummary, JournalUpdate
 from app.modules.equine.models import DIAGRAM_VERSION, JOURNAL_DRAFT, JOURNAL_FINAL, Horse, HorseJournalCorrection, HorseJournalEntry
 
@@ -39,7 +39,17 @@ CHANGE_ANY = (Role.OWNER, Role.ADMIN)
 PREVIEW_LENGTH = 160
 # What the horse's history records of an entry. The text and the marks are the journal's own content and are not copied into the
 # history; the entry itself is the record of them (frozen at finalization).
-AUDITED = ("visit_at", "practitioner_name", "follow_up_on", "status", "finalized_at")
+AUDITED = ("visit_at", "practitioner_user_id", "practitioner_name", "follow_up_on", "status", "finalized_at")
+
+
+def _practitioner(db: Session, ctx: TenantContext, user_id: uuid.UUID) -> User:
+    """The chosen practitioner: a member of THIS organization (anyone else, or a made-up id, is refused alike)."""
+    member = db.scalar(
+        select(User).join(OrganizationUser, OrganizationUser.user_id == User.id).where(OrganizationUser.organization_id == ctx.organization_id, User.id == user_id)
+    )
+    if member is None:
+        reference_error("practitioner_user_id", "Choose a member of this organization", "reference.not_found")
+    return member
 
 
 def _may_change(ctx: TenantContext, entry: HorseJournalEntry) -> bool:
@@ -118,13 +128,15 @@ def list_entries(
 @router.post("", response_model=JournalRead, status_code=status.HTTP_201_CREATED)
 def create_entry(horse_id: uuid.UUID, payload: JournalCreate, ctx: TenantContext = Depends(journal_access), db: Session = Depends(get_db)) -> JournalRead:
     get_scoped_or_404(db, ctx, Horse, horse_id)
+    practitioner = _practitioner(db, ctx, payload.practitioner_user_id) if payload.practitioner_user_id is not None else ctx.user
     entry = create_scoped(
         db,
         ctx,
         HorseJournalEntry,
         horse_id=horse_id,
         visit_at=payload.visit_at or datetime.now(timezone.utc),
-        practitioner_name=payload.practitioner_name or ctx.user.name,
+        practitioner_user_id=practitioner.id,
+        practitioner_name=practitioner.name,
         body=payload.body,
         follow_up_on=payload.follow_up_on,
         marks=[mark.model_dump(mode="json") for mark in payload.marks],
@@ -156,6 +168,9 @@ def update_entry(
     values = {field: getattr(payload, field) for field in payload.model_fields_set}
     if "marks" in values:
         values["marks"] = [mark.model_dump(mode="json") for mark in values["marks"]]
+    if "practitioner_user_id" in values:
+        chosen = _practitioner(db, ctx, values["practitioner_user_id"])
+        values["practitioner_name"] = chosen.name  # the name as it is now, kept with the entry
     if any(getattr(entry, field) != value for field, value in values.items()):  # a save that changes nothing moves no version
         values["version"] = entry.version + 1
     audit.apply_audited_update(db, ctx, entry, "horse_journal_entry", values, context=("horse", horse_id), fields=AUDITED)

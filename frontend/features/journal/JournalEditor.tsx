@@ -8,14 +8,14 @@ import { Button } from "@/components/ui/Button";
 import { ConfirmButton } from "@/components/ui/ConfirmButton";
 import { ErrorSummary } from "@/components/ui/ErrorSummary";
 import { CONTROL } from "@/components/ui/controls";
-import { FieldShell, TextAreaField, TextField } from "@/components/ui/Field";
+import { FieldShell, TextAreaField } from "@/components/ui/Field";
 import { apiFetch } from "@/lib/api/client";
-import type { JournalEntry, JournalUpdate, MarkSide, MarkTool } from "@/lib/api/types";
+import type { Colleague, JournalEntry, JournalUpdate, MarkSide, MarkTool } from "@/lib/api/types";
 import { problemsFrom, useMutation } from "@/lib/forms";
 import { DiagramCanvas, type ActiveTool } from "./DiagramCanvas";
 import { describe, editorReducer, initialState, SIDE_LABELS, TOOL_LABELS } from "./marks";
 
-const CONTROLS = ["visit_at", "practitioner_name", "body", "follow_up_on", "marks"] as const;
+const CONTROLS = ["visit_at", "practitioner_user_id", "body", "follow_up_on", "marks"] as const;
 const TOOLS: { tool: ActiveTool; label: string }[] = [
   { tool: "select", label: "Select / move" },
   ...(["line", "arrow", "x", "o"] as MarkTool[]).map((tool) => ({ tool, label: TOOL_LABELS[tool] })),
@@ -39,7 +39,8 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
   const { pending, error, run } = useMutation();
   const [saved, setSaved] = useState(entry);
   const [visitAt, setVisitAt] = useState(toLocalInput(entry.visit_at));
-  const [practitioner, setPractitioner] = useState(entry.practitioner_name);
+  const [practitioner, setPractitioner] = useState(entry.practitioner_user_id ?? "");
+  const [colleagues, setColleagues] = useState<Colleague[]>([]);
   const [body, setBody] = useState(entry.body);
   const [followUp, setFollowUp] = useState(entry.follow_up_on ?? "");
   const [editor, dispatch] = useReducer(editorReducer, entry.marks, initialState);
@@ -50,10 +51,18 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
 
   const dirty =
     visitAt !== toLocalInput(saved.visit_at) ||
-    practitioner !== saved.practitioner_name ||
+    practitioner !== (saved.practitioner_user_id ?? "") ||
     body !== saved.body ||
     followUp !== (saved.follow_up_on ?? "") ||
     JSON.stringify(editor.marks) !== JSON.stringify(saved.marks);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void apiFetch<Colleague[]>(orgId, "/members/people", { signal: controller.signal }).then((result) => {
+      if (result.ok) setColleagues(result.data);
+    });
+    return () => controller.abort();
+  }, [orgId]);
 
   useEffect(() => {
     if (!dirty) return;
@@ -69,7 +78,7 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
   function changes(): JournalUpdate {
     const update: JournalUpdate = {};
     if (visitAt !== toLocalInput(saved.visit_at) && visitAt !== "") update.visit_at = new Date(visitAt).toISOString();
-    if (practitioner !== saved.practitioner_name) update.practitioner_name = practitioner;
+    if (practitioner !== (saved.practitioner_user_id ?? "") && practitioner !== "") update.practitioner_user_id = practitioner;
     if (body !== saved.body) update.body = body;
     if (followUp !== (saved.follow_up_on ?? "")) update.follow_up_on = followUp === "" ? null : followUp;
     if (JSON.stringify(editor.marks) !== JSON.stringify(saved.marks)) update.marks = editor.marks;
@@ -122,7 +131,19 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
           <FieldShell label="Visit date and time" name="visit_at" error={problems.byField.visit_at}>
             {(control) => <input type="datetime-local" {...control} value={visitAt} onChange={(event) => setVisitAt(event.target.value)} className={CONTROL} />}
           </FieldShell>
-          <TextField label="Practitioner" name="practitioner_name" value={practitioner} onChange={setPractitioner} error={problems.byField.practitioner_name} />
+          <FieldShell label="Practitioner" name="practitioner_user_id" error={problems.byField.practitioner_user_id}>
+            {(control) => (
+              <select {...control} value={practitioner} onChange={(event) => setPractitioner(event.target.value)} className={CONTROL}>
+                {saved.practitioner_user_id === null && <option value="">{saved.practitioner_name} (not on the list)</option>}
+                {colleagues.length === 0 && saved.practitioner_user_id !== null && <option value={saved.practitioner_user_id}>{saved.practitioner_name}</option>}
+                {colleagues.map((colleague) => (
+                  <option key={colleague.user_id} value={colleague.user_id}>
+                    {colleague.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </FieldShell>
           <FieldShell label="Follow-up date (optional)" name="follow_up_on" error={problems.byField.follow_up_on}>
             {(control) => <input type="date" {...control} value={followUp} onChange={(event) => setFollowUp(event.target.value)} className={CONTROL} />}
           </FieldShell>

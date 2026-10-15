@@ -134,6 +134,10 @@ class HorseJournalEntry(TenantOwned, Authored, Base):
 
     horse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
     visit_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))  # when the visit took place (not when it was written down)
+    # Who did the work: a member of the organization chosen from a list (like the person who performed a service on an order), and
+    # their name as it was then (a member who leaves or is renamed does not change an old entry). NULL only for entries that
+    # predate the list.
+    practitioner_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
     practitioner_name: Mapped[str] = mapped_column(String(255))
     body: Mapped[str] = mapped_column(Text, default="", server_default="")
     follow_up_on: Mapped[date | None] = mapped_column(Date)

@@ -1,14 +1,13 @@
-import Link from "next/link";
-
 import { RecordHistory } from "@/components/history/RecordHistory";
 import { RecordMeta } from "@/components/history/RecordMeta";
 import { ServiceList } from "@/components/history/ServiceList";
 import { HorseDetails } from "@/features/horses/HorseDetails";
 import { HorseForm } from "@/features/horses/HorseForm";
 import { HorseNotes } from "@/features/horses/HorseNotes";
+import { HorseJournalSection, SHOWN_ON_HORSE_PAGE } from "@/features/journal/HorseJournalSection";
 import { Notice } from "@/components/ui/Notice";
 import { readActiveRole } from "@/lib/active-role";
-import type { Horse, HorseNote, Organization, ServiceRecord } from "@/lib/api/types";
+import type { Horse, HorseNote, JournalSummary, Organization, ServiceRecord } from "@/lib/api/types";
 import { readRecordHistory } from "@/lib/history-server";
 import { canUseJournal, canWriteRecords } from "@/lib/roles";
 import { requireUuid, serverRead } from "@/lib/server-api";
@@ -24,13 +23,15 @@ export default async function HorsePage({
   const { orgId, id } = await params;
   const { created } = await searchParams;
   const recordId = requireUuid(id);
-  const [horse, role, organization, history, services, notes] = await Promise.all([
+  const role = await readActiveRole(orgId);
+  const [horse, organization, history, services, notes, journal] = await Promise.all([
     serverRead<Horse>(orgId, `/api/horses/${recordId}`),
-    readActiveRole(orgId),
     serverRead<Organization>(orgId, "/api/organization"),
     readRecordHistory(orgId, "horse", recordId),
     serverRead<ServiceRecord[]>(orgId, "/api/transactions/services", `?${new URLSearchParams({ subject_type: "horse", subject_id: recordId })}`),
     serverRead<HorseNote[]>(orgId, `/api/horses/${recordId}/notes`),
+    // Accountants and viewers have no journal at all: nothing is even asked for.
+    canUseJournal(role) ? serverRead<JournalSummary[]>(orgId, `/api/horses/${recordId}/journal`, `?limit=${SHOWN_ON_HORSE_PAGE + 1}`) : Promise.resolve(null),
   ]);
 
   return (
@@ -44,12 +45,8 @@ export default async function HorsePage({
       {created === "1" && <Notice testId="created">Horse created.</Notice>}
       <RecordMeta record={horse} people={history.history.people} timeZone={organization.timezone} />
       {canWriteRecords(role) ? <HorseForm key={horse.id} horse={horse} /> : <HorseDetails orgId={orgId} horse={horse} />}
-      {canUseJournal(role) && (
-        <p>
-          <Link href={`/o/${orgId}/horses/${horse.id}/journal`} className="underline" data-testid="journal-link">
-            Journal of visits and treatments
-          </Link>
-        </p>
+      {journal !== null && (
+        <HorseJournalSection orgId={orgId} horseId={horse.id} entries={journal.slice(0, SHOWN_ON_HORSE_PAGE)} hasMore={journal.length > SHOWN_ON_HORSE_PAGE} timeZone={organization.timezone} />
       )}
       <HorseNotes horseId={horse.id} notes={notes} canWrite={canWriteRecords(role)} timeZone={organization.timezone} />
       <ServiceList orgId={orgId} services={services} timeZone={organization.timezone} title="Services performed on this horse" />

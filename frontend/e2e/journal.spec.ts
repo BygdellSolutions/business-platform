@@ -12,7 +12,7 @@ test.afterEach(() => world?.cleanup());
 
 async function startEntry(page: Page, orgId: string, horseId: string) {
   await page.goto(`/o/${orgId}/horses/${horseId}`);
-  await page.getByTestId("journal-link").click();
+  await page.getByTestId("journal-toggle").getByRole("heading", { name: /Journal of visits and treatments/ }).click(); // a section like the services
   await page.getByTestId("new-journal-entry").click();
   await expect(page.getByTestId("journal-editor")).toBeVisible();
 }
@@ -64,6 +64,31 @@ test("an entry is drawn, written, saved, reloaded, finalized and corrected", asy
   await page.getByRole("link", { name: "All entries" }).click();
   await expect(page.getByTestId("journal-row")).toHaveCount(1);
   await expect(page.getByTestId("entry-status")).toHaveText("Finalized");
+
+  // and the entry is listed in the journal section of the horse's own page
+  await page.goto(`/o/${world.orgId}/horses/${horse.id}`);
+  await expect(page.getByTestId("journal-section")).toContainText("(1)");
+  await page.getByTestId("journal-toggle").getByRole("heading", { name: /Journal of visits and treatments/ }).click();
+  await expect(page.getByTestId("journal-section").getByTestId("journal-row")).toHaveCount(1);
+  await expect(page.getByTestId("journal-section").getByTestId("entry-status")).toHaveText("Finalized");
+});
+
+test("the practitioner is chosen from the organization's members, like who performed a service on an order", async ({ page, context }) => {
+  world = createWorld({ label: "JournalWho" });
+  await signIn(context, world.email);
+  const horse = await createHorse(context, world.orgId, { name: "Kalle", owner_customer_id: (await createCustomer(context, world.orgId, "Anna Andersson")).id });
+  const colleague = world.addMember("employee");
+  await startEntry(page, world.orgId, horse.id);
+  const choice = page.getByLabel("Practitioner");
+  await expect(choice.locator("option")).toHaveCount(2); // the two members
+  await choice.selectOption({ index: 1 });
+  const chosen = await choice.locator("option:checked").textContent();
+  await page.getByLabel(/Observations/).fill("Done by a colleague.");
+  await page.getByTestId("save-draft").click();
+  await expect(page.getByTestId("save-status")).toHaveText("All changes saved");
+  await page.reload();
+  await expect(choice.locator("option:checked")).toHaveText(chosen ?? "");
+  expect(colleague).toBeTruthy();
 });
 
 test("a mark stays in the same place on the horse when the screen size changes", async ({ page, context }) => {
@@ -118,7 +143,7 @@ test("an accountant and a viewer have no journal at all, in the browser or by a 
     await signIn(context, world.addMember(role));
     await page.goto(`/o/${world.orgId}/horses/${horse.id}`);
     await expect(page.getByTestId("record-name")).toBeVisible();
-    await expect(page.getByTestId("journal-link")).toHaveCount(0);
+    await expect(page.getByTestId("journal-section")).toHaveCount(0); // no section, and nothing asked of the backend for it
     await page.goto(`/o/${world.orgId}/horses/${horse.id}/journal`);
     await expect(page.getByTestId("journal-not-allowed")).toBeVisible();
     const forged = await context.request.get(`/api/o/${world.orgId}/horses/${horse.id}/journal`);

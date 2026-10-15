@@ -846,6 +846,8 @@ export interface InvoiceService {
 /** A service performed (GET /api/transactions/services), for a record's page. */
 export interface ServiceRecord {
   transaction_id: string;
+  /** The order's own number (per organization); the date below is when the order is dated. */
+  transaction_number: number;
   transaction_date: string;
   status: "draft" | "completed" | "cancelled";
   currency: string | null;
@@ -1020,6 +1022,8 @@ export interface JournalEntry {
   id: string;
   horse_id: string;
   visit_at: string;
+  /** A member of the organization (null only for entries from before the list existed). */
+  practitioner_user_id: string | null;
   practitioner_name: string;
   body: string;
   follow_up_on: string | null;
@@ -1043,7 +1047,7 @@ export interface JournalEntry {
 
 export interface JournalUpdate {
   visit_at?: string;
-  practitioner_name?: string;
+  practitioner_user_id?: string;
   body?: string;
   follow_up_on?: string | null;
   marks?: JournalMark[];

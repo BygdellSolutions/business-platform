@@ -16,10 +16,18 @@ from tests.factories import add_member, make_customer, make_horse, make_org, mak
 MARK = {"id": "11111111-1111-4111-8111-111111111111", "side": "left", "tool": "arrow", "points": [[0.25, 0.5], [0.75, 0.5]]}
 
 
+IDS: dict[str, uuid.UUID] = {}  # the user id behind each set of headers, by email
+
+
 def _person(db: Session, org, role: Role, name: str):
     user = make_user(db, name=name)
     add_member(db, org, user, role)
+    IDS[user.email] = user.id
     return {"X-Dev-User-Email": user.email}
+
+
+def _id(headers) -> str:
+    return str(IDS[headers["X-Dev-User-Email"]])
 
 
 @pytest.fixture
@@ -54,6 +62,7 @@ def test_owner_admin_and_employee_read_and_write(client: TestClient, world, role
     entry = _create(client, horse, people[role], body="Stiff left shoulder.", marks=[MARK])
     assert entry["status"] == "draft" and entry["practitioner_name"] == f"{role.title()} Person" and entry["version"] == 1
     assert entry["diagram_version"] == 2  # new entries are drawn on the newest illustration
+    assert entry["practitioner_user_id"] == _id(people[role])  # the author, unless someone else is chosen
     assert client.get(_url(horse, entry), headers=people["owner"]).json()["body"] == "Stiff left shoulder."
     assert [row["id"] for row in client.get(_url(horse), headers=people[role]).json()] == [entry["id"]]
 
@@ -172,9 +181,43 @@ def test_marks_and_text_have_size_limits(client: TestClient, world):
 def test_the_visit_time_must_say_its_time_zone_and_defaults_to_now(client: TestClient, world):
     _, horse, people = world
     assert client.post(_url(horse), json={"visit_at": "2026-10-15T14:30:00"}, headers=people["owner"]).status_code == 422
-    stated = _create(client, horse, people["owner"], visit_at="2026-10-15T14:30:00+02:00", practitioner_name="  Tina  ")
-    assert stated["visit_at"].startswith("2026-10-15T12:30:00") and stated["practitioner_name"] == "Tina"
+    stated = _create(client, horse, people["owner"], visit_at="2026-10-15T14:30:00+02:00")
+    assert stated["visit_at"].startswith("2026-10-15T12:30:00")
     assert _create(client, horse, people["owner"])["visit_at"]
+
+
+# --- the practitioner is a member chosen from a list -----------------------------------------------------------------------------
+
+
+def test_the_practitioner_is_a_member_of_the_organization_chosen_by_id(client: TestClient, world):
+    _, horse, people = world
+    entry = _create(client, horse, people["owner"], practitioner_user_id=_id(people["employee"]))
+    assert (entry["practitioner_user_id"], entry["practitioner_name"]) == (_id(people["employee"]), "Employee Person")
+    changed = client.patch(_url(horse, entry), json={"practitioner_user_id": _id(people["admin"])}, headers={**people["owner"], **_if_match(entry)})
+    assert changed.status_code == 200 and (changed.json()["practitioner_user_id"], changed.json()["practitioner_name"]) == (_id(people["admin"]), "Admin Person")
+
+
+def test_someone_who_is_not_a_member_cannot_be_chosen_and_the_free_text_name_is_gone(client: TestClient, db_session: Session, world):
+    _, horse, people = world
+    other_org = make_org(db_session, "Other")
+    stranger = _person(db_session, other_org, Role.OWNER, "Stranger")
+    answers = {
+        client.post(_url(horse), json={"practitioner_user_id": uid}, headers=people["owner"]).text
+        for uid in (_id(stranger), str(uuid.uuid4()))  # a user of another organization and a made-up id look the same
+    }
+    assert len(answers) == 1 and "Choose a member of this organization" in answers.pop()
+    entry = _create(client, horse, people["owner"])
+    assert client.patch(_url(horse, entry), json={"practitioner_user_id": _id(stranger)}, headers={**people["owner"], **_if_match(entry)}).status_code == 422
+    assert client.post(_url(horse), json={"practitioner_name": "Typed by hand"}, headers=people["owner"]).status_code == 422
+
+
+def test_an_old_entry_keeps_the_name_the_practitioner_had(client: TestClient, db_session: Session, world):
+    from sqlalchemy import text
+
+    _, horse, people = world
+    entry = _create(client, horse, people["owner"], practitioner_user_id=_id(people["employee"]))
+    db_session.execute(text("UPDATE users SET name = 'Renamed Later' WHERE id = :i"), {"i": _id(people["employee"])})
+    assert client.get(_url(horse, entry), headers=people["owner"]).json()["practitioner_name"] == "Employee Person"
 
 
 # --- the list -----------------------------------------------------------------------------------------------------------

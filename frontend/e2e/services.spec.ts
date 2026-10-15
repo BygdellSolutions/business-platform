@@ -40,6 +40,8 @@ test("a service for a horse is added, listed on the horse and kept on the invoic
   await expect(page.getByTestId("service-row")).toHaveCount(1);
   await expect(page.getByTestId("service-row")).toContainText("Massage");
   await expect(page.getByTestId("service-row")).toContainText("2026-10-03 14:00");
+  // the "Order no." column shows the order's NUMBER (it once showed the order's date)
+  await expect(page.getByTestId("service-row").getByTestId("order-number").getByRole("link")).toHaveText(/^\d{4,}$/);
 
   await lifecycle(context, world.orgId, tx.id, "complete");
   const invoice = (await (await context.request.post(bffUrl(world.orgId, "/invoices"), { data: { transaction_ids: [tx.id] } })).json()) as { id: string };

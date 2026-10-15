@@ -173,3 +173,16 @@ suite and the page under test showed an error for a reason that was not its own.
 suite with the budgets effectively off (404 and 291 passed) and with the defaults (2 and 1 failures), not by guessing. Rule: a
 new global guard (rate limit, admission, timeout) gets its own tests, and the browser suites switch its numbers up in their
 configuration with a comment saying why; check the guard's effect with a full run both ways before blaming flakiness.
+
+## A new screen should look and work like the one that already does the same job (2026-10-15)
+
+The owner tested the horse journal on staging and corrected three things in a row. (1) The journal was a link on the horse page, while
+the same kind of content ("Services performed on this horse") is a collapsible section with a count and a table: a new list of
+records on a record's page copies that section (`CollapsibleSection`), it does not invent another way to open it. (2) The
+practitioner was a free-text box, while choosing who performed a service on an order is a drop-down of the organization's members
+(`/members/people`): a person is always chosen from the members and stored by id (validated as a member of the active organization,
+with the name kept as it was); a typed name is only for something that is not a member. (3) The order column of the services table
+showed the order's DATE under the heading "Order": a column shows what its heading says, and an order is named by its number.
+Rule: before building a screen, find the screen that already does a similar job and follow it; before calling a table done, read each
+heading against its cells; when a display bug is reported, search every screen for the same pattern and add a guard test
+(`features/order-links.test.ts` fails for any link to an order written as a date).

@@ -21,14 +21,24 @@ const fail = <T,>(status: number, body: unknown): ApiResult<T> => ({ ok: false, 
 
 function entry(overrides: Partial<JournalEntry> = {}): JournalEntry {
   return {
-    id: ENTRY, horse_id: HORSE, visit_at: "2026-10-15T12:30:00Z", practitioner_name: "Tina Therapist", body: "", follow_up_on: null, marks: [],
+    id: ENTRY, horse_id: HORSE, visit_at: "2026-10-15T12:30:00Z", practitioner_user_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", practitioner_name: "Tina Therapist", body: "", follow_up_on: null, marks: [],
     diagram_version: 1, status: "draft", version: 1, finalized_at: null, finalized_by: null, created_at: "", updated_at: "", created_by: null, updated_by: null,
     created_by_name: "Tina Therapist", finalized_by_name: null, can_change: true, can_correct: false, corrections: [], ...overrides,
   };
 }
 
+const COLLEAGUES = [
+  { user_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", name: "Tina Therapist" },
+  { user_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", name: "Erik Employee" },
+];
+const answers: ApiResult<unknown>[] = [];
+/** The calls the editor made about the entry itself (not the list of colleagues it loads). */
+const calls = () => mocked.mock.calls.filter((call) => call[1] !== "/members/people");
+
 beforeEach(() => {
   mocked.mockReset();
+  answers.length = 0;
+  mocked.mockImplementation((async (_org: string, path: string) => (path === "/members/people" ? ok(COLLEAGUES) : (answers.shift() ?? fail(500, {})))) as never);
   router.refresh.mockReset();
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, width: 400, height: 300, right: 400, bottom: 300, x: 0, y: 0, toJSON: () => ({}) });
 });
@@ -54,11 +64,11 @@ describe("writing an entry", () => {
   });
 
   it("saves only what changed, against the version the draft was opened on, and then shows it saved", async () => {
-    mocked.mockResolvedValueOnce(ok(entry({ body: "Stiff", version: 2 })));
+    answers.push(ok(entry({ body: "Stiff", version: 2 })));
     mount();
     await userEvent.type(screen.getByLabelText(/Observations/), "Stiff");
     await userEvent.click(screen.getByTestId("save-draft"));
-    expect(mocked).toHaveBeenCalledWith(ORG, `/horses/${HORSE}/journal/${ENTRY}`, { method: "PATCH", body: { body: "Stiff" }, ifMatch: 1 });
+    expect(calls()).toEqual([[ORG, `/horses/${HORSE}/journal/${ENTRY}`, { method: "PATCH", body: { body: "Stiff" }, ifMatch: 1 }]]);
     await waitFor(() => expect(status()).toBe("All changes saved"));
     expect(screen.getByTestId("saved").textContent).toBe("Draft saved.");
   });
@@ -91,20 +101,44 @@ describe("writing an entry", () => {
   });
 
   it("sends the marks with the save", async () => {
-    mocked.mockResolvedValueOnce(ok(entry({ version: 2 })));
+    answers.push(ok(entry({ version: 2 })));
     mount();
     await userEvent.click(screen.getByTestId("tool-x"));
     tap(200, 150);
     await userEvent.click(screen.getByTestId("save-draft"));
-    const body = (mocked.mock.calls[0][2] as { body: { marks: { tool: string; points: number[][] }[] } }).body;
+    const body = (calls()[0][2] as { body: { marks: { tool: string; points: number[][] }[] } }).body;
     expect(body.marks).toHaveLength(1);
     expect(body.marks[0]).toMatchObject({ tool: "x", points: [[0.5, 0.5]] });
   });
 });
 
+describe("the practitioner", () => {
+  it("is chosen from the organization's members, like who performed a service on an order, and saved by id", async () => {
+    answers.push(ok(entry({ practitioner_user_id: COLLEAGUES[1].user_id, practitioner_name: "Erik Employee", version: 2 })));
+    mount();
+    const select = (await screen.findByLabelText("Practitioner")) as HTMLSelectElement;
+    await waitFor(() => expect([...select.options].map((option) => option.text)).toEqual(["Tina Therapist", "Erik Employee"]));
+    expect(select.value).toBe(COLLEAGUES[0].user_id); // the author unless someone else is chosen
+    await userEvent.selectOptions(select, COLLEAGUES[1].user_id);
+    expect(status()).toBe("Unsaved changes");
+    await userEvent.click(screen.getByTestId("save-draft"));
+    expect(calls()[0][2]).toMatchObject({ method: "PATCH", body: { practitioner_user_id: COLLEAGUES[1].user_id }, ifMatch: 1 });
+  });
+
+  it("shows the name of an old entry's practitioner who is not on the list, and sends nothing for it", async () => {
+    mount(entry({ practitioner_user_id: null, practitioner_name: "Former Colleague" }));
+    const select = (await screen.findByLabelText("Practitioner")) as HTMLSelectElement;
+    expect(select.options[0].text).toBe("Former Colleague (not on the list)");
+    await userEvent.type(screen.getByLabelText(/Observations/), "x");
+    answers.push(ok(entry({ body: "x", version: 2 })));
+    await userEvent.click(screen.getByTestId("save-draft"));
+    expect(calls()[0][2]).toMatchObject({ body: { body: "x" } });
+  });
+});
+
 describe("when saving does not work", () => {
   it("a change made elsewhere is refused, said plainly, and nothing is shown as saved", async () => {
-    mocked.mockResolvedValueOnce(fail(409, { detail: { code: "stale_record", message: "stale", current_version: 3 } }));
+    answers.push(fail(409, { detail: { code: "stale_record", message: "stale", current_version: 3 } }));
     mount();
     await userEvent.type(screen.getByLabelText(/Observations/), "x");
     await userEvent.click(screen.getByTestId("save-draft"));
@@ -115,7 +149,7 @@ describe("when saving does not work", () => {
   });
 
   it("a validation message from the backend appears at the control", async () => {
-    mocked.mockResolvedValueOnce(fail(422, { detail: [{ loc: ["body", "body"], msg: "String should have at most 20000 characters", type: "string_too_long" }] }));
+    answers.push(fail(422, { detail: [{ loc: ["body", "body"], msg: "String should have at most 20000 characters", type: "string_too_long" }] }));
     mount();
     await userEvent.type(screen.getByLabelText(/Observations/), "x");
     await userEvent.click(screen.getByTestId("save-draft"));
@@ -125,26 +159,26 @@ describe("when saving does not work", () => {
 
 describe("finalizing", () => {
   it("asks first, saves the unsaved changes, then finalizes with the new version and shows the frozen entry", async () => {
-    mocked.mockResolvedValueOnce(ok(entry({ body: "Done", version: 2 }))).mockResolvedValueOnce(ok(entry({ body: "Done", version: 3, status: "final" })));
+    answers.push(ok(entry({ body: "Done", version: 2 })), ok(entry({ body: "Done", version: 3, status: "final" })));
     mount();
     await userEvent.type(screen.getByLabelText(/Observations/), "Done");
     await userEvent.click(screen.getByTestId("finalize"));
-    expect(mocked).not.toHaveBeenCalled(); // the first click only asks
+    expect(calls()).toHaveLength(0); // the first click only asks
     await userEvent.click(screen.getByTestId("finalize-confirm"));
-    await waitFor(() => expect(mocked).toHaveBeenCalledTimes(2));
-    expect(mocked.mock.calls[0][2]).toMatchObject({ method: "PATCH", ifMatch: 1 });
-    expect(mocked.mock.calls[1]).toEqual([ORG, `/horses/${HORSE}/journal/${ENTRY}/finalize`, { method: "POST", ifMatch: 2 }]);
+    await waitFor(() => expect(calls()).toHaveLength(2));
+    expect(calls()[0][2]).toMatchObject({ method: "PATCH", ifMatch: 1 });
+    expect(calls()[1]).toEqual([ORG, `/horses/${HORSE}/journal/${ENTRY}/finalize`, { method: "POST", ifMatch: 2 }]);
     await waitFor(() => expect(router.refresh).toHaveBeenCalled());
   });
 
   it("does not finalize when the save before it fails", async () => {
-    mocked.mockResolvedValueOnce(fail(409, { detail: { code: "stale_record", message: "stale", current_version: 3 } }));
+    answers.push(fail(409, { detail: { code: "stale_record", message: "stale", current_version: 3 } }));
     mount();
     await userEvent.type(screen.getByLabelText(/Observations/), "x");
     await userEvent.click(screen.getByTestId("finalize"));
     await userEvent.click(screen.getByTestId("finalize-confirm"));
     await screen.findByTestId("stale");
-    expect(mocked).toHaveBeenCalledTimes(1);
+    expect(calls()).toHaveLength(1);
     expect(router.refresh).not.toHaveBeenCalled();
   });
 });
