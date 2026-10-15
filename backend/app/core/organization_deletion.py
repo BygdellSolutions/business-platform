@@ -41,6 +41,8 @@ TABLES_IN_DELETE_ORDER = (
     "custom_field_definitions",
     "transaction_lines",
     "transactions",
+    "horse_journal_corrections",
+    "horse_journal_entries",
     "horse_notes",
     "horses",
     "incoming_stock",

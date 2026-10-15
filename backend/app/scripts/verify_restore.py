@@ -72,6 +72,9 @@ REQUIRED_TRIGGERS = {
     ("items", "items_record_number"),
     ("suppliers", "suppliers_record_number"),
     ("transactions", "transactions_record_number"),
+    # The horse journal: a finalized entry is frozen, a correction is written once.
+    ("horse_journal_entries", "trg_horse_journal_entries_final_immutable"),
+    ("horse_journal_corrections", "trg_horse_journal_corrections_append_only"),
     # The job queue (Procrastinate's vendored schema): a restored database without them would accept jobs and never run them.
     ("procrastinate_jobs", "procrastinate_jobs_notify_queue_job_inserted_v1"),
     ("procrastinate_jobs", "procrastinate_jobs_notify_queue_job_aborted_v1"),
@@ -95,6 +98,8 @@ REQUIRED_FUNCTIONS = {
     "security_events_append_only",
     "transactions_currency_is_immutable",
     "assign_record_number",
+    "horse_journal_entries_final_immutable",
+    "horse_journal_corrections_append_only",
     "procrastinate_defer_jobs_v1", "procrastinate_defer_periodic_job_v2", "procrastinate_fetch_job_v2", "procrastinate_finish_job_v1",
     "procrastinate_cancel_job_v1", "procrastinate_retry_job_v1", "procrastinate_retry_job_v2", "procrastinate_notify_queue_job_inserted_v1",
     "procrastinate_notify_queue_abort_job_v1", "procrastinate_trigger_function_status_events_insert_v1",
@@ -103,7 +108,7 @@ REQUIRED_FUNCTIONS = {
     "procrastinate_unregister_worker_v1", "procrastinate_update_heartbeat_v1", "procrastinate_prune_stalled_workers_v1",
 }
 TENANT_TABLES = {
-    "audit_events", "credit_note_lines", "credit_note_pdfs", "credit_note_vat_rows", "credit_notes", "custom_field_definitions", "custom_field_options", "custom_field_values", "customers", "horse_notes", "horses", "invoice_counters", "invoice_holds", "invoice_lines",
+    "audit_events", "credit_note_lines", "credit_note_pdfs", "credit_note_vat_rows", "credit_notes", "custom_field_definitions", "custom_field_options", "custom_field_values", "customers", "horse_journal_corrections", "horse_journal_entries", "horse_notes", "horses", "invoice_counters", "invoice_holds", "invoice_lines",
     "invoice_payments", "invoice_pdfs", "invoice_return_events", "invoice_return_lines", "invoice_returns", "invoice_transactions", "invoice_vat_rows", "invoices", "item_discounts", "incoming_stock", "items", "line_fulfillments", "organization_creation_requests",
     "organization_invitations", "organization_users", "record_counters", "stock_movements", "suppliers", "transaction_lines", "transactions",
 }  # `security_events.organization_id` is deliberately nullable (an event may be about no organization)

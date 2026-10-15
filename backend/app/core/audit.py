@@ -153,27 +153,27 @@ def deleted(
 
 def apply_audited_update(
     db: Session, ctx: TenantContext, target: Any, entity_type: str, values: dict[str, Any], *,
-    context: tuple[str, uuid.UUID] | None = None,
+    context: tuple[str, uuid.UUID] | None = None, fields: Iterable[str] | None = None,
 ) -> bool:
     """`apply_update` with history: set the values, record what actually changed, persist. Returns whether
     anything changed."""
     from app.core.query import commit_and_refresh  # query imports the registry; keep this module light
 
-    changed = set_audited(db, ctx, target, entity_type, values, context=context)
+    changed = set_audited(db, ctx, target, entity_type, values, context=context, fields=fields)
     commit_and_refresh(db, target)
     return changed
 
 
 def set_audited(
     db: Session, ctx: TenantContext, target: Any, entity_type: str, values: dict[str, Any], *,
-    context: tuple[str, uuid.UUID] | None = None,
+    context: tuple[str, uuid.UUID] | None = None, fields: Iterable[str] | None = None,
 ) -> bool:
     """Set the values and record what changed, WITHOUT committing (for a change made of several records that must
     commit together). Returns whether anything changed."""
-    before = snapshot(target)
+    before = snapshot(target, fields)
     for field, value in values.items():
         setattr(target, field, value)
     # Compare what the database STORED (900 becomes 900.00, a trimmed name stays trimmed), not what was sent.
     db.flush()
     db.refresh(target)
-    return updated(db, ctx, target, entity_type, before, context=context)
+    return updated(db, ctx, target, entity_type, before, context=context, fields=fields)

@@ -1,18 +1,23 @@
 import uuid
+from datetime import date, datetime
 from enum import StrEnum
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
     ForeignKeyConstraint,
     Index,
+    Integer,
     SmallInteger,
     String,
     Text,
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.base import Base
@@ -94,4 +99,65 @@ class HorseNote(TenantOwned, Authored, Base):
     )
 
     horse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    body: Mapped[str] = mapped_column(Text)
+
+
+JOURNAL_DRAFT, JOURNAL_FINAL = "draft", "final"
+JOURNAL_MAX_BODY = 20_000
+JOURNAL_MAX_MARKS = 200
+DIAGRAM_VERSION = 1  # which bundled horse illustration the marks were drawn on (kept, so old marks can be shown on their own picture)
+
+
+class HorseJournalEntry(TenantOwned, Authored, Base):
+    """One visit in a horse's journal: when, who, what was found and done (text), and drawing marks on the horse diagram.
+
+    A therapy/self-evaluation journal of the practitioner, NOT a formal veterinary record. It is a DRAFT (editable, with `version`
+    for conflict detection) until it is finalized, after which text and marks never change; later corrections are separate dated
+    additions. It belongs to a horse of the same organization (composite foreign key) and goes only with its whole organization:
+    a horse is never deleted. `marks` is a list of validated drawing marks (see journal_schemas.py), at most 200.
+    """
+
+    __tablename__ = "horse_journal_entries"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "horse_id"], ["horses.organization_id", "horses.id"], ondelete="CASCADE", name="fk_horse_journal_entries_horse"
+        ),
+        UniqueConstraint("organization_id", "id", name="uq_horse_journal_entries_organization_id_id"),
+        CheckConstraint("status IN ('draft', 'final')", name="ck_horse_journal_entries_status"),
+        CheckConstraint("(status = 'final') = (finalized_at IS NOT NULL AND finalized_by IS NOT NULL)", name="ck_horse_journal_entries_final_stamped"),
+        CheckConstraint(f"length(body) <= {JOURNAL_MAX_BODY}", name="ck_horse_journal_entries_body_length"),
+        CheckConstraint("length(btrim(practitioner_name)) > 0", name="ck_horse_journal_entries_practitioner_not_blank"),
+        CheckConstraint(f"jsonb_typeof(marks) = 'array' AND jsonb_array_length(marks) <= {JOURNAL_MAX_MARKS}", name="ck_horse_journal_entries_marks"),
+        CheckConstraint("version >= 1 AND diagram_version >= 1", name="ck_horse_journal_entries_versions_positive"),
+        Index("ix_horse_journal_entries_horse_visit", "organization_id", "horse_id", text("visit_at DESC"), "id"),
+    )
+
+    horse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    visit_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))  # when the visit took place (not when it was written down)
+    practitioner_name: Mapped[str] = mapped_column(String(255))
+    body: Mapped[str] = mapped_column(Text, default="", server_default="")
+    follow_up_on: Mapped[date | None] = mapped_column(Date)
+    marks: Mapped[list] = mapped_column(JSONB, default=list, server_default=text("'[]'::jsonb"))
+    diagram_version: Mapped[int] = mapped_column(Integer, default=DIAGRAM_VERSION, server_default=text("1"))
+    status: Mapped[str] = mapped_column(String(16), default=JOURNAL_DRAFT, server_default="draft")
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))  # If-Match, +1 per change
+    finalized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finalized_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
+
+
+class HorseJournalCorrection(TenantOwned, Authored, Base):
+    """A dated addition to a FINALIZED journal entry: what was wrong or has been learned since. The entry itself never changes; this is
+    written once and never changed (the database refuses), with its author and time."""
+
+    __tablename__ = "horse_journal_corrections"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "entry_id"], ["horse_journal_entries.organization_id", "horse_journal_entries.id"],
+            ondelete="CASCADE", name="fk_horse_journal_corrections_entry",
+        ),
+        CheckConstraint("length(btrim(body)) > 0 AND length(body) <= 5000", name="ck_horse_journal_corrections_body"),
+        Index("ix_horse_journal_corrections_entry", "organization_id", "entry_id", "created_at"),
+    )
+
+    entry_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
     body: Mapped[str] = mapped_column(Text)

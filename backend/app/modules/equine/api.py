@@ -17,6 +17,7 @@ from app.core.tenant_scope import (
     scoped_select,
 )
 from app.models import Customer, User
+from app.modules.equine import journal
 from app.modules.equine.models import Horse, HorseNote
 from app.modules.equine.schemas import HorseCreate, HorseNoteRead, HorseNoteWrite, HorseRead, HorseUpdate
 from app.schemas.customer import CustomerRef
@@ -215,3 +216,6 @@ def delete_horse_note(horse_id: uuid.UUID, note_id: uuid.UUID, ctx: TenantContex
     db.delete(note)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+router.include_router(journal.router)  # /api/horses/{horse_id}/journal (its own roles: see journal.py)
