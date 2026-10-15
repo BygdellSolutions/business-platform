@@ -139,6 +139,16 @@ class Settings(BaseSettings):
     db_lock_timeout_ms: int = 10_000
     db_idle_in_transaction_timeout_ms: int = 60_000
 
+    # --- the job worker (app/worker, `python -m app.worker`); the API process ignores these ------------------------------------------
+    # Which queues this worker serves, how many jobs it runs at once, and when a worker that stopped reporting counts as dead
+    # (its running jobs are then given back to the queue by `maintenance.recover_stalled_jobs`, so the stall limit must be well
+    # above the heartbeat). `worker_task_modules` names the modules that define tasks (tests add a probe module).
+    worker_queues: str = "maintenance,pdf,bulk,email"
+    worker_concurrency: int = 2
+    worker_heartbeat_seconds: float = 10.0
+    worker_stalled_seconds: float = 60.0
+    worker_task_modules: str = "app.worker.tasks"
+
     # --- request budgets for signed-in traffic (app/core/rate_limit.py) -------------------------------------------------------------
     # Per PROCESS and per minute (a sliding window). Generous on purpose: a person using the application normally makes a few
     # requests a second; these stop a runaway script or one organization from using the process up for everybody.

@@ -2,6 +2,7 @@
 from app.models.audit import AuditEvent
 from app.models.auth import AuthSession, MfaChallenge, SecurityEvent, UserCredential, UserMfa, UserRecoveryCode, UserSetupToken
 from app.models.customer import Customer, CustomerType
+from app.models.job_effect import JobEffect
 from app.models.item import Item, ItemDiscount, ItemType
 from app.models.invitation import OrganizationInvitation
 from app.models.organization import Organization
@@ -23,6 +24,7 @@ __all__ = [
     "Customer",
     "CustomerType",
     "Item",
+    "JobEffect",
     "ItemDiscount",
     "ItemType",
     "Organization",

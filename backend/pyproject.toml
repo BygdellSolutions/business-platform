@@ -13,6 +13,7 @@ dependencies = [
     "reportlab>=5.0.1",
     "argon2-cffi>=25.1.0",
     "tzdata>=2026.4",
+    "procrastinate==3.10.0",
 ]
 
 [dependency-groups]

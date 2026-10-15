@@ -72,6 +72,14 @@ REQUIRED_TRIGGERS = {
     ("items", "items_record_number"),
     ("suppliers", "suppliers_record_number"),
     ("transactions", "transactions_record_number"),
+    # The job queue (Procrastinate's vendored schema): a restored database without them would accept jobs and never run them.
+    ("procrastinate_jobs", "procrastinate_jobs_notify_queue_job_inserted_v1"),
+    ("procrastinate_jobs", "procrastinate_jobs_notify_queue_job_aborted_v1"),
+    ("procrastinate_jobs", "procrastinate_trigger_status_events_update_v1"),
+    ("procrastinate_jobs", "procrastinate_trigger_status_events_insert_v1"),
+    ("procrastinate_jobs", "procrastinate_trigger_scheduled_events_v1"),
+    ("procrastinate_jobs", "procrastinate_trigger_abort_requested_events_v1"),
+    ("procrastinate_jobs", "procrastinate_trigger_delete_jobs_v1"),
 }
 DEFERRED_CONSTRAINT_TRIGGERS = {"trg_organization_users_owner_required_delete", "trg_organization_users_owner_required_update"}
 REQUIRED_FUNCTIONS = {
@@ -87,6 +95,12 @@ REQUIRED_FUNCTIONS = {
     "security_events_append_only",
     "transactions_currency_is_immutable",
     "assign_record_number",
+    "procrastinate_defer_jobs_v1", "procrastinate_defer_periodic_job_v2", "procrastinate_fetch_job_v2", "procrastinate_finish_job_v1",
+    "procrastinate_cancel_job_v1", "procrastinate_retry_job_v1", "procrastinate_retry_job_v2", "procrastinate_notify_queue_job_inserted_v1",
+    "procrastinate_notify_queue_abort_job_v1", "procrastinate_trigger_function_status_events_insert_v1",
+    "procrastinate_trigger_function_status_events_update_v1", "procrastinate_trigger_function_scheduled_events_v1",
+    "procrastinate_trigger_abort_requested_events_procedure_v1", "procrastinate_unlink_periodic_defers_v1", "procrastinate_register_worker_v1",
+    "procrastinate_unregister_worker_v1", "procrastinate_update_heartbeat_v1", "procrastinate_prune_stalled_workers_v1",
 }
 TENANT_TABLES = {
     "audit_events", "credit_note_lines", "credit_note_pdfs", "credit_note_vat_rows", "credit_notes", "custom_field_definitions", "custom_field_options", "custom_field_values", "customers", "horse_notes", "horses", "invoice_counters", "invoice_holds", "invoice_lines",

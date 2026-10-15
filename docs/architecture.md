@@ -1900,3 +1900,14 @@ inherent to invoicing by delivery and is what other systems do.
 - Credit notes work per invoice line as before. Stock returns stay capped per ORDER line by Inventory (`stock.returnable`,
   everything handed over less what came back), and an invoice line shows at most what is left to credit of it.
 
+
+## Background jobs (2026-10-15)
+
+PostgreSQL is the queue (Procrastinate 3.10.0, pinned; its schema is vendored in migration `a1c3e5f7b9d2` so the migration never changes when the library is upgraded; an upgrade is a new migration). Business code imports only `app.core.jobs`: `enqueue(db, task, queue=..., args=...)` calls the library's stored function `procrastinate_defer_jobs_v1` through the CALLER'S SQLAlchemy session, so a job exists exactly when the business change that asked for it was committed. The worker (`python -m app.worker`, same backend image, `deploy/coolify/worker.yml`) is the only importer of the library; it is stateless and any number can run. Queues: `maintenance`, `pdf`, `bulk`, `email`.
+
+- **Delivery is at-least-once.** A worker that dies after its effect but before the queue hears of it gets the job delivered again. An effect that must not repeat (money, stock, a sent message) is guarded by `jobs.once(db, key)`, a unique row in `job_effects` inserted in the SAME transaction as the effect.
+- **A dead worker's jobs are not recovered by the library by itself.** The periodic job `maintenance.recover_stalled_jobs` (every 5 minutes) gives the running jobs of a worker that stopped reporting (`WORKER_STALLED_SECONDS`, 60) back to the queue. Without a worker running, nothing recovers them.
+- Jobs carry ids only, never documents or secrets; a job queries through tenant-scoped statements with the organization id from its own arguments.
+- Periodic jobs: nightly `maintenance.purge` (what `admin purge` does by hand) and `maintenance.remove_old_jobs` (finished jobs older than a week).
+- Windows development note: the library's async driver needs the selector event loop; `app.worker.__main__` selects it. Production (Linux) is unaffected. Signal handling is skipped on Windows.
+- Proof (`backend/tests/test_job_queue.py`, real commits, real worker processes): commit gives change and job, rollback gives neither; a worker in another process runs a job; a worker killed after its effect, then recovery and redelivery, ends with one effect and a finished job; fault injection removed each guarantee in turn and the tests failed.
