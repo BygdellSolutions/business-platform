@@ -7,6 +7,7 @@
     python -m app.scripts.admin grant-org-creation --email someone@example.com
     python -m app.scripts.admin revoke-org-creation --email someone@example.com
     python -m app.scripts.admin revoke-all-sessions --yes-end-all-sessions   # emergency, after a restore or an incident
+    python -m app.scripts.admin erase-account --email someone@example.com --yes-erase   # right to erasure (an account in no organization)
     python -m app.scripts.admin reset-mfa --email someone@example.com   # lost the authenticator and the recovery codes
     python -m app.scripts.admin purge
 
@@ -118,6 +119,17 @@ def revoke_all_sessions(db: Session) -> int:
     return ended
 
 
+def erase_account(db: Session, *, email: str) -> None:
+    """Right to erasure for an ACCOUNT: anonymise it (no email, no name, no credential, no session, no second factor). Refused while the
+    account still belongs to an organization; records an organization keeps are not touched (see app.core.account_data)."""
+    from app.core import account_data
+
+    try:
+        account_data.erase_account(db, _user_by_email(db, email), clock.utcnow())
+    except account_data.ErasureRefused as error:
+        raise OperatorError(str(error)) from error
+
+
 def reset_mfa(db: Session, *, email: str) -> None:
     """For a person who lost both their authenticator and their recovery codes: remove the second factor and end every session of
     theirs. They sign in with their password and set it up again (an owner or admin cannot work until they do)."""
@@ -157,6 +169,10 @@ def build_parser() -> argparse.ArgumentParser:
     limit.add_argument("--email", required=True)
     limit.add_argument("--limit", required=True, type=int)
 
+    erase = commands.add_parser("erase-account", help="ERASE an account: anonymise it and remove every credential and session (it must belong to no organization)")
+    erase.add_argument("--email", required=True)
+    erase.add_argument("--yes-erase", action="store_true", dest="confirmed", help="required: confirms this cannot be undone")
+
     reset = commands.add_parser("reset-mfa", help="remove a person's second factor and end their sessions (they lost the app and the recovery codes)")
     reset.add_argument("--email", required=True)
 
@@ -188,6 +204,11 @@ def main(argv: list[str] | None = None) -> int:
             elif args.command == "set-owned-limit":
                 changed = set_owned_limit(db, email=args.email, limit=args.limit)
                 print(f"Owned-organization limit set to {args.limit}." + ("" if changed else " (no change)"))
+            elif args.command == "erase-account":
+                if not args.confirmed:
+                    raise OperatorError("This anonymises the account for good. Run it again with --yes-erase to confirm.")
+                erase_account(db, email=args.email)
+                print("The account was erased: no email, name, credential, session or second factor remains.")
             elif args.command == "reset-mfa":
                 reset_mfa(db, email=args.email)
                 print("Second factor removed and every session ended. The person signs in with their password and sets it up again.")

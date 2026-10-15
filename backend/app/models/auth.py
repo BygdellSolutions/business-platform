@@ -48,6 +48,7 @@ SECURITY_EVENT_TYPES = (
     "mfa_failure",
     "mfa_reset_by_operator",
     "recovery_code_used",
+    "account_erased",
 )
 
 HEX64 = "^[0-9a-f]{64}$"

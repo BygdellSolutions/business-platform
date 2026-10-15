@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { Notice } from "@/components/ui/Notice";
 import { ChangePasswordForm } from "@/features/account/ChangePasswordForm";
+import { AccountDataPanel } from "@/features/account/AccountDataPanel";
 import { MfaPanel } from "@/features/account/MfaPanel";
 import { SessionsPanel } from "@/features/account/SessionsPanel";
 import { authMode } from "@/lib/auth/config";
@@ -55,6 +56,12 @@ export default async function AccountPage() {
         <section className="panel flex max-w-xl flex-col gap-3" aria-label="Where you are signed in">
           <h2 className="text-lg font-semibold">Where you are signed in</h2>
           {own?.status === "ok" ? <SessionsPanel initial={own.sessions} /> : <Notice tone="error" testId="sessions-unavailable">Your sessions could not be loaded.</Notice>}
+        </section>
+      )}
+      {authMode() === "session" && (
+        <section className="panel flex max-w-xl flex-col gap-3" aria-label="Your data">
+          <h2 className="text-lg font-semibold">Your data</h2>
+          <AccountDataPanel />
         </section>
       )}
       {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}

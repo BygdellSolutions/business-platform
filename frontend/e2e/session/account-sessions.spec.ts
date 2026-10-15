@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { expect, test } from "../fixtures";
 
 import { signInThroughPage } from "../auth-support";
@@ -90,4 +92,23 @@ test("a person with one other browser can sign out all the others in one step", 
   await other.goto("/");
   await expect(other).toHaveURL(/\/login/);
   await otherContext.close();
+});
+
+test("a person downloads a copy of their own account data, and only theirs", async ({ page }) => {
+  world = createWorld({ label: "AccountData" });
+  await signInThroughPage(page, world.email);
+  await page.goto("/account");
+
+  const downloading = page.waitForEvent("download");
+  await page.getByTestId("download-account-data").click();
+  const download = await downloading;
+
+  expect(download.suggestedFilename()).toBe("account-data.json");
+  const text = readFileSync((await download.path())!, "utf-8");
+  const copy = JSON.parse(text) as { profile: { email: string }; memberships: { organization_name: string }[]; sessions: unknown[] };
+  expect(copy.profile.email).toBe(world.email);
+  expect(copy.memberships.map((m) => m.organization_name)).toContain(world.name);
+  expect(copy.sessions.length).toBeGreaterThan(0);
+  expect(text).not.toContain("$argon2"); // no password hash
+  await expect(page.getByTestId("account-data-done")).toBeVisible();
 });

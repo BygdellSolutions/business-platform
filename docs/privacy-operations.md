@@ -23,7 +23,7 @@ operator helps the organization answer (section 3).
 
 | Data category | Examples | Retention today | How it is removed |
 |---|---|---|---|
-| Account | email, name, password hash (Argon2id), organization memberships, creation allowance | while the account exists | **No self-service account deletion yet** (gap G11). An operator can disable an account; erasure of a person who has no other duty to keep records needs a defined procedure (section 3). |
+| Account | email, name, password hash (Argon2id), organization memberships, creation allowance, second factor | while the account exists | A person downloads a copy from /account ("Your data"). **Erasure is operator-assisted**: `admin erase-account --email ... --yes-erase` anonymises an account that belongs to no organization (no email, name, credential, session or second factor remain; history written in organizations keeps its shape). An account that is still a member must be removed from its organizations first. |
 | Sessions | hashed session token, created/last used, user agent, coarse source | until they end, plus `AUTH_RECORD_RETENTION_DAYS` (30 days) | `admin purge` (**nothing schedules it yet**, gap), or when the account's organization data is deleted |
 | Security events | logins, failures, password changes, owner changes, session revocations | `SECURITY_EVENT_RETENTION_DAYS` (30 days; the database refuses deleting younger rows) | `admin purge` (**not scheduled yet**) |
 | Organization records | customers, suppliers, items, horses and notes, orders, stock, custom fields, member list, invitations | while the organization is active | **Organization hard delete** removes all of it (owner action with recent re-authentication and a typed confirmation); the owner should export first (gate G24, not yet built) |
@@ -45,13 +45,16 @@ Target: answer within one month; extend only where the law allows and tell the p
    - A person who appears as a *customer, supplier or horse owner in an organization's records*: the organization is the
      controller. Tell the person which request goes to which organization (without revealing that other organizations hold
      nothing), and offer the organization the export and deletion help it needs.
-4. **Fulfil.** Today this is operator-assisted (no self-service tools yet): an export is a database query scoped to the one
-   organization or account; erasure of an account is a manual, audited operation that must respect records the organization
-   must keep (an invoice's customer snapshot stays with the invoice). Record what was done and the date.
+4. **Fulfil.**
+   - *Access to account data:* the person downloads it themselves from /account ("Your data"), or the operator does it for them after identity checks.
+   - *Erasure of an account:* `python -m app.scripts.admin erase-account --email ... --yes-erase` (logged as `account_erased`, no email recorded). It is refused while the account is still a member of an organization; an owner removes the member (or the person leaves) first. An organization's own records are the organization's: it decides what to keep for its bookkeeping.
+   - *An organization's whole data:* the owner downloads a complete copy from Settings (the same ZIP that precedes deleting an organization).
+   - Record what was done and the date.
 5. **Close** by telling the person what was done and what was not, with the legal reason.
 
-**Gaps to build (tracked in TODO under "SaaS security gaps"):** a tenant-safe organization export, an account-level export,
-a defined and tested account-erasure procedure, and the retention jobs above.
+**Gaps still to build (tracked in TODO under "SaaS security gaps"):** a spreadsheet-friendly form of the organization copy, a
+background job for very large organizations, correction of data held by an organization (that is the organization's own screens), and
+the scheduled retention jobs above.
 
 ## 4. A security incident (G20c)
 
