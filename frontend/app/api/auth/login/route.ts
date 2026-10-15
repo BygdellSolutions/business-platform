@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 
+import { parseMfaChallenge } from "@/lib/auth/own-mfa";
 import { safeNext } from "@/lib/auth/safe-next";
 import { callAuthEndpoint, json, parseSession, preAuthProblem, problem, readJsonObject, retryAfter, sessionModeOnly, signedIn } from "@/lib/auth/handlers";
 import { instrument } from "@/lib/observability";
@@ -27,7 +28,11 @@ export const POST = instrument(async function POST(request: NextRequest) {
   }
 
   if (upstream.status === 200) {
-    const session = parseSession(await upstream.json().catch(() => undefined));
+    const answer = await upstream.json().catch(() => undefined);
+    // A person with a second factor gets no session from the password alone: only the challenge to spend with a code.
+    const challenge = parseMfaChallenge(answer);
+    if (challenge !== null) return json({ mfa_required: true, challenge });
+    const session = parseSession(answer);
     return session === null ? problem(502, "unavailable", "Sign-in is unavailable right now.") : signedIn(session, safeNext(body.next));
   }
   if (upstream.status === 401) return json({ detail: "Invalid email or password" }, 401);

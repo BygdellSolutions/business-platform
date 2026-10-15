@@ -1,0 +1,45 @@
+﻿{
+  "environment": "Linux production backend image; CPU-only render, no database or HTTP",
+  "results": [
+    {
+      "lines": 10,
+      "seconds": [
+        0.271,
+        0.025,
+        0.027
+      ],
+      "median_seconds": 0.027,
+      "bytes": 30742
+    },
+    {
+      "lines": 100,
+      "seconds": [
+        0.15,
+        0.147,
+        0.15
+      ],
+      "median_seconds": 0.15,
+      "bytes": 37194
+    },
+    {
+      "lines": 500,
+      "seconds": [
+        0.712,
+        0.769,
+        0.73
+      ],
+      "median_seconds": 0.73,
+      "bytes": 65149
+    },
+    {
+      "lines": 2000,
+      "seconds": [
+        3.07,
+        3.039,
+        3.049
+      ],
+      "median_seconds": 3.049,
+      "bytes": 170869
+    }
+  ]
+}

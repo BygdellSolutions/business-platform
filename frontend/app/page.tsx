@@ -4,7 +4,7 @@ import { SignOut } from "@/components/shell/SignOut";
 import { Notice } from "@/components/ui/Notice";
 import { authMode } from "@/lib/auth/config";
 import { loginPath, requireCredential } from "@/lib/auth/credential";
-import { getCurrentUser, getMemberships } from "@/lib/orgs";
+import { getCurrentUser, getMemberships, needsMfaSetup } from "@/lib/orgs";
 
 /** Entry point: pick the organization to work in. One organization is entered directly. */
 export default async function Home() {
@@ -13,6 +13,7 @@ export default async function Home() {
   const [result, current] = await Promise.all([getMemberships(credential), getCurrentUser(credential)]);
   if (result.status === "unauthorized" || current.status === "unauthorized") redirect(loginPath());
   if (result.status === "unavailable" || current.status === "unavailable") throw new Error("The backend is unavailable");
+  if (needsMfaSetup(current.user)) redirect("/account?mfa=required");
 
   const { memberships } = result;
   if (memberships.length === 1) redirect(`/o/${memberships[0].id}`);

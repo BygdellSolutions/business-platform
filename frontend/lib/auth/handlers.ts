@@ -55,11 +55,16 @@ export async function readJsonObject(request: NextRequest): Promise<Record<strin
 }
 
 /**
- * A call to one of the signed-in person's OWN session endpoints (list, end one, end the others, end all). A change must pass
+ * A call to one of the signed-in person's OWN authentication endpoints (their sessions, their second factor). A change must pass
  * the same Origin and CSRF double-submit checks as every other state change; the credential comes from the cookie. Returns the
  * answer to send when the request is refused here, or FastAPI's answer to interpret (a fixed set of statuses, never its text).
  */
-export async function callOwnSessions(request: NextRequest, path: string, method: "GET" | "POST" | "DELETE"): Promise<{ refused: NextResponse } | { upstream: Response }> {
+export async function callOwnAuth(
+  request: NextRequest,
+  path: string,
+  method: "GET" | "POST" | "DELETE",
+  body?: Record<string, unknown>,
+): Promise<{ refused: NextResponse } | { upstream: Response }> {
   const notSession = sessionModeOnly();
   if (notSession) return { refused: notSession };
   let csrf: string | undefined;
@@ -72,7 +77,7 @@ export async function callOwnSessions(request: NextRequest, path: string, method
   const credential = credentialFromRequest(request);
   if (credential === null) return { refused: problem(401, "unauthenticated", "Sign in again.") };
   try {
-    return { upstream: await backendFetch({ credential }, path, { method, csrf }) };
+    return { upstream: await backendFetch({ credential }, path, { method, csrf, body: body === undefined ? undefined : JSON.stringify(body) }) };
   } catch {
     return { refused: problem(502, "unavailable", "Your sessions are unavailable right now.") };
   }

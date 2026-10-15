@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { isUuid } from "@/lib/backend";
 import { authMode } from "@/lib/auth/config";
 import { loginPath, requireCredential } from "@/lib/auth/credential";
-import { getCurrentUser, getMemberships } from "@/lib/orgs";
+import { getCurrentUser, getMemberships, needsMfaSetup } from "@/lib/orgs";
 import { OrgScope } from "@/components/shell/org-context";
 import { OrgSwitcher } from "@/components/shell/OrgSwitcher";
 import { MainNav } from "@/components/shell/MainNav";
@@ -32,6 +32,7 @@ export default async function OrgLayout({
   if (result.status === "unauthorized" || current.status === "unauthorized") redirect(loginPath(`/o/${orgId}`));
   if (result.status === "unavailable" || current.status === "unavailable") throw new Error("The backend is unavailable");
   const mode = authMode();
+  if (needsMfaSetup(current.user)) redirect("/account?mfa=required"); // the server refuses every request until it is set up (FastAPI)
 
   const organization = result.memberships.find((membership) => membership.id === orgId);
   if (!organization) notFound();

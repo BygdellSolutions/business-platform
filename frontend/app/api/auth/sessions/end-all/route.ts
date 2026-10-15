@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 
-import { callOwnSessions, json, problem } from "@/lib/auth/handlers";
+import { callOwnAuth, json, problem } from "@/lib/auth/handlers";
 import { clearSessionCookies } from "@/lib/auth/session-cookies";
 import { instrument } from "@/lib/observability";
 
@@ -10,7 +10,7 @@ import { instrument } from "@/lib/observability";
  * the server still honours the session.
  */
 export const POST = instrument(async function POST(request: NextRequest) {
-  const result = await callOwnSessions(request, "/api/auth/sessions/end-all", "POST");
+  const result = await callOwnAuth(request, "/api/auth/sessions/end-all", "POST");
   if ("refused" in result) return result.refused;
   const { upstream } = result;
   if (upstream.status === 401) {

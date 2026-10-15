@@ -4,6 +4,7 @@ import { cache } from "react";
 
 import type { Credential } from "@/lib/auth/credential";
 import { backendFetch } from "@/lib/backend";
+import { parseMfaStatus, type MfaStatus } from "@/lib/auth/own-mfa";
 import { parseSessionList, type OwnSession } from "@/lib/auth/own-sessions";
 import type { Membership } from "@/lib/api/types";
 
@@ -37,7 +38,28 @@ export interface CurrentUser {
   created_organizations: number;
   /** How many organizations it may create (historical name). Owning an existing organization never counts. */
   max_owned_organizations: number;
+  /** Has a second factor / must have one (an owner or admin with the policy on). Absent from an older backend. */
+  mfa_enabled?: boolean;
+  mfa_required?: boolean;
 }
+
+export type MfaStatusResult = { status: "ok"; mfa: MfaStatus } | { status: "unauthorized" } | { status: "unavailable" };
+
+/** The signed-in person's own second factor state (FastAPI scopes it to the caller), reduced to what the account page shows. */
+export const getMfaStatus = cache(async (credential: Credential): Promise<MfaStatusResult> => {
+  let response: Response;
+  try {
+    response = await backendFetch({ credential }, "/api/auth/mfa");
+  } catch {
+    return { status: "unavailable" };
+  }
+  if (response.status === 401) return { status: "unauthorized" };
+  const mfa = response.ok ? parseMfaStatus(await response.json().catch(() => null)) : null;
+  return mfa === null ? { status: "unavailable" } : { status: "ok", mfa };
+});
+
+/** An owner or admin whose role requires a second factor they have not set up is sent to set it up before anything else. */
+export const needsMfaSetup = (user: CurrentUser): boolean => user.mfa_required === true && user.mfa_enabled !== true;
 
 export type OwnSessionsResult = { status: "ok"; sessions: OwnSession[] } | { status: "unauthorized" } | { status: "unavailable" };
 

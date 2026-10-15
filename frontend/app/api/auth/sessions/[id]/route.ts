@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 
-import { callOwnSessions, json, problem } from "@/lib/auth/handlers";
+import { callOwnAuth, json, problem } from "@/lib/auth/handlers";
 import { instrument } from "@/lib/observability";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -9,7 +9,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const DELETE = instrument(async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
   if (!UUID.test(id)) return problem(404, "not_found", "That session does not exist.");
-  const result = await callOwnSessions(request, `/api/auth/sessions/${id.toLowerCase()}`, "DELETE");
+  const result = await callOwnAuth(request, `/api/auth/sessions/${id.toLowerCase()}`, "DELETE");
   if ("refused" in result) return result.refused;
   const { status } = result.upstream;
   if (status === 204) return json({ ended: 1 });

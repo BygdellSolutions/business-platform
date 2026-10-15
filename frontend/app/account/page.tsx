@@ -2,10 +2,11 @@ import { redirect } from "next/navigation";
 
 import { Notice } from "@/components/ui/Notice";
 import { ChangePasswordForm } from "@/features/account/ChangePasswordForm";
+import { MfaPanel } from "@/features/account/MfaPanel";
 import { SessionsPanel } from "@/features/account/SessionsPanel";
 import { authMode } from "@/lib/auth/config";
 import { loginPath, requireCredential } from "@/lib/auth/credential";
-import { getCurrentUser, getOwnSessions } from "@/lib/orgs";
+import { getCurrentUser, getMfaStatus, getOwnSessions, needsMfaSetup } from "@/lib/orgs";
 
 export const dynamic = "force-dynamic"; // depends on AUTH_MODE at run time, never on the build's environment
 
@@ -21,6 +22,8 @@ export default async function AccountPage() {
 
   const own = authMode() === "session" ? await getOwnSessions(credential) : null;
   if (own?.status === "unauthorized") redirect(loginPath("/account"));
+  const mfa = authMode() === "session" ? await getMfaStatus(credential) : null;
+  if (mfa?.status === "unauthorized") redirect(loginPath("/account"));
 
   return (
     <main className="mx-auto flex max-w-xl flex-col gap-6 p-8">
@@ -38,6 +41,16 @@ export default async function AccountPage() {
           <Notice testId="no-passwords">This environment uses the development sign-in, which has no passwords.</Notice>
         )}
       </section>
+      {mfa !== null && (
+        <section className="panel flex max-w-xl flex-col gap-3" aria-label="Second factor">
+          <h2 className="text-lg font-semibold">Second factor</h2>
+          {mfa.status === "ok" ? (
+            <MfaPanel initial={mfa.mfa} mustSetUp={needsMfaSetup(current.user)} />
+          ) : (
+            <Notice tone="error" testId="mfa-unavailable">The second factor could not be loaded.</Notice>
+          )}
+        </section>
+      )}
       {authMode() === "session" && (
         <section className="panel flex max-w-xl flex-col gap-3" aria-label="Where you are signed in">
           <h2 className="text-lg font-semibold">Where you are signed in</h2>
