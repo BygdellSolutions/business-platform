@@ -179,7 +179,7 @@ export function IncomingPanel({
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="text-left text-sm">
+          <table className="text-left text-sm whitespace-nowrap">
             <thead>
               <tr className="border-b border-zinc-300 dark:border-zinc-700">
                 <SortHeader label="Order date" {...sorted.header("ordered")} />
@@ -243,7 +243,7 @@ export function IncomingPanel({
                     <td className="py-1">
                       {editing?.id === row.id ? (
                         <div
-                          className="flex flex-wrap items-center gap-2"
+                          className="flex flex-nowrap items-center gap-2"
                           data-testid="incoming-edit"
                         >
                           {isOpen(row) && (
@@ -280,20 +280,19 @@ export function IncomingPanel({
                           >
                             Save
                           </Button>
-                          <button
+                          <Button
                             type="button"
-                            className="text-sm underline"
                             onClick={() => setEditing(null)}
+                            data-testid="cancel-edit-incoming"
                           >
-                            Cancel editing
-                          </button>
+                            Cancel
+                          </Button>
                           <ErrorSummary messages={editProblems.general} />
                         </div>
                       ) : (
-                        <div className="flex flex-wrap items-center gap-2">
-                          <button
+                        <div className="flex flex-nowrap items-center gap-2">
+                          <Button
                             type="button"
-                            className="text-sm underline"
                             data-testid="edit-incoming"
                             onClick={() =>
                               setEditing({
@@ -304,7 +303,7 @@ export function IncomingPanel({
                             }
                           >
                             Edit
-                          </button>
+                          </Button>
                           {isOpen(row) && (
                             <>
                               <input
@@ -332,6 +331,7 @@ export function IncomingPanel({
                                 label="Cancel"
                                 question="Will the rest of this delivery not come? Units already received stay on hand."
                                 confirmLabel="Yes, cancel the rest"
+                                oneLine
                                 disabled={pending}
                                 onConfirm={() => void cancel(row)}
                                 testId="cancel-incoming"

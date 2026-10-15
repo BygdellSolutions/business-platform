@@ -38,7 +38,8 @@ class StockMovement(Base):
         ForeignKeyConstraint(
             ["organization_id", "item_id"], ["items.organization_id", "items.id"], ondelete="RESTRICT", name="fk_stock_movements_item"
         ),
-        CheckConstraint("quantity_change <> 0", name="ck_stock_movements_change_nonzero"),
+        # a new product may start at 0: the opening count is recorded even then (no other reason moves nothing)
+        CheckConstraint("quantity_change <> 0 OR reason = 'opening'", name="ck_stock_movements_change_nonzero"),
         CheckConstraint("quantity_before >= 0 AND quantity_after >= 0", name="ck_stock_movements_never_negative"),
         CheckConstraint("quantity_after = quantity_before + quantity_change", name="ck_stock_movements_arithmetic"),
         CheckConstraint("reason IN ('" + "', '".join(MovementReason) + "')", name="ck_stock_movements_reason"),

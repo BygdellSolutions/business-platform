@@ -90,6 +90,23 @@ test("completion delivers what is in stock and backorders the rest; a reopen giv
   await expect(page.getByTestId("stock-movement").first()).toContainText("Order reopened");
 });
 
+test("a new product can be given an opening stock of zero", async ({ page, context }) => {
+  world = createWorld({ label: "InventoryZero" });
+  await signIn(context, world.email);
+  const item = await createItem(context, world.orgId, { name: "New brush", type: "product", unit: "pcs", track_stock: true });
+
+  await page.goto(`/o/${world.orgId}/catalog/${item.id}`);
+  const panel = page.getByTestId("stock-panel");
+  await panel.getByLabel(/Counted quantity/).fill("0");
+  await panel.getByTestId("submit-stock").click();
+  await expect(panel.getByTestId("error-quantity")).toHaveCount(0); // zero is a real answer for a product that has none yet
+  await expect(panel.getByRole("heading", { name: "Change the stock" })).toBeVisible(); // it is counted now
+  await panel.getByTestId("stock-history-toggle").getByText(/Show stock history/).click();
+  await expect(page.getByTestId("stock-movement")).toHaveCount(1);
+  await expect(page.getByTestId("stock-movement")).toContainText("Opening count");
+  await expect(panel.getByTestId("on-hand")).toHaveText("0");
+});
+
 test("a delivery on its way is recorded, received in part, and the rest cancelled", async ({ page, context }) => {
   world = createWorld({ label: "Incoming" });
   await signIn(context, world.email);
@@ -125,6 +142,23 @@ test("a delivery on its way is recorded, received in part, and the rest cancelle
   await page.goto(`/o/${world.orgId}/catalog/${item.id}`);
   await expect(page.getByTestId("stock-figures")).toContainText("incoming 10");
   await expect(page.getByTestId("on-hand")).toHaveText("0");
+
+  // every action of a row is the same kind of button, on one line
+  const [edit1, receive1, cancel1] = [incoming.getByTestId("edit-incoming"), incoming.getByTestId("receive-incoming"), incoming.getByTestId("cancel-incoming")];
+  const heights = await Promise.all([edit1, receive1, cancel1].map(async (button) => (await button.boundingBox())?.height ?? 0));
+  expect(heights[0]).toBeGreaterThan(0);
+  expect(new Set(heights.map(Math.round)).size).toBe(1);
+  const colors = await Promise.all([edit1, receive1, cancel1].map((button) => button.evaluate((element) => getComputedStyle(element).backgroundColor)));
+  expect(new Set(colors).size).toBe(1);
+  const row = await incoming.getByTestId("incoming-row").boundingBox();
+  expect((row?.height ?? 999) < heights[0] * 1.8).toBe(true); // one row, not a wrapped one
+  const tops = await Promise.all([edit1, receive1, cancel1].map(async (button) => Math.round((await button.boundingBox())?.y ?? 0)));
+  expect(new Set(tops).size).toBe(1);
+  await cancel1.click(); // asking keeps the row on one line too
+  await expect(page.getByRole("button", { name: "No, go back" })).toBeVisible();
+  const asking = await incoming.getByTestId("incoming-row").boundingBox();
+  expect((asking?.height ?? 999) < heights[0] * 1.8).toBe(true);
+  await page.getByRole("button", { name: "No, go back" }).click();
 
   await incoming.getByLabel("Quantity received").fill("4");
   await incoming.getByTestId("receive-incoming").click();

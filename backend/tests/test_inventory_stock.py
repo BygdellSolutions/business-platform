@@ -310,3 +310,39 @@ def test_units_on_open_drafts_are_allocated_and_not_shown_as_available_to_others
     client.post(f"/api/transactions/{second.id}/complete", headers=owner)
     [figures] = client.get("/api/inventory/availability", params={"item_id": str(item.id)}, headers=owner).json()
     assert (figures["on_hand"], figures["allocated"], figures["available"]) == ("7.000", "8.000", "0.000")
+
+
+def test_a_new_product_can_start_at_zero_and_is_then_counted(client: TestClient, db_session: Session):
+    org, owner = _world(db_session)
+    item = _product(db_session, org)
+
+    opened = _adjust(client, item.id, owner, kind="count", quantity="0")
+    assert opened.status_code == 201, opened.text
+    body = opened.json()
+    assert body["on_hand"] == "0.000"
+    assert [(m["reason"], m["quantity_change"], m["quantity_after"]) for m in body["movements"]] == [("opening", "0.000", "0.000")]
+
+    # it is counted now: a later count or change is an ordinary one (it needs its note, and a count that changes nothing is refused)
+    assert _adjust(client, item.id, owner, kind="count", quantity="0", note="Counted").json()["detail"][0]["type"] == "stock.unchanged"
+    assert _adjust(client, item.id, owner, kind="add", quantity="5").json()["detail"][0]["type"] == "stock.note_required"
+    added = _adjust(client, item.id, owner, kind="add", quantity="5", note="First delivery")
+    assert added.status_code == 201 and added.json()["on_hand"] == "5.000"
+
+
+def test_only_the_opening_count_may_move_nothing(client: TestClient, db_session: Session):
+    from sqlalchemy import text
+    from sqlalchemy.exc import DBAPIError
+
+    org, owner = _world(db_session)
+    item = _product(db_session, org)
+    _adjust(client, item.id, owner, kind="count", quantity="2")
+    nested = db_session.begin_nested()  # the database itself refuses a zero movement of any other kind
+    with pytest.raises(DBAPIError, match="ck_stock_movements_change_nonzero"):
+        db_session.execute(
+            text(
+                "INSERT INTO stock_movements (organization_id, item_id, quantity_change, quantity_before, quantity_after, reason, note) "
+                "VALUES (:o, :i, 0, 2, 2, 'adjustment', 'x')"
+            ),
+            {"o": org.id, "i": item.id},
+        )
+    nested.rollback()

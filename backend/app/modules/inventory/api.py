@@ -68,7 +68,7 @@ def adjust_stock(
         change = payload.quantity - current
     else:
         change = payload.quantity if payload.kind == "add" else -payload.quantity
-    if change == Decimal(0):
+    if change == Decimal(0) and not opening:  # the first count may be 0: a new product starts empty
         reference_error("quantity", "This is the quantity on hand already; nothing changes", "stock.unchanged")
     service.record_movement(db, ctx, item, change, MovementReason.OPENING if opening else MovementReason.ADJUSTMENT, note=payload.note)
     db.commit()

@@ -125,7 +125,7 @@ export function StockPanel({
                     <td className="py-1 pr-4">{formatDay(movement.created_at, timeZone)}</td>
                     <td className="py-1 pr-4">{REASONS[movement.reason]}</td>
                     <td className="py-1 pr-4 text-right">
-                      {movement.quantity_change.startsWith("-") ? "" : "+"}
+                      {movement.quantity_change.startsWith("-") || trimQuantity(movement.quantity_change) === "0" ? "" : "+"}
                       {trimQuantity(movement.quantity_change)}
                     </td>
                     <td className="py-1 pr-4 text-right">
