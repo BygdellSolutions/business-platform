@@ -10,10 +10,11 @@ from datetime import datetime
 from decimal import Decimal
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
 from app.core import clock
+from app.core.query import in_chunks
 from app.core.tenant import TenantContext
 from app.models import Item, ItemType
 from app.modules.inventory.models import IncomingStock, LineFulfillment, MovementReason, StockMovement
@@ -34,8 +35,20 @@ def lock_items(db: Session, ctx: TenantContext, item_ids: Iterable[uuid.UUID]) -
     return {item.id: item for item in rows}
 
 
-def on_hand(db: Session, organization_id: uuid.UUID, item_ids: Iterable[uuid.UUID]) -> dict[uuid.UUID, Decimal]:
-    """The physical stock of each item: its latest movement's "after" (zero without movements)."""
+def on_hand(db: Session, organization_id: uuid.UUID, item_ids: "Iterable[uuid.UUID] | Select") -> dict[uuid.UUID, Decimal]:
+    """The physical stock of each item: its latest movement's "after" (zero without movements).
+
+    `item_ids` may be a SELECT of item ids (a whole catalogue: one statement, no list sent); the answer then holds only the items
+    that have a movement, and the caller reads the others as zero (`.get(item_id, ZERO)`).
+    """
+    if isinstance(item_ids, Select):
+        last = (
+            select(func.max(StockMovement.sequence))
+            .where(StockMovement.organization_id == organization_id, StockMovement.item_id.in_(item_ids))
+            .group_by(StockMovement.item_id)
+        )
+        latest = select(StockMovement.item_id, StockMovement.quantity_after).where(StockMovement.sequence.in_(last))
+        return {item_id: quantity for item_id, quantity in db.execute(latest)}
     ids = list(set(item_ids))
     result = {item_id: ZERO for item_id in ids}
     if not ids:
@@ -402,16 +415,24 @@ def fulfillment_state(row: LineFulfillment, on_hand_now: Decimal) -> str:
 # --- credit notes (Invoicing calls these through named hooks; it never imports Inventory) --------------------------
 
 
-def _active_fulfillments(db: Session, organization_id: uuid.UUID, transaction_line_ids: Iterable[uuid.UUID], *, lock: bool = False) -> list[LineFulfillment]:
-    ids = [line_id for line_id in transaction_line_ids if line_id is not None]
-    if not ids:
-        return []
-    query = select(LineFulfillment).where(
-        LineFulfillment.organization_id == organization_id,
-        LineFulfillment.transaction_line_id.in_(ids),
-        LineFulfillment.cancelled_at.is_(None),
-    )
-    return list(db.scalars(query.with_for_update() if lock else query))
+def _active_fulfillments(db: Session, organization_id: uuid.UUID, transaction_line_ids: "Iterable[uuid.UUID] | Select", *, lock: bool = False) -> list[LineFulfillment]:
+    """The active fulfillments of some lines: given as ids (asked for in chunks) or as a SELECT of ids (one statement, nothing sent)."""
+    if isinstance(transaction_line_ids, Select):
+        query = select(LineFulfillment).where(
+            LineFulfillment.organization_id == organization_id,
+            LineFulfillment.transaction_line_id.in_(transaction_line_ids),
+            LineFulfillment.cancelled_at.is_(None),
+        )
+        return list(db.scalars(query.with_for_update() if lock else query))
+    rows: list[LineFulfillment] = []
+    for ids in in_chunks(line_id for line_id in transaction_line_ids if line_id is not None):
+        query = select(LineFulfillment).where(
+            LineFulfillment.organization_id == organization_id,
+            LineFulfillment.transaction_line_id.in_(ids),
+            LineFulfillment.cancelled_at.is_(None),
+        )
+        rows.extend(db.scalars(query.with_for_update() if lock else query))
+    return rows
 
 
 def _returned_after_credit(db: Session, organization_id: uuid.UUID, row: LineFulfillment) -> Decimal:
@@ -427,7 +448,7 @@ def _returned_after_credit(db: Session, organization_id: uuid.UUID, row: LineFul
     )
 
 
-def delivered_so_far(db: Session, organization_id: uuid.UUID, transaction_line_ids: Iterable[uuid.UUID]) -> dict[uuid.UUID, Decimal]:
+def delivered_so_far(db: Session, organization_id: uuid.UUID, transaction_line_ids: "Iterable[uuid.UUID] | Select") -> dict[uuid.UUID, Decimal]:
     """Per stock-tracking line of a completed transaction: everything handed over so far (at completion and later).
     What Invoicing may invoice of the line (invoicing by delivery). Lines not tracked are left out: for those, the
     whole quantity counts as delivered once the transaction is completed."""

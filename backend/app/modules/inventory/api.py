@@ -254,14 +254,10 @@ def read_transaction_fulfillment(
 @availability_router.get("/summary", response_model=InventorySummary)
 def inventory_summary(ctx: TenantContext = Depends(get_tenant_context), db: Session = Depends(get_db)) -> InventorySummary:
     """How many active stock-tracking products are out of stock or low, what waits and what is coming (any member)."""
-    rows = db.execute(
-        select(Item.id, Item.low_stock_threshold).where(
-            Item.organization_id == ctx.organization_id, Item.active.is_(True), Item.track_stock.is_(True), Item.type == "product"
-        )
-    ).all()
-    ids = [item_id for item_id, _ in rows]
-    stock = service.on_hand(db, ctx.organization_id, ids)
-    states = [service.stock_states(stock[item_id], threshold, Decimal(0), Decimal(0)) for item_id, threshold in rows]
+    tracked = (Item.organization_id == ctx.organization_id, Item.active.is_(True), Item.track_stock.is_(True), Item.type == "product")
+    rows = db.execute(select(Item.id, Item.low_stock_threshold).where(*tracked)).all()
+    stock = service.on_hand(db, ctx.organization_id, select(Item.id).where(*tracked))  # asked as a subquery: no list of ids is sent
+    states = [service.stock_states(stock.get(item_id, Decimal(0)), threshold, Decimal(0), Decimal(0)) for item_id, threshold in rows]
     open_backorders = (
         LineFulfillment.organization_id == ctx.organization_id,
         LineFulfillment.cancelled_at.is_(None),

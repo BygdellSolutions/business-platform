@@ -15,10 +15,11 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Iterable, Sequence
 
-from sqlalchemy import func, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
 from app.core.entity_registry import registry
+from app.core.query import in_chunks
 from app.core.tenant import TenantContext
 from app.modules.invoicing.models import InvoiceHold, InvoiceLine
 from app.modules.sales.models import Transaction, TransactionLine
@@ -50,37 +51,59 @@ class Part:
         return self.line.vat_rate
 
 
-def delivered(db: Session, ctx: TenantContext, lines: Sequence[TransactionLine]) -> dict[uuid.UUID, Decimal]:
-    """What of each line was handed over so far. Untracked lines: all of it (the order is completed)."""
+def delivered(db: Session, ctx: TenantContext, lines: Sequence[TransactionLine], *, scope: Select | None = None) -> dict[uuid.UUID, Decimal]:
+    """What of each line was handed over so far. Untracked lines: all of it (the order is completed).
+
+    `scope`, when given, is a SELECT of the ids of the orders the lines belong to: the tracked figures are then asked for as
+    "the lines of those orders" in ONE statement instead of by a list of line ids (which grows with the backlog).
+    """
     tracked: dict[uuid.UUID, Decimal] = {}
-    for answer in registry.call_hooks("stock.delivered", db, ctx.organization_id, [line.id for line in lines]):
+    asked = _lines_of(ctx, scope) if scope is not None else [line.id for line in lines]
+    for answer in registry.call_hooks("stock.delivered", db, ctx.organization_id, asked):
         tracked.update(answer)
     return {line.id: tracked.get(line.id, line.quantity) for line in lines}
 
 
-def invoiced(db: Session, ctx: TenantContext, line_ids: Iterable[uuid.UUID], *, except_invoice: uuid.UUID | None = None) -> dict[uuid.UUID, Decimal]:
-    """What of each line is on invoices (draft or issued), optionally leaving one invoice out."""
-    ids = list(line_ids)
-    if not ids:
-        return {}
-    query = (
-        select(InvoiceLine.source_line_id, func.sum(InvoiceLine.quantity))
-        .where(InvoiceLine.organization_id == ctx.organization_id, InvoiceLine.source_line_id.in_(ids))
-        .group_by(InvoiceLine.source_line_id)
-    )
-    if except_invoice is not None:
-        query = query.where(InvoiceLine.invoice_id != except_invoice)
-    return {line_id: total for line_id, total in db.execute(query).all()}
+def _lines_of(ctx: TenantContext, scope: Select) -> Select:
+    """The ids of the lines of the orders `scope` selects (a SELECT, so nothing is sent to the database as a list)."""
+    return select(TransactionLine.id).where(TransactionLine.organization_id == ctx.organization_id, TransactionLine.transaction_id.in_(scope))
 
 
-def held(db: Session, ctx: TenantContext, transaction_ids: Iterable[uuid.UUID]) -> set[uuid.UUID]:
-    """The orders waiting until everything is delivered."""
-    ids = list(transaction_ids)
-    if not ids:
-        return set()
-    return set(
-        db.scalars(select(InvoiceHold.transaction_id).where(InvoiceHold.organization_id == ctx.organization_id, InvoiceHold.transaction_id.in_(ids)))
-    )
+def invoiced(
+    db: Session, ctx: TenantContext, line_ids: Iterable[uuid.UUID], *, except_invoice: uuid.UUID | None = None, scope: Select | None = None
+) -> dict[uuid.UUID, Decimal]:
+    """What of each line is on invoices (draft or issued), optionally leaving one invoice out. With `scope` (a SELECT of order
+    ids) it answers for the lines of those orders in ONE statement."""
+    if scope is not None:
+        query = (
+            select(InvoiceLine.source_line_id, func.sum(InvoiceLine.quantity))
+            .where(InvoiceLine.organization_id == ctx.organization_id, InvoiceLine.source_line_id.in_(_lines_of(ctx, scope)))
+            .group_by(InvoiceLine.source_line_id)
+        )
+        if except_invoice is not None:
+            query = query.where(InvoiceLine.invoice_id != except_invoice)
+        return {line_id: total for line_id, total in db.execute(query).all()}
+    result: dict[uuid.UUID, Decimal] = {}
+    for ids in in_chunks(line_ids):
+        query = (
+            select(InvoiceLine.source_line_id, func.sum(InvoiceLine.quantity))
+            .where(InvoiceLine.organization_id == ctx.organization_id, InvoiceLine.source_line_id.in_(ids))
+            .group_by(InvoiceLine.source_line_id)
+        )
+        if except_invoice is not None:
+            query = query.where(InvoiceLine.invoice_id != except_invoice)
+        result.update({line_id: total for line_id, total in db.execute(query).all()})
+    return result
+
+
+def held(db: Session, ctx: TenantContext, transaction_ids: Iterable[uuid.UUID], *, scope: Select | None = None) -> set[uuid.UUID]:
+    """The orders waiting until everything is delivered (with `scope`, a SELECT of order ids: those of them, in one statement)."""
+    if scope is not None:
+        return set(db.scalars(select(InvoiceHold.transaction_id).where(InvoiceHold.organization_id == ctx.organization_id, InvoiceHold.transaction_id.in_(scope))))
+    waiting: set[uuid.UUID] = set()
+    for ids in in_chunks(transaction_ids):
+        waiting.update(db.scalars(select(InvoiceHold.transaction_id).where(InvoiceHold.organization_id == ctx.organization_id, InvoiceHold.transaction_id.in_(ids))))
+    return waiting
 
 
 def parts(
@@ -90,12 +113,18 @@ def parts(
     lines_of: dict[uuid.UUID, list[TransactionLine]],
     *,
     except_invoice: uuid.UUID | None = None,
+    scope: Select | None = None,
 ) -> dict[uuid.UUID, list[Part]]:
-    """Per order, the parts of its lines that may be invoiced now (lines with nothing to invoice are left out)."""
+    """Per order, the parts of its lines that may be invoiced now (lines with nothing to invoice are left out).
+
+    `scope` is for a LARGE set of orders (a dashboard or a list over the whole backlog): a SELECT of exactly the ids of `orders`.
+    The three side queries (delivered, already invoiced, held) are then asked as subqueries over it, so their number does not
+    grow with the backlog and no list of ids is sent.
+    """
     all_lines = [line for order in orders for line in lines_of.get(order.id, [])]
-    handed_over = delivered(db, ctx, all_lines)
-    already = invoiced(db, ctx, [line.id for line in all_lines], except_invoice=except_invoice)
-    waiting = held(db, ctx, [order.id for order in orders])
+    handed_over = delivered(db, ctx, all_lines, scope=scope)
+    already = invoiced(db, ctx, [line.id for line in all_lines] if scope is None else (), except_invoice=except_invoice, scope=scope)
+    waiting = held(db, ctx, [order.id for order in orders] if scope is None else (), scope=scope)
     result: dict[uuid.UUID, list[Part]] = defaultdict(list)
     for order in orders:
         lines = lines_of.get(order.id, [])

@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
-from sqlalchemy import and_, case, exists, func, or_, select
+from sqlalchemy import Select, and_, case, exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import Pagination, Sorting, pagination, sorted_by, sorting
@@ -14,7 +14,7 @@ from app.core import rate_limit
 from app.core.authz import roles_required
 from app.core.db import get_db
 from app.core.org_time import MONTH_PATTERN, month_range, organization_today, organization_zone, year_range
-from app.core.query import contains_pattern
+from app.core.query import contains_pattern, in_chunks
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import scoped_select
 from app.models import Customer, Role
@@ -111,12 +111,24 @@ def _ready_conditions() -> tuple:
     )
 
 
-def _parts_of(db: Session, ctx: TenantContext, orders: list[Transaction]) -> dict[uuid.UUID, list[delivery.Part]]:
+def _ready_scope(ctx: TenantContext, *extra) -> Select:
+    """The ids of exactly the orders `scoped_select(Transaction, ctx).where(*_ready_conditions(), *extra)` returns, as a SELECT."""
+    return select(Transaction.id).where(Transaction.organization_id == ctx.organization_id, *_ready_conditions(), *extra)
+
+
+def _parts_of(db: Session, ctx: TenantContext, orders: list[Transaction], *, scope: Select | None = None) -> dict[uuid.UUID, list[delivery.Part]]:
+    """What of each order may be invoiced now. `scope` (see delivery.parts) is a SELECT of exactly the ids of `orders`: pass it when
+    `orders` is the whole backlog, so the lookups do not send the ids back to the database."""
     lines: dict[uuid.UUID, list[TransactionLine]] = {tx.id: [] for tx in orders}
-    if lines:
-        for line in db.scalars(scoped_select(TransactionLine, ctx).where(TransactionLine.transaction_id.in_(list(lines))).order_by(TransactionLine.position, TransactionLine.id)):
+    if scope is not None:
+        query = scoped_select(TransactionLine, ctx).where(TransactionLine.transaction_id.in_(scope)).order_by(TransactionLine.position, TransactionLine.id)
+        for line in db.scalars(query):
             lines[line.transaction_id].append(line)
-    return delivery.parts(db, ctx, orders, lines)
+    else:
+        for ids in in_chunks(lines):
+            for line in db.scalars(scoped_select(TransactionLine, ctx).where(TransactionLine.transaction_id.in_(ids)).order_by(TransactionLine.position, TransactionLine.id)):
+                lines[line.transaction_id].append(line)
+    return delivery.parts(db, ctx, orders, lines, scope=scope)
 
 
 
@@ -174,7 +186,14 @@ def list_invoiceable_transactions(
     # candidate (completed, not fully invoiced) and paged after that; fine while the backlog is hundreds of orders,
     # move the delivered figures into SQL (an Inventory sort-style expression hook) if it grows to many thousands.
     candidates = db.execute(sorted_by(query, sort, _invoiceable_sorts(), newest_first)).all()
-    parts_of = _parts_of(db, ctx, [tx for tx, _ in candidates])
+    extra = []
+    if customer_id is not None:
+        extra.append(Transaction.billing_customer_id == customer_id)
+    if date_from is not None:
+        extra.append(Transaction.transaction_date >= date_from)
+    if date_to is not None:
+        extra.append(Transaction.transaction_date <= date_to)
+    parts_of = _parts_of(db, ctx, [tx for tx, _ in candidates], scope=_ready_scope(ctx, *extra))
     rows = [(tx, customer) for tx, customer in candidates if parts_of.get(tx.id)][page.offset : page.offset + page.limit]
     result = []
     for tx, customer in rows:
@@ -213,7 +232,7 @@ def invoicing_summary(
     year_start, year_end = year_range(month_start, today)
     # Ready to invoice: what was delivered and is not invoiced yet (invoicing by delivery), worth what it would be invoiced at.
     candidates = list(db.scalars(scoped_select(Transaction, ctx).where(*_ready_conditions())))
-    parts_of = _parts_of(db, ctx, candidates)
+    parts_of = _parts_of(db, ctx, candidates, scope=_ready_scope(ctx))
     ready_orders = [tx for tx in candidates if parts_of.get(tx.id)]
     ready_count = len(ready_orders)
     by_currency: dict[str, Decimal] = {}

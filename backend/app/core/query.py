@@ -1,7 +1,7 @@
 """Small query/persistence helpers shared by resource routers (not tenant logic)."""
 
-from collections.abc import Callable
-from typing import Any
+from collections.abc import Callable, Iterable, Iterator
+from typing import Any, TypeVar
 
 from fastapi import HTTPException, status
 from sqlalchemy import false
@@ -11,6 +11,27 @@ from sqlalchemy.orm import Session
 from app.core.entity_registry import registry
 
 FOREIGN_KEY_VIOLATION = "23503"  # PostgreSQL SQLSTATE
+
+T = TypeVar("T")
+IN_CHUNK = 60  # an id costs about 76 bytes on the wire (its place in the statement plus its value): 60 ids stay under 5 KB, clear of the stall seen at about 8 KB
+
+
+def in_chunks(values: Iterable[T], size: int = IN_CHUNK) -> Iterator[list[T]]:
+    """`values` in lists of at most `size`, for a query that filters with `IN (...)`.
+
+    One statement with hundreds of ids is slow in a way the database does not explain: on a development machine the same
+    query took 0.8 ms with 200 ids and 44 ms with 250 (the message crossed a size where the network path stalled; the server
+    itself needed 0.05 ms), and it shows in the dashboard. Several short statements are always cheap, so a list that can
+    grow with the data is asked for in chunks.
+    """
+    batch: list[T] = []
+    for value in values:
+        batch.append(value)
+        if len(batch) >= size:
+            yield batch
+            batch = []
+    if batch:
+        yield batch
 
 
 def number_matches(column, text: str):
