@@ -216,6 +216,20 @@ describe("deleting a draft", () => {
   });
 });
 
+describe("backing out of a question", () => {
+  it("says where it goes: back to the draft for finalizing, and keeping the draft for deleting", async () => {
+    mount();
+    await userEvent.click(screen.getByTestId("finalize"));
+    expect(screen.getByRole("button", { name: "No, back to the draft" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Keep" })).toBeNull();
+    await userEvent.click(screen.getByTestId("finalize-keep"));
+    expect(screen.getByTestId("finalize")).toBeTruthy(); // back where it was, nothing sent
+    await userEvent.click(screen.getByTestId("delete-draft"));
+    expect(screen.getByRole("button", { name: "No, keep the draft" })).toBeTruthy();
+    expect(calls()).toHaveLength(0);
+  });
+});
+
 describe("finalizing", () => {
   it("asks first, saves the unsaved changes, then finalizes with the new version and shows the frozen entry", async () => {
     answers.push(ok(entry({ body: "Done", version: 2 })), ok(entry({ body: "Done", version: 3, status: "final" })));

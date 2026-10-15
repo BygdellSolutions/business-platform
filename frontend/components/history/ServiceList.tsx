@@ -5,7 +5,7 @@ import Link from "next/link";
 import { DecimalText } from "@/components/ui/DecimalText";
 import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import type { ServiceRecord } from "@/lib/api/types";
-import { formatTimestamp } from "@/lib/timestamps";
+import { formatDay } from "@/lib/timestamps";
 import { SortHeader } from "@/components/ui/SortHeader";
 import type { SortValue } from "@/lib/table-sort";
 import { useSortedRows } from "@/lib/use-sorted-rows";
@@ -48,7 +48,7 @@ export function ServiceList({ orgId, services, timeZone, title }: { orgId: strin
             <tbody>
               {sorted.rows.map((service) => (
                 <tr key={service.line_id} data-testid="service-row" className="border-b border-zinc-200 align-top dark:border-zinc-800">
-                  <td className="py-1 pr-4">{formatTimestamp(service.performed_at, timeZone)}</td>
+                  <td className="py-1 pr-4">{formatDay(service.performed_at, timeZone)}</td>
                   <td className="py-1 pr-4">
                     {service.description}
                     {service.notes && <span className="block text-xs italic text-zinc-500">{service.notes}</span>}

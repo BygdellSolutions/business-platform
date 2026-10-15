@@ -11,7 +11,7 @@ import { TextAreaField } from "@/components/ui/Field";
 import { apiFetch } from "@/lib/api/client";
 import type { HorseNote } from "@/lib/api/types";
 import { problemsFrom, useMutation } from "@/lib/forms";
-import { formatTimestamp } from "@/lib/timestamps";
+import { formatDay } from "@/lib/timestamps";
 
 const CONTROLS = ["body"] as const;
 
@@ -75,9 +75,9 @@ export function HorseNotes({ horseId, notes, canWrite, timeZone }: { horseId: st
           {notes.map((note) => (
             <li key={note.id} data-testid="horse-note" className="rounded border border-zinc-200 p-3 dark:border-zinc-800">
               <div className="mb-1 text-xs text-zinc-500">
-                {formatTimestamp(note.created_at, timeZone)} · {note.created_by_name ?? "not recorded"}
+                {formatDay(note.created_at, timeZone)} · {note.created_by_name ?? "not recorded"}
                 {note.updated_at !== note.created_at && note.updated_by && (
-                  <> · changed {formatTimestamp(note.updated_at, timeZone)} by {note.updated_by_name ?? "not recorded"}</>
+                  <> · changed {formatDay(note.updated_at, timeZone)} by {note.updated_by_name ?? "not recorded"}</>
                 )}
               </div>
               {editing?.id === note.id ? (

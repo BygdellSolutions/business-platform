@@ -13,7 +13,7 @@ import { readRecordHistory } from "@/lib/history-server";
 import { getMemberships } from "@/lib/orgs";
 import { canMutateInvoices } from "@/lib/roles";
 import { requireUuid, serverRead } from "@/lib/server-api";
-import { formatTimestamp } from "@/lib/timestamps";
+import { formatDay } from "@/lib/timestamps";
 
 /**
  * The invoice, read on the server: the single source of truth for the view, which refreshes it
@@ -66,10 +66,10 @@ export default async function InvoicePage({
       </p>
       {invoice.issued_at !== null && (
         <p className="text-sm text-zinc-500" data-testid="issued-meta">
-          Issued {formatTimestamp(invoice.issued_at, organization.timezone)} by <span data-testid="issued-by">{issuedBy}</span>
+          Issued {formatDay(invoice.issued_at, organization.timezone)} by <span data-testid="issued-by">{issuedBy}</span>
         </p>
       )}
-      <InvoiceView key={invoice.id} invoice={invoice} canMutate={canMutateInvoices(role)} />
+      <InvoiceView key={invoice.id} invoice={invoice} canMutate={canMutateInvoices(role)} timeZone={organization.timezone} />
       <PaymentsPanel
         key={`payments-${invoice.id}-${invoice.payments.length}-${invoice.credit_notes.length}`}
         invoice={invoice}

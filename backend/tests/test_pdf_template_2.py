@@ -68,7 +68,7 @@ def test_discount_steps_and_service_details_are_printed_under_the_line():
 
     assert document.lines[0].notes == (
         "List price 1 000.00 −20 % campaign −10 % customer discount",
-        "Service for Kalle · 2026-10-03 14:00 · by Tina Therapist",
+        "Service for Kalle · 2026-10-03 · by Tina Therapist",  # the day only, although this stored (older) invoice also kept the time
         "Stiff left shoulder",
     )
     text = pdf_text(render_pdf(document))

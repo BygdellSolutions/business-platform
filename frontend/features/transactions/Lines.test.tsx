@@ -518,7 +518,7 @@ describe("the kinds of line", () => {
     await userEvent.click(screen.getByLabelText("Service"));
     expect(screen.getByTestId("service-fields")).toBeInTheDocument();
     expect(screen.getByLabelText("Performed for")).toHaveValue("horse");
-    expect(screen.getByLabelText(/Performed at/)).toBeInTheDocument();
+    expect((screen.getByLabelText(/Performed on/) as HTMLInputElement).type).toBe("date"); // a day, not a time
     expect(await within(screen.getByLabelText("Performed by")).findByRole("option", { name: "Tina Therapist" })).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText("Quantity"), "1");
     await userEvent.click(screen.getByTestId("submit-line"));
@@ -538,7 +538,7 @@ describe("the kinds of line", () => {
       notes: "Stiff left shoulder",
     });
     render(<Harness initial={tx({ lines: [service] })} timeZone="Europe/Stockholm" />);
-    expect(screen.getByTestId("service-summary")).toHaveTextContent("Service for Kalle · 2026-10-03 14:00 · by Tina Therapist");
+    expect(screen.getByTestId("service-summary")).toHaveTextContent("Service for Kalle · 2026-10-03 · by Tina Therapist");
     expect(screen.getByTestId("service-notes")).toHaveTextContent("Stiff left shoulder");
   });
 });
@@ -655,7 +655,7 @@ describe("editing follows the rules of adding", () => {
     await openEditor();
 
     expect(screen.getByTestId("edit-service-fields")).toBeInTheDocument();
-    expect(screen.getByLabelText("Performed at")).toHaveValue("2026-10-03T14:00"); // the organization's local time
+    expect(screen.getByLabelText("Performed on")).toHaveValue("2026-10-03"); // the day, in the organization's time zone
     expect(within(screen.getByTestId("picker-subject_id")).getByRole("combobox")).toHaveValue("Kalle");
     expect(screen.queryByLabelText("Unit price excluding VAT")).toBeNull();
     await replace("Notes", "Better");

@@ -10,7 +10,7 @@ import { DecimalField, SelectField, TextField } from "@/components/ui/Field";
 import { apiFetch } from "@/lib/api/client";
 import type { ItemAvailability, Stock, StockMovement } from "@/lib/api/types";
 import { blankToNull, problemsFrom, useMutation } from "@/lib/forms";
-import { formatTimestamp } from "@/lib/timestamps";
+import { formatDay } from "@/lib/timestamps";
 
 import { StockBadges } from "./StockBadges";
 import { trimQuantity } from "@/lib/decimal";
@@ -122,7 +122,7 @@ export function StockPanel({
               <tbody>
                 {sorted.rows.map((movement) => (
                   <tr key={movement.id} data-testid="stock-movement" className="border-b border-zinc-200 dark:border-zinc-800">
-                    <td className="py-1 pr-4">{formatTimestamp(movement.created_at, timeZone)}</td>
+                    <td className="py-1 pr-4">{formatDay(movement.created_at, timeZone)}</td>
                     <td className="py-1 pr-4">{REASONS[movement.reason]}</td>
                     <td className="py-1 pr-4 text-right">
                       {movement.quantity_change.startsWith("-") ? "" : "+"}

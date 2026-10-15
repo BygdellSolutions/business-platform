@@ -101,7 +101,7 @@ describe("the number is the server's", () => {
   it("shows the stored dates, description, version and when it was issued", () => {
     render(<InvoiceDocument invoice={issued({ invoice_date: "2026-10-01", due_date: null, description: null })} orgId={ORG_A} />);
     expect([text("invoice-date"), text("invoice-due-date"), text("invoice-description"), text("invoice-version")]).toEqual(["2026-10-01", "—", "—", "4"]);
-    expect(text("invoice-issued-at")).toBe("2026-10-02T09:00:00Z");
+    expect(text("invoice-issued-at")).toBe("2026-10-02"); // the day, not the instant
   });
 });
 

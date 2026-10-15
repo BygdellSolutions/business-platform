@@ -6,6 +6,7 @@ import { ServiceSummary } from "@/components/ui/ServiceSummary";
 import { FieldSnapshots } from "@/components/snapshots/FieldSnapshots";
 import { InvoiceStatusBadge } from "@/features/invoices/InvoiceStatusBadge";
 import type { Invoice, PartySnapshot } from "@/lib/api/types";
+import { formatDay } from "@/lib/timestamps";
 
 /**
  * The invoice as a DOCUMENT: every word and every amount on it is the invoice's own stored
@@ -16,7 +17,7 @@ import type { Invoice, PartySnapshot } from "@/lib/api/types";
  * navigation and audit, visibly secondary, labelled with the date the invoice itself recorded.
  * Following one shows the live record, which may by now differ from what this invoice says.
  */
-export function InvoiceDocument({ invoice, orgId }: { invoice: Invoice; orgId: string }) {
+export function InvoiceDocument({ invoice, orgId, timeZone = null }: { invoice: Invoice; orgId: string; timeZone?: string | null }) {
   const heading = invoice.number_text !== null ? `Invoice ${invoice.number_text}` : "Draft invoice (no number yet)";
   return (
     <article aria-label="Invoice" data-testid="invoice-document" data-status={invoice.status} className="panel flex flex-col gap-5">
@@ -59,7 +60,7 @@ export function InvoiceDocument({ invoice, orgId }: { invoice: Invoice; orgId: s
         {invoice.issued_at !== null && (
           <>
             <dt>Issued</dt>
-            <dd data-testid="invoice-issued-at">{invoice.issued_at}</dd>
+            <dd data-testid="invoice-issued-at">{formatDay(invoice.issued_at, timeZone)}</dd>
           </>
         )}
         <dt>Version</dt>
@@ -109,7 +110,7 @@ export function InvoiceDocument({ invoice, orgId }: { invoice: Invoice; orgId: s
                         </div>
                       )}
                       {line.service && (
-                        <ServiceSummary subject={line.service.subject_label} when={line.service.performed_at_local} by={line.service.performed_by} notes={line.service.notes} />
+                        <ServiceSummary subject={line.service.subject_label} when={line.service.performed_at_local.slice(0, 10)} by={line.service.performed_by} notes={line.service.notes} />
                       )}
                       <FieldSnapshots fields={line.fields} label={`Fields of line ${line.position}`} testId="line-fields" />
                     </td>

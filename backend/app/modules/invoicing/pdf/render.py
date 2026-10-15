@@ -57,7 +57,8 @@ from app.modules.invoicing.pdf.labels import decimal_separator, labels
 # 13: an invoice with a stated ground for charging no VAT prints it under the VAT breakdown ("No VAT charged because" /
 #    "Ingen moms debiteras eftersom"). Everything else prints as in 12.
 # 14: an invoice in another currency prints its VAT amount in SEK and the exchange rate that gave it. Everything else prints as in 13.
-TEMPLATE_VERSION = 14
+# 15: a service line shows the day it was performed, without the time. Everything else prints as in 14.
+TEMPLATE_VERSION = 15
 ACCENT = colors.HexColor("#1f4e5f")
 ACCENT_LIGHT = colors.HexColor("#e8f0f2")
 # Room for the footer columns (up to five lines each) above the page number.

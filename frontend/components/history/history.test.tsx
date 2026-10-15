@@ -89,6 +89,8 @@ describe("RecordMeta", () => {
     );
     expect(screen.getByTestId("created-by")).toHaveTextContent("not recorded");
     expect(screen.getByTestId("updated-by")).toHaveTextContent("Olle Owner");
-    expect(screen.getByTestId("record-meta")).toHaveTextContent("Last changed 2026-10-08 00:30");
+    expect(screen.getByTestId("record-meta")).toHaveTextContent("Created 2026-10-01 by"); // the day only
+    expect(screen.getByTestId("record-meta")).toHaveTextContent("Last changed 2026-10-08 by"); // in the organization's time zone (22:30 UTC is past midnight in Stockholm), no time of day
+    expect(screen.getByTestId("record-meta")).not.toHaveTextContent(/d:dd/);
   });
 });

@@ -154,7 +154,7 @@ def test_an_invoice_keeps_a_snapshot_of_the_service(client: TestClient, db_sessi
 
     service = invoice["lines"][0]["service"]
     assert {k: service[k] for k in ("performed_at", "performed_at_local", "performed_by", "subject_type", "subject_label", "notes")} == {
-        "performed_at": "2026-10-03T12:00:00+00:00", "performed_at_local": "2026-10-03 14:00", "performed_by": "Tina Therapist", "subject_type": "horse", "subject_label": "Kalle", "notes": "Stiff left shoulder",
+        "performed_at": "2026-10-03T12:00:00+00:00", "performed_at_local": "2026-10-03", "performed_by": "Tina Therapist", "subject_type": "horse", "subject_label": "Kalle", "notes": "Stiff left shoulder",
     }
     world.horse.name = "Renamed later"
     db_session.flush()

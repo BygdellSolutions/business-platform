@@ -10,7 +10,7 @@ import { TextAreaField } from "@/components/ui/Field";
 import { apiFetch } from "@/lib/api/client";
 import type { JournalEntry } from "@/lib/api/types";
 import { problemsFrom, useMutation } from "@/lib/forms";
-import { formatDay, formatTimestamp } from "@/lib/timestamps";
+import { formatDay } from "@/lib/timestamps";
 import { DiagramCanvas } from "./DiagramCanvas";
 import { describe, numberOf, SIDE_LABELS } from "./marks";
 
@@ -46,7 +46,7 @@ export function JournalEntryView({ entry, timeZone }: { entry: JournalEntry; tim
         )}
         {entry.status === "final" ? (
           <p data-testid="entry-final" className="text-zinc-600 dark:text-zinc-400">
-            Finalized {entry.finalized_at ? formatTimestamp(entry.finalized_at, timeZone) : ""} by {entry.finalized_by_name ?? "someone no longer recorded"}. It can no longer be changed.
+            Finalized {entry.finalized_at ? formatDay(entry.finalized_at, timeZone) : ""} by {entry.finalized_by_name ?? "someone no longer recorded"}. It can no longer be changed.
           </p>
         ) : (
           <p data-testid="entry-draft" className="text-zinc-600 dark:text-zinc-400">
@@ -90,7 +90,7 @@ export function JournalEntryView({ entry, timeZone }: { entry: JournalEntry; tim
             {entry.corrections.map((correction) => (
               <li key={correction.id} data-testid="correction" className="text-sm">
                 <p className="text-xs text-zinc-500">
-                  {formatTimestamp(correction.created_at, timeZone)} · {correction.created_by_name ?? "not recorded"}
+                  {formatDay(correction.created_at, timeZone)} · {correction.created_by_name ?? "not recorded"}
                 </p>
                 <p className="whitespace-pre-wrap">{correction.body}</p>
               </li>

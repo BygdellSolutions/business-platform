@@ -103,7 +103,7 @@ def _notes(line: dict[str, Any], words: dict[str, str], separator: str) -> tuple
     service = line.get("service")
     if service:
         subject = service.get("subject_label") or words["service_gone"]
-        parts = [words["service_for"].format(subject=subject), service.get("performed_at_local")]
+        parts = [words["service_for"].format(subject=subject), (service.get("performed_at_local") or "")[:10] or None]  # the day only (older invoices also stored the time)
         if service.get("performed_by"):
             parts.append(words["by"].format(name=service["performed_by"]))
         notes.append(" · ".join(_text(part) for part in parts if part))

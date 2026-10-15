@@ -420,7 +420,7 @@ def _service_snapshots(db: Session, ctx: TenantContext, lines: list[TransactionL
             "schema": 1,
             "performed_at": line.performed_at.isoformat(),
             # As a person in the organization reads it, so the document never needs a time zone to be shown.
-            "performed_at_local": line.performed_at.astimezone(zone).strftime("%Y-%m-%d %H:%M"),
+            "performed_at_local": line.performed_at.astimezone(zone).strftime("%Y-%m-%d"),
             "performed_by": names.get(line.performed_by),
             "subject_type": line.subject_type,
             "subject_label": labels.get((line.subject_type, line.subject_id)),

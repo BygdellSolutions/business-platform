@@ -15,7 +15,7 @@ import { LineEditor } from "@/features/transactions/LineEditor";
 import { LineFields } from "@/features/transactions/LineFields";
 import { apiFetch } from "@/lib/api/client";
 import type { LineFulfillment, TransactionLine } from "@/lib/api/types";
-import { formatTimestamp } from "@/lib/timestamps";
+import { formatDay } from "@/lib/timestamps";
 import { trimQuantity } from "@/lib/decimal";
 
 /**
@@ -75,7 +75,7 @@ export function LineRow({ line, ordinal }: { line: TransactionLine; ordinal: num
       <td className="py-1 pr-3" data-testid="line-description">
         {line.description}
         {line.kind === "service" && line.performed_at && (
-          <ServiceSummary subject={line.subject_label} when={formatTimestamp(line.performed_at, timeZone)} by={line.performed_by_name} notes={line.notes} />
+          <ServiceSummary subject={line.subject_label} when={formatDay(line.performed_at, timeZone)} by={line.performed_by_name} notes={line.notes} />
         )}
         {fulfilled && (
           <span className="block text-xs text-zinc-600 dark:text-zinc-400" data-testid="line-fulfillment">

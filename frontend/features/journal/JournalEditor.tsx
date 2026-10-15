@@ -255,6 +255,7 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
           label="Finalize entry"
           question="Finalize this entry? Its text and marks are then frozen; later corrections are added as dated notes."
           confirmLabel="Yes, finalize"
+          declineLabel="No, back to the draft"
           disabled={pending}
           onConfirm={() => void finalize()}
           testId="finalize"
@@ -263,6 +264,7 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
           label="Delete draft"
           question="Delete this draft for good? Only a draft can be deleted; once finalized an entry stays."
           confirmLabel="Yes, delete it"
+          declineLabel="No, keep the draft"
           disabled={pending}
           onConfirm={() => void deleteDraft()}
           testId="delete-draft"

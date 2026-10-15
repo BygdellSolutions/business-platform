@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/Button";
 export function ConfirmButton({
   label,
   confirmLabel,
+  declineLabel = "No, go back",
   question,
   onConfirm,
   disabled = false,
@@ -19,6 +20,8 @@ export function ConfirmButton({
 }: {
   label: string;
   confirmLabel: string;
+  /** The button that backs out. It says what happens ("No, go back", "No, back to the draft"): a bare "Keep" does not say what is kept. */
+  declineLabel?: string;
   question: string;
   onConfirm: () => void;
   disabled?: boolean;
@@ -47,7 +50,7 @@ export function ConfirmButton({
         {confirmLabel}
       </Button>
       <Button type="button" onClick={() => setAsking(false)} data-testid={testId ? `${testId}-keep` : undefined}>
-        Keep
+        {declineLabel}
       </Button>
     </span>
   );

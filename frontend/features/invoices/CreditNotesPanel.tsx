@@ -13,7 +13,7 @@ import { apiFetch } from "@/lib/api/client";
 import type { CreditNoteSummary, Invoice, InvoiceLine, InvoiceReturn } from "@/lib/api/types";
 import { trimQuantity } from "@/lib/decimal";
 import { problemsFrom, useMutation } from "@/lib/forms";
-import { formatTimestamp } from "@/lib/timestamps";
+import { formatDay } from "@/lib/timestamps";
 import { SortHeader } from "@/components/ui/SortHeader";
 import type { SortValue } from "@/lib/table-sort";
 import { useSortedRows } from "@/lib/use-sorted-rows";
@@ -156,7 +156,7 @@ export function CreditNotesPanel({
                     <DecimalText value={note.gross_amount} /> {note.currency}
                   </td>
                   <td className="py-1 pr-4 text-xs text-zinc-500">
-                    {formatTimestamp(note.issued_at, timeZone)}
+                    {formatDay(note.issued_at, timeZone)}
                     {note.issued_by_name && ` by ${note.issued_by_name}`}
                   </td>
                   <td className="py-1">

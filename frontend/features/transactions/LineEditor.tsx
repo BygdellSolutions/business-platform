@@ -35,15 +35,15 @@ const CONTROLS = [
 
 type Kind = "item" | "service" | "adhoc";
 
-/** "YYYY-MM-DDTHH:MM" of an instant in the organization's time zone (UTC without one), for a datetime-local field. */
+/** "YYYY-MM-DD" of an instant in the organization's time zone (UTC without one), for a date field. The time of day is not kept track of. */
 function localInput(iso: string | null, timeZone: string | null): string {
   if (iso === null) return "";
   const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-CA", { timeZone: timeZone ?? "UTC", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+    new Intl.DateTimeFormat("en-CA", { timeZone: timeZone ?? "UTC", year: "numeric", month: "2-digit", day: "2-digit" })
       .formatToParts(new Date(iso))
       .map((part) => [part.type, part.value]),
   );
-  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+  return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
 /**
@@ -131,7 +131,7 @@ export function LineEditor({ line, ordinal, onClose }: { line: TransactionLine; 
         body.subject_type = subjectType;
         body.subject_id = subject.id;
       }
-      if (draft.performed_at !== base.performed_at && draft.performed_at !== "") body.performed_at = draft.performed_at;
+      if (draft.performed_at !== base.performed_at && draft.performed_at !== "") body.performed_at = `${draft.performed_at}T12:00:00`; // noon of that day, in the organization's time zone
       if (draft.performed_by_user_id !== base.performed_by_user_id) body.performed_by_user_id = draft.performed_by_user_id === "" ? null : draft.performed_by_user_id;
       if (draft.notes !== base.notes) body.notes = draft.notes.trim() === "" ? null : draft.notes;
     }
@@ -289,9 +289,9 @@ export function LineEditor({ line, ordinal, onClose }: { line: TransactionLine; 
                 </select>
               </label>
               <label className="flex flex-col gap-1 text-sm font-medium">
-                Performed at
+                Performed on
                 <input
-                  type="datetime-local"
+                  type="date"
                   name="performed_at"
                   value={draft.performed_at}
                   onChange={(event) => set("performed_at")(event.target.value)}

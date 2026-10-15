@@ -13,7 +13,7 @@ import { PAYMENT_METHODS, PAYMENT_STATES } from "@/features/invoices/payment-lab
 import { apiFetch } from "@/lib/api/client";
 import type { Invoice, InvoicePayment } from "@/lib/api/types";
 import { blankToNull, problemsFrom, useMutation } from "@/lib/forms";
-import { formatTimestamp } from "@/lib/timestamps";
+import { formatDay } from "@/lib/timestamps";
 import { SortHeader } from "@/components/ui/SortHeader";
 import type { SortValue } from "@/lib/table-sort";
 import { useSortedRows } from "@/lib/use-sorted-rows";
@@ -124,7 +124,7 @@ export function PaymentsPanel({ invoice, canRecord, today, timeZone }: { invoice
                     {payment.note && <span className="block text-xs italic text-zinc-500">{payment.note}</span>}
                   </td>
                   <td className="py-1 pr-4 text-xs text-zinc-500">
-                    {formatTimestamp(payment.created_at, timeZone)}
+                    {formatDay(payment.created_at, timeZone)}
                     {payment.created_by_name && ` by ${payment.created_by_name}`}
                   </td>
                   <td className="py-1">

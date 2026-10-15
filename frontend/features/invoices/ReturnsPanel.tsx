@@ -13,7 +13,7 @@ import type { Invoice, InvoiceReturn } from "@/lib/api/types";
 import { addDays } from "@/lib/dates";
 import { trimQuantity } from "@/lib/decimal";
 import { problemsFrom, useMutation } from "@/lib/forms";
-import { formatTimestamp } from "@/lib/timestamps";
+import { formatDay } from "@/lib/timestamps";
 
 const DATE = "rounded border border-zinc-400 px-2 py-1 font-normal dark:bg-zinc-900";
 const CELL = "rounded border border-zinc-400 px-2 py-1 text-right dark:bg-zinc-900";
@@ -264,7 +264,7 @@ function ReturnCase({ invoice, item, canHandle, timeZone, today }: { invoice: In
                 {event.note && <>: {event.note}</>}
                 <span className="text-zinc-500">
                   {" "}
-                  · {formatTimestamp(event.created_at, timeZone)}
+                  · {formatDay(event.created_at, timeZone)}
                   {event.created_by_name && ` by ${event.created_by_name}`}
                 </span>
               </li>

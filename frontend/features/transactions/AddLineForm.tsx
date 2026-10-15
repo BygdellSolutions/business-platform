@@ -109,7 +109,7 @@ function AddLinePanel({ onClose }: { onClose: () => void }) {
           quantity,
           subject_type: subjectType,
           subject_id: subject.id,
-          ...(service.performed_at !== "" ? { performed_at: service.performed_at } : {}),
+          ...(service.performed_at !== "" ? { performed_at: `${service.performed_at}T12:00:00` } : {}),
           performed_by_user_id: service.performed_by_user_id === "" ? null : service.performed_by_user_id,
           notes: service.notes.trim() === "" ? null : service.notes,
           ...withDiscount,
@@ -222,9 +222,9 @@ function AddLinePanel({ onClose }: { onClose: () => void }) {
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm font-medium">
-            Performed at (leave empty for now)
+            Performed on (leave empty for today)
             <input
-              type="datetime-local"
+              type="date"
               name="performed_at"
               value={service.performed_at}
               onChange={(event) => setService((current) => ({ ...current, performed_at: event.target.value }))}

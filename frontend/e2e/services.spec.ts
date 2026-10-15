@@ -26,27 +26,27 @@ test("a service for a horse is added, listed on the horse and kept on the invoic
   await pick(page, "item_id", "Massage");
   await pick(page, "subject_id", "Kalle");
   await page.getByLabel("Performed by").selectOption({ label: `owner ${world.name.split(" ").pop()}` });
-  await page.getByLabel(/Performed at/).fill("2026-10-03T14:00");
+  await page.getByLabel(/Performed on/).fill("2026-10-03");
   await page.getByLabel("Quantity").fill("1");
   await page.getByLabel("Notes").fill("Stiff left shoulder");
   await page.getByTestId("submit-line").click();
 
   const summary = page.getByTestId("service-summary");
-  await expect(summary).toContainText("Service for Kalle · 2026-10-03 14:00 · by owner");
+  await expect(summary).toContainText("Service for Kalle · 2026-10-03 · by owner");
   await expect(page.getByTestId("service-notes")).toHaveText("Stiff left shoulder");
 
   await page.goto(`/o/${world.orgId}/horses/${horse.id}`);
   await page.getByRole("heading", { name: /Services performed on this horse/ }).click();
   await expect(page.getByTestId("service-row")).toHaveCount(1);
   await expect(page.getByTestId("service-row")).toContainText("Massage");
-  await expect(page.getByTestId("service-row")).toContainText("2026-10-03 14:00");
+  await expect(page.getByTestId("service-row")).toContainText("2026-10-03");
   // the "Order no." column shows the order's NUMBER (it once showed the order's date)
   await expect(page.getByTestId("service-row").getByTestId("order-number").getByRole("link")).toHaveText(/^\d{4,}$/);
 
   await lifecycle(context, world.orgId, tx.id, "complete");
   const invoice = (await (await context.request.post(bffUrl(world.orgId, "/invoices"), { data: { transaction_ids: [tx.id] } })).json()) as { id: string };
   await page.goto(`/o/${world.orgId}/invoices/${invoice.id}`);
-  await expect(page.getByTestId("service-summary")).toContainText("Service for Kalle · 2026-10-03 14:00");
+  await expect(page.getByTestId("service-summary")).toContainText("Service for Kalle · 2026-10-03");
 });
 
 test("a product cannot be chosen as a service, and a horse with a service cannot be deleted", async ({ context }) => {
