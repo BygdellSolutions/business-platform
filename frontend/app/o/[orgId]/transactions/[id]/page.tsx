@@ -62,13 +62,16 @@ export default async function TransactionPage({
       <RecordMeta record={transaction} people={history.history.people} timeZone={organization.timezone} />
       {invoice && invoice.invoices.length > 0 && (
         // Invoicing by delivery: an order can be on several invoices, one per delivery.
-        <p className="flex flex-wrap gap-2 text-sm" data-testid="order-invoice">
-          {invoice.invoices.map((entry) => (
-            <Link key={entry.invoice_id} href={`/o/${orgId}/invoices/${entry.invoice_id}`} className="badge tone-primary !px-3 !py-1 !text-sm hover:brightness-95 after:ml-1.5 after:content-['→']">
-              {entry.status === "issued" ? `Invoice ${entry.number_text ?? ""}` : "Draft invoice"}
-            </Link>
-          ))}
-        </p>
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-zinc-500">{invoice.invoices.length === 1 ? "This order is on:" : "This order is on these invoices:"}</span>
+          <p className="flex flex-wrap gap-2" data-testid="order-invoice">
+            {invoice.invoices.map((entry) => (
+              <Link key={entry.invoice_id} href={`/o/${orgId}/invoices/${entry.invoice_id}`} className="badge tone-primary !px-3 !py-1 !text-sm hover:brightness-95 after:ml-1.5 after:content-['→']">
+                {entry.status === "issued" ? `Invoice ${entry.number_text ?? ""}` : "Draft invoice"}
+              </Link>
+            ))}
+          </p>
+        </div>
       )}
       <TransactionEditor
         key={transaction.id}
