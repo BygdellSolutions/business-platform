@@ -12,6 +12,9 @@ export const BUTTON_VARIANTS = {
 /** The same look for a link that starts the main action of a page ("New customer"). */
 export const PRIMARY_LINK = BUTTON_VARIANTS.primary;
 
+/** The same look for a link that leaves the page ("Back to orders", "Cancel"): a button, never bare underlined text. */
+export const SECONDARY_LINK = BUTTON_VARIANTS.secondary;
+
 export function Button({
   className = "",
   variant,

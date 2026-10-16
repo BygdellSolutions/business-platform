@@ -10,6 +10,7 @@ import type { InvoiceStateOfOrder, LineFulfillment, Organization, StockDemand, T
 import { readRecordHistory } from "@/lib/history-server";
 import { canMutateInvoices, canWriteRecords } from "@/lib/roles";
 import { requireUuid, serverRead } from "@/lib/server-api";
+import { SECONDARY_LINK } from "@/components/ui/Button";
 
 /**
  * The transaction, read on the server: the single source of truth for the editor, which
@@ -53,7 +54,7 @@ export default async function TransactionPage({
         <h1 className="text-[28px] leading-tight font-semibold tracking-tight" data-testid="record-name">
           Order {transaction.number} · {transaction.transaction_date}
         </h1>
-        <Link href={`/o/${orgId}/transactions`} className="text-sm underline">
+        <Link href={`/o/${orgId}/transactions`} className={SECONDARY_LINK}>
           Back to orders
         </Link>
       </div>

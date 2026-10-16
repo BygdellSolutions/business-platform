@@ -10,6 +10,7 @@ import type { Horse, JournalSummary, Organization } from "@/lib/api/types";
 import { backendQuery, listHref, pageOf, parseListParams, sortHref } from "@/lib/list-params";
 import { canUseJournal } from "@/lib/roles";
 import { requireUuid, serverRead } from "@/lib/server-api";
+import { SECONDARY_LINK } from "@/components/ui/Button";
 
 const SORTS = ["number", "visit", "by", "status", "marks", "follow_up"] as const;
 
@@ -30,7 +31,7 @@ export default async function JournalPage({
       <div className="flex flex-col gap-2" data-testid="journal-not-allowed">
         <h1 className="text-[28px] leading-tight font-semibold tracking-tight">Journal</h1>
         <p>Your role in this organization has no access to the horse journal.</p>
-        <Link href={base} className="text-sm underline">
+        <Link href={base} className={`${SECONDARY_LINK} self-start`}>
           Back to the horse
         </Link>
       </div>
@@ -51,7 +52,7 @@ export default async function JournalPage({
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-[28px] leading-tight font-semibold tracking-tight">Journal: {horse.name}</h1>
-        <Link href={base} className="text-sm underline">
+        <Link href={base} className={SECONDARY_LINK}>
           Back to the horse
         </Link>
       </div>

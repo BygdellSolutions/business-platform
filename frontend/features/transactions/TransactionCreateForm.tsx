@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
 
 import { useOrgId } from "@/components/shell/org-context";
-import { Button } from "@/components/ui/Button";
+import { Button, SECONDARY_LINK } from "@/components/ui/Button";
 import { EntityPicker, type PickerEntity } from "@/components/ui/EntityPicker";
 import { ErrorSummary } from "@/components/ui/ErrorSummary";
 import { customerSearch } from "@/features/customers/customer-picker";
@@ -83,7 +83,7 @@ export function TransactionCreateForm({ today }: { today: string }) {
         <Button type="submit" disabled={pending || (date !== "" && !isDateShape(date))} data-testid="submit">
           {pending ? "Creating…" : "Create order"}
         </Button>
-        <Link href={`/o/${orgId}/transactions`} className="text-sm underline">
+        <Link href={`/o/${orgId}/transactions`} className={SECONDARY_LINK}>
           Cancel
         </Link>
       </div>

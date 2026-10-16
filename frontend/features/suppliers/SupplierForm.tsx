@@ -7,7 +7,7 @@ import { useState, type FormEvent } from "react";
 import { useOrgId } from "@/components/shell/org-context";
 import { PROFILE_CONTROLS, ProfileFields } from "@/components/profile/ProfileFields";
 import { ActiveToggle } from "@/components/ui/ActiveToggle";
-import { Button } from "@/components/ui/Button";
+import { Button, SECONDARY_LINK } from "@/components/ui/Button";
 import { ErrorSummary } from "@/components/ui/ErrorSummary";
 import { CheckboxField, TextField } from "@/components/ui/Field";
 import { Notice } from "@/components/ui/Notice";
@@ -133,7 +133,7 @@ export function SupplierForm({ supplier }: { supplier?: Supplier }) {
           <Button type="submit" disabled={pending} data-testid="submit">
             {pending ? "Saving…" : record ? "Save changes" : "Create supplier"}
           </Button>
-          <Link href={`/o/${orgId}/suppliers`} className="text-sm underline">
+          <Link href={`/o/${orgId}/suppliers`} className={SECONDARY_LINK}>
             {record ? "Back to suppliers" : "Cancel"}
           </Link>
         </div>

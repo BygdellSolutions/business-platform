@@ -16,6 +16,7 @@ import { canWriteRecords } from "@/lib/roles";
 import { requireUuid, serverRead } from "@/lib/server-api";
 import { SortHeader } from "@/components/ui/SortHeader";
 import { sortRows, tableSort, type SortValue } from "@/lib/table-sort";
+import { SECONDARY_LINK } from "@/components/ui/Button";
 
 const DELIVERY_STATES: Record<Incoming["state"], string> = {
   expected: "Expected",
@@ -70,7 +71,7 @@ export default async function SupplierPage({
         <h1 className="text-[28px] leading-tight font-semibold tracking-tight" data-testid="record-name">
           {supplier.name}
         </h1>
-        <Link href={`/o/${orgId}/suppliers`} className="text-sm underline">
+        <Link href={`/o/${orgId}/suppliers`} className={SECONDARY_LINK}>
           Back to suppliers
         </Link>
       </div>

@@ -6,7 +6,7 @@ import { useState, type FormEvent } from "react";
 
 import { useOrgId } from "@/components/shell/org-context";
 import { ActiveToggle } from "@/components/ui/ActiveToggle";
-import { Button } from "@/components/ui/Button";
+import { Button, SECONDARY_LINK } from "@/components/ui/Button";
 import { ErrorSummary } from "@/components/ui/ErrorSummary";
 import {
   CheckboxField,
@@ -386,7 +386,7 @@ export function ItemForm({ item }: { item?: Item }) {
           <Button type="submit" disabled={pending} data-testid="submit">
             {pending ? "Saving…" : record ? "Save changes" : "Create item"}
           </Button>
-          <Link href={`/o/${orgId}/catalog`} className="text-sm underline">
+          <Link href={`/o/${orgId}/catalog`} className={SECONDARY_LINK}>
             {record ? "Back to catalog" : "Cancel"}
           </Link>
         </div>

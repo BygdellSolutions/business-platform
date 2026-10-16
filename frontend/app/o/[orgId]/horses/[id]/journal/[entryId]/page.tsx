@@ -6,6 +6,7 @@ import { readActiveRole } from "@/lib/active-role";
 import type { Horse, JournalEntry, Organization } from "@/lib/api/types";
 import { canUseJournal } from "@/lib/roles";
 import { requireUuid, serverRead } from "@/lib/server-api";
+import { SECONDARY_LINK } from "@/components/ui/Button";
 
 /** One journal entry: the editor while it is a draft someone may change, otherwise the frozen entry with its corrections. */
 export default async function JournalEntryPage({ params }: { params: Promise<{ orgId: string; id: string; entryId: string }> }) {
@@ -16,7 +17,7 @@ export default async function JournalEntryPage({ params }: { params: Promise<{ o
     return (
       <div className="flex flex-col gap-2" data-testid="journal-not-allowed">
         <p>Your role in this organization has no access to the horse journal.</p>
-        <Link href={base} className="text-sm underline">
+        <Link href={base} className={`${SECONDARY_LINK} self-start`}>
           Back to the horse
         </Link>
       </div>
@@ -35,7 +36,7 @@ export default async function JournalEntryPage({ params }: { params: Promise<{ o
           Journal entry no. {entry.number}: {horse.name}
           {entry.status === "draft" && <span className="ml-2 rounded bg-amber-100 px-2 text-sm font-normal text-amber-900">Draft</span>}
         </h1>
-        <Link href={`${base}/journal`} className="text-sm underline">
+        <Link href={`${base}/journal`} className={SECONDARY_LINK}>
           All entries
         </Link>
       </div>

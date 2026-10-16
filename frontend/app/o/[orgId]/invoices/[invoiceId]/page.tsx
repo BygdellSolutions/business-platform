@@ -14,6 +14,7 @@ import { getMemberships } from "@/lib/orgs";
 import { canMutateInvoices } from "@/lib/roles";
 import { requireUuid, serverRead } from "@/lib/server-api";
 import { formatDay } from "@/lib/timestamps";
+import { SECONDARY_LINK } from "@/components/ui/Button";
 
 /**
  * The invoice, read on the server: the single source of truth for the view, which refreshes it
@@ -48,7 +49,7 @@ export default async function InvoicePage({
         <h1 className="text-[28px] leading-tight font-semibold tracking-tight" data-testid="record-name">
           {invoice.number_text !== null ? `Invoice ${invoice.number_text}` : "Draft invoice"} · {invoice.customer_name}
         </h1>
-        <Link href={`/o/${orgId}/invoices`} className="text-sm underline">
+        <Link href={`/o/${orgId}/invoices`} className={SECONDARY_LINK}>
           Back to invoices
         </Link>
       </div>
