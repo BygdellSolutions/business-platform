@@ -55,6 +55,11 @@ function toneOf(props: Pick<CalendarProps, "people">, userId: string | null): st
   return index < 0 ? UNASSIGNED_TONE : TONES[index % TONES.length];
 }
 
+/** The names of the horses an appointment is about, "Kalle, Storm" (empty when none). */
+export function horsesOf(appointment: Appointment): string {
+  return appointment.subjects.map((subject) => subject.label ?? "a horse").join(", ");
+}
+
 const NAV_BUTTON = `${BUTTON_VARIANTS.secondary}`;
 
 export function Calendar(props: CalendarProps) {
@@ -241,6 +246,7 @@ function Block({
   const end = localParts(appointment.ends_at, zone);
   const range = `${timeText(start.minutes)}–${timeText(end.minutes)}`;
   const who = showPerson && appointment.practitioner_name ? ` · ${appointment.practitioner_name}` : "";
+  const horses = horsesOf(appointment);
   return (
     <Link
       href={`/o/${orgId}/calendar/${appointment.id}`}
@@ -256,7 +262,13 @@ function Block({
         {range}
         {who}
       </span>
-      {appointment.customer_name && height > 44 && (
+      {horses && height > 34 && (
+        <>
+          <br />
+          <span data-testid="appointment-horses">{horses}</span>
+        </>
+      )}
+      {appointment.customer_name && height > 56 && (
         <>
           <br />
           <span>{appointment.customer_name}</span>
@@ -302,9 +314,11 @@ function MonthGrid(props: CalendarProps & { link: (view: CalendarView, day: stri
                       href={`/o/${orgId}/calendar/${appointment.id}`}
                       className={`${toneOf({ people }, appointment.practitioner_user_id)} tint block truncate rounded px-1 text-xs ${clashes.has(appointment.id) ? "ring-1 ring-red-600" : ""}`}
                       style={{ color: "var(--tone-text)" }}
+                      title={[appointment.title, horsesOf(appointment)].filter(Boolean).join(" · ")}
                       data-testid="appointment"
                     >
                       {timeText(localParts(appointment.starts_at, zone).minutes)} {appointment.title}
+                      {horsesOf(appointment) && <span className="opacity-75"> · {horsesOf(appointment)}</span>}
                     </Link>
                   </li>
                 ))}

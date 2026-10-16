@@ -60,7 +60,7 @@ function AppointmentSummary({ appointment, zone }: { appointment: Appointment; z
     ["Status", appointment.status === "cancelled" ? "Cancelled" : "Scheduled"],
     ["Practitioner", appointment.practitioner_name],
     ["Customer", appointment.customer_name],
-    ["Horse", appointment.subject_label],
+    ["Horses", appointment.subjects.map((subject) => subject.label ?? "a horse").join(", ") || null],
     ["Location", appointment.location],
     ["Notes", appointment.notes],
   ];

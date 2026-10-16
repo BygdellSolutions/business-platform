@@ -1,7 +1,7 @@
 import type { BrowserContext } from "@playwright/test";
 
 import { expect, test } from "./fixtures";
-import { bffUrl, createWorld, signIn, type World } from "./support";
+import { bffUrl, createCustomer, createHorse, createWorld, picker, signIn, type World } from "./support";
 
 /**
  * Scheduling: appointments are booked in the browser, shown per day (a column per person), week and month, changed, cancelled and
@@ -67,6 +67,7 @@ test("an appointment is booked, changed, cancelled and deleted in the browser", 
   await page.goto(`/o/${world.orgId}/calendar/${mine.id}`);
   await page.getByTestId("restore").click();
   await expect(page.getByTestId("saved")).toBeVisible();
+  await page.waitForLoadState("networkidle"); // the page reloads its data after a save and rebuilds the form; ask about deleting only afterwards
   await page.getByTestId("delete-appointment").click();
   await page.getByRole("button", { name: "Yes, delete it" }).click();
   await expect(page.getByTestId("calendar")).toBeVisible();
@@ -148,4 +149,42 @@ test("a viewer sees the calendar but cannot book", async ({ page, context }) => 
   await expect(page.getByTestId("slot")).toHaveCount(0);
   await page.goto(`/o/${world.orgId}/calendar/new`);
   await expect(page.getByTestId("not-allowed")).toBeVisible();
+});
+
+test("a stable books several horses in one appointment, and the calendar shows their names", async ({ page, context }) => {
+  world = createWorld({ label: "Calendar horses" });
+  await signIn(context, world.email);
+  const stable = await createCustomer(context, world.orgId, "Umeå HK");
+  for (const name of ["Kalle", "Storm", "Bella"]) await createHorse(context, world.orgId, { name, owner_customer_id: stable.id });
+
+  await page.goto(`/o/${world.orgId}/calendar/new?date=2026-10-19&start=09:00`);
+  await page.getByLabel("Title", { exact: true }).fill("Stable day");
+  await page.getByLabel("End time").fill("12:00");
+  const addHorse = async (name: string) => {
+    const input = picker(page, "subjects").getByRole("combobox");
+    await input.click();
+    await input.fill(name);
+    await picker(page, "subjects").getByRole("option").filter({ hasText: name }).first().click();
+  };
+  await addHorse("Kalle");
+  await addHorse("Storm");
+  await addHorse("Bella");
+  await expect(page.getByTestId("chosen-horse")).toHaveText(["Kalle×", "Storm×", "Bella×"]);
+  const input = picker(page, "subjects").getByRole("combobox");
+  await input.click();
+  await input.fill("Kalle");
+  await expect(picker(page, "subjects").getByRole("option")).toHaveCount(0); // a horse already on the list is not offered again
+  await page.getByTestId("submit").click();
+
+  await expect(page.getByTestId("appointment-horses")).toHaveText("Bella, Kalle, Storm"); // by name
+  await page.goto(`/o/${world.orgId}/calendar?view=month&date=2026-10-19`);
+  await expect(page.getByTestId("appointment")).toContainText("Bella, Kalle, Storm");
+
+  await page.getByTestId("appointment").click();
+  await expect(page.getByTestId("chosen-horse")).toHaveCount(3);
+  await page.getByRole("button", { name: "Remove Storm" }).click();
+  await page.getByTestId("submit").click();
+  await expect(page.getByTestId("saved")).toBeVisible();
+  await page.goto(`/o/${world.orgId}/calendar?${WEEK}`);
+  await expect(page.getByTestId("appointment-horses")).toHaveText("Bella, Kalle");
 });

@@ -25,8 +25,7 @@ export const FIELD_LABELS: Record<string, Record<string, string>> = {
     status: "Status",
     practitioner_user_id: "Practitioner",
     customer_id: "Customer",
-    subject_type: "About",
-    subject_id: "Horse",
+    subjects: "Horses",
   },
   horse: { name: "Name", owner_customer_id: "Owner", stable_customer_id: "Stable", birth_year: "Birth year", sex: "Sex", breed: "Breed", active: "Active" },
   transaction: { billing_customer_id: "Billing customer", transaction_date: "Date", status: "Status", currency: "Currency" },
@@ -93,10 +92,9 @@ export function actionLabel(action: string): string {
 }
 
 /** Fields whose values are ids of other records, and which kind of record they point at. */
-export const REFERENCE_FIELDS: Record<string, "customers" | "items" | "horses" | "people"> = {
+export const REFERENCE_FIELDS: Record<string, "customers" | "items" | "people"> = {
   customer_id: "customers",
   practitioner_user_id: "people",
-  subject_id: "horses",
   owner_customer_id: "customers",
   stable_customer_id: "customers",
   billing_customer_id: "customers",

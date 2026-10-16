@@ -2,8 +2,9 @@
 
 Everyone in the organization may read it; whoever may write business records (owner, admin, accountant, employee) may book, move
 and cancel. A viewer only looks. The practitioner of an appointment is a member who does the work (owner, admin or employee);
-leaving it empty books the time for nobody in particular. Times travel with their offset and are stored as instants: the browser
-shows them in the organization's time zone.
+leaving it empty books the time for nobody in particular. An appointment can be about several records (a stable books one long
+session for many horses). Times travel with their offset and are stored as instants: the browser shows them in the organization's
+time zone.
 
 A change needs the version the caller last saw (If-Match, 409 `stale_record` otherwise), like other records several people edit.
 """
@@ -23,16 +24,17 @@ from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import create_scoped, get_scoped_or_404, reference_error, resolve_reference, scoped_select
 from app.core.versioning import ensure_current
 from app.models import Customer, OrganizationUser, Role, User
-from app.modules.scheduling.models import CANCELLED, Appointment
-from app.modules.scheduling.schemas import AppointmentCreate, AppointmentRead, AppointmentUpdate, check_span
+from app.modules.scheduling.models import CANCELLED, Appointment, AppointmentSubject
+from app.modules.scheduling.schemas import AppointmentCreate, AppointmentRead, AppointmentUpdate, SubjectRead, check_span
 
 router = APIRouter(prefix="/api/appointments", tags=["appointments"])
 
 PRACTITIONER_ROLES = (Role.OWNER, Role.ADMIN, Role.EMPLOYEE)
-# One request shows at most a month view with its leading and trailing days; more is a mistake (or a way to ask for everything).
+# One request shows at most a month view with its leading and trailing weeks; more is a mistake (or a way to ask for everything).
 LONGEST_WINDOW = timedelta(days=62)
 MAX_ROWS = 1000
-AUDITED = ("title", "starts_at", "ends_at", "location", "status", "practitioner_user_id", "customer_id", "subject_type", "subject_id")
+AUDITED = ("title", "starts_at", "ends_at", "location", "status", "practitioner_user_id", "customer_id")
+Pair = tuple[str, uuid.UUID]
 
 
 def _practitioner(db: Session, ctx: TenantContext, user_id: uuid.UUID) -> User:
@@ -47,6 +49,21 @@ def _practitioner(db: Session, ctx: TenantContext, user_id: uuid.UUID) -> User:
     return member
 
 
+def _links(db: Session, ctx: TenantContext, appointment_ids: list[uuid.UUID]) -> dict[uuid.UUID, list[AppointmentSubject]]:
+    found: dict[uuid.UUID, list[AppointmentSubject]] = {}
+    if appointment_ids:
+        rows = db.scalars(scoped_select(AppointmentSubject, ctx).where(AppointmentSubject.appointment_id.in_(appointment_ids)))
+        for row in rows:
+            found.setdefault(row.appointment_id, []).append(row)
+    return found
+
+
+def _ordered(links: list[AppointmentSubject], labels: dict[Pair, str]) -> list[SubjectRead]:
+    """The subjects by name (so the same horses always read in the same order)."""
+    reads = [SubjectRead(subject_type=l.subject_type, subject_id=l.subject_id, label=labels.get((l.subject_type, l.subject_id))) for l in links]
+    return sorted(reads, key=lambda s: ((s.label or "").lower(), str(s.subject_id)))
+
+
 def _reads(db: Session, ctx: TenantContext, rows: list[Appointment]) -> list[AppointmentRead]:
     """The appointments with the names of who, which customer and what they are about (looked up in this organization only)."""
     people = dict(db.execute(select(User.id, User.name).where(User.id.in_({r.practitioner_user_id for r in rows if r.practitioner_user_id}))).all()) if rows else {}
@@ -56,13 +73,14 @@ def _reads(db: Session, ctx: TenantContext, rows: list[Appointment]) -> list[App
         if customer_ids
         else {}
     )
-    labels = subjects.subject_labels(db, ctx.organization_id, {(r.subject_type, r.subject_id) for r in rows if r.subject_type})
+    links = _links(db, ctx, [r.id for r in rows])
+    labels = subjects.subject_labels(db, ctx.organization_id, {(l.subject_type, l.subject_id) for group in links.values() for l in group})
     return [
         AppointmentRead(
             **{field: getattr(r, field) for field in AppointmentRead.model_fields if hasattr(r, field)},
             practitioner_name=people.get(r.practitioner_user_id),
             customer_name=customers.get(r.customer_id),
-            subject_label=labels.get((r.subject_type, r.subject_id)) if r.subject_type else None,
+            subjects=_ordered(links.get(r.id, []), labels),
         )
         for r in rows
     ]
@@ -72,22 +90,36 @@ def _read(db: Session, ctx: TenantContext, appointment: Appointment) -> Appointm
     return _reads(db, ctx, [appointment])[0]
 
 
+def _names(db: Session, ctx: TenantContext, pairs: set[Pair]) -> str:
+    """What the history says about the records an appointment is about: their names, in order."""
+    labels = subjects.subject_labels(db, ctx.organization_id, pairs)
+    return ", ".join(sorted((labels.get(pair) or "a record that no longer exists" for pair in pairs), key=str.lower))
+
+
 def _validate_references(db: Session, ctx: TenantContext, values: dict, current: Appointment | None = None) -> None:
     """Check only what is being set or changed (an existing link stays valid even if the record was deactivated since)."""
     if values.get("practitioner_user_id") is not None and (current is None or values["practitioner_user_id"] != current.practitioner_user_id):
         _practitioner(db, ctx, values["practitioner_user_id"])
     if values.get("customer_id") is not None and (current is None or values["customer_id"] != current.customer_id):
         resolve_reference(db, ctx, Customer, values["customer_id"], "customer_id")
-    if values.get("subject_type") is not None and (current is None or (values["subject_type"], values["subject_id"]) != (current.subject_type, current.subject_id)):
-        subjects.resolve_subject(db, ctx, values["subject_type"], values["subject_id"])
 
 
 @router.post("", response_model=AppointmentRead, status_code=status.HTTP_201_CREATED)
 def create_appointment(payload: AppointmentCreate, ctx: TenantContext = Depends(record_writer), db: Session = Depends(get_db)) -> AppointmentRead:
-    values = payload.model_dump()
+    values = payload.model_dump(exclude={"subjects"})
+    pairs = [(s.subject_type, s.subject_id) for s in payload.subjects]
     _validate_references(db, ctx, values)
+    for subject_type, subject_id in pairs:
+        subjects.resolve_subject(db, ctx, subject_type, subject_id, field="subjects")
     appointment = create_scoped(db, ctx, Appointment, **values)
-    audit.created(db, ctx, appointment, "appointment", fields=AUDITED)
+    for subject_type, subject_id in pairs:
+        create_scoped(db, ctx, AppointmentSubject, appointment_id=appointment.id, subject_type=subject_type, subject_id=subject_id)
+    db.flush()
+    audit.stamp(appointment, ctx, created=True)
+    changes = {field: {"from": None, "to": value} for field, value in audit.snapshot(appointment, AUDITED).items() if value is not None}
+    if pairs:
+        changes["subjects"] = {"from": None, "to": _names(db, ctx, set(pairs))}
+    audit.record(db, ctx, entity_type="appointment", entity_id=appointment.id, action=audit.CREATED, changes=changes)
     commit_and_refresh(db, appointment)
     return _read(db, ctx, appointment)
 
@@ -133,15 +165,38 @@ def update_appointment(
 ) -> AppointmentRead:
     appointment = get_scoped_or_404(db, ctx, Appointment, appointment_id, for_update=True)
     ensure_current(if_match, appointment.version, "appointment", appointment.id)
-    values = {field: getattr(payload, field) for field in payload.model_fields_set}
+    values = {field: getattr(payload, field) for field in payload.model_fields_set if field != "subjects"}
     _validate_references(db, ctx, values, appointment)
     try:
         check_span(values.get("starts_at", appointment.starts_at), values.get("ends_at", appointment.ends_at))
     except ValueError as error:
         reference_error("ends_at", str(error), "value_error")
-    if any(getattr(appointment, field) != value for field, value in values.items()):  # a save that changes nothing moves no version
+
+    existing = {(link.subject_type, link.subject_id): link for link in _links(db, ctx, [appointment.id]).get(appointment.id, [])}
+    wanted = {(s.subject_type, s.subject_id) for s in payload.subjects} if payload.subjects is not None else set(existing)
+    for subject_type, subject_id in wanted - set(existing):  # only what is newly added is checked: an old link stays valid
+        subjects.resolve_subject(db, ctx, subject_type, subject_id, field="subjects")
+    subjects_changed = wanted != set(existing)
+
+    before = audit.snapshot(appointment, AUDITED)
+    names_before = _names(db, ctx, set(existing)) if subjects_changed else ""
+    if subjects_changed or any(getattr(appointment, field) != value for field, value in values.items()):  # a save that changes nothing moves no version
         values["version"] = appointment.version + 1
-    audit.apply_audited_update(db, ctx, appointment, "appointment", values, fields=AUDITED)
+    for field, value in values.items():
+        setattr(appointment, field, value)
+    for pair in set(existing) - wanted:
+        db.delete(existing[pair])
+    for subject_type, subject_id in wanted - set(existing):
+        create_scoped(db, ctx, AppointmentSubject, appointment_id=appointment.id, subject_type=subject_type, subject_id=subject_id)
+    db.flush()
+    db.refresh(appointment)  # compare what the database STORED
+    changes = audit.changes_between(before, audit.snapshot(appointment, AUDITED))
+    if subjects_changed:
+        changes["subjects"] = {"from": names_before or None, "to": _names(db, ctx, wanted) or None}
+    if changes:
+        audit.stamp(appointment, ctx)
+        audit.record(db, ctx, entity_type="appointment", entity_id=appointment.id, action=audit.UPDATED, changes=changes)
+    commit_and_refresh(db, appointment)
     return _read(db, ctx, appointment)
 
 

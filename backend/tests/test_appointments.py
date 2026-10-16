@@ -1,5 +1,7 @@
 """Scheduling: appointments. Tenant isolation first, then who may do what, validation, concurrency and what protects a booked record."""
 
+from uuid import uuid4
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -7,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.models import Role
 from tests.factories import add_member, make_customer, make_horse, make_org, make_user
 
+HORSE = lambda horse: {"subject_type": "horse", "subject_id": str(horse.id)}  # noqa: E731
 MORNING = {"starts_at": "2026-10-19T09:00:00+02:00", "ends_at": "2026-10-19T10:00:00+02:00"}
 WINDOW = {"from": "2026-10-19T00:00:00+02:00", "to": "2026-10-26T00:00:00+02:00"}
 
@@ -45,9 +48,9 @@ def _etag(appointment: dict) -> dict:
 def test_book_read_change_and_remove(client: TestClient, world):
     _, anna, kalle, people = world
     employee, headers = people["employee"]
-    booked = _book(client, headers, practitioner_user_id=str(employee.id), customer_id=str(anna.id), subject_type="horse", subject_id=str(kalle.id), location="Stable 3")
+    booked = _book(client, headers, practitioner_user_id=str(employee.id), customer_id=str(anna.id), subjects=[HORSE(kalle)], location="Stable 3")
     assert (booked["number"], booked["status"], booked["version"]) == (1, "scheduled", 1)
-    assert (booked["practitioner_name"], booked["customer_name"], booked["subject_label"]) == ("Employee", "Anna Andersson", "Kalle")
+    assert (booked["practitioner_name"], booked["customer_name"], [s["label"] for s in booked["subjects"]]) == ("Employee", "Anna Andersson", ["Kalle"])
     assert _book(client, headers)["number"] == 2
 
     assert client.get(f"/api/appointments/{booked['id']}", headers=headers).json()["location"] == "Stable 3"
@@ -96,7 +99,7 @@ def two_organizations(client: TestClient, db_session: Session, world):
     their_anna = make_customer(db_session, other, "Anna Andersson")
     their_kalle = make_horse(db_session, other, "Kalle", owner=their_anna)
     their_owner, their_headers = _person(db_session, other, Role.OWNER, "Their Owner")
-    theirs = _book(client, their_headers, title="Theirs", practitioner_user_id=str(their_owner.id), customer_id=str(their_anna.id), subject_type="horse", subject_id=str(their_kalle.id))
+    theirs = _book(client, their_headers, title="Theirs", practitioner_user_id=str(their_owner.id), customer_id=str(their_anna.id), subjects=[HORSE(their_kalle)])
     return people, theirs, their_anna, their_kalle, their_owner, their_headers
 
 
@@ -116,13 +119,13 @@ def test_an_appointment_cannot_point_at_another_organizations_records(client: Te
     for body in (
         {"customer_id": str(their_anna.id)},
         {"practitioner_user_id": str(their_owner.id)},
-        {"subject_type": "horse", "subject_id": str(their_kalle.id)},
+        {"subjects": [HORSE(their_kalle)]},
     ):
         response = client.post("/api/appointments", json={"title": "x", **MORNING, **body}, headers=headers)
         assert response.status_code == 422, (body, response.text)
         assert _listed(client, headers) == []  # nothing was saved
     mine = _book(client, headers)
-    for body in ({"customer_id": str(their_anna.id)}, {"practitioner_user_id": str(their_owner.id)}, {"subject_type": "horse", "subject_id": str(their_kalle.id)}):
+    for body in ({"customer_id": str(their_anna.id)}, {"practitioner_user_id": str(their_owner.id)}, {"subjects": [HORSE(their_kalle)]}):
         assert client.patch(f"/api/appointments/{mine['id']}", json=body, headers={**headers, **_etag(mine)}).status_code == 422
 
 
@@ -159,7 +162,8 @@ def test_only_those_who_do_the_work_can_be_the_practitioner(client: TestClient, 
         {"starts_at": "2026-10-19T09:00:00+02:00", "ends_at": "2026-10-19T09:00:00+02:00"},
         {"starts_at": "2026-10-19T09:00:00+02:00", "ends_at": "2026-10-27T09:00:00+02:00"},  # longer than a week
         {"title": "   "},
-        {"subject_type": "horse"},  # a subject is a type and an id together
+        {"subjects": [{"subject_type": "horse"}]},  # a subject is a type and an id together
+        {"subjects": [{"subject_type": "horse", "subject_id": "00000000-0000-4000-8000-000000000001"}] * 2},  # the same horse twice
         {"organization_id": "00000000-0000-0000-0000-000000000000"},
     ],
 )
@@ -209,7 +213,7 @@ def test_a_customer_or_horse_with_a_booking_cannot_be_deleted(client: TestClient
 
     _, anna, kalle, people = world
     headers = people["owner"][1]
-    booked = _book(client, headers, customer_id=str(anna.id), subject_type="horse", subject_id=str(kalle.id))
+    booked = _book(client, headers, customer_id=str(anna.id), subjects=[HORSE(kalle)])
     assert client.delete(f"/api/customers/{anna.id}", headers=headers).status_code == 409
     assert registry.is_referenced(db_session, kalle)  # horses are never deleted through the API; the guard is what any deletion path asks
     client.delete(f"/api/appointments/{booked['id']}", headers={**headers, **_etag(booked)})
@@ -228,3 +232,64 @@ def test_the_history_records_booking_changes_and_removal(client: TestClient, db_
     client.delete(f"/api/appointments/{booked['id']}", headers={**headers, **_etag(changed)})
     actions = [e.action for e in db_session.scalars(select(AuditEvent).where(AuditEvent.entity_type == "appointment").order_by(AuditEvent.id))]
     assert actions == ["created", "updated", "deleted"]
+
+
+# --- several horses on one appointment (a stable books one long session) --------------------------------------------------------------
+
+
+def test_one_appointment_can_be_about_several_horses_listed_by_name(client: TestClient, db_session: Session, world):
+    _, anna, kalle, people = world
+    headers = people["owner"][1]
+    storm, bella = make_horse(db_session, world[0], "Storm", owner=anna), make_horse(db_session, world[0], "Bella", owner=anna)
+    booked = _book(client, headers, title="Stable day", subjects=[HORSE(storm), HORSE(kalle), HORSE(bella)])
+    assert [s["label"] for s in booked["subjects"]] == ["Bella", "Kalle", "Storm"]  # by name, whatever order they were sent in
+    assert [s["label"] for s in _listed(client, headers)[0]["subjects"]] == ["Bella", "Kalle", "Storm"]
+
+    fewer = client.patch(f"/api/appointments/{booked['id']}", json={"subjects": [HORSE(kalle)]}, headers={**headers, **_etag(booked)}).json()
+    assert [s["label"] for s in fewer["subjects"]] == ["Kalle"] and fewer["version"] == booked["version"] + 1
+    same = client.patch(f"/api/appointments/{booked['id']}", json={"subjects": [HORSE(kalle)]}, headers={**headers, **_etag(fewer)}).json()
+    assert same["version"] == fewer["version"]  # the same horses again change nothing
+    none = client.patch(f"/api/appointments/{booked['id']}", json={"subjects": []}, headers={**headers, **_etag(same)}).json()
+    assert none["subjects"] == []
+    other_fields = client.patch(f"/api/appointments/{booked['id']}", json={"title": "Renamed"}, headers={**headers, **_etag(none)}).json()
+    assert other_fields["subjects"] == []  # a save without `subjects` leaves them alone
+
+
+def test_a_save_without_subjects_leaves_the_horses(client: TestClient, world):
+    _, _, kalle, people = world
+    headers = people["owner"][1]
+    booked = _book(client, headers, subjects=[HORSE(kalle)])
+    renamed = client.patch(f"/api/appointments/{booked['id']}", json={"title": "Renamed"}, headers={**headers, **_etag(booked)}).json()
+    assert [s["label"] for s in renamed["subjects"]] == ["Kalle"]
+
+
+def test_every_horse_in_the_list_must_belong_to_this_organization(client: TestClient, db_session: Session, world, two_organizations):
+    _, anna, kalle, people = world
+    headers = people["owner"][1]
+    their_kalle = two_organizations[3]
+    assert client.post("/api/appointments", json={"title": "x", **MORNING, "subjects": [HORSE(kalle), HORSE(their_kalle)]}, headers=headers).status_code == 422
+    assert _listed(client, headers) == []  # not even the horse that was fine was saved
+    mine = _book(client, headers, subjects=[HORSE(kalle)])
+    response = client.patch(f"/api/appointments/{mine['id']}", json={"subjects": [HORSE(kalle), HORSE(their_kalle)]}, headers={**headers, **_etag(mine)})
+    assert response.status_code == 422
+    assert [s["label"] for s in client.get(f"/api/appointments/{mine['id']}", headers=headers).json()["subjects"]] == ["Kalle"]
+
+
+def test_an_appointment_takes_at_most_fifty_horses(client: TestClient, world):
+    _, _, _, people = world
+    many = [{"subject_type": "horse", "subject_id": str(uuid4())} for _ in range(51)]
+    assert client.post("/api/appointments", json={"title": "x", **MORNING, "subjects": many}, headers=people["owner"][1]).status_code == 422
+
+
+def test_the_history_names_the_horses_of_a_booking(client: TestClient, db_session: Session, world):
+    from sqlalchemy import select
+
+    from app.models import AuditEvent
+
+    _, anna, kalle, people = world
+    headers = people["owner"][1]
+    storm = make_horse(db_session, world[0], "Storm", owner=anna)
+    booked = _book(client, headers, subjects=[HORSE(kalle)])
+    client.patch(f"/api/appointments/{booked['id']}", json={"subjects": [HORSE(kalle), HORSE(storm)]}, headers={**headers, **_etag(booked)})
+    events = list(db_session.scalars(select(AuditEvent).where(AuditEvent.entity_type == "appointment").order_by(AuditEvent.id)))
+    assert [e.changes["subjects"] for e in events] == [{"from": None, "to": "Kalle"}, {"from": "Kalle", "to": "Kalle, Storm"}]

@@ -18,7 +18,7 @@ import { localParts, minutesOf, timeText, zonedInstant } from "@/lib/calendar";
 import { addDays } from "@/lib/dates";
 import { blankToNull, problemsFrom, useMutation } from "@/lib/forms";
 
-const CONTROLS = ["title", "starts_at", "ends_at", "location", "notes", "practitioner_user_id", "customer_id", "subject_id"] as const;
+const CONTROLS = ["title", "starts_at", "ends_at", "location", "notes", "practitioner_user_id", "customer_id", "subjects"] as const;
 const SUBJECT_TYPE = "horse";
 const NOBODY = "";
 const DEFAULT_MINUTES = 60;
@@ -39,7 +39,7 @@ interface FormState {
   endTime: string;
   practitioner: string;
   customer: PickerEntity | null;
-  horse: PickerEntity | null;
+  horses: PickerEntity[];
   location: string;
   notes: string;
 }
@@ -56,7 +56,7 @@ function toState(zone: string | null, prefill: Prefill, appointment?: Appointmen
       endTime: timeText(end.minutes),
       practitioner: appointment.practitioner_user_id ?? NOBODY,
       customer: appointment.customer_id ? { id: appointment.customer_id, label: appointment.customer_name ?? "Customer" } : null,
-      horse: appointment.subject_type === SUBJECT_TYPE && appointment.subject_id ? { id: appointment.subject_id, label: appointment.subject_label ?? "Horse" } : null,
+      horses: appointment.subjects.filter((subject) => subject.subject_type === SUBJECT_TYPE).map((subject) => ({ id: subject.subject_id, label: subject.label ?? "A horse" })),
       location: appointment.location ?? "",
       notes: appointment.notes ?? "",
     };
@@ -71,7 +71,7 @@ function toState(zone: string | null, prefill: Prefill, appointment?: Appointmen
     endTime: timeText(endMinutes % (24 * 60)),
     practitioner: prefill.who ?? NOBODY,
     customer: null,
-    horse: null,
+    horses: [],
     location: "",
     notes: "",
   };
@@ -116,7 +116,12 @@ export function AppointmentForm({
   const stale = error?.kind === "conflict" && error.code === "stale_record";
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => setState((current) => ({ ...current, [key]: value }));
   const customers = customerSearch(orgId, { activeOnly: true });
-  const horses = horseSearch(orgId);
+  const horseChoices = horseSearch(orgId);
+  // A horse already on the list is not offered again.
+  const horses: PickerSearch = async (query, signal) => {
+    const result = await horseChoices(query, signal);
+    return result.ok ? { ...result, data: result.data.filter((entity) => !state.horses.some((chosen) => chosen.id === entity.id)) } : result;
+  };
   const backToCalendar = calendarHref(orgId, "week", state.startDay, null);
 
   function instants(): { starts_at: string; ends_at: string } | null {
@@ -141,7 +146,7 @@ export function AppointmentForm({
     return { starts_at, ends_at };
   }
 
-  const subject = () => (state.horse ? { subject_type: SUBJECT_TYPE, subject_id: state.horse.id } : { subject_type: null, subject_id: null });
+  const subjects = () => state.horses.map((horse) => ({ subject_type: SUBJECT_TYPE, subject_id: horse.id }));
 
   async function create() {
     const when = instants();
@@ -153,7 +158,7 @@ export function AppointmentForm({
       notes: blankToNull(state.notes),
       practitioner_user_id: state.practitioner === NOBODY ? null : state.practitioner,
       customer_id: state.customer?.id ?? null,
-      ...subject(),
+      subjects: subjects(),
     };
     const created = await run(() => apiFetch<Appointment>(orgId, "/appointments", { method: "POST", body }));
     if (created === null) return;
@@ -173,7 +178,8 @@ export function AppointmentForm({
     const practitioner = state.practitioner === NOBODY ? null : state.practitioner;
     if (practitioner !== current.practitioner_user_id) body.practitioner_user_id = practitioner;
     if ((state.customer?.id ?? null) !== current.customer_id) body.customer_id = state.customer?.id ?? null;
-    if ((state.horse?.id ?? null) !== (current.subject_type === SUBJECT_TYPE ? current.subject_id : null)) Object.assign(body, subject());
+    const had = current.subjects.filter((subject) => subject.subject_type === SUBJECT_TYPE).map((subject) => subject.subject_id).sort();
+    if (JSON.stringify(had) !== JSON.stringify(state.horses.map((horse) => horse.id).sort())) body.subjects = subjects();
     if (Object.keys(body).length === 0) {
       setNotice("unchanged");
       return;
@@ -231,7 +237,29 @@ export function AppointmentForm({
         <p className="text-xs text-zinc-500">Times are in the organization&apos;s time zone ({zone ?? "UTC"}).</p>
         <SelectField label="Practitioner" name="practitioner_user_id" value={state.practitioner} onChange={(value) => set("practitioner", value)} options={personOptions} error={problems.byField.practitioner_user_id} hint="Who does the work." />
         <EntityPicker label="Customer" name="customer_id" value={state.customer} onChange={(customer) => set("customer", customer)} search={customers} clearable error={problems.byField.customer_id} hint="Optional." />
-        <EntityPicker label="Horse" name="subject_id" value={state.horse} onChange={(horse) => set("horse", horse)} search={horses} clearable error={problems.byField.subject_id} hint="Optional." />
+        <div className="flex flex-col gap-2" data-testid="horses">
+          <EntityPicker
+            label="Horses"
+            name="subjects"
+            value={null}
+            onChange={(horse) => horse && set("horses", [...state.horses, horse])}
+            search={horses}
+            error={problems.byField.subjects}
+            hint={state.horses.length === 0 ? "Optional. Pick one horse after another to book a stable's horses in one session." : `${state.horses.length} chosen. Pick another to add it.`}
+          />
+          {state.horses.length > 0 && (
+            <ul className="flex flex-wrap gap-2" aria-label="Chosen horses">
+              {state.horses.map((horse) => (
+                <li key={horse.id} className="badge tone-primary !px-2.5 !py-1 !text-sm gap-1.5" data-testid="chosen-horse">
+                  {horse.label}
+                  <button type="button" aria-label={`Remove ${horse.label}`} className="font-bold" onClick={() => set("horses", state.horses.filter((chosen) => chosen.id !== horse.id))}>
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
         <TextField label="Location" name="location" value={state.location} onChange={(value) => set("location", value)} error={problems.byField.location} autoComplete="off" />
         <TextAreaField label="Notes" name="notes" rows={4} value={state.notes} onChange={(value) => set("notes", value)} error={problems.byField.notes} />
         <ErrorSummary messages={[...local, ...(error?.kind === "validation" ? problems.general : [])]} />

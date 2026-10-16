@@ -17,7 +17,7 @@ export interface RecordHistoryData {
  */
 export async function readRecordHistory(orgId: string, entityType: string, entityId: string): Promise<RecordHistoryData> {
   const history = await serverRead<History>(orgId, "/api/history", `?${new URLSearchParams({ entity_type: entityType, entity_id: entityId })}`);
-  const wanted = new Map<string, "customers" | "items" | "horses" | "people">();
+  const wanted = new Map<string, "customers" | "items" | "people">();
   for (const event of history.events) {
     for (const [field, change] of Object.entries(event.changes)) {
       const area = REFERENCE_FIELDS[field];
