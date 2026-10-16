@@ -17,6 +17,17 @@ export const FIELD_LABELS: Record<string, Record<string, string>> = {
   },
   item: { type: "Type", name: "Name", description: "Description", unit: "Unit", price_ex_vat: "Price excl. VAT", vat_rate: "VAT %", active: "Active" },
   horse_note: { body: "Note" },
+  appointment: {
+    title: "Title",
+    starts_at: "Starts",
+    ends_at: "Ends",
+    location: "Location",
+    status: "Status",
+    practitioner_user_id: "Practitioner",
+    customer_id: "Customer",
+    subject_type: "About",
+    subject_id: "Horse",
+  },
   horse: { name: "Name", owner_customer_id: "Owner", stable_customer_id: "Stable", birth_year: "Birth year", sex: "Sex", breed: "Breed", active: "Active" },
   transaction: { billing_customer_id: "Billing customer", transaction_date: "Date", status: "Status", currency: "Currency" },
   transaction_line: {
@@ -58,6 +69,7 @@ export const ENTITY_LABELS: Record<string, string> = {
   item: "Item",
   horse: "Horse",
   horse_note: "Note",
+  appointment: "Appointment",
   transaction: "Order",
   transaction_line: "Line",
   invoice: "Invoice",
@@ -81,7 +93,10 @@ export function actionLabel(action: string): string {
 }
 
 /** Fields whose values are ids of other records, and which kind of record they point at. */
-export const REFERENCE_FIELDS: Record<string, "customers" | "items"> = {
+export const REFERENCE_FIELDS: Record<string, "customers" | "items" | "horses" | "people"> = {
+  customer_id: "customers",
+  practitioner_user_id: "people",
+  subject_id: "horses",
   owner_customer_id: "customers",
   stable_customer_id: "customers",
   billing_customer_id: "customers",

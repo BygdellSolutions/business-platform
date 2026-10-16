@@ -33,6 +33,7 @@ export function backendUrl(): string {
 
 /** Areas of the FastAPI app the browser may reach through the BFF. */
 export const ALLOWED_API_AREAS = [
+  "appointments",
   "customers",
   "suppliers",
   "items",

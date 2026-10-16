@@ -1065,3 +1065,41 @@ export interface JournalUpdate {
   follow_up_on?: string | null;
   marks?: JournalMark[];
 }
+
+/** A booking in the calendar (GET /api/appointments). Times are instants; the pages show them in the organization's time zone. */
+export interface Appointment {
+  id: string;
+  number: number;
+  version: number;
+  title: string;
+  starts_at: string;
+  ends_at: string;
+  location: string | null;
+  notes: string | null;
+  status: "scheduled" | "cancelled";
+  practitioner_user_id: string | null;
+  practitioner_name: string | null;
+  customer_id: string | null;
+  customer_name: string | null;
+  subject_type: string | null;
+  subject_id: string | null;
+  subject_label: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+}
+
+export interface AppointmentCreate {
+  title: string;
+  starts_at: string;
+  ends_at: string;
+  location?: string | null;
+  notes?: string | null;
+  practitioner_user_id?: string | null;
+  customer_id?: string | null;
+  subject_type?: string | null;
+  subject_id?: string | null;
+}
+
+export type AppointmentUpdate = Partial<AppointmentCreate> & { status?: "scheduled" | "cancelled" };
