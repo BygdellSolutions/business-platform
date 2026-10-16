@@ -55,16 +55,21 @@ export default async function InvoicePage({
       </div>
       {created === "1" && <Notice testId="created">Draft invoice created. Its orders are reserved until you issue or delete it.</Notice>}
       <RecordMeta record={invoice} people={history.history.people} timeZone={organization.timezone} />
-      <p className="text-sm" data-testid="invoice-orders">
-        {invoice.transactions.map((source, index) => (
-          <span key={source.transaction_id}>
-            {index > 0 && ", "}
-            <Link href={`/o/${orgId}/transactions/${source.transaction_id}`} className="underline" data-testid="invoice-order-link">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="text-zinc-500">{invoice.transactions.length === 1 ? "This invoice is for:" : "This invoice is for these orders:"}</span>
+        <p className="flex flex-wrap gap-2" data-testid="invoice-orders">
+          {invoice.transactions.map((source) => (
+            <Link
+              key={source.transaction_id}
+              href={`/o/${orgId}/transactions/${source.transaction_id}`}
+              className="badge tone-primary !px-3 !py-1 !text-sm hover:brightness-95 after:ml-1.5 after:content-['→']"
+              data-testid="invoice-order-link"
+            >
               {source.transaction_number !== null ? `Order ${source.transaction_number}` : `Order of ${source.transaction_date}`}
             </Link>
-          </span>
-        ))}
-      </p>
+          ))}
+        </p>
+      </div>
       {invoice.issued_at !== null && (
         <p className="text-sm text-zinc-500" data-testid="issued-meta">
           Issued {formatDay(invoice.issued_at, organization.timezone)} by <span data-testid="issued-by">{issuedBy}</span>
