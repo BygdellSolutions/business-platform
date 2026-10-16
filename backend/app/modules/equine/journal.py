@@ -56,17 +56,19 @@ def _practitioner(db: Session, ctx: TenantContext, user_id: uuid.UUID) -> User:
     return member
 
 
-def _numbered(marks: list[dict]) -> list[dict]:
-    """Every mark gets a number: the ones that have one keep it, the others take the next free numbers in the order they came."""
+def _numbered(marks: list[dict], counter: int = 1) -> tuple[list[dict], int]:
+    """Every mark gets a number: the ones that have one keep it, the others take the next numbers in the order they came. `counter` is
+    one past the highest number ever handed out in this entry; numbers only go up from it, so a deleted mark's number is never given
+    to another mark. Returns the marks and the new counter."""
     taken = [mark["number"] for mark in marks if mark.get("number") is not None]
-    following = (max(taken) if taken else 0) + 1
+    following = max([counter, *(number + 1 for number in taken)])
     result = []
     for mark in marks:
         if mark.get("number") is None:
             mark = {**mark, "number": following}
             following += 1
         result.append(mark)
-    return result
+    return result, following
 
 
 def _may_change(ctx: TenantContext, entry: HorseJournalEntry) -> bool:
@@ -157,6 +159,7 @@ for its text and marks)."""
 def create_entry(horse_id: uuid.UUID, payload: JournalCreate, ctx: TenantContext = Depends(journal_access), db: Session = Depends(get_db)) -> JournalRead:
     get_scoped_or_404(db, ctx, Horse, horse_id)
     practitioner = _practitioner(db, ctx, payload.practitioner_user_id) if payload.practitioner_user_id is not None else ctx.user
+    marks, next_mark_number = _numbered([mark.model_dump(mode="json", exclude_none=False) for mark in payload.marks])
     entry = create_scoped(
         db,
         ctx,
@@ -167,7 +170,8 @@ def create_entry(horse_id: uuid.UUID, payload: JournalCreate, ctx: TenantContext
         practitioner_name=practitioner.name,
         body=payload.body,
         follow_up_on=payload.follow_up_on,
-        marks=_numbered([mark.model_dump(mode="json", exclude_none=False) for mark in payload.marks]),
+        marks=marks,
+        next_mark_number=next_mark_number,
         diagram_version=DIAGRAM_VERSION,
         status=JOURNAL_DRAFT,
     )
@@ -195,7 +199,7 @@ def update_entry(
     ensure_current(if_match, entry.version, "horse_journal_entry", entry.id)
     values = {field: getattr(payload, field) for field in payload.model_fields_set}
     if "marks" in values:
-        values["marks"] = _numbered([mark.model_dump(mode="json") for mark in values["marks"]])
+        values["marks"], values["next_mark_number"] = _numbered([mark.model_dump(mode="json") for mark in values["marks"]], entry.next_mark_number)
     if "practitioner_user_id" in values:
         chosen = _practitioner(db, ctx, values["practitioner_user_id"])
         values["practitioner_name"] = chosen.name  # the name as it is now, kept with the entry

@@ -11,6 +11,8 @@ export const MIN_LINE_LENGTH = 0.02;
 
 export interface EditorState {
   marks: JournalMark[];
+  /** The number the next new mark gets: one past the highest ever handed out in this entry (never goes down, so a deleted mark's number is not reused). */
+  next: number;
   past: JournalMark[][];
   future: JournalMark[][];
 }
@@ -21,25 +23,28 @@ export type EditorAction =
   | { type: "remove"; id: string }
   | { type: "undo" }
   | { type: "redo" }
-  | { type: "load"; marks: JournalMark[] };
+  | { type: "load"; marks: JournalMark[]; next?: number };
 
-/** The number the next mark gets: after the highest in use (a number is never given to a different mark while the entry is open). */
-export const nextNumber = (marks: JournalMark[]): number => Math.max(0, ...marks.map((mark) => mark.number ?? 0)) + 1;
+/** One past the highest number in use: the least a counter can be (the entry's own counter, from the backend, may be higher: a deleted mark's number is never reused). */
+export const afterHighest = (marks: JournalMark[]): number => Math.max(0, ...marks.map((mark) => mark.number ?? 0)) + 1;
 
 /** The number to show for a mark: its own, or (for a mark from before numbers existed) its place in the entry. */
 export const numberOf = (mark: JournalMark, marks: JournalMark[]): number => mark.number ?? marks.findIndex((other) => other.id === mark.id) + 1;
 
-export const initialState = (marks: JournalMark[] = []): EditorState => ({ marks, past: [], future: [] });
+export const initialState = (marks: JournalMark[] = [], next = 1): EditorState => ({ marks, next: Math.max(next, afterHighest(marks)), past: [], future: [] });
 
-function commit(state: EditorState, marks: JournalMark[]): EditorState {
-  return { marks, past: [...state.past, state.marks].slice(-HISTORY_LIMIT), future: [] };
+function commit(state: EditorState, marks: JournalMark[], next = state.next): EditorState {
+  return { marks, next, past: [...state.past, state.marks].slice(-HISTORY_LIMIT), future: [] };
 }
 
 /** Marks change only through this reducer, so every step can be undone and redone. */
 export function editorReducer(state: EditorState, action: EditorAction): EditorState {
   switch (action.type) {
-    case "add":
-      return state.marks.length >= MAX_MARKS ? state : commit(state, [...state.marks, { ...action.mark, number: action.mark.number ?? nextNumber(state.marks) }]);
+    case "add": {
+      if (state.marks.length >= MAX_MARKS) return state;
+      const number = action.mark.number ?? state.next;
+      return commit(state, [...state.marks, { ...action.mark, number }], Math.max(state.next, number + 1));
+    }
     case "replace":
       return commit(
         state,
@@ -49,14 +54,14 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       return state.marks.some((mark) => mark.id === action.id) ? commit(state, state.marks.filter((mark) => mark.id !== action.id)) : state;
     case "undo": {
       const previous = state.past[state.past.length - 1];
-      return previous === undefined ? state : { marks: previous, past: state.past.slice(0, -1), future: [state.marks, ...state.future] };
+      return previous === undefined ? state : { marks: previous, next: state.next, past: state.past.slice(0, -1), future: [state.marks, ...state.future] };
     }
     case "redo": {
       const next = state.future[0];
-      return next === undefined ? state : { marks: next, past: [...state.past, state.marks], future: state.future.slice(1) };
+      return next === undefined ? state : { marks: next, next: state.next, past: [...state.past, state.marks], future: state.future.slice(1) };
     }
     case "load":
-      return initialState(action.marks);
+      return initialState(action.marks, Math.max(action.next ?? 1, state.next));
   }
 }
 

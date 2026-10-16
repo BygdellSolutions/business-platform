@@ -212,6 +212,38 @@ def test_a_number_stays_with_its_mark_when_another_is_deleted_and_is_never_share
         assert client.post(_url(horse), json={"marks": [_plain(number=bad)]}, headers=people["owner"]).status_code == 422
 
 
+def test_a_deleted_marks_number_is_never_given_to_another_mark(client: TestClient, world):
+    """Draw 1-3, delete 3, add one: it is 4, not 3 (a note saying "see mark 3" must never point at a different mark)."""
+    _, horse, people = world
+    owner = people["owner"]
+    first, second, third = _plain(number=1), _plain(number=2), _plain(number=3)
+    entry = _create(client, horse, owner, marks=[first, second, third])
+    assert entry["next_mark_number"] == 4
+
+    after_delete = client.patch(_url(horse, entry), json={"marks": [first, second]}, headers={**owner, **_if_match(entry)}).json()
+    assert [m["number"] for m in after_delete["marks"]] == [1, 2] and after_delete["next_mark_number"] == 4  # the counter did not go back
+
+    added = client.patch(_url(horse, after_delete), json={"marks": [first, second, _plain()]}, headers={**owner, **_if_match(after_delete)}).json()
+    assert [m["number"] for m in added["marks"]] == [1, 2, 4] and added["next_mark_number"] == 5
+
+    emptied = client.patch(_url(horse, added), json={"marks": []}, headers={**owner, **_if_match(added)}).json()
+    assert emptied["marks"] == [] and emptied["next_mark_number"] == 5  # even with no marks left
+    again = client.patch(_url(horse, emptied), json={"marks": [_plain()]}, headers={**owner, **_if_match(emptied)}).json()
+    assert [m["number"] for m in again["marks"]] == [5]
+
+
+def test_the_counter_follows_numbers_the_browser_hands_out_and_a_save_without_marks_leaves_it(client: TestClient, world):
+    _, horse, people = world
+    owner = people["owner"]
+    entry = _create(client, horse, owner, marks=[_plain(number=9)])
+    assert entry["next_mark_number"] == 10
+    texted = client.patch(_url(horse, entry), json={"body": "text only"}, headers={**owner, **_if_match(entry)}).json()
+    assert texted["next_mark_number"] == 10
+    unchanged = client.patch(_url(horse, texted), json={"marks": texted["marks"]}, headers={**owner, **_if_match(texted)}).json()
+    assert unchanged["version"] == texted["version"]  # the same marks again change nothing, not even the version
+    assert _create(client, horse, owner)["next_mark_number"] == 1  # an entry without marks starts at 1
+
+
 # --- the practitioner is a member chosen from a list -----------------------------------------------------------------------------
 
 

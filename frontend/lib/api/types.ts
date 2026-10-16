@@ -1042,6 +1042,8 @@ export interface JournalEntry {
   follow_up_on: string | null;
   marks: JournalMark[];
   diagram_version: number;
+  /** The number the next new mark gets: one past the highest ever handed out in the entry (a number is never reused). */
+  next_mark_number: number;
   status: "draft" | "final";
   /** Sent back as If-Match when the draft is changed or finalized. */
   version: number;

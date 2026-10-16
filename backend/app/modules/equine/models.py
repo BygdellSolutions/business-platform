@@ -130,6 +130,7 @@ class HorseJournalEntry(TenantOwned, Numbered, Authored, Base):
         CheckConstraint("length(btrim(practitioner_name)) > 0", name="ck_horse_journal_entries_practitioner_not_blank"),
         CheckConstraint(f"jsonb_typeof(marks) = 'array' AND jsonb_array_length(marks) <= {JOURNAL_MAX_MARKS}", name="ck_horse_journal_entries_marks"),
         CheckConstraint("version >= 1 AND diagram_version >= 1", name="ck_horse_journal_entries_versions_positive"),
+        CheckConstraint("next_mark_number >= 1", name="ck_horse_journal_entries_next_mark_number"),
         Index("ix_horse_journal_entries_horse_visit", "organization_id", "horse_id", text("visit_at DESC"), "id"),
     )
 
@@ -144,6 +145,9 @@ class HorseJournalEntry(TenantOwned, Numbered, Authored, Base):
     follow_up_on: Mapped[date | None] = mapped_column(Date)
     marks: Mapped[list] = mapped_column(JSONB, default=list, server_default=text("'[]'::jsonb"))
     diagram_version: Mapped[int] = mapped_column(Integer, default=DIAGRAM_VERSION, server_default=text("1"))
+    # The number the next new mark gets: one past the highest ever handed out, so a number is never given to a different mark after the one
+    # that had it is deleted (a note saying "see mark 3" must keep meaning that mark).
+    next_mark_number: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
     status: Mapped[str] = mapped_column(String(16), default=JOURNAL_DRAFT, server_default="draft")
     version: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))  # If-Match, +1 per change
     finalized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

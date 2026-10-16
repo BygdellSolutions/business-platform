@@ -13,6 +13,7 @@ import { apiFetch } from "@/lib/api/client";
 import type { Colleague, JournalEntry, JournalUpdate, MarkSide, MarkTool } from "@/lib/api/types";
 import { problemsFrom, useMutation } from "@/lib/forms";
 import { DiagramCanvas, type ActiveTool } from "./DiagramCanvas";
+import { illustrationOf } from "./HorseDiagram";
 import { describe, editorReducer, initialState, numberOf, sameMarks, SIDE_LABELS, TOOL_LABELS } from "./marks";
 
 const CONTROLS = ["visit_at", "practitioner_user_id", "body", "follow_up_on", "marks"] as const;
@@ -46,7 +47,8 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
   const [colleagues, setColleagues] = useState<Colleague[]>([]);
   const [body, setBody] = useState(entry.body);
   const [followUp, setFollowUp] = useState(entry.follow_up_on ?? "");
-  const [editor, dispatch] = useReducer(editorReducer, entry.marks, initialState);
+  const drawable = illustrationOf(entry.diagram_version) !== null; // an entry drawn on a picture this build lacks is not drawn on another one
+  const [editor, dispatch] = useReducer(editorReducer, entry.marks, (marks) => initialState(marks, entry.next_mark_number));
   const [side, setSide] = useState<MarkSide>("left");
   const [tool, setTool] = useState<ActiveTool>("select");
   const [selected, setSelected] = useState<string | null>(null);
@@ -173,6 +175,7 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
             </Button>
           ))}
         </div>
+        {drawable && (
         <div role="toolbar" aria-label="Drawing tools" className="flex flex-wrap gap-2">
           {TOOLS.map((item) => (
             <Button key={item.tool} type="button" aria-pressed={tool === item.tool} onClick={() => setTool(item.tool)} data-testid={`tool-${item.tool}`} variant={tool === item.tool ? "primary" : "secondary"}>
@@ -189,6 +192,7 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
             Redo
           </Button>
         </div>
+        )}
         <DiagramCanvas
           side={side}
           marks={editor.marks}
@@ -205,7 +209,7 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
           <h3 className="text-sm font-medium">Marks on the {side} side</h3>
           {marksHere.length === 0 ? (
             <p className="text-sm text-zinc-500" data-testid="no-marks">
-              No marks yet. Pick a tool and draw on the diagram.
+              {drawable ? "No marks yet. Pick a tool and draw on the diagram." : "No marks."}
             </p>
           ) : (
             <ol className="flex flex-col gap-1 text-sm" data-testid="marks-list">
