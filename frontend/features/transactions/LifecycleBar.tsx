@@ -231,7 +231,7 @@ export function LifecycleBar({ canInvoice = true, invoiceState = "none" }: { can
           ) : (
             <>
               Added to a draft invoice.{" "}
-              <Link href={`/o/${orgId}/invoices/${invoiced.id}`} className="underline" data-testid="open-draft-invoice">
+              <Link href={`/o/${orgId}/invoices/${invoiced.id}`} className={SECONDARY_LINK} data-testid="open-draft-invoice">
                 Open the draft invoice
               </Link>
             </>
