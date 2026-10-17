@@ -18,6 +18,8 @@ async function startEntry(page: Page, orgId: string, horseId: string) {
 }
 
 async function box(page: Page, side = "left") {
+  // The mouse only reaches what is inside the window: put the diagram at the top of it before measuring (the editor above it is tall).
+  await page.getByTestId(`diagram-${side}`).evaluate((element) => element.scrollIntoView({ block: "start" }));
   const found = await page.getByTestId(`diagram-${side}`).boundingBox();
   if (!found) throw new Error("the diagram is not on the page");
   return found;
@@ -34,10 +36,11 @@ test("an entry is drawn, written, saved, reloaded, finalized and corrected", asy
   const area = await box(page);
   await page.mouse.click(area.x + area.width * 0.45, area.y + area.height * 0.45);
   await page.getByTestId("tool-arrow").click();
-  await page.mouse.move(area.x + area.width * 0.7, area.y + area.height * 0.2);
+  const now = await box(page); // clicking the tool may have scrolled the page: measure again
+  await page.mouse.move(now.x + now.width * 0.7, now.y + now.height * 0.2);
   await page.mouse.down();
-  await page.mouse.move(area.x + area.width * 0.6, area.y + area.height * 0.3, { steps: 4 });
-  await page.mouse.move(area.x + area.width * 0.55, area.y + area.height * 0.4, { steps: 4 });
+  await page.mouse.move(now.x + now.width * 0.6, now.y + now.height * 0.3, { steps: 4 });
+  await page.mouse.move(now.x + now.width * 0.55, now.y + now.height * 0.4, { steps: 4 });
   await page.mouse.up();
   await expect(page.getByTestId("marks-list").locator("li")).toHaveCount(2);
   // each mark carries a number on the picture and in the list, so the text can refer to "mark 2"
@@ -241,4 +244,32 @@ test("an accountant and a viewer have no journal at all, in the browser or by a 
     const forged = await context.request.get(`/api/o/${world.orgId}/horses/${horse.id}/journal`);
     expect(forged.status()).toBe(403);
   }
+});
+
+test("the journal is searched by its text, and an entry offers the orders of its horse to link", async ({ page, context }) => {
+  world = createWorld({ label: "Journal search" });
+  await signIn(context, world.email);
+  const horse = await createHorse(context, world.orgId, { name: "Kalle", owner_customer_id: (await createCustomer(context, world.orgId, "Anna Andersson")).id });
+  for (const body of ["Stiff left shoulder, massage given.", "Sore back after the competition."]) {
+    const created = await context.request.post(bffUrl(world.orgId, `/horses/${horse.id}/journal`), { data: { body } });
+    expect(created.status(), await created.text()).toBe(201);
+  }
+
+  await page.goto(`/o/${world.orgId}/horses/${horse.id}/journal`);
+  await expect(page.getByTestId("journal-row")).toHaveCount(2);
+  await page.getByRole("search", { name: "Filter" }).getByPlaceholder("Search").fill("shoulder");
+  await page.getByRole("search", { name: "Filter" }).getByPlaceholder("Search").press("Enter");
+  await expect(page.getByTestId("journal-row")).toHaveCount(1);
+  await expect(page.getByTestId("journal-row")).toContainText("Stiff left shoulder");
+  await expect(page).toHaveURL(/q=shoulder/);
+
+  await page.goto(`/o/${world.orgId}/journal`); // the drafts overview across all horses has the same box
+  await page.getByRole("search", { name: "Filter" }).getByPlaceholder("Search").fill("competition");
+  await page.getByRole("search", { name: "Filter" }).getByPlaceholder("Search").press("Enter");
+  await expect(page.getByTestId("journal-row")).toHaveCount(1);
+  await expect(page.getByTestId("journal-row")).toContainText("Kalle");
+
+  await page.getByTestId("journal-entry-link").click();
+  await expect(page.getByLabel(/Linked order/)).toHaveValue(""); // no order yet, and a horse without services has none to offer
+  await expect(page.getByLabel(/Linked order/).locator("option")).toHaveText(["No linked order"]);
 });

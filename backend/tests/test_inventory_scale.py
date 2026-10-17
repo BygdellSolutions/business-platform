@@ -75,7 +75,9 @@ def test_the_stock_overview_of_a_long_catalogue_grows_only_with_chunks_of_items(
     big_ctx, _ = _world(db_session, items=300, movements_each=3)
     rows, big = _statements(db_session, lambda: inventory_api.list_stock_items(q=None, state=None, include_inactive=False, sort=_no_sort(), ctx=big_ctx, db=db_session))
     assert len(rows) == 300
-    assert big <= small + 5 * 5 + 5  # 300 items = 5 chunks of 60 for each of the five figures, plus a few fixed statements
+    # 50 items are one chunk of 60, 300 items are five: every further chunk costs the same 8 statements (measured: 9, 17, 25, 41, 73 for 50, 120, 180, 300, 600 items),
+    # whatever the movements and orders behind the figures. Linear in the chunks, never in the history.
+    assert big == small + 8 * (5 - 1)
 
 
 def _no_sort():

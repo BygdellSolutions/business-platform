@@ -21,7 +21,7 @@ const fail = <T,>(status: number, body: unknown): ApiResult<T> => ({ ok: false, 
 
 function entry(overrides: Partial<JournalEntry> = {}): JournalEntry {
   return {
-    id: ENTRY, number: 12, horse_id: HORSE, visit_at: "2026-10-15T12:30:00Z", practitioner_user_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", practitioner_name: "Tina Therapist", body: "", follow_up_on: null, marks: [],
+    id: ENTRY, number: 12, horse_id: HORSE, visit_at: "2026-10-15T12:30:00Z", practitioner_user_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", practitioner_name: "Tina Therapist", body: "", follow_up_on: null, order_id: null, order_number: null, marks: [],
     diagram_version: 1, next_mark_number: 1, status: "draft", version: 1, finalized_at: null, finalized_by: null, created_at: "", updated_at: "", created_by: null, updated_by: null,
     created_by_name: "Tina Therapist", finalized_by_name: null, can_change: true, can_correct: false, corrections: [], ...overrides,
   };
@@ -32,13 +32,21 @@ const COLLEAGUES = [
   { user_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", name: "Erik Employee" },
 ];
 const answers: ApiResult<unknown>[] = [];
-/** The calls the editor made about the entry itself (not the list of colleagues it loads). */
-const calls = () => mocked.mock.calls.filter((call) => !String(call[1]).startsWith("/members/people"));
+/** The orders the horse has had services on (what the editor offers to link), answered to its own request. */
+let services: unknown[] = [];
+const SERVICE = (number: number, description: string, day: string) => ({
+  transaction_id: `0000000${number}-0000-4000-8000-000000000000`, transaction_number: number, transaction_date: day, status: "completed", currency: "SEK", line_id: `line-${number}`,
+  description, quantity: "1.000", gross_amount: "850.00", performed_at: `${day}T10:00:00Z`, performed_by_name: "Tina Therapist", subject_type: "horse", subject_id: HORSE, subject_label: "Kalle", notes: null,
+});
+/** The calls the editor made about the entry itself (not the lists of colleagues and orders it loads). */
+const calls = () => mocked.mock.calls.filter((call) => !String(call[1]).startsWith("/members/people") && !String(call[1]).startsWith("/transactions/services"));
 
 beforeEach(() => {
   mocked.mockReset();
   answers.length = 0;
-  mocked.mockImplementation((async (_org: string, path: string) => (path.startsWith("/members/people") ? ok(COLLEAGUES) : (answers.shift() ?? fail(500, {})))) as never);
+  services = [];
+  mocked.mockImplementation((async (_org: string, path: string) =>
+    path.startsWith("/members/people") ? ok(COLLEAGUES) : path.startsWith("/transactions/services") ? ok(services) : (answers.shift() ?? fail(500, {}))) as never);
   router.refresh.mockReset();
   router.push.mockReset();
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, width: 400, height: 300, right: 400, bottom: 300, x: 0, y: 0, toJSON: () => ({}) });
@@ -95,6 +103,33 @@ describe("writing an entry", () => {
     expect(screen.getByTestId("unsupported-diagram")).toBeTruthy();
     expect(screen.queryByRole("toolbar", { name: "Drawing tools" })).toBeNull();
     expect(screen.getByTestId("marks-list").textContent).toContain("1. X on the horse's left side");
+  });
+
+  it("offers the orders this horse was treated on, one entry per order, and links the chosen one", async () => {
+    services = [SERVICE(1004, "Massage", "2026-10-14"), SERVICE(1004, "Stretching", "2026-10-14"), SERVICE(1007, "Massage", "2026-10-20")];
+    const order = (services[2] as { transaction_id: string }).transaction_id;
+    answers.push(ok(entry({ order_id: order, order_number: 1007, version: 2 })));
+    mount();
+    const select = (await screen.findByLabelText(/Linked order/)) as HTMLSelectElement;
+    await waitFor(() => expect(select.options.length).toBe(3)); // none, order 1004 (once, though it has two services), order 1007
+    expect(mocked.mock.calls.some((call) => call[1] === `/transactions/services?subject_type=horse&subject_id=${HORSE}`)).toBe(true); // this horse's, nobody else's
+    expect([...select.options].map((option) => option.text)).toEqual(["No linked order", "Order 1004 · Massage · 2026-10-14", "Order 1007 · Massage · 2026-10-20"]);
+    await userEvent.selectOptions(select, order);
+    expect(status()).toBe("Unsaved changes");
+    await userEvent.click(screen.getByTestId("save-draft"));
+    expect(calls()).toEqual([[ORG, `/horses/${HORSE}/journal/${ENTRY}`, { method: "PATCH", body: { order_id: order }, ifMatch: 1 }]]);
+    await waitFor(() => expect(status()).toBe("All changes saved"));
+  });
+
+  it("shows an order that is already linked even when the horse has no service on it, and can unlink it", async () => {
+    answers.push(ok(entry({ order_id: null, order_number: null, version: 2 })));
+    mount(entry({ order_id: "00000009-0000-4000-8000-000000000000", order_number: 1009 }));
+    const select = (await screen.findByLabelText(/Linked order/)) as HTMLSelectElement;
+    expect(select.value).toBe("00000009-0000-4000-8000-000000000000");
+    expect([...select.options].map((option) => option.text)).toEqual(["No linked order", "Order 1009"]);
+    await userEvent.selectOptions(select, "");
+    await userEvent.click(screen.getByTestId("save-draft"));
+    expect(calls()).toEqual([[ORG, `/horses/${HORSE}/journal/${ENTRY}`, { method: "PATCH", body: { order_id: null }, ifMatch: 1 }]]);
   });
 
   it("keeps the marks of each side apart", async () => {
