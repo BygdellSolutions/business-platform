@@ -7,6 +7,7 @@ transaction and line ids, the issuing user, custom-field definition ids) are lef
 nothing downstream could look them up.
 """
 
+import hashlib
 from typing import Any
 
 from app.modules.invoicing.ocr import ocr_reference
@@ -128,8 +129,12 @@ def _payment_reference(data: dict[str, Any]) -> str:
     return ocr_reference(number) if isinstance(number, int) and not isinstance(number, bool) and number > 0 else data["number_text"]
 
 
-def document_from_invoice(invoice: Any) -> PdfDocument:
-    """`invoice` is an InvoiceRead (or anything with the same JSON form)."""
+def _logo(logo: bytes | None) -> dict[str, Any]:
+    return {"logo": logo, "logo_sha256": hashlib.sha256(logo).hexdigest()} if logo else {}
+
+
+def document_from_invoice(invoice: Any, logo: bytes | None = None) -> PdfDocument:
+    """`invoice` is an InvoiceRead (or anything with the same JSON form). `logo` is the PNG its issuer snapshot recorded, if any."""
     data = invoice.model_dump(mode="json") if hasattr(invoice, "model_dump") else invoice
     if data["status"] != "issued" or data.get("number_text") is None:
         raise ValueError("only an issued invoice has a PDF document")
@@ -138,6 +143,7 @@ def document_from_invoice(invoice: Any) -> PdfDocument:
     words = labels(language)
     separator = decimal_separator(language)
     return PdfDocument(
+        **_logo(logo),
         language=language if language in ("en", "sv") else "en",
         delivery_dates=tuple(sorted({_text(source["transaction_date"]) for source in data["transactions"]})),
         order_numbers=tuple(str(source["transaction_number"]) for source in data["transactions"] if source.get("transaction_number") is not None),
@@ -190,13 +196,14 @@ def negative(value: str) -> str:
     return value if value.startswith("-") or value.strip("0.") == "" else f"-{value}"
 
 
-def document_from_credit_note(note: Any) -> PdfDocument:
+def document_from_credit_note(note: Any, logo: bytes | None = None) -> PdfDocument:
     """`note` is a CreditNoteRead (or its JSON form). Amounts print negative; quantities and unit prices as stored."""
     data = note.model_dump(mode="json") if hasattr(note, "model_dump") else note
     issuer = data["issuer_snapshot"]
     language = issuer.get("document_language") or "en"
     words = labels(language)
     return PdfDocument(
+        **_logo(logo),
         language=language if language in ("en", "sv") else "en",
         approved_for_f_tax=issuer.get("approved_for_f_tax") is True,
         issuer_footer=_footer(issuer, words),

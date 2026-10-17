@@ -1,9 +1,9 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, SmallInteger, String, func, text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, SmallInteger, String, func, text
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.base import Base
 from app.models.mixins import BusinessProfile, profile_constraints
@@ -63,6 +63,11 @@ class Organization(BusinessProfile, Base):
     approved_for_f_tax: Mapped[bool | None] = mapped_column(Boolean)
     # The language of the organization's documents (invoice PDFs): 'sv' or 'en'. NULL: English, as before.
     document_language: Mapped[str | None] = mapped_column(String(2))
+    # The current logo version (see OrganizationLogo); NULL = no logo. use_alter: the two tables point at each other.
+    logo_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organization_logos.id", ondelete="SET NULL", use_alter=True, name="fk_organizations_logo")
+    )
+    logo: Mapped["OrganizationLogo | None"] = relationship(foreign_keys=[logo_id], lazy="select", viewonly=True)
     # When a complete copy of the organization's data was last streamed to the owner (see app.core.organization_export).
     last_export_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(

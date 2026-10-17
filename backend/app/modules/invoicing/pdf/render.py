@@ -26,9 +26,10 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
-from reportlab.platypus import KeepTogether, LongTable, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Image, KeepTogether, LongTable, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from app.modules.invoicing.pdf import fonts as font_layer
 from app.modules.invoicing.pdf.document import DocumentTooLarge, PdfDocument, PdfField, PdfParty, check_bounds, iter_strings
@@ -59,7 +60,10 @@ from app.modules.invoicing.pdf.labels import decimal_separator, labels
 # 14: an invoice in another currency prints its VAT amount in SEK and the exchange rate that gave it. Everything else prints as in 13.
 # 15: a service line shows the day it was performed, without the time. Everything else prints as in 14.
 # 16: a credit note on an invoice in another currency prints the credited VAT in SEK and the invoice's exchange rate (as the invoice does). Everything else prints as in 15.
-TEMPLATE_VERSION = 16
+# 17: the seller's logo, when the invoice recorded one, at the top of the sender block. Everything else prints as in 16.
+TEMPLATE_VERSION = 17
+LOGO_MAX_WIDTH = 60 * mm
+LOGO_MAX_HEIGHT = 22 * mm
 ACCENT = colors.HexColor("#1f4e5f")
 ACCENT_LIGHT = colors.HexColor("#e8f0f2")
 # Room for the footer columns (up to five lines each) above the page number.
@@ -169,6 +173,15 @@ def _party_flowables(printer: _Printer, party: PdfParty, name_kind: str) -> list
     return [printer.p(party.name, name_kind), *reference, *[printer.p(line) for line in party.lines]]
 
 
+def _logo_flowable(png: bytes) -> Image:
+    """The logo inside a fixed box, proportions kept: a wide logo is limited by the width, a tall one by the height.
+    It is part of the header's flow, so it can never overlap the seller's details."""
+    reader = ImageReader(io.BytesIO(png))
+    natural_width, natural_height = reader.getSize()
+    scale = min(LOGO_MAX_WIDTH / natural_width, LOGO_MAX_HEIGHT / natural_height)
+    return Image(io.BytesIO(png), width=natural_width * scale, height=natural_height * scale, hAlign="LEFT", mask="auto")
+
+
 def _fields(printer: _Printer, fields: tuple[PdfField, ...], kind: str) -> list[Paragraph]:
     return [printer.p(f"{field.label}: {field.text}", kind) for field in fields]
 
@@ -266,6 +279,8 @@ def _build(document: PdfDocument, fonts: font_layer.Registered) -> bytes:
     detail_table = Table([[printer.p(label, "label"), printer.p(value, "body")] for label, value in details], colWidths=[28 * mm, 36 * mm], hAlign="RIGHT")
     detail_table.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0), ("TOPPADDING", (0, 0), (-1, -1), 1), ("BOTTOMPADDING", (0, 0), (-1, -1), 1)]))
     sender = [printer.p(words["from"], "from_label"), Spacer(1, 2), *_party_flowables(printer, document.issuer, "issuer")]
+    if document.logo is not None:
+        sender = [_logo_flowable(document.logo), Spacer(1, 4 * mm), *sender]
     header = Table([[sender, [printer.p(title, "title"), Spacer(1, 4), detail_table]]], colWidths=[width * 0.52, width * 0.48])
     header.setStyle(
         TableStyle(

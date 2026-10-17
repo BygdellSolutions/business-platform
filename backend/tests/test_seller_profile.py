@@ -65,7 +65,7 @@ def test_an_invoice_keeps_the_payment_details_and_takes_its_due_date_from_the_te
 
     assert invoice["due_date"] == "2026-11-07" and explicit["due_date"] == "2026-10-20"
     snapshot = invoice["issuer_snapshot"]
-    assert snapshot["schema"] == 4 and snapshot["our_reference"]  # who made the draft, until it is issued
+    assert snapshot["schema"] == 5 and snapshot["our_reference"]  # who made the draft, until it is issued
     assert {key: snapshot[key] for key in PROFILE} == {**PROFILE, "iban": "SE4550000000058398257466", "bic": "ESLSSESS"}
 
     # Issuing re-takes the snapshot; changing the settings afterwards never changes the issued invoice.

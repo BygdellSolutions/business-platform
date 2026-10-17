@@ -30,7 +30,7 @@ from sqlalchemy.orm import Session
 
 from app.core.tenant import TenantContext
 from app.core.tenant_scope import get_scoped_or_404
-from app.modules.invoicing import credits
+from app.modules.invoicing import credits, snapshots
 from app.modules.invoicing import service as invoices
 from app.modules.invoicing.models import CreditNotePdf, Invoice, InvoicePdf, InvoiceStatus
 from app.modules.invoicing.pdf import render
@@ -91,7 +91,8 @@ def get_or_create_pdf(db: Session, ctx: TenantContext, invoice_id: uuid.UUID) ->
     if existing is not None:
         return StoredPdf(existing.content, existing.sha256, filename)
 
-    document = document_from_invoice(invoices.read_invoice(db, ctx, invoice.id))  # 3 (invoicing tables only)
+    read = invoices.read_invoice(db, ctx, invoice.id)
+    document = document_from_invoice(read, snapshots.logo_bytes(db, ctx.organization_id, read.issuer_snapshot))  # 3 (invoicing tables only, plus the recorded logo)
     db.commit()  # 4: no transaction is open while rendering
 
     started = time.monotonic()
@@ -143,7 +144,7 @@ def get_or_create_credit_note_pdf(db: Session, ctx: TenantContext, credit_note_i
     if existing is not None:
         return StoredPdf(existing.content, existing.sha256, filename)
 
-    document = document_from_credit_note(note)
+    document = document_from_credit_note(note, snapshots.logo_bytes(db, ctx.organization_id, note.issuer_snapshot))
     db.commit()
     try:
         content = render.render_pdf(document)

@@ -1,3 +1,7 @@
+import base64
+import binascii
+import hashlib
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -7,7 +11,7 @@ from datetime import timedelta
 
 from fastapi.responses import StreamingResponse
 
-from app.core import clock, memberships, rate_limit
+from app.core import audit, clock, logo_image, memberships, rate_limit
 from app.core.authz import roles_required
 from app.core.currency import CURRENCY_LOCKED, default_currency_lock_reason
 from app.core.config import settings
@@ -19,9 +23,9 @@ from app.core.organization_export import archive_name, stream_export
 from app.core.query import apply_update
 from app.core.security_events import client_source
 from app.core.tenant import TenantContext, get_tenant_context
-from app.models import Organization, Role
+from app.models import Organization, OrganizationLogo, Role
 from app.schemas.members import OrganizationDeletion, OwnershipTransfer, RecentAuthentication
-from app.schemas.organization import OrganizationRead, OrganizationUpdate
+from app.schemas.organization import LogoRead, LogoUpload, OrganizationRead, OrganizationUpdate
 
 router = APIRouter(prefix="/api/organization", tags=["organization"])
 
@@ -39,6 +43,7 @@ def read_organization_profile(db: Session, organization: Organization) -> Organi
             for name in OrganizationRead.model_fields
             if hasattr(organization, name)
         },
+        has_logo=organization.logo_id is not None,
         default_currency_locked=reason is not None,
         default_currency_lock_reason=reason,
         today=today_in(organization.timezone),
@@ -89,6 +94,72 @@ def update_organization(
             )
     apply_update(db, organization, values)
     return read_organization_profile(db, organization)
+
+
+# --- the logo: printed on the organization's PDFs; changing it is the owner's decision -----------------------------------
+
+
+def _current_logo(db: Session, organization: Organization) -> OrganizationLogo | None:
+    if organization.logo_id is None:
+        return None
+    return db.scalar(select(OrganizationLogo).where(OrganizationLogo.organization_id == organization.id, OrganizationLogo.id == organization.logo_id))
+
+
+@router.get("/logo", response_model=LogoRead)
+def read_logo(ctx: TenantContext = Depends(get_tenant_context), db: Session = Depends(get_db)) -> LogoRead:
+    logo = _current_logo(db, _active_organization(db, ctx))
+    if logo is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Not found")
+    return LogoRead(data_base64=base64.b64encode(logo.content).decode("ascii"), width=logo.width, height=logo.height)
+
+
+@router.post("/logo", response_model=OrganizationRead)
+def upload_logo(
+    payload: LogoUpload, ctx: TenantContext = Depends(roles_required(Role.OWNER)), db: Session = Depends(get_db)
+) -> OrganizationRead:
+    try:
+        raw = base64.b64decode(payload.data_base64, validate=True)
+        picture = logo_image.normalize(raw)
+    except (binascii.Error, ValueError):
+        raise _invalid_logo("The file could not be read.") from None
+    except logo_image.InvalidLogo as error:
+        raise _invalid_logo(error.message) from None
+    # Row lock: an invoice issued at the same moment records either the old or the new version, never a mix.
+    organization = _active_organization(db, ctx, for_update=True)
+    logo = OrganizationLogo(
+        organization_id=organization.id,
+        content=picture.content,
+        sha256=hashlib.sha256(picture.content).hexdigest(),
+        width=picture.width,
+        height=picture.height,
+        byte_size=len(picture.content),
+        created_by=ctx.user.id,
+    )
+    db.add(logo)
+    db.flush()
+    previous = organization.logo_id
+    organization.logo_id = logo.id
+    audit.record(
+        db, ctx, entity_type="organization", entity_id=organization.id, action="logo_changed",
+        changes={"logo_id": {"from": str(previous) if previous else None, "to": str(logo.id)}},
+    )
+    return read_organization_profile(db, organization)
+
+
+@router.delete("/logo", status_code=status.HTTP_204_NO_CONTENT)
+def remove_logo(ctx: TenantContext = Depends(roles_required(Role.OWNER)), db: Session = Depends(get_db)) -> Response:
+    organization = _active_organization(db, ctx, for_update=True)
+    if organization.logo_id is not None:
+        audit.record(
+            db, ctx, entity_type="organization", entity_id=organization.id, action="logo_removed",
+            changes={"logo_id": {"from": str(organization.logo_id), "to": None}},
+        )
+        organization.logo_id = None  # the version stays: issued documents may refer to it
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def _invalid_logo(message: str) -> HTTPException:
+    return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail={"code": "invalid_logo", "message": message})
 
 
 # --- the danger zone: decided from fresh, locked membership rows, never from the request's role --------------------

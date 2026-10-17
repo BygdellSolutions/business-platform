@@ -342,9 +342,25 @@ export interface Organization extends Profile {
 
   document_language: DocumentLanguage | null;
 
+  /** Whether the organization has a logo for its documents (the picture is read from /organization/logo). */
+
+  has_logo?: boolean;
+
   created_at: string;
 
   updated_at: string;
+
+}
+
+/** The organization's current logo: a PNG as base64, with its pixel size. */
+
+export interface OrganizationLogo {
+
+  data_base64: string;
+
+  width: number;
+
+  height: number;
 
 }
 

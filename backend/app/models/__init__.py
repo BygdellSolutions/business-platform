@@ -6,6 +6,7 @@ from app.models.job_effect import JobEffect
 from app.models.item import Item, ItemDiscount, ItemType
 from app.models.invitation import OrganizationInvitation
 from app.models.organization import Organization
+from app.models.organization_logo import OrganizationLogo
 from app.models.organization_request import OrganizationCreationRequest
 from app.models.organization_user import OrganizationUser, Role
 from app.models.record_counter import RecordCounter
@@ -29,6 +30,7 @@ __all__ = [
     "ItemType",
     "Organization",
     "OrganizationInvitation",
+    "OrganizationLogo",
     "OrganizationCreationRequest",
     "OrganizationUser",
     "RecordCounter",

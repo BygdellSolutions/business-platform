@@ -44,7 +44,7 @@ from app.modules.sales.models import discount_constraints
 
 DEFAULT_SERIES = "default"
 SNAPSHOT_SCHEMA = 1  # version of the customer snapshot structure
-ISSUER_SNAPSHOT_SCHEMA = 4  # version of the issuer snapshot: 2 added contact, payment, F-tax and document language; 3 our reference; 4 the registered office
+ISSUER_SNAPSHOT_SCHEMA = 5  # version of the issuer snapshot: 2 added contact, payment, F-tax and document language; 3 our reference; 4 the registered office; 5 the logo (id and hash)
 
 
 class InvoiceStatus(StrEnum):

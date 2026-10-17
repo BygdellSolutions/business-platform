@@ -4,12 +4,20 @@ Only fields that exist today are copied; nothing is invented for later. The stru
 versioned (`schema`) so a reader can tell which fields to expect from an old invoice.
 """
 
+import hashlib
+import logging
+import uuid
 from collections.abc import Sequence
 from typing import Any
 
-from app.models import Customer, Organization
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.models import Customer, Organization, OrganizationLogo
 from app.modules.custom_fields.schemas import ValueRead
 from app.modules.invoicing.models import ISSUER_SNAPSHOT_SCHEMA, SNAPSHOT_SCHEMA
+
+logger = logging.getLogger("app.invoicing.snapshots")
 
 PROFILE_FIELDS = (
     "address_line1",
@@ -63,7 +71,23 @@ def issuer_snapshot(organization: Organization, our_reference: str | None = None
         # Schema 3: the person at the seller the customer can turn to ("Vår referens"): who issued the invoice (who
         # created the draft until then), by name as it was at that moment.
         "our_reference": our_reference,
+        # Schema 5: the logo version in use at that moment (None: no logo), so the invoice keeps printing that picture.
+        "logo_id": str(organization.logo_id) if organization.logo_id else None,
+        "logo_sha256": organization.logo.sha256 if organization.logo is not None else None,
     }
+
+
+def logo_bytes(db: Session, organization_id: uuid.UUID, issuer: dict[str, Any]) -> bytes | None:
+    """The PNG an issuer snapshot recorded: looked up in the document's OWN organization and checked against the recorded hash.
+    A missing or different picture prints no logo (and is logged) rather than another picture."""
+    logo_id = issuer.get("logo_id")
+    if not logo_id:
+        return None
+    row = db.scalar(select(OrganizationLogo).where(OrganizationLogo.organization_id == organization_id, OrganizationLogo.id == uuid.UUID(logo_id)))
+    if row is None or row.sha256 != issuer.get("logo_sha256") or hashlib.sha256(row.content).hexdigest() != row.sha256:
+        logger.warning("logo %s recorded on a document of organization %s is missing or changed; printing none", logo_id, organization_id)
+        return None
+    return row.content
 
 
 def custom_field_snapshot(values: Sequence[ValueRead]) -> list[dict[str, Any]]:

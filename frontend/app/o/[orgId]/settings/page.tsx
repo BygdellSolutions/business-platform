@@ -2,12 +2,13 @@
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { DangerZone } from "@/features/settings/DangerZone";
 import { EarlierTransactions } from "@/features/settings/EarlierTransactions";
+import { LogoSettings } from "@/features/settings/LogoSettings";
 import { OrganizationSettings } from "@/features/settings/OrganizationSettings";
-import type { CurrencyStatus, Member, Organization, Role } from "@/lib/api/types";
+import type { CurrencyStatus, Member, Organization, OrganizationLogo, Role } from "@/lib/api/types";
 import { authMode } from "@/lib/auth/config";
 import { requireCredential } from "@/lib/auth/credential";
 import { getMemberships } from "@/lib/orgs";
-import { serverRead } from "@/lib/server-api";
+import { serverRead, serverReadOrNull } from "@/lib/server-api";
 
 /** Who is offered the editing form. Only a convenience: FastAPI refuses the change for any other role. */
 const SETTINGS_ROLES: Role[] = ["owner", "admin"];
@@ -26,6 +27,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ orgId
   const canEdit = role !== undefined && SETTINGS_ROLES.includes(role);
   // Owners and admins may read the member list (for the ownership transfer and the sole-owner rule).
   const members = canEdit ? await serverRead<Member[]>(orgId, "/api/members") : [];
+  const logo = organization.has_logo ? await serverReadOrNull<OrganizationLogo>(orgId, "/api/organization/logo") : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -37,6 +39,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ orgId
         hint="The organization's permanent identifier: give it to support when asking about this organization."
       />
       <OrganizationSettings key={organization.id} organization={organization} canEdit={canEdit} />
+      <LogoSettings key={`${organization.id}-logo`} logo={logo} canEdit={role === "owner"} />
       <EarlierTransactions status={status} canEdit={canEdit} />
       <DangerZone organizationName={organization.name} role={role} members={members} passwordChecked={authMode() === "session"} recentExport={organization.recent_export === true} />
     </div>

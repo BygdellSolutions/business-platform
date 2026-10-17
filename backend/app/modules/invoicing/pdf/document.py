@@ -17,7 +17,7 @@ import hashlib
 import json
 import unicodedata
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 # Pre-render resource bounds, based on input size. They protect the service from a pathological
 # invoice; they are not a business rule, and nothing here limits pages or truncates text: long
@@ -158,6 +158,10 @@ class PdfDocument(Frozen):
     credit: PdfCredit | None = None
     # Template 9: a receipt ("Kvitto" / "Receipt") of an order paid at the counter.
     receipt: PdfReceipt | None = None
+    # Template 17: the seller's logo, a PNG the logo layer already validated. The bytes stay out of the document's JSON;
+    # their hash is in it, so the source hash still says which picture was printed.
+    logo: bytes | None = Field(default=None, exclude=True)
+    logo_sha256: str | None = None
 
 
 # --- text -------------------------------------------------------------------------------------------------------------------

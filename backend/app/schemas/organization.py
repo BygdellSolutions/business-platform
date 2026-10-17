@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BeforeValidator, Field, StringConstraints, field_validator
+from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, Field, StringConstraints, field_validator
 
 from app.core.org_time import is_known_zone
 
@@ -93,6 +93,19 @@ class OrganizationUpdate(ProfileIn):
         return value
 
 
+class LogoUpload(BaseModel):
+    """The picture as base64 (the browser's only door to the backend carries JSON bodies); checked and re-encoded by `logo_image`."""
+
+    model_config = ConfigDict(extra="forbid")
+    data_base64: str = Field(max_length=1_000_000)
+
+
+class LogoRead(BaseModel):
+    data_base64: str
+    width: int
+    height: int
+
+
 class OrganizationRead(ProfileRead):
     id: uuid.UUID
     name: str
@@ -117,6 +130,7 @@ class OrganizationRead(ProfileRead):
     payment_terms_days: int | None
     approved_for_f_tax: bool | None
     document_language: str | None
+    has_logo: bool = False  # the picture itself is read from GET /api/organization/logo
     # The organization's current date in its time zone (UTC when none is set): the default for new dates.
     today: date
     created_at: datetime

@@ -75,7 +75,7 @@ def receipt_pdf(db: Session, ctx: TenantContext, transaction_id: uuid.UUID) -> t
         "vat_amount": f"{totals.vat_amount:.2f}",
         "gross_amount": f"{totals.gross_amount:.2f}",
     }
-    document = document_from_invoice(data)
+    document = document_from_invoice(data, snapshots.logo_bytes(db, ctx.organization_id, issuer))  # a receipt is built live, so the current logo
     words = labels(document.language)
     split: dict = {}
     for answer in registry.call_hooks("stock.split_at_completion", db, ctx.organization_id, [line.id for line in lines]):
