@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { BUTTON_VARIANTS, PRIMARY_LINK } from "@/components/ui/Button";
+import { CalendarDnD } from "@/features/calendar/CalendarDnD";
 import type { Appointment, Colleague } from "@/lib/api/types";
 import { addDays } from "@/lib/dates";
 import {
@@ -53,6 +54,18 @@ function newHref(orgId: string, day: string, start: string | null, who: string |
 function toneOf(props: Pick<CalendarProps, "people">, userId: string | null): string {
   const index = userId === null ? -1 : props.people.findIndex((person) => person.user_id === userId);
   return index < 0 ? UNASSIGNED_TONE : TONES[index % TONES.length];
+}
+
+/** What the drag layer needs to know about a booking it may move (see CalendarDnD). */
+function dragData(appointment: Appointment) {
+  return {
+    "data-movable": "true",
+    "data-appointment-id": appointment.id,
+    "data-version": appointment.version,
+    "data-start": appointment.starts_at,
+    "data-end": appointment.ends_at,
+    "data-who": appointment.practitioner_user_id ?? "",
+  };
 }
 
 /** The names of the horses an appointment is about, "Kalle, Storm" (empty when none). */
@@ -131,6 +144,7 @@ export function Calendar(props: CalendarProps) {
         <TimeGrid
           {...props}
           clashes={clashes}
+          assign={false}
           columns={daysOf("week", day).map((columnDay) => ({
             key: columnDay,
             heading: (
@@ -148,6 +162,7 @@ export function Calendar(props: CalendarProps) {
         <TimeGrid
           {...props}
           clashes={clashes}
+          assign
           columns={[
             ...people
               .filter((person) => who === null || person.user_id === who)
@@ -177,8 +192,8 @@ interface Column {
   items: Appointment[];
 }
 
-function TimeGrid(props: CalendarProps & { columns: Column[]; clashes: Set<string>; showPerson: boolean }) {
-  const { orgId, zone, columns, canWrite, clashes, showPerson } = props;
+function TimeGrid(props: CalendarProps & { columns: Column[]; clashes: Set<string>; showPerson: boolean; assign: boolean }) {
+  const { orgId, zone, columns, canWrite, clashes, showPerson, assign } = props;
   const placed = columns.map((column) => ({ column, blocks: place(column.items, column.day, zone) }));
   const { first, last } = hourRange(placed.flatMap((entry) => entry.blocks));
   const hours = Array.from({ length: last - first }, (_, index) => first + index);
@@ -188,6 +203,7 @@ function TimeGrid(props: CalendarProps & { columns: Column[]; clashes: Set<strin
   if (columns.length === 0) return <p data-testid="calendar-empty">There is nobody to show. Add colleagues under Members.</p>;
 
   return (
+    <CalendarDnD orgId={orgId} zone={zone} mode="time" firstHour={first} hourPx={HOUR_PX} enabled={canWrite}>
     <div className="overflow-x-auto rounded-lg border border-border-strong">
       <div className="grid min-w-[44rem]" style={{ gridTemplateColumns: `3.5rem repeat(${columns.length}, minmax(0, 1fr))` }}>
         <div className="border-b border-border-strong" />
@@ -204,7 +220,7 @@ function TimeGrid(props: CalendarProps & { columns: Column[]; clashes: Set<strin
           ))}
         </div>
         {placed.map(({ column, blocks }) => (
-          <div key={column.key} className="relative border-l border-border-strong" style={{ height: hours.length * HOUR_PX }} data-testid="column" data-day={column.day}>
+          <div key={column.key} className="relative border-l border-border-strong" style={{ height: hours.length * HOUR_PX }} data-testid="column" data-column data-day={column.day} data-who={column.who ?? ""} data-assign={assign ? "true" : undefined}>
             {hours.map((hour) => (
               <div key={hour} className="absolute inset-x-0 border-t border-border" style={{ top: (hour - first) * HOUR_PX }} aria-hidden />
             ))}
@@ -221,12 +237,13 @@ function TimeGrid(props: CalendarProps & { columns: Column[]; clashes: Set<strin
                 />
               ))}
             {blocks.map(({ item, top, height, lane, lanes }) => (
-              <Block key={`${item.id}-${column.day}`} {...props} appointment={item} top={px(top)} height={Math.max((height / 60) * HOUR_PX, 22)} lane={lane} lanes={lanes} clash={clashes.has(item.id)} showPerson={showPerson} />
+              <Block key={`${item.id}-${column.day}`} {...props} day={column.day} appointment={item} top={px(top)} height={Math.max((height / 60) * HOUR_PX, 22)} lane={lane} lanes={lanes} clash={clashes.has(item.id)} showPerson={showPerson} />
             ))}
           </div>
         ))}
       </div>
     </div>
+    </CalendarDnD>
   );
 }
 
@@ -234,6 +251,8 @@ function Block({
   orgId,
   zone,
   people,
+  canWrite,
+  day,
   appointment,
   top,
   height,
@@ -241,20 +260,25 @@ function Block({
   lanes,
   clash,
   showPerson,
-}: CalendarProps & { appointment: Appointment; top: number; height: number; lane: number; lanes: number; clash: boolean; showPerson: boolean }) {
+}: CalendarProps & { day: string; appointment: Appointment; top: number; height: number; lane: number; lanes: number; clash: boolean; showPerson: boolean }) {
   const start = localParts(appointment.starts_at, zone);
   const end = localParts(appointment.ends_at, zone);
   const range = `${timeText(start.minutes)}–${timeText(end.minutes)}`;
   const who = showPerson && appointment.practitioner_name ? ` · ${appointment.practitioner_name}` : "";
   const horses = horsesOf(appointment);
+  // A booking can be moved from the day it starts on, and its end dragged when it also ends on that day (a clipped one is changed in the form).
+  const movable = canWrite && start.day === day;
+  const resizable = movable && end.day === day;
   return (
     <Link
       href={`/o/${orgId}/calendar/${appointment.id}`}
       className={`${toneOf({ people }, appointment.practitioner_user_id)} tint absolute overflow-hidden rounded px-1.5 py-0.5 text-xs leading-tight hover:brightness-95 ${clash ? "ring-2 ring-red-600" : ""}`}
-      style={{ top, height, left: `calc(${(lane / lanes) * 100}% + 2px)`, width: `calc(${100 / lanes}% - 4px)`, color: "var(--tone-text)" }}
+      style={{ top, height, left: `calc(${(lane / lanes) * 100}% + 2px)`, width: `calc(${100 / lanes}% - 4px)`, color: "var(--tone-text)", touchAction: movable ? "none" : undefined }}
       title={clash ? "Overlaps another booking of the same person" : undefined}
+      draggable={false}
       data-testid="appointment"
       data-clash={clash ? "true" : undefined}
+      {...(movable ? dragData(appointment) : {})}
     >
       <span className="font-semibold">{clash ? "⚠ " : ""}{appointment.title}</span>
       <br />
@@ -274,6 +298,7 @@ function Block({
           <span>{appointment.customer_name}</span>
         </>
       )}
+      {resizable && <span data-resize aria-hidden className="absolute inset-x-0 bottom-0 h-1.5 cursor-ns-resize" />}
     </Link>
   );
 }
@@ -292,6 +317,7 @@ function MonthGrid(props: CalendarProps & { link: (view: CalendarView, day: stri
     }
   }
   return (
+    <CalendarDnD orgId={orgId} zone={zone} mode="month" enabled={props.canWrite}>
     <div className="overflow-x-auto rounded-lg border border-border-strong">
       <div className="grid min-w-[44rem] grid-cols-7">
         {days.slice(0, 7).map((name) => (
@@ -303,7 +329,7 @@ function MonthGrid(props: CalendarProps & { link: (view: CalendarView, day: stri
           const items = byDay.get(cell) ?? [];
           const inMonth = cell.slice(0, 7) === day.slice(0, 7);
           return (
-            <div key={cell} className={`min-h-24 border-t border-l border-border-strong p-1 ${inMonth ? "" : "bg-surface-hover/40 text-secondary"}`} data-testid="month-day" data-day={cell}>
+            <div key={cell} className={`min-h-24 border-t border-l border-border-strong p-1 ${inMonth ? "" : "bg-surface-hover/40 text-secondary"}`} data-testid="month-day" data-month-day data-day={cell}>
               <Link href={link("day", cell)} className={`text-xs ${cell === today ? "rounded bg-accent px-1.5 py-0.5 font-semibold text-white" : "font-medium"}`}>
                 {dayOfMonth(cell)}
               </Link>
@@ -312,10 +338,12 @@ function MonthGrid(props: CalendarProps & { link: (view: CalendarView, day: stri
                   <li key={appointment.id}>
                     <Link
                       href={`/o/${orgId}/calendar/${appointment.id}`}
-                      className={`${toneOf({ people }, appointment.practitioner_user_id)} tint block truncate rounded px-1 text-xs ${clashes.has(appointment.id) ? "ring-1 ring-red-600" : ""}`}
-                      style={{ color: "var(--tone-text)" }}
+                      className={`${toneOf({ people }, appointment.practitioner_user_id)} tint relative block truncate rounded px-1 text-xs ${clashes.has(appointment.id) ? "ring-1 ring-red-600" : ""}`}
+                      style={{ color: "var(--tone-text)", touchAction: props.canWrite ? "none" : undefined }}
                       title={[appointment.title, horsesOf(appointment)].filter(Boolean).join(" · ")}
+                      draggable={false}
                       data-testid="appointment"
+                      {...(props.canWrite ? dragData(appointment) : {})}
                     >
                       {timeText(localParts(appointment.starts_at, zone).minutes)} {appointment.title}
                       {horsesOf(appointment) && <span className="opacity-75"> · {horsesOf(appointment)}</span>}
@@ -335,5 +363,6 @@ function MonthGrid(props: CalendarProps & { link: (view: CalendarView, day: stri
         })}
       </div>
     </div>
+    </CalendarDnD>
   );
 }

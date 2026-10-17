@@ -197,3 +197,35 @@ export function hourRange(placed: readonly { top: number; height: number }[], ea
   }
   return { first: Math.max(0, first), last: Math.min(24, last) };
 }
+
+/** Dragging snaps to this many minutes. */
+export const SNAP_MINUTES = 15;
+
+/** `minutes` (since midnight) rounded to the nearest step, kept inside the day (the last start is one step before midnight). */
+export function snapMinutes(minutes: number, step = SNAP_MINUTES): number {
+  return Math.min(24 * 60 - step, Math.max(0, Math.round(minutes / step) * step));
+}
+
+/** The whole days from `from` to `to` (both "YYYY-MM-DD"; negative when `to` is earlier). */
+export function dayDifference(from: string, to: string): number {
+  return Math.round((new Date(`${to}T00:00:00Z`).getTime() - new Date(`${from}T00:00:00Z`).getTime()) / 86400000);
+}
+
+/** A booking moved so that it starts at `minutes` on `day` (the organization's wall clock); its length stays the same. */
+export function movedTo(startsAt: string, endsAt: string, day: string, minutes: number, zone: string | null): { starts_at: string; ends_at: string } {
+  const length = new Date(endsAt).getTime() - new Date(startsAt).getTime();
+  const start = zonedInstant(day, timeText(minutes), zone);
+  return { starts_at: start, ends_at: new Date(new Date(start).getTime() + length).toISOString() };
+}
+
+/** A booking moved by whole days, at the same time of day on the wall clock (so a move over a clock change keeps "09:00" as 09:00). */
+export function shiftedByDays(startsAt: string, endsAt: string, days: number, zone: string | null): { starts_at: string; ends_at: string } {
+  const start = localParts(startsAt, zone);
+  return movedTo(startsAt, endsAt, addDays(start.day, days), start.minutes, zone);
+}
+
+/** The end of a booking dragged to `minutes` on the day it starts, or null when that would not be after its start. */
+export function resizedTo(startsAt: string, day: string, minutes: number, zone: string | null): string | null {
+  const end = minutes >= 24 * 60 ? zonedInstant(addDays(day, 1), "00:00", zone) : zonedInstant(day, timeText(minutes), zone);
+  return new Date(end) > new Date(startsAt) ? end : null;
+}

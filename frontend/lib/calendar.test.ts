@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { clashing, daysOf, hourRange, isRealDay, localParts, minutesOf, mondayOf, place, step, titleOf, windowOf, zonedInstant, type Booking } from "@/lib/calendar";
+import { clashing, dayDifference, daysOf, hourRange, isRealDay, localParts, minutesOf, mondayOf, movedTo, place, resizedTo, shiftedByDays, snapMinutes, step, titleOf, windowOf, zonedInstant, type Booking } from "@/lib/calendar";
 
 const STOCKHOLM = "Europe/Stockholm";
 
@@ -107,5 +107,38 @@ describe("place", () => {
   it("widens the hour range to include early and late bookings", () => {
     expect(hourRange([])).toEqual({ first: 7, last: 19 });
     expect(hourRange([{ top: 5 * 60, height: 60 }, { top: 20 * 60, height: 90 }])).toEqual({ first: 5, last: 22 });
+  });
+});
+
+describe("moving and resizing a booking", () => {
+  const start = "2026-10-19T07:00:00.000Z"; // 09:00 in Stockholm
+  const end = "2026-10-19T08:30:00.000Z"; // 10:30
+
+  it("snaps to quarter hours and stays inside the day", () => {
+    expect([snapMinutes(547), snapMinutes(553), snapMinutes(-30), snapMinutes(24 * 60 + 100)]).toEqual([540, 555, 0, 24 * 60 - 15]);
+  });
+
+  it("moves to another time and day on the organization's wall clock and keeps the length", () => {
+    expect(movedTo(start, end, "2026-10-20", 11 * 60, STOCKHOLM)).toEqual({ starts_at: "2026-10-20T09:00:00.000Z", ends_at: "2026-10-20T10:30:00.000Z" });
+    expect(movedTo(start, end, "2026-10-19", 9 * 60, STOCKHOLM)).toEqual({ starts_at: start, ends_at: end }); // dropped where it was: the same instants
+    expect(localParts(movedTo(start, end, "2026-10-19", 23 * 60 + 30, STOCKHOLM).ends_at, STOCKHOLM)).toEqual({ day: "2026-10-20", minutes: 60 }); // may run past midnight (to 01:00)
+  });
+
+  it("keeps the wall-clock time when it moves over a clock change", () => {
+    const moved = shiftedByDays(start, end, 7, STOCKHOLM); // 26 October: winter time has begun
+    expect(localParts(moved.starts_at, STOCKHOLM)).toEqual({ day: "2026-10-26", minutes: 9 * 60 });
+    expect(new Date(moved.ends_at).getTime() - new Date(moved.starts_at).getTime()).toBe(90 * 60000);
+    expect(shiftedByDays(start, end, -2, STOCKHOLM).starts_at).toBe("2026-10-17T07:00:00.000Z");
+  });
+
+  it("counts whole days between two days", () => {
+    expect([dayDifference("2026-10-19", "2026-10-22"), dayDifference("2026-10-22", "2026-10-19"), dayDifference("2026-10-25", "2026-10-26"), dayDifference("2026-10-19", "2026-10-19")]).toEqual([3, -3, 1, 0]);
+  });
+
+  it("resizes the end, refuses an end that is not after the start, and reaches midnight", () => {
+    expect(resizedTo(start, "2026-10-19", 12 * 60, STOCKHOLM)).toBe("2026-10-19T10:00:00.000Z");
+    expect(resizedTo(start, "2026-10-19", 9 * 60, STOCKHOLM)).toBeNull(); // not after the start
+    expect(resizedTo(start, "2026-10-19", 8 * 60, STOCKHOLM)).toBeNull();
+    expect(resizedTo(start, "2026-10-19", 24 * 60, STOCKHOLM)).toBe("2026-10-19T22:00:00.000Z"); // the end of the day
   });
 });
