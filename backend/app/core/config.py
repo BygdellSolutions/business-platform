@@ -118,6 +118,55 @@ class Settings(BaseSettings):
     trust_client_ip_header: bool = False
     client_ip_header: str = "x-client-ip"
 
+    # --- request admission (app/core/admission.py) -----------------------------------------------------------------------------------
+    # Per PROCESS: at most `admission_max_running` requests run, at most `admission_max_waiting` more queue for at most
+    # `admission_wait_seconds`, and the rest get an immediate 503. These are the load test's starting values (12 / 48 / 1 s),
+    # not final: size them against the connection pool and the CPUs of the real server (TODO step 5).
+    admission_max_running: int = 12
+    admission_max_waiting: int = 48
+    admission_wait_seconds: float = 1.0
+
+    # --- database pool and timeouts (app/core/db.py) -------------------------------------------------------------------------------
+    # Per PROCESS. The pool must hold every request admission lets run, plus the probes: 12 running + a few spare. A request
+    # that cannot get a connection within `db_pool_timeout_seconds` is refused (503), never queued without limit. The three
+    # server-side timeouts are set on every runtime connection (never on the migration or operator connections): a statement
+    # that runs too long is cancelled, a lock wait that lasts too long fails, and a session idle inside a transaction is
+    # ended, which is what a stalled request would otherwise hold open (the load test found 15 such connections).
+    db_pool_size: int = 12
+    db_max_overflow: int = 4
+    db_pool_timeout_seconds: float = 3.0
+    db_statement_timeout_ms: int = 30_000
+    db_lock_timeout_ms: int = 10_000
+    db_idle_in_transaction_timeout_ms: int = 60_000
+
+    # --- the job worker (app/worker, `python -m app.worker`); the API process ignores these ------------------------------------------
+    # Which queues this worker serves, how many jobs it runs at once, and when a worker that stopped reporting counts as dead
+    # (its running jobs are then given back to the queue by `maintenance.recover_stalled_jobs`, so the stall limit must be well
+    # above the heartbeat). `worker_task_modules` names the modules that define tasks (tests add a probe module).
+    worker_queues: str = "maintenance,pdf,bulk,email"
+    worker_concurrency: int = 2
+    worker_heartbeat_seconds: float = 10.0
+    worker_stalled_seconds: float = 60.0
+    worker_task_modules: str = "app.worker.tasks"
+
+    # --- request budgets for signed-in traffic (app/core/rate_limit.py) -------------------------------------------------------------
+    # Per PROCESS and per minute (a sliding window). Generous on purpose: a person using the application normally makes a few
+    # requests a second; these stop a runaway script or one organization from using the process up for everybody.
+    rate_limit_user_per_minute: int = 1200
+    rate_limit_org_per_minute: int = 6000
+    rate_limit_heavy_per_minute: int = 60  # PDFs and the dashboard summary, per person, on top of the general budgets
+    rate_limit_export_per_hour: int = 5  # complete copies of an organization's data, per organization
+    export_render_limit: int = 100  # documents without a stored PDF that one copy renders first (the rest are reported as missing)
+
+    # --- second factor (app/core/mfa.py) -----------------------------------------------------------------------------------------
+    mfa_issuer: str = "Business Platform"  # the name an authenticator app shows
+    mfa_challenge_ttl_seconds: int = 300  # how long a correct password may wait for its code
+    mfa_max_attempts_per_challenge: int = 5
+    mfa_max_failures: int = 5  # wrong codes per person in the throttle window (the same window as login failures)
+    # Owners and admins must have a second factor. None = decide by environment: required in production, not elsewhere (so
+    # development and the test suites run without enrolling every account); set true/false to override either way.
+    mfa_required_for_admins: bool | None = None
+
     # --- operator links and retention -----------------------------------------------------------------------------------------------
     setup_token_ttl_hours: int = 24
     invitation_ttl_days: int = 7  # how long an organization invitation can be accepted
@@ -159,6 +208,21 @@ class Settings(BaseSettings):
             ("argon2_parallelism", 1),
             ("argon2_max_concurrent", 1),
             ("argon2_max_waiting", 0),
+            ("admission_max_running", 1),
+            ("rate_limit_user_per_minute", 1),
+            ("mfa_challenge_ttl_seconds", 30),
+            ("mfa_max_attempts_per_challenge", 1),
+            ("mfa_max_failures", 1),
+            ("rate_limit_org_per_minute", 1),
+            ("rate_limit_heavy_per_minute", 1),
+            ("rate_limit_export_per_hour", 1),
+            ("export_render_limit", 0),
+            ("db_pool_size", 1),
+            ("db_max_overflow", 0),
+            ("db_statement_timeout_ms", 100),
+            ("db_lock_timeout_ms", 100),
+            ("db_idle_in_transaction_timeout_ms", 1000),
+            ("admission_max_waiting", 0),
             ("throttle_window_seconds", 1),
             ("throttle_source_max_failures", 1),
             ("throttle_pair_max_failures", 1),
@@ -173,6 +237,10 @@ class Settings(BaseSettings):
         ):
             if getattr(self, name) < minimum:
                 raise ValueError(f"{name.upper()} must be at least {minimum}")
+        if self.admission_wait_seconds <= 0:
+            raise ValueError("ADMISSION_WAIT_SECONDS must be greater than 0")
+        if self.db_pool_timeout_seconds <= 0:
+            raise ValueError("DB_POOL_TIMEOUT_SECONDS must be greater than 0")
         if not 12 <= self.password_min_length <= self.password_max_length <= 1024:
             raise ValueError("password length limits must satisfy 12 <= min <= max <= 1024")
         return self

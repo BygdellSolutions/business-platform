@@ -12,6 +12,10 @@ import { Button } from "@/components/ui/Button";
 export function ConfirmButton({
   label,
   confirmLabel,
+  alsoLabel,
+  onAlso,
+  declineLabel = "No, go back",
+  oneLine = false,
   question,
   onConfirm,
   disabled = false,
@@ -19,6 +23,13 @@ export function ConfirmButton({
 }: {
   label: string;
   confirmLabel: string;
+  /** A second way to go ahead, shown between the two ("Cancel appointment and order"). Both are needed for it to appear. */
+  alsoLabel?: string;
+  onAlso?: () => void;
+  /** The button that backs out. It says what happens ("No, go back", "No, back to the draft"): a bare "Keep" does not say what is kept. */
+  declineLabel?: string;
+  /** The question and its buttons stay on one line (in a table row, where a wrapped question would make the row taller). */
+  oneLine?: boolean;
   question: string;
   onConfirm: () => void;
   disabled?: boolean;
@@ -34,7 +45,7 @@ export function ConfirmButton({
     );
   }
   return (
-    <span role="group" aria-label={question} className="flex flex-wrap items-center gap-2 text-sm">
+    <span role="group" aria-label={question} className={`flex items-center gap-2 text-sm ${oneLine ? "flex-nowrap whitespace-nowrap" : "flex-wrap"}`}>
       <span>{question}</span>
       <Button
         type="button"
@@ -46,8 +57,20 @@ export function ConfirmButton({
       >
         {confirmLabel}
       </Button>
+      {alsoLabel !== undefined && onAlso !== undefined && (
+        <Button
+          type="button"
+          onClick={() => {
+            setAsking(false);
+            onAlso();
+          }}
+          data-testid={testId ? `${testId}-also` : undefined}
+        >
+          {alsoLabel}
+        </Button>
+      )}
       <Button type="button" onClick={() => setAsking(false)} data-testid={testId ? `${testId}-keep` : undefined}>
-        Keep
+        {declineLabel}
       </Button>
     </span>
   );

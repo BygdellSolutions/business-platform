@@ -13,12 +13,12 @@
 # `.next/static` and `public`: no sources, tests, dev dependencies, host node_modules or .env files. It runs as the
 # non-root `node` user on port 3000. No font service is contacted (the sans font is bundled in app/fonts).
 
-FROM node:22-slim AS deps
+FROM node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
-FROM node:22-slim AS build
+FROM node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS build
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 ARG TEST_BUILD_MODE
@@ -30,13 +30,18 @@ COPY . .
 # Only the variables a caller passed are set for the build step; none is set by default.
 RUN env ${TEST_BUILD_MODE:+AUTH_MODE=$TEST_BUILD_MODE} ${TEST_BUILD_ENVIRONMENT:+APP_ENV=$TEST_BUILD_ENVIRONMENT} ${TEST_BUILD_ORIGIN:+PUBLIC_ORIGIN=$TEST_BUILD_ORIGIN} ${TEST_BUILD_BACKEND:+BACKEND_URL=$TEST_BUILD_BACKEND} npm run build
 
-FROM node:22-slim AS runtime
+FROM node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS runtime
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0 PORT=3000
 WORKDIR /app
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
 COPY --from=build /app/public ./public
-RUN mkdir -p .next/cache && chown -R node:node .next/cache
+# perl-base in the pinned base image still has fixed HIGH/CRITICAL findings (deb12u3, fixed in deb12u4). Upgrade ONLY that
+# package; delete this line when a newer pinned base already contains it (the audit workflow shows when).
+RUN apt-get update && apt-get install -y --no-install-recommends --only-upgrade perl-base && rm -rf /var/lib/apt/lists/*
+# The runtime needs only `node`: npm, npx and corepack are build tools (they are what carried the image's HIGH findings), so they are removed.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+ && mkdir -p .next/cache && chown -R node:node .next/cache
 USER node
 EXPOSE 3000
 # LIVENESS only: GET /api/health depends on nothing, so a backend or database outage never marks THIS process unhealthy

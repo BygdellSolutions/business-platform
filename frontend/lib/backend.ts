@@ -21,6 +21,8 @@ import { UUID, isUuid } from "@/lib/uuid";
 
 const TIMEOUT_MS = 15_000;
 const READINESS_TIMEOUT_MS = 3_000;
+/** The complete copy of an organization's data is streamed for as long as it takes (the backend ends it after twenty minutes). */
+export const EXPORT_TIMEOUT_MS = 20 * 60 * 1000;
 
 export { UUID, isUuid };
 
@@ -31,13 +33,16 @@ export function backendUrl(): string {
 
 /** Areas of the FastAPI app the browser may reach through the BFF. */
 export const ALLOWED_API_AREAS = [
+  "appointments",
   "customers",
+  "suppliers",
   "items",
   "horses",
   "transactions",
   "custom-fields",
   "invoices",
   "invoiceable-transactions",
+  "inventory",
   "organization",
   "members",
   "invitations",
@@ -135,16 +140,24 @@ export interface BackendRequest {
   csrf?: string;
   clientAddress?: string;
   idempotencyKey?: string;
+  /** How long the whole exchange may take, body included; the default suits an ordinary API call. */
+  timeoutMs?: number;
 }
 
 /**
  * The ONE binary resource the BFF passes through: the frozen PDF of an invoice. Everything else it
  * relays is JSON text.
  */
-const INVOICE_PDF_PATH = /^\/api\/invoices\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/pdf$/i;
+// An invoice's PDF, a credit note's, or a receipt's (all served under the invoices area).
+const INVOICE_PDF_PATH = /^\/api\/invoices\/(?:credit-notes\/|receipts\/)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/pdf$/i;
 
 export function isInvoicePdfPath(apiPath: string): boolean {
   return INVOICE_PDF_PATH.test(apiPath);
+}
+
+/** The one streamed download: the complete copy of the organization's data (POST). */
+export function isOrganizationExportPath(apiPath: string): boolean {
+  return apiPath === "/api/organization/export";
 }
 
 export async function backendFetch(
@@ -177,7 +190,7 @@ export async function backendFetch(
       body: request.body,
       cache: "no-store",
       redirect: "manual",
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(request.timeoutMs ?? TIMEOUT_MS),
     });
     logEvent(response.status >= 500 ? "error" : "info", "upstream", { request_id: requestId, method, path, status: response.status, duration_ms: took() });
     return response;

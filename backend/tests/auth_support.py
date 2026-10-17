@@ -117,6 +117,9 @@ def purge_committed(users: list[CommittedUser], extra_sources: tuple[str, ...] =
     with engine.begin() as connection:
         connection.execute(text("set local session_replication_role = replica"))
         connection.execute(text("delete from security_events where source = any(:s) or actor_user_id = any(:u)"), {"s": sources, "u": ids})
+        connection.execute(text("delete from mfa_challenges where user_id = any(:u)"), {"u": ids})
+        connection.execute(text("delete from user_recovery_codes where user_id = any(:u)"), {"u": ids})
+        connection.execute(text("delete from user_mfa where user_id = any(:u)"), {"u": ids})
         connection.execute(text("delete from auth_sessions where user_id = any(:u)"), {"u": ids})
         connection.execute(text("delete from user_setup_tokens where user_id = any(:u)"), {"u": ids})
         connection.execute(text("delete from user_credentials where user_id = any(:u)"), {"u": ids})

@@ -1,10 +1,11 @@
+from decimal import Decimal
 from enum import StrEnum
 
-from sqlalchemy import Boolean, CheckConstraint, String, UniqueConstraint, text
+from sqlalchemy import Boolean, CheckConstraint, Index, Numeric, String, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.base import Base
-from app.models.mixins import BusinessProfile, TenantOwned, profile_constraints
+from app.models.mixins import Authored, BusinessProfile, Numbered, TenantOwned, profile_constraints
 
 
 class CustomerType(StrEnum):
@@ -12,7 +13,7 @@ class CustomerType(StrEnum):
     COMPANY = "company"  # not "organization": that word means the tenant
 
 
-class Customer(TenantOwned, BusinessProfile, Base):
+class Customer(TenantOwned, Numbered, Authored, BusinessProfile, Base):
     """A person or company that an organization does business with."""
 
     __tablename__ = "customers"
@@ -20,11 +21,17 @@ class Customer(TenantOwned, BusinessProfile, Base):
         # Target for tenant-safe composite foreign keys: other tables reference
         # (organization_id, id), so the database itself refuses cross-tenant links.
         UniqueConstraint("organization_id", "id", name="uq_customers_organization_id_id"),
+        UniqueConstraint("organization_id", "number", name="uq_customers_organization_number"),
+        Index("uq_customers_one_walk_in", "organization_id", unique=True, postgresql_where=text("walk_in")),
         CheckConstraint(
             "customer_type IN ('" + "', '".join(CustomerType) + "')",
             name="ck_customers_customer_type",
         ),
         *profile_constraints("customers"),
+        CheckConstraint(
+            "default_discount_percent IS NULL OR (default_discount_percent > 0 AND default_discount_percent < 100)",
+            name="ck_customers_default_discount_range",
+        ),
     )
 
     customer_type: Mapped[str] = mapped_column(String(16))
@@ -33,3 +40,8 @@ class Customer(TenantOwned, BusinessProfile, Base):
     email: Mapped[str | None] = mapped_column(String(320))
     phone: Mapped[str | None] = mapped_column(String(64))
     active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+    # The organization's one "Walk-in customer" for counter sales without a named customer (never invoiced).
+    walk_in: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    # The customer's permanent discount (percent), applied to catalog-priced lines after any temporary catalog
+    # discount, until it is changed or removed (NULL: none). Set by owners and admins; its history is recorded.
+    default_discount_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))

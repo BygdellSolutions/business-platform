@@ -1,0 +1,187 @@
+{
+  "date": "2026-10-13",
+  "environment": "Local Docker Desktop Linux; PostgreSQL 17 dedicated test server on tmpfs; no container CPU/RAM limits",
+  "generator": "Linux Docker",
+  "api_workers": 1,
+  "experimental_admission": true,
+  "docker_resources": "16 CPUs 16726769664 bytes RAM",
+  "dataset": {
+    "users": 1000,
+    "organizations": 20,
+    "customers": 5000,
+    "items": 2000,
+    "orders": 5000,
+    "lines": 15000
+  },
+  "duration_s": 15,
+  "results": [
+    {
+      "name": "bff_business_mixed",
+      "concurrency": 100,
+      "requested_duration_s": 15,
+      "elapsed_s": 16.24,
+      "interval_s": 0,
+      "requests": 1379,
+      "success_rps": 73.1,
+      "statuses": {
+        "200": 981,
+        "503": 191,
+        "201": 207
+      },
+      "p50_ms": 784.5,
+      "p95_ms": 3265.5,
+      "p99_ms": 4657.5,
+      "successful_p95_ms": 3294.1,
+      "generator_cpu_percent": 96.8,
+      "endpoints": {
+        "/customers": {
+          "requests": 553,
+          "p95_ms": 2983.5
+        },
+        "/items": {
+          "requests": 292,
+          "p95_ms": 3253.4
+        },
+        "/transactions": {
+          "requests": 275,
+          "p95_ms": 3750.9
+        },
+        "/invoices": {
+          "requests": 259,
+          "p95_ms": 3588.8
+        }
+      },
+      "cpu_samples": {
+        "backend": {
+          "mean_percent": 52.3,
+          "max_percent": 118.83,
+          "samples": 5
+        },
+        "frontend": {
+          "mean_percent": 29.7,
+          "max_percent": 50.95,
+          "samples": 5
+        },
+        "postgres": {
+          "mean_percent": 17.1,
+          "max_percent": 28.45,
+          "samples": 5
+        }
+      },
+      "memory_samples": {
+        "backend": [
+          "93.34MiB",
+          "100.1MiB",
+          "102MiB",
+          "102.8MiB",
+          "101.1MiB"
+        ],
+        "frontend": [
+          "104MiB",
+          "106.9MiB",
+          "122.5MiB",
+          "126.1MiB",
+          "150.3MiB"
+        ],
+        "postgres": [
+          "221.1MiB",
+          "223.9MiB",
+          "224MiB",
+          "229.5MiB",
+          "222.6MiB"
+        ]
+      }
+    },
+    {
+      "name": "bff_1000_paced",
+      "concurrency": 1000,
+      "requested_duration_s": 30,
+      "elapsed_s": 40.0,
+      "interval_s": 10,
+      "requests": 2999,
+      "success_rps": 73.0,
+      "statuses": {
+        "200": 2918,
+        "503": 81
+      },
+      "p50_ms": 22.7,
+      "p95_ms": 678.7,
+      "p99_ms": 726.2,
+      "successful_p95_ms": 679.9,
+      "generator_cpu_percent": 14.9,
+      "endpoints": {
+        "/customers": {
+          "requests": 1000,
+          "p95_ms": 20.8
+        },
+        "/items": {
+          "requests": 1000,
+          "p95_ms": 75.3
+        },
+        "/transactions": {
+          "requests": 999,
+          "p95_ms": 717.4
+        }
+      },
+      "cpu_samples": {
+        "backend": {
+          "mean_percent": 57.5,
+          "max_percent": 118.76,
+          "samples": 11
+        },
+        "frontend": {
+          "mean_percent": 25.7,
+          "max_percent": 42.7,
+          "samples": 11
+        },
+        "postgres": {
+          "mean_percent": 15.0,
+          "max_percent": 29.82,
+          "samples": 11
+        }
+      },
+      "memory_samples": {
+        "backend": [
+          "92.89MiB",
+          "92.86MiB",
+          "93.93MiB",
+          "94.27MiB",
+          "95.7MiB",
+          "96.26MiB",
+          "100.5MiB",
+          "101.5MiB",
+          "101.2MiB",
+          "100.8MiB",
+          "99.55MiB"
+        ],
+        "frontend": [
+          "77.71MiB",
+          "108.6MiB",
+          "135.3MiB",
+          "150.1MiB",
+          "150.7MiB",
+          "153.5MiB",
+          "160.5MiB",
+          "164.4MiB",
+          "165.9MiB",
+          "165MiB",
+          "70.28MiB"
+        ],
+        "postgres": [
+          "220MiB",
+          "219.2MiB",
+          "219.7MiB",
+          "222.6MiB",
+          "222.4MiB",
+          "238.8MiB",
+          "239.3MiB",
+          "239.1MiB",
+          "221.9MiB",
+          "220.9MiB",
+          "220.6MiB"
+        ]
+      }
+    }
+  ],
+  "backend_error_counts": {}
+}

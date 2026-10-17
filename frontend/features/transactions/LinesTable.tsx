@@ -12,7 +12,7 @@ export function LinesTable() {
   const { transaction, refreshing } = useEditor();
 
   return (
-    <section aria-label="Lines" aria-busy={refreshing} data-testid="lines" data-updating={refreshing || undefined} className={`flex flex-col gap-2 ${refreshing ? "opacity-50" : ""}`}>
+    <section aria-label="Lines" aria-busy={refreshing} data-testid="lines" data-updating={refreshing || undefined} className={`panel flex flex-col gap-2 ${refreshing ? "opacity-50" : ""}`}>
       <h2 className="text-lg font-medium">Lines</h2>
       {transaction.lines.length === 0 ? (
         <p data-testid="no-lines">No lines yet.</p>

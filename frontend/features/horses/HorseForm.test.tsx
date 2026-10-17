@@ -18,7 +18,7 @@ const B = "00000000-0000-4000-8000-0000000000b2";
 const mocked = vi.mocked(apiFetch);
 
 function customer(id: string, name: string, active = true): Customer {
-  return { id, customer_type: "person", name, email: null, phone: null, active, created_at: "", updated_at: "", ...EMPTY_PROFILE };
+  return { id, number: 1, customer_type: "person", name, email: null, phone: null, active, created_at: "", updated_at: "", created_by: null, updated_by: null, default_discount_percent: null, ...EMPTY_PROFILE };
 }
 const ANNA = customer("11111111-1111-4111-8111-111111111111", "Anna Andersson");
 const UMEA = customer("22222222-2222-4222-8222-222222222222", "Umeå HK");
@@ -27,6 +27,7 @@ const OLD = customer("33333333-3333-4333-8333-333333333333", "Old Owner", false)
 function horse(overrides: Partial<Horse> = {}): Horse {
   return {
     id: "99999999-9999-4999-8999-999999999999",
+    number: 1,
     name: "Kalle",
     owner_customer_id: ANNA.id,
     stable_customer_id: UMEA.id,
@@ -38,6 +39,8 @@ function horse(overrides: Partial<Horse> = {}): Horse {
     active: true,
     created_at: "",
     updated_at: "",
+    created_by: null,
+    updated_by: null,
     ...overrides,
   };
 }

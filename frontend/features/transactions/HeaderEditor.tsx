@@ -35,7 +35,7 @@ export function HeaderEditor() {
   }
 
   return (
-    <section aria-label="Details" aria-busy={refreshing} data-testid="header" data-updating={refreshing || undefined} className={`flex flex-col gap-3 ${refreshing ? "opacity-50" : ""}`}>
+    <section aria-label="Details" aria-busy={refreshing} data-testid="header" data-updating={refreshing || undefined} className={`panel flex flex-col gap-3 ${refreshing ? "opacity-50" : ""}`}>
       <h2 className="text-lg font-medium">Details</h2>
       {editing && !readOnly ? (
         <HeaderForm onClose={() => setEditing(false)} />

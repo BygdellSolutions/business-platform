@@ -90,6 +90,29 @@ describe("development mode", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("counts the bytes that arrive, with or without a Content-Length", async () => {
+    const send = (text: string) => {
+      const data = new TextEncoder().encode(text);
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(data);
+          controller.close();
+        },
+      });
+      const init = { method: "POST", headers: { origin: ORIGIN, host: "127.0.0.1:3100", "content-type": "application/json", cookie: "bp_dev_user=fredrik@dev.test" }, body, duplex: "half" };
+      const req = new NextRequest(`${ORIGIN}/api/organizations`, init as ConstructorParameters<typeof NextRequest>[1]);
+      expect(req.headers.get("content-length")).toBeNull();
+      return POST(req);
+    };
+
+    expect((await send(JSON.stringify({ x: "y".repeat(20_000) }))).status).toBe(413);
+    // 6,000 characters but 18,000 bytes: under the limit as a string, over it as bytes.
+    const multibyte = JSON.stringify({ x: "€".repeat(6_000) });
+    expect(multibyte.length).toBeLessThan(16_000);
+    expect((await send(multibyte)).status).toBe(413);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("relays the backend refusals as they are (a 403 is not a lost session) and turns a 401 into the fixed answer", async () => {
     fetchMock.mockImplementationOnce(() => Promise.resolve(new Response(JSON.stringify({ detail: { code: "organization_creation_not_allowed" } }), { status: 403, headers: { "content-type": "application/json" } })));
     const forbidden = await post();

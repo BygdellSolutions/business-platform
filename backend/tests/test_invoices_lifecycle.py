@@ -166,7 +166,7 @@ def test_issuing_numbers_and_freezes_the_invoice(client, db_session, sales):
 
     issued = issue(client, sales.headers, invoice)
 
-    assert (issued["status"], issued["number"], issued["number_text"], issued["version"]) == ("issued", 1, "1", 2)
+    assert (issued["status"], issued["number"], issued["number_text"], issued["version"]) == ("issued", 1001, "1001", 2)
     assert issued["issued_at"] is not None and issued["issued_by"] is not None
     assert issued["series"] == "default"
     for kept in ("net_amount", "vat_amount", "gross_amount", "customer_id", "currency", "lines", "vat_breakdown", "invoice_date"):
@@ -176,7 +176,7 @@ def test_issuing_numbers_and_freezes_the_invoice(client, db_session, sales):
 def test_numbers_follow_issuance_order_not_creation_order(client, db_session, sales):
     first, second, third = (draft_invoice(client, sales.headers, completed(db_session, sales.org, sales.billing)) for _ in range(3))
 
-    assert [issue(client, sales.headers, x)["number"] for x in (third, first, second)] == [1, 2, 3]
+    assert [issue(client, sales.headers, x)["number"] for x in (third, first, second)] == [1001, 1002, 1003]
     assert [r["number_text"] for r in client.get(INVOICES, params={"status": "issued"}, headers=sales.headers).json()] != []
 
 
@@ -186,7 +186,7 @@ def test_drafts_have_no_number_and_deleting_one_consumes_nothing(client, db_sess
     assert (gone["number"], kept["number"]) == (None, None)
     assert client.delete(url(gone), headers={**sales.headers, **if_match(1)}).status_code == 204
 
-    assert issue(client, sales.headers, kept)["number"] == 1
+    assert issue(client, sales.headers, kept)["number"] == 1001
     assert row_count(db_session, InvoiceCounter) == 1
 
 
@@ -196,9 +196,9 @@ def test_identical_organizations_each_start_at_one(client, db_session):
     b = issue(client, two.b, draft_invoice(client, two.b, two.b_tx))
     a2 = issue(client, two.a, draft_invoice(client, two.a, completed(db_session, two.a_org, two.a_customer)))
 
-    assert (a["number"], b["number"], a2["number"]) == (1, 1, 2)
+    assert (a["number"], b["number"], a2["number"]) == (1001, 1001, 1002)
     counters = {c.organization_id: c.next_number for c in db_session.scalars(select(InvoiceCounter))}
-    assert counters == {two.a_org.id: 3, two.b_org.id: 2}
+    assert counters == {two.a_org.id: 1003, two.b_org.id: 1002}
 
 
 def test_issuing_needs_a_precondition_and_a_stale_one_consumes_no_number(raw_client, db_session, sales):
@@ -225,7 +225,7 @@ def test_an_issued_invoice_cannot_be_issued_edited_or_deleted_again(client, db_s
 
     assert [r.status_code for r in (again, edit, delete)] == [409, 409, 409]
     assert client.get(url(invoice), headers=sales.headers).json() == issued
-    assert row_count(db_session, InvoiceCounter) == 1 and db_session.scalar(select(InvoiceCounter.next_number)) == 2
+    assert row_count(db_session, InvoiceCounter) == 1 and db_session.scalar(select(InvoiceCounter.next_number)) == 1002
 
 
 def test_issuing_retakes_the_customer_organization_and_custom_field_snapshots(client, db_session, sales):
@@ -408,27 +408,24 @@ def test_a_failure_after_the_number_was_allocated_rolls_the_allocation_back(clie
     assert row_count(db_session, InvoiceCounter) == 0  # the allocation did not survive
     stored = client.get(url(invoice), headers=sales.headers).json()
     assert (stored["status"], stored["number"], stored["version"]) == ("draft", None, 1)
-    assert issue(client, sales.headers, invoice)["number"] == 1  # the next issuance gets the number
+    assert issue(client, sales.headers, invoice)["number"] == 1001  # the next issuance gets the number
 
 
 def test_a_lost_race_for_a_transaction_gets_the_ordinary_already_invoiced_answer(client, db_session, sales, monkeypatch):
-    """The ordinary check sees nothing (as it would for a concurrent creator that has not committed
-    yet); the unique key on the source link is the last guard and answers the same 409."""
+    """The ordinary checks see nothing (as they would for a concurrent creator that has not committed yet): the
+    database's last guard (never more of an order line on invoices than was ordered) answers the same 409 code."""
+    from app.modules.invoicing import delivery
+
     tx = completed(db_session, sales.org, sales.billing)
     draft_invoice(client, sales.headers, tx)
     ordinary = client.post(INVOICES, json={"transaction_ids": [str(tx.id)]}, headers=sales.headers)
-    real = service._already_invoiced
-    calls: list[int] = []
-
-    def blind_once(*args, **kwargs):
-        calls.append(1)
-        return [] if len(calls) == 1 else real(*args, **kwargs)
-
-    monkeypatch.setattr(service, "_already_invoiced", blind_once)
+    monkeypatch.setattr(service, "_on_a_draft", lambda *args, **kwargs: [])
+    monkeypatch.setattr(delivery, "invoiced", lambda *args, **kwargs: {})
     raced = client.post(INVOICES, json={"transaction_ids": [str(tx.id)]}, headers=sales.headers)
 
     assert ordinary.status_code == raced.status_code == 409
-    assert raced.json() == ordinary.json()
+    assert raced.json()["detail"]["code"] == ordinary.json()["detail"]["code"] == "already_invoiced"
+    assert raced.json()["detail"]["transaction_ids"] == ordinary.json()["detail"]["transaction_ids"] == [str(tx.id)]
     assert row_count(db_session, Invoice) == 1  # the loser left nothing behind
 
 

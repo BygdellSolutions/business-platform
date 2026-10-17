@@ -58,6 +58,16 @@ describe("what is offered (presentation only)", () => {
     expect(within(row("admin@x.test")).queryByTestId("invitation-regenerate")).toBeNull();
   });
 
+  it("says who invited, and that it is not recorded when the backend does not know", () => {
+    render(
+      <OrgScope orgId={ORG}>
+        <InvitationsAdmin invitations={[{ ...invitation("new@x.test", "viewer"), invited_by_name: "Owner Person" }, invitation("old@x.test", "viewer")]} actorRole="owner" />
+      </OrgScope>,
+    );
+    expect(within(row("new@x.test")).getByTestId("invitation-invited")).toHaveTextContent("Owner Person");
+    expect(within(row("old@x.test")).getByTestId("invitation-invited")).toHaveTextContent("not recorded");
+  });
+
   it("lists email, role and expiry state and never a token", () => {
     const { container } = mount("owner");
     expect(within(row("old@x.test")).getByTestId("invitation-state")).toHaveTextContent("Expired");

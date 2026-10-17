@@ -6,8 +6,8 @@ trailing zeros of the fraction dropped. There is no number type here: nothing is
 nothing can be rounded, added, multiplied or reconstructed. A value that does not look like a decimal
 is returned unchanged rather than guessed at.
 
-V1 is locale-neutral: a dot as the decimal separator and a no-break space between digit groups.
-Localized formats are future work.
+Digits are grouped by a no-break space; the decimal separator is the document language's (a dot in English, a
+comma in Swedish). Only the separator character changes: the digits are the stored ones.
 """
 
 import re
@@ -22,20 +22,20 @@ def _group(digits: str) -> str:
     return NBSP.join(parts)
 
 
-def money(value: str) -> str:
+def money(value: str, separator: str = ".") -> str:
     """A stored amount or unit price: grouped integer digits, the stored decimals untouched."""
     found = _DECIMAL.match(value)
     if found is None:
         return value
     sign, whole, fraction = found.groups()
-    return f"{sign}{_group(whole)}" + (f".{fraction}" if fraction is not None else "")
+    return f"{sign}{_group(whole)}" + (f"{separator}{fraction}" if fraction is not None else "")
 
 
-def trimmed(value: str) -> str:
+def trimmed(value: str, separator: str = ".") -> str:
     """A stored quantity or rate: without the zeros that only pad its fraction ("1.000" -> "1", "12.50" -> "12.5")."""
     found = _DECIMAL.match(value)
     if found is None:
         return value
     sign, whole, fraction = found.groups()
     fraction = (fraction or "").rstrip("0")
-    return f"{sign}{_group(whole)}" + (f".{fraction}" if fraction else "")
+    return f"{sign}{_group(whole)}" + (f"{separator}{fraction}" if fraction else "")

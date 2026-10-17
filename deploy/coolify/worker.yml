@@ -1,0 +1,23 @@
+# The job worker as its own Coolify resource: the same backend image with another command. It holds the runtime (app) role's URL and
+# the secrets the jobs need, and NOTHING public (no domain, no ports, not reachable from outside). Start it only after the migration
+# job has run (it needs the queue tables) and run as many as the load needs: workers share the queue and need no coordination.
+# The queue is the database, so a worker that dies loses nothing: its job is given back by the `maintenance.recover_stalled_jobs`
+# job after WORKER_STALLED_SECONDS. See README.md in this directory and docs/architecture.md ("Background jobs").
+services:
+  worker:
+    build:
+      context: ./backend
+    command: ["python", "-m", "app.worker"]
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      AUTH_MODE: session
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL (app role)}
+      SECURITY_KEY: ${SECURITY_KEY:?set SECURITY_KEY}
+      BFF_INTERNAL_SECRET: ${BFF_INTERNAL_SECRET:?set BFF_INTERNAL_SECRET}
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?set PUBLIC_ORIGIN}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
+    # The image's health check asks the web server; a worker has none. A worker is healthy while its process runs and it can
+    # reach the database (the queue library exits when it cannot), so the container's own restart policy is the supervisor.
+    healthcheck:
+      disable: true

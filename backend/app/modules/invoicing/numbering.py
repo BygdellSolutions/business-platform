@@ -22,9 +22,14 @@ from sqlalchemy.orm import Session
 from app.modules.invoicing.models import InvoiceCounter
 
 
+# A series starts here (decided by the owner 2026-10-10: invoices count from 1001, like orders). Credit notes are
+# numbered from the invoice's series, so they continue the same count.
+FIRST_NUMBER = 1001
+
+
 def allocate_number(db: Session, organization_id: uuid.UUID, series: str) -> int:
     """The next number of the series, in one atomic statement (no MAX()+1, no read-then-write)."""
-    statement = insert(InvoiceCounter).values(organization_id=organization_id, series=series, next_number=2)
+    statement = insert(InvoiceCounter).values(organization_id=organization_id, series=series, next_number=FIRST_NUMBER + 1)
     statement = statement.on_conflict_do_update(
         index_elements=[InvoiceCounter.organization_id, InvoiceCounter.series],
         set_={"next_number": InvoiceCounter.next_number + 1},

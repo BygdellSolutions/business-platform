@@ -36,7 +36,13 @@ class InvitationRead(BaseModel):
     role: Role
     created_at: datetime
     expires_at: datetime
-    state: Literal["pending", "expired"]
+    state: Literal["pending", "expired", "accepted", "revoked"]
+    # The audit of the invitation: who invited, and how it ended (names as they are now; null: not recorded).
+    invited_by: uuid.UUID | None = None
+    invited_by_name: str | None = None
+    accepted_at: datetime | None = None
+    accepted_by_name: str | None = None
+    revoked_at: datetime | None = None
 
 
 class InvitationCreated(InvitationRead):

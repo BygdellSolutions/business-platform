@@ -37,6 +37,7 @@ export default defineConfig({
     "**/invoices.spec.ts",
     "**/onboarding.spec.ts",
     "**/members.spec.ts",
+    "**/danger-zone.spec.ts",
   ],
   // Left to the dev run because they exercise the DEV identity itself: forged X-Dev-User-Email headers (the session
   // run has its own specs for forged identity, organization and authorization headers) and checks that read FastAPI
@@ -68,6 +69,11 @@ export default defineConfig({
         AUTH_MODE: "session",
         DEV_USER_EMAIL: "fredrik@dev.test", // must be ignored in session mode (proved by specs)
         CORS_ORIGINS: "[]",
+        // A browser robot drives one account at full speed, far beyond any person: it would trip the real request budgets
+        // (backend/app/core/rate_limit.py) and fail for a reason that is not the page under test. The budgets have their own tests.
+        RATE_LIMIT_USER_PER_MINUTE: "1000000",
+        RATE_LIMIT_ORG_PER_MINUTE: "1000000",
+        RATE_LIMIT_HEAVY_PER_MINUTE: "1000000",
         ...BACKEND_AUTH_ENV,
       },
     },

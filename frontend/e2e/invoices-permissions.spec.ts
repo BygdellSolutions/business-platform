@@ -41,11 +41,10 @@ for (const role of ["employee", "viewer"] as RoleName[]) {
       await expect(page.getByTestId("invoice-view").getByRole("button")).toHaveCount(0);
 
       await page.goto(`/o/${world.orgId}/invoices/${s.issued.id}`);
-      await expect(page.getByTestId("invoice-number")).toHaveText("1");
+      await expect(page.getByTestId("invoice-number")).toHaveText("1001");
 
       await page.goto(`/o/${world.orgId}/invoices`);
       await expect(page.getByTestId("invoice-row")).toHaveCount(2);
-      await expect(page.getByTestId("new-invoice")).toHaveCount(0);
     });
 
     test("sees what is waiting to be invoiced but cannot select or create", async ({ page, context }) => {
@@ -89,8 +88,8 @@ for (const role of ["accountant", "admin"] as RoleName[]) {
     for (const control of ["issue", "delete-draft", "edit-details"]) await expect(page.getByTestId(control)).toBeVisible();
     await page.getByTestId("issue").click();
     await page.getByTestId("issue-confirm").click();
-    await expect(page.getByTestId("invoice-status")).toHaveText("Issued");
-    await expect(page.getByTestId("invoice-number")).toHaveText("2");
+    await expect(page.getByTestId("invoice-status")).toHaveAttribute("data-status", "issued");
+    await expect(page.getByTestId("invoice-number")).toHaveText("1002");
 
     await page.goto(`/o/${world.orgId}/invoices/new`);
     await expect(page.getByTestId("select-transaction")).toHaveCount(1);

@@ -16,7 +16,7 @@ export default function SetupPage() {
   if (authMode() !== "session") notFound();
   return (
     <main className="mx-auto flex max-w-sm flex-col gap-4 p-8">
-      <h1 className="text-2xl font-semibold">Set your password</h1>
+      <h1 className="text-[28px] leading-tight font-semibold tracking-tight">Set your password</h1>
       <SetupForm />
     </main>
   );

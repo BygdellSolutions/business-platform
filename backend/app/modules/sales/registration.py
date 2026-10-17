@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.entity_registry import EntityType, ParentSpec, Registry
 from app.core.tenant import TenantContext
 from app.core.tenant_scope import get_scoped
+from app.modules.sales import booking
 from app.modules.sales.models import Transaction, TransactionLine, TransactionStatus
 
 
@@ -27,7 +28,23 @@ def _transactions_fix_the_currency(db: Session, organization_id: uuid.UUID) -> s
     exists = db.scalar(
         select(Transaction.id).where(Transaction.organization_id == organization_id).limit(1)
     )
-    return "Transactions already exist, and their prices are in the current currency." if exists else None
+    return "Orders already exist, and their prices are in the current currency." if exists else None
+
+
+def _service_subjects_are_referenced(db: Session, entity_key: str, organization_id: uuid.UUID, record_id: uuid.UUID) -> bool:
+    """A record that a service line was performed for cannot be deleted (a polymorphic reference has no foreign key)."""
+    return db.scalar(
+        select(TransactionLine.id).where(
+            TransactionLine.organization_id == organization_id,
+            TransactionLine.subject_type == entity_key,
+            TransactionLine.subject_id == record_id,
+        ).limit(1)
+    ) is not None
+
+
+def _order_numbers(db: Session, organization_id: uuid.UUID, ids) -> dict[uuid.UUID, int]:
+    """The numbers of the orders of ONE organization among `ids` (the answer to the hook other modules ask, never their rows)."""
+    return dict(db.execute(select(Transaction.id, Transaction.number).where(Transaction.organization_id == organization_id, Transaction.id.in_(list(ids)))).all())
 
 
 def register(registry: Registry) -> None:
@@ -36,7 +53,7 @@ def register(registry: Registry) -> None:
     registry.register(
         EntityType(
             key="transaction",
-            label="Transaction",
+            label="Order",
             model=Transaction,
             custom_fields=True,
             is_editable=_transaction_is_editable,
@@ -45,11 +62,18 @@ def register(registry: Registry) -> None:
     registry.register(
         EntityType(
             key="transaction_line",
-            label="Transaction line",
+            label="Order line",
             model=TransactionLine,
             custom_fields=True,
             parent=ParentSpec(entity="transaction", column="transaction_id"),
             is_editable=_line_is_editable,
         )
     )
+    registry.add_hook("order.numbers", _order_numbers)
+    registry.add_hook("order.statuses", booking.statuses)
+    registry.add_hook("order.create_from_booking", booking.create_from_booking)
+    registry.add_hook("order.sync_from_booking", booking.sync_from_booking)
+    registry.add_hook("order.cancel_draft", booking.cancel_draft)
+    registry.add_hook("order.delete_draft", booking.delete_draft)
     registry.add_currency_guard(_transactions_fix_the_currency)
+    registry.add_reference_guard(_service_subjects_are_referenced)

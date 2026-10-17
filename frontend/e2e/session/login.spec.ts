@@ -19,7 +19,7 @@ const cookieOf = async (context: import("@playwright/test").BrowserContext, name
 
 test.describe("who gets in, and who is sent to /login", () => {
   test("an unauthenticated browser is sent to /login from every application page, with a safe way back", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/organizations");
     await expect(page).toHaveURL(/\/login$/);
 
     await page.goto(`/o/${ORG_A.id}/customers`);
@@ -35,6 +35,17 @@ test.describe("who gets in, and who is sent to /login", () => {
     await expect(page.getByTestId("organization-list").getByRole("link")).toHaveText([ORG_A.name, ORG_B.name]);
   });
 
+  test("a signed-in browser that opens /login is sent on, and the login offers a way back to the homepage", async ({ page }) => {
+    await page.goto("/login");
+    await page.getByRole("link", { name: "Go to homepage" }).click();
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+
+    await signInThroughPage(page, FREDRIK);
+    await page.goto("/login");
+    await expect(page).toHaveURL(/\/organizations$/);
+  });
+
   test("a user with one organization goes straight to it, with the role they hold there", async ({ page }) => {
     await signInThroughPage(page, MARIA);
 
@@ -48,7 +59,7 @@ test.describe("who gets in, and who is sent to /login", () => {
     const post = await context.request.post("/api/dev-session", { form: { email: FREDRIK }, headers: { origin: BASE_URL }, maxRedirects: 0 });
     expect(post.status()).toBe(404);
     expect((await context.cookies()).map((c) => c.name)).not.toContain("bp_dev_user");
-    await page.goto("/");
+    await page.goto("/organizations");
     await expect(page).toHaveURL(/\/login$/);
   });
 });

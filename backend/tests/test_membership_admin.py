@@ -13,8 +13,9 @@ from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 
 from app.models import OrganizationUser, Role, SecurityEvent, User
+from app.models.auth import UserCredential
 from app.scripts import repair
-from tests.auth_support import events, make_session
+from tests.auth_support import PASSWORD, events, make_credential, make_session
 from tests.factories import add_member, make_org, make_user
 from tests.invoicing_support import completed, draft_invoice, issue
 
@@ -35,7 +36,7 @@ def api(request, db_session):
         def headers(user, org=None):
             return {**make_session(db_session, user).headers, **({"X-Organization-Id": str(org.id)} if org else {})}
 
-    return SimpleNamespace(client=client, h=headers)
+    return SimpleNamespace(client=client, h=headers, mode=request.param)
 
 
 class Team:
@@ -72,7 +73,11 @@ def delete(api, team, actor, target, *, org=None):
 
 
 def leave(api, team, actor):
-    return api.client.post("/api/members/leave", headers=api.h(team.users[actor], team.org))
+    """Leave with recent authentication: in session mode the member gets a password and confirms with it."""
+    user = team.users[actor]
+    if api.mode == "session" and team.db.get(UserCredential, user.id) is None:
+        make_credential(team.db, user)
+    return api.client.post("/api/members/leave", json={"password": PASSWORD}, headers=api.h(user, team.org))
 
 
 def code(response):

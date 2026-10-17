@@ -334,7 +334,7 @@ def test_me_user_returns_the_session_user_and_nothing_about_organizations(sessio
     response = session_client.get("/api/me/user", headers=handle.read_headers)
 
     assert response.status_code == 200
-    assert response.json() == {"id": str(user.id), "email": user.email, "name": "Ada Owner", "can_create_organizations": False}
+    assert response.json() == {"id": str(user.id), "email": user.email, "name": "Ada Owner", "can_create_organizations": False, "created_organizations": 0, "max_owned_organizations": 0, "mfa_enabled": False, "mfa_required": False}
 
 
 def test_me_user_needs_authentication_and_ignores_an_organization_selector(session_client, db_session):

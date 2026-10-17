@@ -1,28 +1,7 @@
 import { expect, test, type APIResponse, type Page } from "./fixtures";
 
 import { BASE_URL } from "./env";
-import {
-  addLine,
-  bffUrl,
-  choices,
-  createCustomer,
-  createItem,
-  createTransaction,
-  FREDRIK,
-  getTransaction,
-  ifMatch,
-  lifecycle,
-  MARIA,
-  openAddLine,
-  ORG_A,
-  ORG_B,
-  picker,
-  RANDOM_ORG,
-  signIn,
-  sql,
-  testRow,
-  unique,
-} from "./support";
+import { addLine, bffUrl, choices, createCustomer, createItem, createTransaction, FREDRIK, getTransaction, ifMatch, lifecycle, MARIA, openAddLine, ORG_A, ORG_B, picker, RANDOM_ORG, signIn, sql, testRow, unique, switchOrg } from "./support";
 
 /**
  * Tenant isolation for transactions, lines, versions and the pickers they use, as the browser
@@ -57,7 +36,7 @@ const ids: { a: Side; b: Side } = {
 
 const txUrl = (orgId: string, id: string) => `/o/${orgId}/transactions/${id}`;
 const rows = (page: Page) => page.getByTestId("line-row");
-const switchTo = (page: Page, org: { name: string }) => page.getByTestId("org-switcher").getByRole("link", { name: org.name }).click();
+const switchTo = (page: Page, org: { name: string }) => switchOrg(page, org.name);
 
 async function outcome(response: APIResponse) {
   return { status: response.status(), body: await response.text() };
@@ -127,7 +106,7 @@ test.describe("identical-looking transactions stay separate", () => {
     await page.getByLabel("Unit price excluding VAT", { exact: true }).fill("99.00");
     await page.getByTestId("save-line").click();
     await expect(rows(page).first()).toContainText("Changed in A");
-    await page.getByTestId("complete").click();
+    await page.getByTestId("invoice-order").click();
     await expect(page.getByTestId("tx-status")).toHaveText("Completed");
 
     expect(testRow(`select t.status || '|' || t.version || '|' || l.description || ':' || l.unit_price_ex_vat::text || ':' || l.version from transactions t join transaction_lines l on l.transaction_id = t.id where t.id = ${sql(bTx.id)}`)).toBe(bBefore);
@@ -296,8 +275,8 @@ test.describe("references to other organizations' customers and items", () => {
 test.describe("switching organizations while editing", () => {
   test("open editors and drafts do not follow the user to the other organization", async ({ page }) => {
     await page.goto(txUrl(ORG_A.id, ids.a.tx));
-    await rows(page).first().getByTestId("edit-line").click();
-    await page.getByLabel("Description", { exact: true }).fill("Draft typed in A");
+    await rows(page).first().getByTestId("edit-line").click(); // a catalog line: the discount is what can be typed
+    await page.getByLabel("Discount % (optional)").fill("37.5");
     await page.getByTestId("edit-header").click();
     await page.getByLabel("Date").fill("2040-04-04");
 
@@ -308,9 +287,9 @@ test.describe("switching organizations while editing", () => {
     await expect(page.getByTestId("org-name")).toHaveText(ORG_B.name);
     await expect(page.getByTestId("line-editor")).toHaveCount(0);
     await expect(page.getByTestId("save-header")).toHaveCount(0);
-    expect(await page.content()).not.toContain("Draft typed in A");
+    expect(await page.content()).not.toContain("37.5");
     expect(await page.content()).not.toContain("2040-04-04");
-    await expect(page.getByTestId("complete")).toBeEnabled(); // no leftover "editor open" state
+    await expect(page.getByTestId("invoice-order")).toBeEnabled(); // no leftover "editor open" state
   });
 
   test("two tabs, two organizations: each saves into its own, and a conflict in one does not touch the other", async ({ context }) => {

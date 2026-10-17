@@ -13,7 +13,7 @@ test.beforeEach(async ({ context }) => {
 });
 
 const list = `/o/${ORG_A.id}/horses`;
-const horseNames = (page: Page) => page.getByTestId("horse-row").locator("td:first-child").allTextContents();
+const horseNames = (page: Page) => page.getByTestId("horse-row").locator("td:nth-child(2)").allTextContents() // after the No. column;
 const nameField = (page: Page) => page.getByLabel("Name", { exact: true });
 
 /** A fresh owner (and optionally stable) customer in organization A. */
@@ -590,6 +590,8 @@ test.describe("navigation and history", () => {
     await page.goto(`${list}${query}`);
     await expect(page.getByTestId("horse-owner")).toHaveText(first.name);
     await page.getByRole("link", { name: horse.name }).click();
+    // The list's Owner filter is a picker with the same field name: wait until the horse's own form is shown.
+    await expect(page.getByTestId("record-name")).toHaveText(horse.name);
     await pick(page, "owner_customer_id", second.name);
     await page.getByTestId("submit").click();
     await expect(page.getByTestId("saved")).toBeVisible();

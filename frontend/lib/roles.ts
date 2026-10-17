@@ -9,3 +9,24 @@ export const INVOICING_ROLES: readonly Role[] = ["owner", "admin", "accountant"]
 export function canMutateInvoices(role: Role | undefined): boolean {
   return role !== undefined && INVOICING_ROLES.includes(role);
 }
+
+/**
+ * Who is offered the controls that create, change and delete business records (customers, catalog
+ * items, horses, transactions and their custom values): everyone but a viewer. Presentation only, like
+ * the rule above; FastAPI refuses a viewer's write whatever the screen shows.
+ */
+export const RECORD_WRITER_ROLES: readonly Role[] = ["owner", "admin", "accountant", "employee"];
+
+/**
+ * Who sees the horse journal: owner, admin and employee. An accountant or a viewer has no access at all. Presentation only; FastAPI
+ * refuses the other roles whatever the screen shows.
+ */
+export const JOURNAL_ROLES: readonly Role[] = ["owner", "admin", "employee"];
+
+export function canUseJournal(role: Role | undefined): boolean {
+  return role !== undefined && JOURNAL_ROLES.includes(role);
+}
+
+export function canWriteRecords(role: Role | undefined): boolean {
+  return role !== undefined && RECORD_WRITER_ROLES.includes(role);
+}

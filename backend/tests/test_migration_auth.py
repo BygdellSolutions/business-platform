@@ -15,6 +15,7 @@ from sqlalchemy.exc import DBAPIError
 from tests.test_migration_currency import _alembic, _downgrade, _execute, _scalar, _upgrade, scratch_url  # noqa: F401
 
 BEFORE = "a85e1c4d7f90"
+REVISION = "b96f2d4e8a13"  # the authentication migration under test
 AUTH_REVISION = "b96f2d4e8a13"
 AUTH_TABLES = {"user_credentials", "auth_sessions", "user_setup_tokens", "security_events"}
 
@@ -57,7 +58,7 @@ def test_upgrade_keeps_every_user_and_membership_unchanged_and_creates_no_creden
     _insert_existing(scratch_url)
     before = _fingerprint(scratch_url)
 
-    _upgrade(scratch_url, "head")
+    _upgrade(scratch_url, REVISION)  # this migration's own outcome (a later one replaces the flag with a limit)
 
     assert AUTH_TABLES <= _tables(scratch_url)
     assert _fingerprint(scratch_url) == before
@@ -68,7 +69,7 @@ def test_upgrade_keeps_every_user_and_membership_unchanged_and_creates_no_creden
 
 
 def test_the_new_column_defaults_to_false_for_new_rows_too(scratch_url: str):
-    _upgrade(scratch_url, "head")
+    _upgrade(scratch_url, REVISION)
     _execute(scratch_url, "insert into users (email, name) values ('new@example.test', 'New')")
     assert _scalar(scratch_url, "select can_create_organizations from users where email = 'new@example.test'") is False
 

@@ -184,7 +184,7 @@ describe("saving values", () => {
     installBackend(() => new Promise((resolve) => (finish = resolve)));
     render(<Harness initial={tx()} fields={fieldsWith({ lineDefs: [def("note", "text")] })} />);
     await userEvent.click(linePanel(LINE_1).getByTestId("edit-fields"));
-    expect(screen.getByTestId("complete")).toBeDisabled(); // a fields form is an open editor
+    expect(screen.getByTestId("invoice-order")).toBeDisabled(); // a fields form is an open editor
     expect(screen.getByTestId("lifecycle-hint")).toBeInTheDocument();
     await userEvent.type(linePanel(LINE_1).getByLabelText("Note"), "x");
 
@@ -268,7 +268,7 @@ describe("a blocked completion, at the controls", () => {
   async function complete(answer: ApiResult<unknown>) {
     installBackend(() => answer);
     render(<Harness initial={tx()} fields={ALL} />);
-    await userEvent.click(screen.getByTestId("complete"));
+    await userEvent.click(screen.getByTestId("invoice-order"));
   }
 
   it("puts a transaction problem on that transaction field and a line problem on that line's field, and keeps the banner", async () => {
@@ -284,7 +284,7 @@ describe("a blocked completion, at the controls", () => {
     expect(linePanel(LINE_2).queryByTestId("error-region")).toBeNull();
     // the summary list is preserved, with a link to each place
     const items = within(screen.getByTestId("editor-problems")).getAllByRole("listitem");
-    expect(items.map((item) => item.textContent)).toEqual(["Transaction · Project: Project is required", "Line 2 · District: District is required"]);
+    expect(items.map((item) => item.textContent)).toEqual(["Order · Project: Project is required", "Line 2 · District: District is required"]);
     expect(within(items[0]).getByRole("link")).toHaveAttribute("href", "#transaction-fields");
     expect(within(items[1]).getByRole("link")).toHaveAttribute("href", `#line-${LINE_2}-fields`);
     expect(document.getElementById("transaction-fields")).not.toBeNull();
@@ -316,7 +316,7 @@ describe("a blocked completion, at the controls", () => {
       return ok(null);
     });
     render(<Harness initial={tx()} fields={fieldsWith({ lineDefs: [] })} />);
-    await userEvent.click(screen.getByTestId("complete"));
+    await userEvent.click(screen.getByTestId("invoice-order"));
     expect(await transactionPanel().findByTestId("error-project")).toBeInTheDocument();
 
     await userEvent.click(transactionPanel().getByTestId("edit-fields"));
@@ -327,7 +327,7 @@ describe("a blocked completion, at the controls", () => {
     expect(screen.queryByTestId("editor-problems")).toBeNull();
 
     server.tx = tx({ status: "completed", version: 9 });
-    await userEvent.click(screen.getByTestId("complete"));
+    await userEvent.click(screen.getByTestId("invoice-order"));
     await waitFor(() => expect(screen.getByTestId("tx-status")).toHaveTextContent("Completed"));
     expect(screen.queryByTestId("editor-notice")).toBeNull();
     expect(screen.queryAllByRole("alert")).toHaveLength(0);
@@ -336,7 +336,7 @@ describe("a blocked completion, at the controls", () => {
   it("the completion itself is the backend's decision: the screen never completes or refuses on its own", async () => {
     installBackend(() => ok(tx({ status: "completed" })));
     render(<Harness initial={tx()} fields={fieldsWith({ transactionValues: [], lineValues: {} })} />);
-    await userEvent.click(screen.getByTestId("complete")); // required fields are empty, and the request is still sent
+    await userEvent.click(screen.getByTestId("invoice-order")); // required fields are empty, and the request is still sent
     expect(writes()).toHaveLength(1);
     expect(writes()[0].path).toBe(`/transactions/${TX_ID}/complete`);
   });

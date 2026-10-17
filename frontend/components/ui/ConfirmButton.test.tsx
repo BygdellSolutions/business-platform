@@ -22,13 +22,32 @@ describe("ConfirmButton", () => {
     expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument(); // asks again next time
   });
 
-  it("Keep goes back without doing anything", async () => {
+  it("the button that backs out says so, and goes back without doing anything", async () => {
     const onConfirm = vi.fn();
     render(<ConfirmButton {...props} onConfirm={onConfirm} />);
     await userEvent.click(screen.getByRole("button", { name: "Delete" }));
-    await userEvent.click(screen.getByRole("button", { name: "Keep" }));
+    await userEvent.click(screen.getByRole("button", { name: "No, go back" }));
     expect(onConfirm).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+  });
+
+  it("can offer a second way to go ahead, and runs only the one that was chosen", async () => {
+    const onConfirm = vi.fn();
+    const onAlso = vi.fn();
+    render(<ConfirmButton {...props} alsoLabel="Yes, and the order too" onAlso={onAlso} onConfirm={onConfirm} />);
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await userEvent.click(screen.getByRole("button", { name: "Yes, and the order too" }));
+    expect(onAlso).toHaveBeenCalledTimes(1);
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it("can name what backing out means for the thing being confirmed", async () => {
+    const onConfirm = vi.fn();
+    render(<ConfirmButton {...props} declineLabel="No, back to the draft" onConfirm={onConfirm} />);
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(screen.queryByRole("button", { name: "No, go back" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "No, back to the draft" }));
+    expect(onConfirm).not.toHaveBeenCalled();
   });
 
   it("is reachable and operable with the keyboard", async () => {

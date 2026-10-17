@@ -151,7 +151,7 @@ def test_isolated_restores_even_when_the_block_fails():
 def test_the_application_registered_its_entities_explicitly():
     keys = {e.key: e for e in registry.all()}
 
-    assert set(keys) == {"customer", "horse", "transaction", "transaction_line"}
+    assert set(keys) == {"customer", "horse", "supplier", "transaction", "transaction_line"}
     assert keys["customer"].model is Customer and keys["customer"].reference is not None
     assert keys["horse"].model is Horse
     assert keys["transaction"].custom_fields and keys["transaction_line"].custom_fields

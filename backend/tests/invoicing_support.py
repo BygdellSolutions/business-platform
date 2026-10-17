@@ -78,15 +78,20 @@ def purge_organization(org_id: uuid.UUID, user_ids: list[uuid.UUID]) -> None:
             "invoice_lines",
             "invoice_transactions",
             "invoices",
+            "invoice_holds",
             "invoice_counters",
             "custom_field_values",
             "custom_field_options",
             "custom_field_definitions",
             "transaction_lines",
             "transactions",
+            "line_fulfillments",
+            "stock_movements",
+            "incoming_stock",
             "items",
             "customers",
             "organization_users",
+            "record_counters",
         ):
             connection.execute(text(f"delete from {table} where organization_id = :o"), {"o": org_id})
         connection.execute(text("delete from organizations where id = :o"), {"o": org_id})

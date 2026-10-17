@@ -164,3 +164,73 @@ describe("LoginForm", () => {
     expect(screen.getByLabelText("Password")).toHaveAttribute("autocomplete", "current-password");
   });
 });
+
+describe("LoginForm with a second factor", () => {
+  const CHALLENGE = "H".repeat(43);
+
+  function arrangeSteps(second: () => Promise<Response>) {
+    fetchMock.mockImplementation((url: string) => {
+      if (url === "/api/auth/pre") return reply(200, { token: PRE });
+      if (url === "/api/auth/login") return reply(200, { mfa_required: true, challenge: CHALLENGE });
+      return second();
+    });
+  }
+
+  async function reachTheCodeStep() {
+    await signIn();
+    await screen.findByTestId("mfa-form");
+  }
+
+  it("asks for a code after the password and does not leave the page yet", async () => {
+    arrangeSteps(() => reply(200, { next: "/" }));
+    render(<LoginForm next="/" />);
+
+    await reachTheCodeStep();
+
+    expect(assign).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("login-form")).toBeNull();
+    expect(screen.getByLabelText("Code")).toHaveAttribute("autocomplete", "one-time-code");
+    expect(document.body.innerHTML).not.toContain(CHALLENGE); // the challenge is held in state, never drawn on the page
+  });
+
+  it("sends the challenge, the code and where to go, with the pre-auth header, and then loads the destination", async () => {
+    arrangeSteps(() => reply(200, { next: `/o/${ORG}` }));
+    render(<LoginForm next={`/o/${ORG}`} />);
+    await reachTheCodeStep();
+
+    await userEvent.type(screen.getByLabelText("Code"), "123456");
+    await userEvent.click(screen.getByTestId("mfa-submit"));
+
+    await waitFor(() => expect(assign).toHaveBeenCalledWith(`/o/${ORG}`));
+    const call = fetchMock.mock.calls.find(([url]) => url === "/api/auth/login/mfa") as [string, RequestInit & { headers: Record<string, string> }];
+    expect(JSON.parse(call[1].body as string)).toEqual({ challenge: CHALLENGE, code: "123456", next: `/o/${ORG}` });
+    expect(call[1].headers["x-pre-auth"]).toBe(PRE);
+  });
+
+  it("says plainly that the code was wrong, clears it and lets the person try again or start over", async () => {
+    arrangeSteps(() => reply(401, { detail: "Invalid or expired code" }));
+    render(<LoginForm next="/" />);
+    await reachTheCodeStep();
+
+    await userEvent.type(screen.getByLabelText("Code"), "000000");
+    await userEvent.click(screen.getByTestId("mfa-submit"));
+
+    expect(await screen.findByTestId("mfa-error")).toHaveTextContent(/not correct, or it has expired/);
+    expect(screen.getByLabelText("Code")).toHaveValue("");
+    expect(assign).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByTestId("mfa-start-over"));
+    expect(await screen.findByTestId("login-form")).toBeInTheDocument();
+  });
+
+  it("says when there have been too many attempts", async () => {
+    arrangeSteps(() => reply(429, {}));
+    render(<LoginForm next="/" />);
+    await reachTheCodeStep();
+
+    await userEvent.type(screen.getByLabelText("Code"), "000000");
+    await userEvent.click(screen.getByTestId("mfa-submit"));
+
+    expect(await screen.findByTestId("mfa-error")).toHaveTextContent("Too many attempts");
+  });
+});

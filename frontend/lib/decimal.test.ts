@@ -1,16 +1,6 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 
-import {
-  isDecimalString,
-  parseCustomNumber,
-  parseMoney,
-  parsePercent,
-  parseQuantity,
-  type DecimalString,
-  type MoneyString,
-  type PercentString,
-  type QuantityString,
-} from "@/lib/decimal";
+import { isDecimalString, parseCustomNumber, parseMoney, parsePercent, parseQuantity, trimQuantity, type DecimalString, type MoneyString, type PercentString, type QuantityString } from "@/lib/decimal";
 
 describe("money (shape only: digits with an optional decimal part)", () => {
   it.each(["0", "0.00", "0.1", "0.01", "850.00", "850", "19.99", "9999999999.99", "0000012.5"])("accepts %s and returns the same string", (input) => {
@@ -109,5 +99,11 @@ describe("types: a decimal is a branded string, never a number", () => {
     expectTypeOf(parseQuantity).returns.toEqualTypeOf<QuantityString | null>();
     expectTypeOf(parsePercent).returns.toEqualTypeOf<PercentString | null>();
     expectTypeOf(parseCustomNumber).returns.toEqualTypeOf<DecimalString | null>();
+  });
+});
+
+describe("trimQuantity", () => {
+  it("drops only the zeros that pad the fraction, as text", () => {
+    expect(["10.000", "2.500", "0.125", "-3.000", "0.000", "1200", "abc"].map(trimQuantity)).toEqual(["10", "2.5", "0.125", "-3", "0", "1200", "abc"]);
   });
 });

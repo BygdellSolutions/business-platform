@@ -103,6 +103,7 @@ HORSES = Resource(
     twin_search="kalle",
     unique_overrides={"name": "Zelda"},
     unique_search="zelda",
+    supports_delete=False,  # a horse is only ever active or inactive (decided 2026-10-14)
 )
 
 

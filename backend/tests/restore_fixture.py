@@ -57,7 +57,7 @@ def build_fixture() -> dict:
     with SessionLocal() as db:
         org_a = make_org(db, SENTINEL_ORG_A, legal_name="Sentinel Stable AB", address_line1="Storgatan 1", postal_code="903 26", city="Umeå", vat_number="SE556000000101")
         org_b = make_org(db, SENTINEL_ORG_B, legal_name="Sentinel Clinic AB", address_line1="Ridvägen 2", postal_code="903 30", city="Umeå")
-        alice = _user(db, "alice", credential=True, can_create_organizations=True)
+        alice = _user(db, "alice", credential=True, max_owned_organizations=2)
         bob = _user(db, "bob", credential=True)
         carol, dave, frank = _user(db, "carol"), _user(db, "dave"), _user(db, "frank")
         erin = _user(db, "erin", credential=True)

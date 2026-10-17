@@ -16,7 +16,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.base import Base
 
-SESSION_REVOKED_REASONS = ("logout", "rotated", "password_changed", "cap", "disabled", "setup")
+SESSION_REVOKED_REASONS = ("logout", "rotated", "password_changed", "cap", "disabled", "setup", "operator")
 SETUP_PURPOSES = ("set_password",)
 # The only things a security event can say. A fixed list keeps rows small and meaningful.
 SECURITY_EVENT_TYPES = (
@@ -39,6 +39,16 @@ SECURITY_EVENT_TYPES = (
     "invitation_created",
     "invitation_revoked",
     "invitation_accepted",
+    "reauth_failure",
+    "ownership_transferred",
+    "organization_deleted",
+    "sessions_revoked_by_operator",
+    "mfa_enabled",
+    "mfa_disabled",
+    "mfa_failure",
+    "mfa_reset_by_operator",
+    "recovery_code_used",
+    "account_erased",
 )
 
 HEX64 = "^[0-9a-f]{64}$"
@@ -137,3 +147,55 @@ class SecurityEvent(Base):
     source: Mapped[str | None] = mapped_column(String(64))
     identifier_hash: Mapped[str | None] = mapped_column(String(64))
     detail: Mapped[str | None] = mapped_column(String(64))
+
+
+class UserMfa(Base):
+    """A person's second factor (TOTP). It holds NO usable secret: `seed` is random and meaningless on its own, and the key an
+    authenticator app needs is derived from it with a server-side key (see `app.core.mfa`), so a copy of the database alone cannot
+    produce a code. `enabled_at` is NULL while the enrollment is only started."""
+
+    __tablename__ = "user_mfa"
+    __table_args__ = (CheckConstraint("seed ~ '^[0-9a-f]{32}$'", name="ck_user_mfa_seed_shape"),)
+
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), primary_key=True)
+    seed: Mapped[str] = mapped_column(String(32))
+    enabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_step: Mapped[int | None] = mapped_column(BigInteger)  # the newest time step already accepted: a code cannot be used twice
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class UserRecoveryCode(Base):
+    """One single-use recovery code, kept only as the SHA-256 of a high-entropy random value."""
+
+    __tablename__ = "user_recovery_codes"
+    __table_args__ = (
+        CheckConstraint(f"code_hash ~ '{HEX64}'", name="ck_user_recovery_codes_hash_shape"),
+        Index("ix_user_recovery_codes_user", "user_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, server_default=text("gen_random_uuid()"))
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
+    code_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class MfaChallenge(Base):
+    """The step between a correct password and a session for a person who has a second factor: short-lived, single-use, and
+    limited in how often a code may be tried against it. Only the SHA-256 of its token is stored."""
+
+    __tablename__ = "mfa_challenges"
+    __table_args__ = (
+        CheckConstraint(f"token_hash ~ '{HEX64}'", name="ck_mfa_challenges_hash_shape"),
+        CheckConstraint("attempts >= 0", name="ck_mfa_challenges_attempts"),
+        Index("ix_mfa_challenges_expires_at", "expires_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, server_default=text("gen_random_uuid()"))
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attempts: Mapped[int] = mapped_column(server_default=text("0"))
+    source: Mapped[str | None] = mapped_column(String(64))

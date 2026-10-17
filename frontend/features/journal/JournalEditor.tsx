@@ -1,0 +1,355 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useEffect, useReducer, useRef, useState, type KeyboardEvent } from "react";
+
+import { useOrgId } from "@/components/shell/org-context";
+import { Button } from "@/components/ui/Button";
+import { ConfirmButton } from "@/components/ui/ConfirmButton";
+import { ErrorSummary } from "@/components/ui/ErrorSummary";
+import { CONTROL } from "@/components/ui/controls";
+import { FieldShell, TextAreaField } from "@/components/ui/Field";
+import { apiFetch } from "@/lib/api/client";
+import type { Colleague, JournalEntry, JournalUpdate, MarkSide, MarkTool, ServiceRecord } from "@/lib/api/types";
+import { problemsFrom, useMutation } from "@/lib/forms";
+import { DiagramCanvas, type ActiveTool } from "./DiagramCanvas";
+import { illustrationOf } from "./HorseDiagram";
+import { describe, editorReducer, initialState, numberOf, sameMarks, SIDE_LABELS, TOOL_LABELS } from "./marks";
+
+const CONTROLS = ["visit_at", "practitioner_user_id", "body", "follow_up_on", "order_id", "marks"] as const;
+const TOOLS: { tool: ActiveTool; label: string }[] = [
+  { tool: "select", label: "Select / move" },
+  ...(["line", "arrow", "x", "o"] as MarkTool[]).map((tool) => ({ tool, label: TOOL_LABELS[tool] })),
+];
+
+/** The orders this horse has had services on (one entry per order), plus the one already linked even when it is not among them. */
+function linkable(services: ServiceRecord[], saved: JournalEntry): { id: string; label: string }[] {
+  const options = new Map<string, string>();
+  for (const service of services) {
+    if (!options.has(service.transaction_id)) options.set(service.transaction_id, `Order ${service.transaction_number} · ${service.description} · ${service.transaction_date}`);
+  }
+  if (saved.order_id && !options.has(saved.order_id)) options.set(saved.order_id, saved.order_number !== null ? `Order ${saved.order_number}` : "Linked order (no longer exists)");
+  return [...options].map(([id, label]) => ({ id, label }));
+}
+
+/** The day of a stored instant as the value of a date input (the browser's own time zone). The time of day is not kept track of. */
+function toLocalInput(iso: string): string {
+  const date = new Date(iso);
+  const part = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${part(date.getMonth() + 1)}-${part(date.getDate())}`;
+}
+
+/** A chosen day as the instant that is stored: noon that day, so a day is the same day wherever it is shown. */
+const noonOf = (day: string): string => new Date(`${day}T12:00:00`).toISOString();
+
+/** A draft is saved by itself this long after the last change (a lost note is the worst thing that can happen in a journal). */
+export const AUTOSAVE_MS = 2000;
+/** When a save fails because the connection or the server failed, it is tried again this long after. */
+const RETRY_MS = 10_000;
+
+/**
+ * Writing a journal entry (a draft): when and who, one horse diagram per side with drawing marks, and one text. The draft is saved by
+ * itself a moment after the last change (and when the tab is left), and "Save draft" does it at once; the page says plainly when there
+ * are unsaved changes and asks the browser before leaving with any. Every save is made against the version the draft was last saved
+ * at, one at a time, so a change made elsewhere is refused (nothing overwritten) and shown here; then saving by itself stops. A change
+ * the server refuses as invalid is not sent again until it changes; a failed connection is tried again. `autosaveMs` null turns it off.
+ */
+export function JournalEditor({ entry, autosaveMs = AUTOSAVE_MS }: { entry: JournalEntry; autosaveMs?: number | null }) {
+  const orgId = useOrgId();
+  const router = useRouter();
+  const { pending, error, run } = useMutation();
+  const [saved, setSaved] = useState(entry);
+  const [visitAt, setVisitAt] = useState(toLocalInput(entry.visit_at));
+  const [practitioner, setPractitioner] = useState(entry.practitioner_user_id ?? "");
+  const [colleagues, setColleagues] = useState<Colleague[]>([]);
+  const [services, setServices] = useState<ServiceRecord[]>([]);
+  const [orderId, setOrderId] = useState(entry.order_id ?? "");
+  const [body, setBody] = useState(entry.body);
+  const [followUp, setFollowUp] = useState(entry.follow_up_on ?? "");
+  const drawable = illustrationOf(entry.diagram_version) !== null; // an entry drawn on a picture this build lacks is not drawn on another one
+  const [editor, dispatch] = useReducer(editorReducer, entry.marks, (marks) => initialState(marks, entry.next_mark_number));
+  const [side, setSide] = useState<MarkSide>("left");
+  const [tool, setTool] = useState<ActiveTool>("select");
+  const [selected, setSelected] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [deleted, setDeleted] = useState(false);
+  const saveRef = useRef<(auto?: boolean) => Promise<JournalEntry | null>>(async () => null);
+  const [sent, setSent] = useState("");
+
+  const dirty =
+    !deleted && (
+    visitAt !== toLocalInput(saved.visit_at) ||
+    practitioner !== (saved.practitioner_user_id ?? "") ||
+    body !== saved.body ||
+    followUp !== (saved.follow_up_on ?? "") ||
+    orderId !== (saved.order_id ?? "") ||
+    !sameMarks(editor.marks, saved.marks));
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void apiFetch<Colleague[]>(orgId, "/members/people?journal=true", { signal: controller.signal }).then((result) => {
+      if (result.ok) setColleagues(result.data);
+    });
+    return () => controller.abort();
+  }, [orgId]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const query = new URLSearchParams({ subject_type: "horse", subject_id: entry.horse_id });
+    void apiFetch<ServiceRecord[]>(orgId, `/transactions/services?${query}`, { signal: controller.signal }).then((result) => {
+      if (result.ok && Array.isArray(result.data)) setServices(result.data);
+    });
+    return () => controller.abort();
+  }, [orgId, entry.horse_id]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
+  const problems = problemsFrom(error, CONTROLS);
+  const stale = error?.kind === "conflict" && error.code === "stale_record";
+  const finalError = error?.kind === "conflict" && error.code === "journal_entry_final";
+
+  // Saving by itself. What would be sent now, as text: a change to it restarts the wait (so it saves after the LAST change), and what
+  // the server refused as invalid is not sent again until it is different.
+  const content = JSON.stringify(changes());
+  const cannotSucceed = stale || finalError || error?.kind === "forbidden" || error?.kind === "not_found" || error?.kind === "unauthorized";
+  const retryLater = error?.kind === "network" || error?.kind === "server";
+  useEffect(() => {
+    saveRef.current = save;
+  });
+  const refused = (error?.kind === "validation" || error?.kind === "client") && content === sent;
+  useEffect(() => {
+    if (autosaveMs === null || !dirty || pending || cannotSucceed || refused || content === "{}") return;
+    const timer = setTimeout(() => void saveRef.current(true), retryLater ? RETRY_MS : autosaveMs);
+    return () => clearTimeout(timer);
+  }, [autosaveMs, dirty, pending, cannotSucceed, refused, retryLater, content]);
+  useEffect(() => {
+    if (autosaveMs === null) return;
+    const leave = () => {
+      if (document.visibilityState === "hidden") void saveRef.current(true); // the tab is left or the window closed: save what is there now
+    };
+    document.addEventListener("visibilitychange", leave);
+    return () => document.removeEventListener("visibilitychange", leave);
+  }, [autosaveMs]);
+
+  function changes(): JournalUpdate {
+    const update: JournalUpdate = {};
+    if (visitAt !== toLocalInput(saved.visit_at) && visitAt !== "") update.visit_at = noonOf(visitAt);
+    if (practitioner !== (saved.practitioner_user_id ?? "") && practitioner !== "") update.practitioner_user_id = practitioner;
+    if (body !== saved.body) update.body = body;
+    if (followUp !== (saved.follow_up_on ?? "")) update.follow_up_on = followUp === "" ? null : followUp;
+    if (orderId !== (saved.order_id ?? "")) update.order_id = orderId === "" ? null : orderId;
+    if (!sameMarks(editor.marks, saved.marks)) update.marks = editor.marks;
+    return update;
+  }
+
+  async function save(auto = false): Promise<JournalEntry | null> {
+    const update = changes();
+    if (Object.keys(update).length === 0) return saved;
+    setNotice(null);
+    setSent(JSON.stringify(update));
+    const result = await run(() => apiFetch<JournalEntry>(orgId, `/horses/${entry.horse_id}/journal/${entry.id}`, { method: "PATCH", body: update, ifMatch: saved.version }));
+    if (result === null) return null;
+    setSaved(result);
+    setNotice(auto ? "Draft saved automatically." : "Draft saved.");
+    return result;
+  }
+
+  async function deleteDraft() {
+    const gone = await run(() => apiFetch<null>(orgId, `/horses/${entry.horse_id}/journal/${entry.id}`, { method: "DELETE", ifMatch: saved.version }));
+    if (gone === null) return;
+    setDeleted(true);
+    router.push(`/o/${orgId}/horses/${entry.horse_id}/journal`);
+    router.refresh();
+  }
+
+  async function finalize() {
+    const current = await save();
+    if (current === null) return;
+    const result = await run(() => apiFetch<JournalEntry>(orgId, `/horses/${entry.horse_id}/journal/${entry.id}/finalize`, { method: "POST", ifMatch: current.version }));
+    if (result === null) return;
+    router.refresh(); // the page now shows the finalized entry
+  }
+
+  function onKeyDown(event: KeyboardEvent) {
+    const typing = event.target instanceof HTMLElement && ["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName);
+    if (typing) return;
+    if ((event.key === "Delete" || event.key === "Backspace") && selected !== null) {
+      event.preventDefault();
+      dispatch({ type: "remove", id: selected });
+      setSelected(null);
+    } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+      event.preventDefault();
+      dispatch({ type: event.shiftKey ? "redo" : "undo" });
+    } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y") {
+      event.preventDefault();
+      dispatch({ type: "redo" });
+    }
+  }
+
+  const marksHere = editor.marks.filter((mark) => mark.side === side);
+  const status = pending ? "Saving…" : dirty ? "Unsaved changes" : "All changes saved";
+
+  return (
+    <div className="flex max-w-3xl flex-col gap-4" data-testid="journal-editor" onKeyDown={onKeyDown}>
+      <div className="panel flex flex-col gap-3">
+        <h2 className="text-lg font-semibold">Visit</h2>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <FieldShell label="Visit date" name="visit_at" error={problems.byField.visit_at}>
+            {(control) => <input type="date" {...control} value={visitAt} onChange={(event) => setVisitAt(event.target.value)} className={CONTROL} />}
+          </FieldShell>
+          <FieldShell label="Practitioner" name="practitioner_user_id" error={problems.byField.practitioner_user_id}>
+            {(control) => (
+              <select {...control} value={practitioner} onChange={(event) => setPractitioner(event.target.value)} className={CONTROL}>
+                {saved.practitioner_user_id === null && <option value="">Choose a practitioner</option>}
+                {colleagues.length === 0 && saved.practitioner_user_id !== null && <option value={saved.practitioner_user_id}>{saved.practitioner_name}</option>}
+                {colleagues.map((colleague) => (
+                  <option key={colleague.user_id} value={colleague.user_id}>
+                    {colleague.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </FieldShell>
+          <FieldShell label="Follow-up date (optional)" name="follow_up_on" error={problems.byField.follow_up_on}>
+            {(control) => <input type="date" {...control} value={followUp} onChange={(event) => setFollowUp(event.target.value)} className={CONTROL} />}
+          </FieldShell>
+        </div>
+        
+        <FieldShell label="Linked order (optional)" name="order_id" error={problems.byField.order_id} hint="An order this horse was treated on. The journal text is never copied into the order or its invoice.">
+          {(control) => (
+            <select {...control} value={orderId} onChange={(event) => setOrderId(event.target.value)} className={CONTROL}>
+              <option value="">No linked order</option>
+              {linkable(services, saved).map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          )}
+        </FieldShell>
+      </div>
+
+      <div className="panel flex flex-col gap-3">
+        <h2 className="text-lg font-semibold">Diagram</h2>
+        <div role="group" aria-label="Side of the horse" className="flex gap-2">
+          {(["left", "right"] as MarkSide[]).map((candidate) => (
+            <Button key={candidate} type="button" aria-pressed={side === candidate} onClick={() => setSide(candidate)} data-testid={`side-${candidate}`} variant={side === candidate ? "primary" : "secondary"}>
+              {SIDE_LABELS[candidate]}
+            </Button>
+          ))}
+        </div>
+        {drawable && (
+        <div role="toolbar" aria-label="Drawing tools" className="flex flex-wrap gap-2">
+          {TOOLS.map((item) => (
+            <Button key={item.tool} type="button" aria-pressed={tool === item.tool} onClick={() => setTool(item.tool)} data-testid={`tool-${item.tool}`} variant={tool === item.tool ? "primary" : "secondary"}>
+              {item.label}
+            </Button>
+          ))}
+          <Button type="button" disabled={selected === null} onClick={() => { if (selected !== null) dispatch({ type: "remove", id: selected }); setSelected(null); }} data-testid="delete-mark">
+            Delete selected
+          </Button>
+          <Button type="button" disabled={editor.past.length === 0} onClick={() => dispatch({ type: "undo" })} data-testid="undo">
+            Undo
+          </Button>
+          <Button type="button" disabled={editor.future.length === 0} onClick={() => dispatch({ type: "redo" })} data-testid="redo">
+            Redo
+          </Button>
+        </div>
+        )}
+        <DiagramCanvas
+          side={side}
+          marks={editor.marks}
+          version={entry.diagram_version}
+          editable
+          tool={tool}
+          selectedId={selected}
+          onSelect={setSelected}
+          onAdd={(mark) => dispatch({ type: "add", mark })}
+          onMove={(mark) => dispatch({ type: "replace", mark })}
+        />
+        <ErrorSummary messages={problems.byField.marks ?? []} />
+        <div>
+          <h3 className="text-sm font-medium">Marks on the {side} side</h3>
+          {marksHere.length === 0 ? (
+            <p className="text-sm text-zinc-500" data-testid="no-marks">
+              {drawable ? "No marks yet. Pick a tool and draw on the diagram." : "No marks."}
+            </p>
+          ) : (
+            <ol className="flex flex-col gap-1 text-sm" data-testid="marks-list">
+              {marksHere.map((mark) => (
+                <li key={mark.id} className="flex items-center gap-2">
+                  <button type="button" className={`text-left underline ${mark.id === selected ? "font-semibold" : ""}`} onClick={() => { setTool("select"); setSelected(mark.id); }}>
+                    {numberOf(mark, editor.marks)}. {describe(mark)}
+                  </button>
+                  <Button type="button" onClick={() => { dispatch({ type: "remove", id: mark.id }); if (selected === mark.id) setSelected(null); }} aria-label={`Delete mark ${numberOf(mark, editor.marks)}`} data-testid="delete-listed-mark">
+                    Delete
+                  </Button>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      </div>
+
+      <div className="panel flex flex-col gap-3">
+        <TextAreaField label="Observations, assessment, treatment, response, advice and follow-up" name="body" rows={10} value={body} onChange={setBody} error={problems.byField.body} />
+        <p className="text-xs text-zinc-500">{body.length.toLocaleString("en")} of 20,000 characters. Refer to a mark by its number, for example “mark 2”.</p>
+      </div>
+
+      <ErrorSummary messages={error?.kind === "validation" ? problems.general : []} />
+      {stale && (
+        <div role="alert" data-testid="stale" className="flex flex-col gap-2 rounded border border-amber-400 p-3 text-sm">
+          <p>This entry was changed somewhere else, so nothing was saved. Reload to see the latest version (your unsaved changes here are lost).</p>
+          <div>
+            <Button type="button" onClick={() => router.refresh()}>
+              Reload
+            </Button>
+          </div>
+        </div>
+      )}
+      {finalError && <p role="alert">This entry has been finalized elsewhere and can no longer be changed.</p>}
+      {error && !stale && !finalError && error.kind !== "validation" && <p role="alert">{error.message}{retryLater && autosaveMs !== null ? " It will be tried again shortly." : ""}</p>}
+      {notice && !dirty && (
+        <p role="status" data-testid="saved">
+          {notice}
+        </p>
+      )}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button type="button" variant="primary" disabled={pending || !dirty} onClick={() => void save()} data-testid="save-draft">
+          Save draft
+        </Button>
+        <ConfirmButton
+          label="Finalize entry"
+          question="Finalize this entry? Its text and marks are then frozen; later corrections are added as dated notes."
+          confirmLabel="Yes, finalize"
+          declineLabel="No, back to the draft"
+          disabled={pending}
+          onConfirm={() => void finalize()}
+          testId="finalize"
+        />
+        <ConfirmButton
+          label="Delete draft"
+          question="Delete this draft for good? Only a draft can be deleted; once finalized an entry stays."
+          confirmLabel="Yes, delete it"
+          declineLabel="No, keep the draft"
+          disabled={pending}
+          onConfirm={() => void deleteDraft()}
+          testId="delete-draft"
+        />
+        <span role="status" aria-live="polite" data-testid="save-status" className={dirty ? "text-sm font-medium text-amber-700" : "text-sm text-zinc-500"}>
+          {status}
+        </span>
+        {autosaveMs !== null && !cannotSucceed && (
+          <span className="text-xs text-zinc-500" data-testid="autosave-note">
+            Changes are saved automatically a moment after you stop.
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}

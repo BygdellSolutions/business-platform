@@ -33,3 +33,5 @@ Thumbs.db
 # CI (local reproductions)
 ci-logs/
 backend/.venv313/
+
+backend/tools/

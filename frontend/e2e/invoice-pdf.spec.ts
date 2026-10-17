@@ -45,13 +45,13 @@ test.describe("the browser downloads the stored PDF", () => {
 
     const { download, bytes } = await downloadFromPage(page);
 
-    expect(download.suggestedFilename()).toBe("invoice-1.pdf");
+    expect(download.suggestedFilename()).toBe("invoice-1001.pdf");
     expect(bytes.subarray(0, 5).toString("latin1")).toBe("%PDF-");
     const [count, sha, size] = stored(s.issued.id);
     expect(count).toBe("1");
     expect(sha256(bytes)).toBe(sha);
     expect(String(bytes.length)).toBe(size);
-    await expect(page.getByTestId("pdf-done")).toHaveText("Downloaded invoice-1.pdf.");
+    await expect(page.getByTestId("pdf-done")).toHaveText("Downloaded invoice-1001.pdf.");
     await expect(page.getByTestId("pdf-error")).toHaveCount(0);
   });
 
@@ -94,7 +94,7 @@ test.describe("the browser downloads the stored PDF", () => {
 
       const { download, bytes } = await downloadFromPage(page);
 
-      expect(download.suggestedFilename()).toBe("invoice-1.pdf");
+      expect(download.suggestedFilename()).toBe("invoice-1001.pdf");
       expect(bytes.subarray(0, 5).toString("latin1")).toBe("%PDF-");
       expect(stored(s.issued.id)[0]).toBe("1");
     });
@@ -110,7 +110,7 @@ test.describe("what the BFF puts on the wire", () => {
     expect(response.status()).toBe(200);
     const headers = response.headers();
     expect(headers["content-type"]).toBe("application/pdf");
-    expect(headers["content-disposition"]).toBe('attachment; filename="invoice-1.pdf"');
+    expect(headers["content-disposition"]).toBe('attachment; filename="invoice-1001.pdf"');
     expect(headers["cache-control"]).toBe("private, no-store");
     expect(headers["x-content-type-options"]).toBe("nosniff");
     const body = await response.body();
@@ -168,7 +168,7 @@ test.describe("what the user sees", () => {
     await expect(page.getByTestId("download-pdf")).toHaveText("Preparing PDF…");
     await expect(page.getByTestId("download-pdf")).toBeDisabled();
     release();
-    expect((await download).suggestedFilename()).toBe("invoice-1.pdf");
+    expect((await download).suggestedFilename()).toBe("invoice-1001.pdf");
     await expect(page.getByTestId("download-pdf")).toHaveText("Download PDF");
     await expect(page.getByTestId("download-pdf")).toBeEnabled();
   });
@@ -192,7 +192,7 @@ test.describe("what the user sees", () => {
 
     failing = false;
     const [download] = await Promise.all([page.waitForEvent("download"), page.getByTestId("download-pdf").click()]);
-    expect(download.suggestedFilename()).toBe("invoice-1.pdf");
+    expect(download.suggestedFilename()).toBe("invoice-1001.pdf");
     await expect(page.getByTestId("pdf-error")).toHaveCount(0);
   });
 

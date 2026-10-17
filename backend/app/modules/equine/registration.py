@@ -27,5 +27,6 @@ def register(registry: Registry) -> None:
                     ),
                 },
             ),
+            service_subject=True,  # a treatment performed on a horse
         )
     )

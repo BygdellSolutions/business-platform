@@ -243,11 +243,62 @@ describe("methods and bodies", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("keeps FastAPI's Retry-After on a 429 (a plain number only) so the browser knows when to try again", async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ detail: { code: "rate_limited" } }), { status: 429, headers: { "content-type": "application/json", "retry-after": "7" } })));
+    const response = await call("GET");
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("7");
+  });
+
+  it("does not pass on a Retry-After that is not a plain number", async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(new Response("{}", { status: 429, headers: { "content-type": "application/json", "retry-after": "Wed, 21 Oct 2026 07:28:00 GMT" } })));
+
+    expect((await call("GET")).headers.get("retry-after")).toBeNull();
+  });
+
   it("refuses oversized bodies", async () => {
     const response = await call("POST", { body: JSON.stringify({ x: "y".repeat(1_100_000) }), headers: { "content-type": "application/json" } });
 
     expect(response.status).toBe(413);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  // A streamed upload has no Content-Length, so only counting the bytes that arrive can stop it.
+  function streamedPost(text: string, chunk = 64 * 1024) {
+    const data = new TextEncoder().encode(text);
+    let at = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (at >= data.length) return controller.close();
+        controller.enqueue(data.slice(at, at + chunk));
+        at += chunk;
+      },
+    });
+    const init = { method: "POST", headers: { cookie: "bp_dev_user=maria@dev.test", "content-type": "application/json" }, body, duplex: "half" };
+    const req = new NextRequest(`${ORIGIN}/api/o/${ORG}/customers`, init as ConstructorParameters<typeof NextRequest>[1]);
+    expect(req.headers.get("content-length")).toBeNull();
+    return route.POST(req, { params: Promise.resolve({ orgId: ORG, path: ["customers"] }) });
+  }
+
+  it("refuses an oversized body that arrives without a Content-Length", async () => {
+    const response = await streamedPost(JSON.stringify({ x: "y".repeat(1_100_000) }));
+
+    expect(response.status).toBe(413);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("counts bytes: a multibyte body that is short in characters but over the limit is refused", async () => {
+    const text = JSON.stringify({ x: "€".repeat(400_000) }); // about 400,000 characters, 1,200,000 bytes
+    expect(text.length).toBeLessThan(1_000_000);
+
+    expect((await streamedPost(text)).status).toBe(413);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("still forwards a streamed body within the limit", async () => {
+    expect((await streamedPost(JSON.stringify({ name: "Anna" }))).status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 

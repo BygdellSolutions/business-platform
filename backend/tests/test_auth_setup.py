@@ -21,7 +21,7 @@ SETUP = "/api/auth/setup"
 
 
 def token_of(link: str) -> str:
-    assert link.startswith(settings.public_origin.rstrip("/") + "/setup#")
+    assert link.startswith(settings.public_origin.rstrip("/") + "/setup#") or link.startswith(settings.public_origin.rstrip("/") + "/setup?new#")
     return link.split("#", 1)[1]
 
 
@@ -40,7 +40,7 @@ def test_bootstrap_creates_a_user_without_any_credential_and_a_single_use_link(d
     token = bootstrap(db_session, " Owner@Example.TEST ")
 
     user = db_session.scalar(select(User).where(User.email == "owner@example.test"))
-    assert user is not None and user.is_active and user.can_create_organizations and user.name == "Ada Owner"
+    assert user is not None and user.is_active and user.max_owned_organizations == 1 and user.name == "Ada Owner"
     assert db_session.scalar(select(UserCredential).where(UserCredential.user_id == user.id)) is None  # no password exists
     assert active_sessions(db_session, user) == []
     row = db_session.execute(text("select token_hash, purpose, created_at, expires_at, used_at, revoked_at from user_setup_tokens where user_id = :u"), {"u": user.id}).one()
@@ -66,7 +66,7 @@ def test_tokens_are_high_entropy_and_distinct(db_session):
     assert len({t[:6] for t in tokens}) > 50  # no visible structure in the leading characters either
 
 
-def test_bootstrap_refuses_duplicates_bad_emails_and_blank_names(db_session):
+def test_bootstrap_refuses_duplicates_and_bad_emails(db_session):
     bootstrap(db_session)
     with pytest.raises(admin.OperatorError, match="already exists"):
         bootstrap(db_session)
@@ -75,13 +75,11 @@ def test_bootstrap_refuses_duplicates_bad_emails_and_blank_names(db_session):
     for bad in ("", "nobody", "a@b", "two words@example.test"):
         with pytest.raises(admin.OperatorError):
             admin.bootstrap_user(db_session, email=bad, name="x")
-    with pytest.raises(admin.OperatorError, match="name"):
-        admin.bootstrap_user(db_session, email="x@example.test", name="  ")
 
 
 def test_organization_creation_can_be_left_out(db_session):
     bootstrap(db_session, can_create_organizations=False)
-    assert db_session.scalar(select(User.can_create_organizations).where(User.email == "owner@example.test")) is False
+    assert db_session.scalar(select(User.max_owned_organizations).where(User.email == "owner@example.test")) == 0
 
 
 def test_the_cli_has_no_way_to_provide_or_read_a_password():
@@ -119,6 +117,33 @@ def test_redeeming_the_link_sets_the_password_and_signs_in(session_client, db_se
     assert stored.startswith("$argon2id$") and passwords.verify(stored, NEW_PASSWORD)
     assert login(session_client, "owner@example.test", NEW_PASSWORD).status_code == 200
     assert [e.event_type for e in events(db_session)][:2] == ["setup_link_issued", "setup_redeemed"]
+
+
+def test_without_a_name_from_the_operator_the_person_enters_their_own(session_client, db_session):
+    assert admin.build_parser().parse_args(["bootstrap-user", "--email", "noname@example.test"]).name == ""
+    link = admin.bootstrap_user(db_session, email="noname@example.test")
+    assert "/setup?new#" in link  # the page asks for the name
+    assert "/setup?new#" in admin.reissue_setup_link(db_session, email="noname@example.test")  # still nameless
+    token = token_of(admin.reissue_setup_link(db_session, email="noname@example.test"))
+    user = db_session.scalar(select(User).where(User.email == "noname@example.test"))
+    assert user.name == ""
+
+    for missing in (None, "   "):
+        refused = session_client.post(SETUP, json={"token": token, "password": NEW_PASSWORD} | ({} if missing is None else {"name": missing}))
+        assert refused.status_code == 422 and refused.json()["detail"]["code"] == "name_required"
+    assert db_session.scalar(select(UserCredential).where(UserCredential.user_id == user.id)) is None  # nothing was set
+
+    accepted = session_client.post(SETUP, json={"token": token, "password": NEW_PASSWORD, "name": "  Self Named  "})
+    assert accepted.status_code == 200 and accepted.json()["user"]["name"] == "Self Named"  # the link was not used up
+
+
+def test_a_name_sent_with_the_link_replaces_the_operators(session_client, db_session):
+    assert "/setup#" in admin.bootstrap_user(db_session, email="named@example.test", name="Named")  # a name exists: not asked
+    token = bootstrap(db_session)
+    assert redeem(session_client, token).json()["user"]["name"] == "Ada Owner"  # optional when the account has one
+    again = token_of(recovery := admin.reissue_setup_link(db_session, email="owner@example.test"))
+    assert "/setup#" in recovery  # recovery of a named account does not ask for the name again
+    assert session_client.post(SETUP, json={"token": again, "password": NEW_PASSWORD, "name": "Ada Lovelace"}).json()["user"]["name"] == "Ada Lovelace"
 
 
 def test_a_link_works_exactly_once(session_client, db_session):

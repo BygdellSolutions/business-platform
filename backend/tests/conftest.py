@@ -29,6 +29,11 @@ if RUNTIME_ROLE_URL:
 os.environ["DATABASE_URL"] = RUNTIME_ROLE_URL or TEST_DATABASE_URL  # before app.core.config is first imported
 os.environ["MIGRATION_DATABASE_URL"] = TEST_DATABASE_URL  # a developer's .env value must never redirect a migration to the dev database
 os.environ.pop("BFF_INTERNAL_SECRET", None)  # tests are the documented unauthenticated development mode unless a test opts in
+# Admission (app/core/admission.py) belongs to ONE event loop, like the server's. The burst tests drive the app from many
+# threads, each request on its own loop, so a contended wait would fail for a reason that is not the application's: tests
+# that are not about admission switch it off (its own tests, tests/test_admission.py, pass explicit limits).
+os.environ.setdefault("ADMISSION_MAX_RUNNING", "100000")
+os.environ.setdefault("ADMISSION_MAX_WAITING", "0")
 os.environ.setdefault("APP_ENV", "development")  # tests are development by definition (production refuses AUTH_MODE=dev)
 os.environ.setdefault("AUTH_MODE", "dev")  # ... with the dev identity unless a test chooses otherwise (never rely on a developer's .env for it)
 

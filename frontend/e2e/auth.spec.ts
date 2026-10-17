@@ -1,10 +1,10 @@
 import { expect, test } from "./fixtures";
 
-import { FREDRIK, MARIA, ORG_A, ORG_B, signIn, signInViaUi } from "./support";
+import { FREDRIK, MARIA, ORG_A, ORG_B, signIn, signInViaUi, openUserMenu } from "./support";
 
 test.describe("development sign-in", () => {
   test("everything redirects to /dev-login without an identity", async ({ page }) => {
-    for (const url of ["/", `/o/${ORG_A.id}`, `/o/${ORG_B.id}`]) {
+    for (const url of ["/organizations", `/o/${ORG_A.id}`, `/o/${ORG_B.id}`]) {
       await page.goto(url);
       await expect(page).toHaveURL(/\/dev-login$/);
     }
@@ -19,7 +19,7 @@ test.describe("development sign-in", () => {
 
     await expect(page.getByTestId("login-error")).toContainText("does not know an active user");
     expect((await context.cookies()).find((c) => c.name === "bp_dev_user")).toBeUndefined();
-    await page.goto("/");
+    await page.goto("/organizations");
     await expect(page).toHaveURL(/\/dev-login$/);
   });
 
@@ -70,7 +70,8 @@ test.describe("development sign-in", () => {
     await signInViaUi(page, FREDRIK);
     await page.goto(`/o/${ORG_A.id}`);
 
-    await page.getByRole("button", { name: "Sign out" }).click();
+    await openUserMenu(page); // sign out is in the avatar menu of the top bar
+    await page.getByRole("menuitem", { name: "Sign out" }).click();
 
     await expect(page).toHaveURL(/\/dev-login$/);
     await page.goto(`/o/${ORG_A.id}`);
@@ -88,11 +89,29 @@ test.describe("development sign-in", () => {
   test("a tab that loses its identity is sent to sign in when it next calls the backend", async ({ page, context }) => {
     await signIn(context, FREDRIK);
     await page.goto(`/o/${ORG_A.id}`);
-    await expect(page.getByTestId("customer-preview")).toBeVisible();
+    await expect(page.getByTestId("dashboard-org")).toBeVisible();
 
     await context.clearCookies();
     await page.reload();
 
     await expect(page).toHaveURL(/\/dev-login$/);
+  });
+});
+
+test.describe("the public homepage", () => {
+  test("shows information and a sign-in link without an identity, and sends a signed-in user into the app", async ({ page }) => {
+    await page.goto("/");
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await page.getByRole("link", { name: "Sign in", exact: true }).click();
+    await expect(page).toHaveURL(/\/dev-login$/);
+
+    await signInViaUi(page, FREDRIK);
+    await page.goto("/");
+    await expect(page).toHaveURL(/\/organizations$/);
+
+    await page.getByRole("link", { name: "Go to homepage" }).click();
+    await expect(page).toHaveURL(/\/\?home$/);
+    await expect(page.getByRole("link", { name: "Open the app" }).first()).toBeVisible();
   });
 });

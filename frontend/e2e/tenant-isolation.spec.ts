@@ -1,17 +1,7 @@
 import { expect, test, type Page } from "./fixtures";
 
 import { BASE_URL } from "./env";
-import {
-  FREDRIK,
-  MARIA,
-  ORG_A,
-  ORG_B,
-  RANDOM_ORG,
-  createCustomer,
-  expectOrganization,
-  previewNames,
-  signIn,
-} from "./support";
+import { FREDRIK, MARIA, ORG_A, ORG_B, RANDOM_ORG, createCustomer, expectOrganization, previewNames, signIn, switchOrg } from "./support";
 
 /**
  * Organization isolation as the BROWSER experiences it. The seed gives both organizations a
@@ -19,8 +9,8 @@ import {
  * organization each, so any leak of data (or of stale state) across a switch is visible.
  */
 
-// The dashboard preview shows the first 10 active customers by name. The leading zeros keep
-// these two first however many customers other specs add to the shared test database.
+// The customers list is searched for "000": the leading zeros keep these two first however many customers other
+// specs add to the shared test database.
 const ONLY_A = "000 Only In Org A";
 const ONLY_B = "000 Only In Org B";
 
@@ -97,7 +87,7 @@ test.describe("switching organizations", () => {
     await page.goto(`/o/${ORG_A.id}`);
     await expectShowsOnly(page, ORG_A);
 
-    await page.getByTestId("org-switcher").getByRole("link", { name: ORG_B.name }).click();
+    await switchOrg(page, ORG_B.name);
 
     await expect(page).toHaveURL(new RegExp(`/o/${ORG_B.id}$`));
     await expectShowsOnly(page, ORG_B);
@@ -111,23 +101,28 @@ test.describe("switching organizations", () => {
       (window as unknown as { __sameDocument: string }).__sameDocument = "still the old document";
     });
 
-    await page.getByTestId("org-switcher").getByRole("link", { name: ORG_B.name }).click();
+    await switchOrg(page, ORG_B.name);
     await expectShowsOnly(page, ORG_B);
 
     expect(await page.evaluate(() => (window as unknown as { __sameDocument?: string }).__sameDocument)).toBeUndefined();
   });
 
   test("cannot preserve tenant-specific client state", async ({ page }) => {
-    await page.goto(`/o/${ORG_A.id}`);
-    await previewNames(page);
-    await page.getByLabel("Filter preview").fill("Anna");
-    await expect(page.getByTestId("customer-preview-item")).toHaveText(["Anna Andersson"]);
+    // A picker loads its options in the browser: what was typed and found in A must not follow the user to B.
+    await page.goto(`/o/${ORG_A.id}/transactions/new`);
+    const picker = page.getByTestId("picker-billing_customer_id");
+    await picker.getByRole("combobox").fill("000 Only");
+    await expect(picker.getByRole("option").filter({ hasText: ONLY_A })).toBeVisible();
 
-    await page.getByTestId("org-switcher").getByRole("link", { name: ORG_B.name }).click();
-    await expectShowsOnly(page, ORG_B);
+    await switchOrg(page, ORG_B.name);
+    await expectOrganization(page, ORG_B);
+    await page.goto(`/o/${ORG_B.id}/transactions/new`);
 
-    await expect(page.getByLabel("Filter preview")).toHaveValue("");
-    expect((await previewNames(page)).length).toBeGreaterThan(1); // unfiltered list of B
+    await expect(page.getByTestId("picker-billing_customer_id").getByRole("combobox")).toHaveValue("");
+    await page.getByTestId("picker-billing_customer_id").getByRole("combobox").fill("000 Only");
+    await expect(page.getByTestId("picker-billing_customer_id").getByRole("option").filter({ hasText: ONLY_B })).toBeVisible();
+    await expect(page.getByTestId("picker-billing_customer_id").getByRole("option").filter({ hasText: ONLY_A })).toHaveCount(0);
+    expect(await previewNames(page)).not.toContain(ONLY_A);
   });
 
   test("never lets a request for the old organization go out after the switch", async ({ page }) => {
@@ -141,7 +136,7 @@ test.describe("switching organizations", () => {
     await page.goto(`/o/${ORG_A.id}`);
     await expectShowsOnly(page, ORG_A);
     phase = "after";
-    await page.getByTestId("org-switcher").getByRole("link", { name: ORG_B.name }).click();
+    await switchOrg(page, ORG_B.name);
     await expectShowsOnly(page, ORG_B);
 
     expect(requests.filter((r) => r.at === "before").map((r) => r.org)).toEqual([ORG_A.id]);
@@ -189,7 +184,7 @@ test.describe("tabs", () => {
     await expectShowsOnly(first, ORG_A);
     await expectShowsOnly(second, ORG_A);
 
-    await second.getByTestId("org-switcher").getByRole("link", { name: ORG_B.name }).click();
+    await switchOrg(second, ORG_B.name);
     await expectShowsOnly(second, ORG_B);
 
     await first.reload();
@@ -205,10 +200,10 @@ test.describe("browser history", () => {
   test("back and forward never show another tenant's data as current data", async ({ page }) => {
     await page.goto(`/o/${ORG_A.id}`);
     await expectShowsOnly(page, ORG_A);
-    await page.getByTestId("org-switcher").getByRole("link", { name: ORG_B.name }).click();
+    await switchOrg(page, ORG_B.name);
     await expect(page).toHaveURL(new RegExp(`/o/${ORG_B.id}$`));
     await expectShowsOnly(page, ORG_B);
-    await page.getByTestId("org-switcher").getByRole("link", { name: ORG_A.name }).click();
+    await switchOrg(page, ORG_A.name);
     await expect(page).toHaveURL(new RegExp(`/o/${ORG_A.id}$`));
     await expectShowsOnly(page, ORG_A);
 

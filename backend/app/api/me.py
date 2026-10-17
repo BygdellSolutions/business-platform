@@ -2,6 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from fastapi.responses import JSONResponse
+
+from app.core import account_data, mfa_policy, mfa_service, ownership, rate_limit
 from app.core.auth import get_current_user
 from app.core.db import get_db
 from app.core.tenant import TenantContext, get_tenant_context
@@ -12,9 +15,25 @@ router = APIRouter(prefix="/api", tags=["me"])
 
 
 @router.get("/me/user", response_model=MyUser)
-def read_my_user(user: User = Depends(get_current_user)) -> MyUser:
+def read_my_user(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> MyUser:
     """Who the session is: the user's own identity, with no organization context. Needs authentication only."""
-    return MyUser(id=user.id, email=user.email, name=user.name, can_create_organizations=user.can_create_organizations)
+    created = ownership.created_count(db, user.id)
+    return MyUser(
+        id=user.id, email=user.email, name=user.name, can_create_organizations=created < user.max_owned_organizations,
+        created_organizations=created, max_owned_organizations=user.max_owned_organizations,
+        mfa_enabled=mfa_service.is_enabled(db, user.id), mfa_required=mfa_policy.required_for_user(db, user),
+    )
+
+
+@router.get("/me/export")
+def export_my_account(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> JSONResponse:
+    """A copy of everything the platform holds about the caller's own ACCOUNT (profile, memberships, sessions, security events, the state
+    of the second factor; never a secret). The business records of an organization belong to that organization."""
+    rate_limit.enforce("export", f"u:{user.id}", 10, window=3600.0)
+    return JSONResponse(
+        account_data.export_account(db, user),
+        headers={"Content-Disposition": 'attachment; filename="account-data.json"', "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+    )
 
 
 @router.get("/me/organizations", response_model=list[MyOrganization])

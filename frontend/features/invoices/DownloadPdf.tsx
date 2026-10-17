@@ -68,7 +68,7 @@ function saveFile(file: DownloadedFile) {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
-export function DownloadPdf({ invoice }: { invoice: Pick<Invoice, "id" | "status"> }) {
+export function DownloadPdf({ invoice, path, label = "Download PDF" }: { invoice: Pick<Invoice, "id" | "status">; path?: string; label?: string }) {
   const orgId = useOrgId();
   const [preparing, setPreparing] = useState(false);
   const [failure, setFailure] = useState<PdfFailureText | null>(null);
@@ -89,7 +89,7 @@ export function DownloadPdf({ invoice }: { invoice: Pick<Invoice, "id" | "status
     setFailure(null);
     setDone(null);
     try {
-      const result = await apiDownloadPdf(orgId, `/invoices/${invoice.id}/pdf`, controller.signal);
+      const result = await apiDownloadPdf(orgId, path ?? `/invoices/${invoice.id}/pdf`, controller.signal);
       if (controller.signal.aborted) return;
       if (result.ok) {
         saveFile(result.data);
@@ -109,7 +109,7 @@ export function DownloadPdf({ invoice }: { invoice: Pick<Invoice, "id" | "status
     <section aria-label="PDF" data-testid="pdf" className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-3">
         <Button type="button" disabled={preparing} aria-busy={preparing} onClick={() => void download()} data-testid="download-pdf">
-          {preparing ? "Preparing PDF…" : failure ? "Try again" : "Download PDF"}
+          {preparing ? "Preparing PDF…" : failure ? "Try again" : label}
         </Button>
         {done && (
           <span role="status" data-testid="pdf-done" className="text-sm text-zinc-600 dark:text-zinc-400">

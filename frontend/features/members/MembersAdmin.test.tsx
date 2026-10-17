@@ -2,7 +2,6 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { LeaveOrganization } from "@/components/shell/LeaveOrganization";
 import { OrgScope } from "@/components/shell/org-context";
 import { MembersAdmin } from "@/features/members/MembersAdmin";
 import type { Member, Role } from "@/lib/api/types";
@@ -144,40 +143,5 @@ describe("MembersAdmin", () => {
     await userEvent.selectOptions(within(row("Oskar")).getByTestId("member-role"), "viewer");
     expect(await screen.findByTestId("members-message")).toHaveTextContent(/Could not reach the server/);
     await waitFor(() => expect(refresh).toHaveBeenCalled());
-  });
-});
-
-describe("LeaveOrganization", () => {
-  it("is separate from administration, asks first, and goes back to the organization selection on success", async () => {
-    fetchMock.mockImplementation(() => reply(204));
-    render(<LeaveOrganization orgId={ORG} />);
-
-    await userEvent.click(screen.getByTestId("leave-organization"));
-    expect(fetchMock).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole("button", { name: "Leave" }));
-
-    await waitFor(() => expect(assign).toHaveBeenCalledWith("/"));
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe(`/api/o/${ORG}/members/leave`);
-    expect(init.method).toBe("POST");
-    expect(init.body).toBeUndefined();
-  });
-
-  it("stays put and explains when the server refuses because this is the last owner", async () => {
-    fetchMock.mockImplementation(() => reply(409, { detail: { code: "last_owner", message: "x" } }));
-    render(<LeaveOrganization orgId={ORG} />);
-    await userEvent.click(screen.getByTestId("leave-organization"));
-    await userEvent.click(screen.getByRole("button", { name: "Leave" }));
-
-    expect(await screen.findByTestId("leave-message")).toHaveTextContent(/last owner/);
-    expect(assign).not.toHaveBeenCalled();
-  });
-
-  it("treats an already-gone membership like a completed departure", async () => {
-    fetchMock.mockImplementation(() => reply(404, { detail: "Organization not found" }));
-    render(<LeaveOrganization orgId={ORG} />);
-    await userEvent.click(screen.getByTestId("leave-organization"));
-    await userEvent.click(screen.getByRole("button", { name: "Leave" }));
-    await waitFor(() => expect(assign).toHaveBeenCalledWith("/"));
   });
 });

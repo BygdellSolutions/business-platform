@@ -19,7 +19,7 @@ from fastapi import Request
 from sqlalchemy import delete, exists, func, select
 from sqlalchemy.orm import Session
 
-from app.core import internal_auth
+from app.core import internal_auth, metrics
 from app.core.config import settings
 from app.models.auth import SecurityEvent
 
@@ -69,6 +69,7 @@ def record(
     detail: str | None = None,
 ) -> None:
     db.add(SecurityEvent(occurred_at=now, event_type=event_type, actor_user_id=actor_user_id, source=source, identifier_hash=ident_hash, detail=detail))
+    metrics.count(f"security_event_{event_type}")  # the operator's alert signal: a burst of failures shows as a rate
 
 
 def count_recent(

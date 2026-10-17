@@ -18,6 +18,7 @@ from contextlib import contextmanager
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 
+from app.core import common_passwords
 from app.core.config import settings
 
 
@@ -119,7 +120,7 @@ def verify(stored: str | None, password: str) -> bool:
 
 
 def policy_problem(password: str, email: str | None = None) -> str | None:
-    """Why a NEW password is not acceptable (length only, no composition rules), or None."""
+    """Why a NEW password is not acceptable (length, not the email, not a common password; no composition rules), or None."""
     if len(password) < settings.password_min_length:
         return f"The password must be at least {settings.password_min_length} characters."
     if len(password) > settings.password_max_length:
@@ -128,4 +129,6 @@ def policy_problem(password: str, email: str | None = None) -> str | None:
         return "The password contains an invalid character."
     if email is not None and password.strip().lower() == email.strip().lower():
         return "The password must not be the same as the email address."
+    if common_passwords.is_common(password):
+        return "This password is too common. Choose another."  # one message, never which check matched
     return None

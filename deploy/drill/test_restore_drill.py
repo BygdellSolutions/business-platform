@@ -64,7 +64,7 @@ class PostgresServer:
         self.superuser_password = secrets.token_hex(12)
         docker(
             "run", "-d", "--name", self.name, "--network", NETWORK, "-e", "POSTGRES_USER=bp", "-e", f"POSTGRES_PASSWORD={self.superuser_password}",
-            "-e", "POSTGRES_DB=postgres", "--tmpfs", "/var/lib/postgresql/data", "-p", "127.0.0.1::5432", "postgres:17",
+            "-e", "POSTGRES_DB=postgres", "--tmpfs", "/var/lib/postgresql/data", "-p", "127.0.0.1::5432", "postgres:17@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3",
         )
         for _ in range(60):
             if docker("exec", self.name, "pg_isready", "-U", "bp", "-d", "postgres", check=False).returncode == 0 and self.psql("select 1", "postgres", check=False) == "1":

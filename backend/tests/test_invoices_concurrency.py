@@ -418,8 +418,8 @@ def test_concurrent_issuances_get_distinct_sequential_numbers(world):
     ])
     assert [r.status_code for r in responses] == [200] * count
     numbers = sorted(r.json()["number"] for r in responses)
-    assert numbers == list(range(1, count + 1))  # distinct, and exactly 1..N
-    assert scalar("select next_number from invoice_counters where organization_id = :o", o=world.org_id) == count + 1
+    assert numbers == list(range(1001, 1001 + count))  # distinct, and exactly 1001..1000+N
+    assert scalar("select next_number from invoice_counters where organization_id = :o", o=world.org_id) == 1001 + count
     assert scalar("select count(distinct number) from invoices where organization_id = :o", o=world.org_id) == count
 
 
@@ -434,8 +434,8 @@ def test_each_organization_numbers_independently_under_concurrency(world):
             for inv in group
         ]
         responses = race(*calls)
-        assert sorted(r.json()["number"] for r in responses[:3]) == [1, 2, 3]
-        assert sorted(r.json()["number"] for r in responses[3:]) == [1, 2, 3]
+        assert sorted(r.json()["number"] for r in responses[:3]) == [1001, 1002, 1003]
+        assert sorted(r.json()["number"] for r in responses[3:]) == [1001, 1002, 1003]
     finally:
         purge_organization(other.org_id, [other.user_id])
 
@@ -464,10 +464,10 @@ def test_a_failed_issuance_gives_its_number_back_and_a_waiting_one_takes_it(worl
 
     assert failing.result().status_code == 500
     response = waiting.result()
-    assert response.status_code == 200 and response.json()["number"] == 1  # the failed number was never consumed
+    assert response.status_code == 200 and response.json()["number"] == 1001  # the failed number was never consumed
     assert scalar("select status from invoices where id = :i", i=uuid.UUID(first["id"])) == "draft"
     assert scalar("select number from invoices where id = :i", i=uuid.UUID(first["id"])) is None
-    assert scalar("select next_number from invoice_counters where organization_id = :o", o=world.org_id) == 2
+    assert scalar("select next_number from invoice_counters where organization_id = :o", o=world.org_id) == 1002
 
 
 def test_an_issued_number_is_never_handed_out_again(world):
@@ -477,7 +477,7 @@ def test_an_issued_number_is_never_handed_out_again(world):
     assert Request({**world.headers, **if_match(1)}, "delete", f"{INVOICES}/{draft['id']}").result().status_code == 204  # a deleted draft takes no number
     third = world.create_invoice(world.transaction())
     numbers = [issued["number"], Request({**world.headers, **if_match(1)}, "post", f"{INVOICES}/{third['id']}/issue").result().json()["number"]]
-    assert numbers == [1, 2]
+    assert numbers == [1001, 1002]
     # The issued invoice itself cannot be removed, so its number can never come back.
     assert Request({**world.headers, **if_match(2)}, "delete", f"{INVOICES}/{first['id']}").result().status_code == 409
 
@@ -512,7 +512,7 @@ def test_two_simultaneous_issuances_of_one_draft_issue_it_once(world):
             lambda: Request({**world.headers, **if_match(1)}, "post", f"{INVOICES}/{invoice['id']}/issue").result(),
         )
         assert sorted([first.status_code, second.status_code]) == [200, 409]
-    assert scalar("select next_number from invoice_counters where organization_id = :o", o=world.org_id) == ROUNDS // 2 + 1
+    assert scalar("select next_number from invoice_counters where organization_id = :o", o=world.org_id) == 1001 + ROUNDS // 2
 
 
 def test_an_edit_racing_an_issue_has_one_consistent_winner(world):
@@ -613,3 +613,66 @@ def test_issuing_after_a_committed_change_of_a_source_refuses(world):
     response = issuing.result()
     assert response.status_code == 409 and response.json()["detail"]["code"] == "source_changed"
     assert scalar("select count(*) from invoice_counters where organization_id = :o", o=world.org_id) == 0
+
+
+# --- invoicing by delivery: Invoice and Deliver at the same instant ------------------------------------------------------------
+
+
+def test_invoicing_and_delivering_at_once_always_put_every_delivered_unit_on_the_draft(world):
+    """An order of 7 with 2 delivered: "Invoice what is delivered" and "Deliver the other 5" race. Both lock the sale
+    first, so whichever goes first, the other sees it: the draft ends with all 7, never more, never less."""
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    client = TestClient(app)
+    h = world.headers
+    for round_ in range(ROUNDS):
+        item = client.post("/api/items", json={"name": f"Pad {round_}", "type": "product", "unit": "pcs", "price_ex_vat": "100.00", "vat_rate": "25", "track_stock": True}, headers=h).json()
+        assert client.post(f"/api/items/{item['id']}/stock", json={"kind": "count", "quantity": "2"}, headers=h).status_code == 201
+        tx = client.post("/api/transactions", json={"billing_customer_id": str(world.customer_id), "transaction_date": "2026-10-10"}, headers=h).json()
+        assert client.post(f"/api/transactions/{tx['id']}/lines", json={"item_id": item["id"], "quantity": "7"}, headers=h).status_code == 201
+        assert client.post(f"/api/transactions/{tx['id']}/complete", headers={**h, **if_match(tx_version(uuid.UUID(tx["id"])))}).status_code == 200
+        incoming = client.post("/api/inventory/incoming", json={"item_id": item["id"], "quantity": "5"}, headers=h).json()
+        assert client.post(f"/api/inventory/incoming/{incoming['id']}/receive", json={}, headers=h).status_code == 200
+        backorder = client.get("/api/inventory/backorders", params={"item_id": item["id"]}, headers=h).json()[0]
+
+        invoiced, delivered = race(
+            lambda: Request(h, "post", f"{INVOICES}/for-order", json={"transaction_id": tx["id"], "partial": True}).result(),
+            lambda: Request(h, "post", f"/api/inventory/items/{item['id']}/allocation", json={"allocations": [{"fulfillment_id": backorder["fulfillment_id"], "quantity": "5"}]}).result(),
+        )
+
+        assert invoiced.status_code == 200, invoiced.text
+        assert delivered.status_code == 200, delivered.text
+        on_invoices = scalar(
+            "select coalesce(sum(l.quantity), 0) from invoice_lines l join transaction_lines s on s.id = l.source_line_id where s.transaction_id = :t", t=tx["id"]
+        )
+        assert on_invoices == Decimal("7")
+
+
+def test_a_delivery_waits_for_an_invoicing_that_holds_the_sale(world):
+    """The gated twin: while invoicing holds the sale's lock (uncommitted), a delivery to it visibly waits."""
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    client = TestClient(app)
+    h = world.headers
+    item = client.post("/api/items", json={"name": "Pad gated", "type": "product", "unit": "pcs", "price_ex_vat": "100.00", "vat_rate": "25", "track_stock": True}, headers=h).json()
+    client.post(f"/api/items/{item['id']}/stock", json={"kind": "count", "quantity": "2"}, headers=h)
+    tx = client.post("/api/transactions", json={"billing_customer_id": str(world.customer_id), "transaction_date": "2026-10-10"}, headers=h).json()
+    client.post(f"/api/transactions/{tx['id']}/lines", json={"item_id": item["id"], "quantity": "7"}, headers=h)
+    assert client.post(f"/api/transactions/{tx['id']}/complete", headers={**h, **if_match(tx_version(uuid.UUID(tx["id"])))}).status_code == 200
+    incoming = client.post("/api/inventory/incoming", json={"item_id": item["id"], "quantity": "5"}, headers=h).json()
+    client.post(f"/api/inventory/incoming/{incoming['id']}/receive", json={}, headers=h)
+    backorder = client.get("/api/inventory/backorders", params={"item_id": item["id"]}, headers=h).json()[0]
+
+    holder = SessionLocal()
+    try:
+        lock_transaction(holder, uuid.UUID(tx["id"]))  # as invoicing does first
+        delivery = Request(h, "post", f"/api/inventory/items/{item['id']}/allocation", json={"allocations": [{"fulfillment_id": backorder["fulfillment_id"], "quantity": "5"}]})
+        assert delivery.still_waiting()
+        holder.rollback()
+    finally:
+        holder.close()
+    assert delivery.result().status_code == 200

@@ -31,7 +31,7 @@ import type { Invoice } from "@/lib/api/types";
  * A tab that becomes visible again refreshes itself, but never while an editor is open or a change
  * is running, so it cannot overwrite what the user is typing.
  */
-export function InvoiceView({ invoice, canMutate }: { invoice: Invoice; canMutate: boolean }) {
+export function InvoiceView({ invoice, canMutate, timeZone = null }: { invoice: Invoice; canMutate: boolean; timeZone?: string | null }) {
   const orgId = useOrgId();
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
@@ -209,7 +209,7 @@ export function InvoiceView({ invoice, canMutate }: { invoice: Invoice; canMutat
         <InvoiceActions />
         <DraftHeader />
         <div className={refreshing ? "opacity-50" : ""} aria-busy={refreshing} data-updating={refreshing || undefined}>
-          <InvoiceDocument invoice={invoice} orgId={orgId} />
+          <InvoiceDocument invoice={invoice} orgId={orgId} timeZone={timeZone} />
         </div>
       </div>
     </InvoiceContext.Provider>

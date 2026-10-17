@@ -18,11 +18,14 @@ export function ActiveToggle<T extends { active: boolean }>({
   path,
   active,
   noun,
+  version,
   onChanged,
 }: {
   path: string;
   active: boolean;
   noun: string;
+  /** The record's version, for records that guard changes with If-Match (items). */
+  version?: number;
   onChanged: (record: T) => void;
 }) {
   const orgId = useOrgId();
@@ -30,7 +33,7 @@ export function ActiveToggle<T extends { active: boolean }>({
   const { pending, error, run } = useMutation();
 
   async function toggle() {
-    const record = await run(() => apiFetch<T>(orgId, path, { method: "PATCH", body: { active: !active } }));
+    const record = await run(() => apiFetch<T>(orgId, path, { method: "PATCH", body: { active: !active }, ifMatch: version }));
     if (record === null) return;
     onChanged(record);
     router.refresh(); // simple V1 strategy: re-render the server components with the new state

@@ -72,7 +72,7 @@ export function InvoiceActions() {
         />
         <ConfirmButton
           label={running === "delete" ? "Deleting…" : "Delete draft"}
-          question="Delete this draft? Its transactions become invoiceable again."
+          question="Delete this draft? Its orders become invoiceable again."
           confirmLabel="Yes, delete it"
           disabled={blocked}
           onConfirm={() => void remove()}

@@ -18,11 +18,27 @@ const NOTICES: Record<string, string> = {
  * BFF never say whether an account exists). The password is read from the form when it is submitted and is not
  * kept in state. After success the BFF has set the protected cookies and returned a validated relative
  * destination; the page then does a full load so every server component sees the new session.
+ *
+ * A person with a second factor gets no session from the password alone: the BFF answers with a short-lived challenge, and
+ * the page asks for the code (from the authenticator app, or a recovery code). The challenge lives only in this component's
+ * state; it is not a session and is spent once.
  */
 export function LoginForm({ next, notice }: { next: string; notice?: string }) {
   const preAuth = usePreAuth();
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [challenge, setChallenge] = useState<string | null>(null);
+
+  function arrive(body: { next?: unknown } | undefined) {
+    // A full page load on purpose: every server component must see the new session.
+    window.location.assign(typeof body?.next === "string" && body.next.startsWith("/") && !body.next.startsWith("//") ? body.next : "/");
+  }
+
+  function explain(status: number) {
+    if (status === 429) setMessage("Too many attempts. Try again later.");
+    else if (status === 503) setMessage("The service is busy. Try again in a moment.");
+    else setMessage("Sign-in is unavailable right now.");
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -41,24 +57,80 @@ export function LoginForm({ next, notice }: { next: string; notice?: string }) {
         cache: "no-store",
       });
       if (response.ok) {
-        const body = (await response.json().catch(() => undefined)) as { next?: unknown } | undefined;
-        // A full page load on purpose: every server component must see the new session.
-        window.location.assign(typeof body?.next === "string" && body.next.startsWith("/") && !body.next.startsWith("//") ? body.next : "/");
+        const body = (await response.json().catch(() => undefined)) as { next?: unknown; mfa_required?: unknown; challenge?: unknown } | undefined;
+        if (body?.mfa_required === true && typeof body.challenge === "string") {
+          setChallenge(body.challenge);
+          setWorking(false);
+          return;
+        }
+        arrive(body);
         return;
       }
       if (response.status === 401) setMessage("Invalid email or password.");
-      else if (response.status === 429) setMessage("Too many attempts. Try again later.");
-      else if (response.status === 503) setMessage("The service is busy. Try again in a moment.");
       else if (response.status === 403) {
         setMessage("This page has expired. Try again.");
         await preAuth.refresh();
-      } else setMessage("Sign-in is unavailable right now.");
+      } else explain(response.status);
     } catch {
       setMessage("Could not reach the server. Check your connection and try again.");
     }
     const password = element.elements.namedItem("password");
     if (password instanceof HTMLInputElement) password.value = "";
     setWorking(false);
+  }
+
+  async function submitCode(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const secret = preAuth.current();
+    if (secret === null || challenge === null) return;
+    const element = event.currentTarget;
+    const form = new FormData(element);
+    setWorking(true);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/auth/login/mfa", {
+        method: "POST",
+        headers: { "content-type": "application/json", [PRE_AUTH_HEADER]: secret },
+        body: JSON.stringify({ challenge, code: String(form.get("code") ?? ""), next }),
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      if (response.ok) {
+        arrive((await response.json().catch(() => undefined)) as { next?: unknown } | undefined);
+        return;
+      }
+      if (response.status === 401) setMessage("That code is not correct, or it has expired. Try again, or start over.");
+      else if (response.status === 403) {
+        setMessage("This page has expired. Start over.");
+        await preAuth.refresh();
+      } else explain(response.status);
+    } catch {
+      setMessage("Could not reach the server. Check your connection and try again.");
+    }
+    const code = element.elements.namedItem("code");
+    if (code instanceof HTMLInputElement) code.value = "";
+    setWorking(false);
+  }
+
+  if (challenge !== null) {
+    return (
+      <form onSubmit={(event) => void submitCode(event)} className="flex flex-col gap-3" data-testid="mfa-form" data-ready={preAuth.ready || undefined}>
+        {message && <Notice tone="error" testId="mfa-error">{message}</Notice>}
+        <p className="text-sm">Enter the 6-digit code from your authenticator app, or one of your recovery codes.</p>
+        <label className="flex flex-col gap-1 text-sm">
+          Code
+          <input name="code" type="text" inputMode="numeric" autoComplete="one-time-code" autoFocus required maxLength={64} className="rounded border border-zinc-400 px-2 py-1 dark:bg-zinc-900" />
+        </label>
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" disabled={working || !preAuth.ready} data-testid="mfa-submit">
+            {working ? "Checking…" : "Continue"}
+          </Button>
+          <Button type="button" disabled={working} onClick={() => { setChallenge(null); setMessage(null); }} data-testid="mfa-start-over">
+            Start over
+          </Button>
+        </div>
+      </form>
+    );
   }
 
   return (
