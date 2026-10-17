@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useState, type FormEvent } from "react";
 
 import { useOrgId } from "@/components/shell/org-context";
@@ -10,15 +11,16 @@ import { EntityPicker, type PickerEntity, type PickerSearch } from "@/components
 import { ErrorSummary } from "@/components/ui/ErrorSummary";
 import { FieldShell, SelectField, TextAreaField, TextField } from "@/components/ui/Field";
 import { Notice } from "@/components/ui/Notice";
+import { itemSearch } from "@/features/catalog/item-picker";
 import { customerSearch } from "@/features/customers/customer-picker";
 import { apiFetch } from "@/lib/api/client";
-import type { Appointment, AppointmentCreate, AppointmentUpdate, Colleague, Horse } from "@/lib/api/types";
+import type { Appointment, AppointmentCreate, AppointmentUpdate, Colleague, Horse, OrderUpdateResult } from "@/lib/api/types";
 import { calendarHref } from "@/features/calendar/Calendar";
 import { localParts, minutesOf, timeText, zonedInstant } from "@/lib/calendar";
 import { addDays } from "@/lib/dates";
 import { blankToNull, problemsFrom, useMutation } from "@/lib/forms";
 
-const CONTROLS = ["title", "starts_at", "ends_at", "location", "notes", "practitioner_user_id", "customer_id", "subjects"] as const;
+const CONTROLS = ["title", "starts_at", "ends_at", "location", "notes", "practitioner_user_id", "customer_id", "subjects", "items"] as const;
 const SUBJECT_TYPE = "horse";
 const NOBODY = "";
 const DEFAULT_MINUTES = 60;
@@ -40,6 +42,7 @@ interface FormState {
   practitioner: string;
   customer: PickerEntity | null;
   horses: PickerEntity[];
+  services: PickerEntity[];
   location: string;
   notes: string;
 }
@@ -57,6 +60,7 @@ function toState(zone: string | null, prefill: Prefill, appointment?: Appointmen
       practitioner: appointment.practitioner_user_id ?? NOBODY,
       customer: appointment.customer_id ? { id: appointment.customer_id, label: appointment.customer_name ?? "Customer" } : null,
       horses: appointment.subjects.filter((subject) => subject.subject_type === SUBJECT_TYPE).map((subject) => ({ id: subject.subject_id, label: subject.label ?? "A horse" })),
+      services: appointment.items.map((item) => ({ id: item.item_id, label: item.name ?? "A service" })),
       location: appointment.location ?? "",
       notes: appointment.notes ?? "",
     };
@@ -72,6 +76,7 @@ function toState(zone: string | null, prefill: Prefill, appointment?: Appointmen
     practitioner: prefill.who ?? NOBODY,
     customer: null,
     horses: [],
+    services: [],
     location: "",
     notes: "",
   };
@@ -111,11 +116,18 @@ export function AppointmentForm({
   const [state, setState] = useState<FormState>(() => toState(zone, prefill, appointment));
   const [local, setLocal] = useState<string[]>([]);
   const [notice, setNotice] = useState<"saved" | "unchanged" | null>(null);
+  const [orderNotice, setOrderNotice] = useState<string | null>(null);
 
   const problems = problemsFrom(error, CONTROLS);
   const stale = error?.kind === "conflict" && error.code === "stale_record";
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => setState((current) => ({ ...current, [key]: value }));
   const customers = customerSearch(orgId, { activeOnly: true });
+  const serviceChoices = itemSearch(orgId, { type: "service" });
+  // A service already on the list is not offered again.
+  const services: PickerSearch = async (query, signal) => {
+    const result = await serviceChoices(query, signal);
+    return result.ok ? { ...result, data: result.data.filter((entity) => !state.services.some((chosen) => chosen.id === entity.id)) } : result;
+  };
   const horseChoices = horseSearch(orgId);
   // A horse already on the list is not offered again.
   const horses: PickerSearch = async (query, signal) => {
@@ -159,6 +171,7 @@ export function AppointmentForm({
       practitioner_user_id: state.practitioner === NOBODY ? null : state.practitioner,
       customer_id: state.customer?.id ?? null,
       subjects: subjects(),
+      items: state.services.map((service) => service.id),
     };
     const created = await run(() => apiFetch<Appointment>(orgId, "/appointments", { method: "POST", body }));
     if (created === null) return;
@@ -180,6 +193,8 @@ export function AppointmentForm({
     if ((state.customer?.id ?? null) !== current.customer_id) body.customer_id = state.customer?.id ?? null;
     const had = current.subjects.filter((subject) => subject.subject_type === SUBJECT_TYPE).map((subject) => subject.subject_id).sort();
     if (JSON.stringify(had) !== JSON.stringify(state.horses.map((horse) => horse.id).sort())) body.subjects = subjects();
+    const hadServices = current.items.map((item) => item.item_id).sort();
+    if (JSON.stringify(hadServices) !== JSON.stringify(state.services.map((service) => service.id).sort())) body.items = state.services.map((service) => service.id);
     if (Object.keys(body).length === 0) {
       setNotice("unchanged");
       return;
@@ -200,6 +215,29 @@ export function AppointmentForm({
     const gone = await run(() => apiFetch<null>(orgId, `/appointments/${current.id}`, { method: "DELETE", ifMatch: current.version }));
     if (gone === null) return;
     router.push(backToCalendar);
+    router.refresh();
+  }
+
+  const dirty = record !== undefined && JSON.stringify(state) !== JSON.stringify(toState(zone, prefill, record));
+
+  async function makeOrder(current: Appointment) {
+    setOrderNotice(null);
+    const made = await run(() => apiFetch<Appointment>(orgId, `/appointments/${current.id}/order`, { method: "POST", ifMatch: current.version }));
+    if (made === null) return;
+    setRecord(made);
+    setState(toState(zone, prefill, made));
+    setOrderNotice(`Draft order ${made.order_number ?? ""} made.`.replace("  ", " "));
+    router.refresh();
+  }
+
+  async function updateOrder(current: Appointment) {
+    setOrderNotice(null);
+    const done = await run(() => apiFetch<OrderUpdateResult>(orgId, `/appointments/${current.id}/order/update`, { method: "POST", ifMatch: current.version }));
+    if (done === null) return;
+    setRecord(done.appointment);
+    const parts = [`${done.added} ${done.added === 1 ? "line" : "lines"} added`, `${done.removed} removed`];
+    if (done.kept > 0) parts.push(`${done.kept} kept because it was changed on the order`);
+    setOrderNotice(`Order updated: ${parts.join(", ")}.`);
     router.refresh();
   }
 
@@ -260,6 +298,29 @@ export function AppointmentForm({
             </ul>
           )}
         </div>
+        <div className="flex flex-col gap-2" data-testid="services">
+          <EntityPicker
+            label="Services"
+            name="items"
+            value={null}
+            onChange={(service) => service && set("services", [...state.services, service])}
+            search={services}
+            error={problems.byField.items}
+            hint={state.services.length === 0 ? "Optional. What is done at this appointment; it is what the order is made from." : `${state.services.length} chosen. Pick another to add it.`}
+          />
+          {state.services.length > 0 && (
+            <ul className="flex flex-wrap gap-2" aria-label="Chosen services">
+              {state.services.map((service) => (
+                <li key={service.id} className="badge tone-success !px-2.5 !py-1 !text-sm gap-1.5" data-testid="chosen-service">
+                  {service.label}
+                  <button type="button" aria-label={`Remove ${service.label}`} className="font-bold" onClick={() => set("services", state.services.filter((chosen) => chosen.id !== service.id))}>
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
         <TextField label="Location" name="location" value={state.location} onChange={(value) => set("location", value)} error={problems.byField.location} autoComplete="off" />
         <TextAreaField label="Notes" name="notes" rows={4} value={state.notes} onChange={(value) => set("notes", value)} error={problems.byField.notes} />
         <ErrorSummary messages={[...local, ...(error?.kind === "validation" ? problems.general : [])]} />
@@ -285,6 +346,66 @@ export function AppointmentForm({
           </Button>
         </div>
       </form>
+      {record && (
+        <section aria-label="Order" className="panel flex max-w-3xl flex-col gap-2" data-testid="appointment-order">
+          <h2 className="text-lg font-semibold">Order</h2>
+          {record.order_id !== null && record.order_number !== null ? (
+            <>
+              <p className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="text-zinc-500">This appointment is billed on:</span>
+                <Link href={`/o/${orgId}/transactions/${record.order_id}`} className="badge tone-primary !px-3 !py-1 !text-sm after:ml-1.5 after:content-['→']" data-testid="appointment-order-link">
+                  Order {record.order_number}
+                </Link>
+                <span className="text-zinc-500" data-testid="appointment-order-status">
+                  {record.order_status === "draft" ? "draft" : record.order_status}
+                </span>
+              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button type="button" disabled={pending || dirty || record.order_status !== "draft"} onClick={() => void updateOrder(record)} data-testid="update-order">
+                  Update order
+                </Button>
+                <span className="text-xs text-zinc-500">
+                  {record.order_status !== "draft"
+                    ? "The order is no longer a draft, so it is changed on the order itself."
+                    : dirty
+                      ? "Save the appointment first: the order is made from what is saved."
+                      : "Adds lines for horses and services added since, and removes the ones taken away. Lines you changed or added on the order stay."}
+                </span>
+              </div>
+            </>
+          ) : (
+            <>
+              {record.order_id !== null && <p className="text-sm text-zinc-500" data-testid="order-gone">The order made from this appointment no longer exists.</p>}
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  disabled={pending || dirty || cancelled || record.customer_id === null || record.items.length === 0}
+                  onClick={() => void makeOrder(record)}
+                  data-testid="create-order"
+                >
+                  Create draft order
+                </Button>
+                <span className="text-xs text-zinc-500">
+                  {cancelled
+                    ? "A cancelled appointment cannot make an order."
+                    : record.customer_id === null
+                      ? "Choose a customer and save: the order is billed to them."
+                      : record.items.length === 0
+                        ? "Choose at least one service and save: the order has a line for each service and each horse."
+                        : dirty
+                          ? "Save the appointment first: the order is made from what is saved."
+                          : "Makes a draft order with a line for each service and each horse."}
+                </span>
+              </div>
+            </>
+          )}
+          {orderNotice && (
+            <p role="status" className="text-sm" data-testid="order-notice">
+              {orderNotice}
+            </p>
+          )}
+        </section>
+      )}
       {record && (
         <div className="flex flex-wrap items-center gap-3" data-testid="appointment-actions">
           {cancelled ? (

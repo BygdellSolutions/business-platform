@@ -298,6 +298,12 @@ function Block({
           <span>{appointment.customer_name}</span>
         </>
       )}
+      {appointment.order_number !== null && height > 68 && (
+        <>
+          <br />
+          <span data-testid="appointment-order-mark">Order {appointment.order_number}</span>
+        </>
+      )}
       {resizable && <span data-resize aria-hidden className="absolute inset-x-0 bottom-0 h-1.5 cursor-ns-resize" />}
     </Link>
   );

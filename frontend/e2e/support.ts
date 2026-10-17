@@ -389,6 +389,7 @@ export function createWorld(options: { currency?: string | null; label?: string 
         "invoice_transactions",
         "invoices",
         "invoice_counters",
+        "appointment_items",
         "appointment_subjects",
         "appointments",
         "custom_field_values",

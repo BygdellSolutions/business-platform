@@ -184,7 +184,9 @@ class TransactionLine(TenantOwned, Authored, Base):
             " OR (kind = 'standard' AND performed_at IS NULL AND performed_by IS NULL AND subject_type IS NULL AND subject_id IS NULL)",
             name="ck_transaction_lines_service_fields",
         ),
+        CheckConstraint("(source_type IS NULL) = (source_id IS NULL)", name="ck_transaction_lines_source_pair"),
         Index("ix_transaction_lines_subject", "organization_id", "subject_type", "subject_id"),
+        Index("ix_transaction_lines_source", "organization_id", "source_type", "source_id"),
         Index("ix_transaction_lines_organization_transaction", "organization_id", "transaction_id"),
         Index("ix_transaction_lines_organization_item", "organization_id", "item_id"),
     )
@@ -220,4 +222,8 @@ class TransactionLine(TenantOwned, Authored, Base):
     # The subject as (registry key, id): Sales never knows what it is (see app.core.subjects).
     subject_type: Mapped[str | None] = mapped_column(String(64))
     subject_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    # Where the line came from when it was made from something else (an appointment): so that bringing the order up to date touches only
+    # those lines. NULL for a line a person typed.
+    source_type: Mapped[str | None] = mapped_column(String(32))
+    source_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     notes: Mapped[str | None] = mapped_column(Text)

@@ -43,6 +43,9 @@ class Appointment(TenantOwned, Numbered, Authored, Base):
     status: Mapped[str] = mapped_column(String(16), default=SCHEDULED, server_default=SCHEDULED)
     practitioner_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
     customer_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    # The draft order made from this appointment (see app/core/booking_orders.py). No foreign key: Scheduling never knows what an order
+    # is; Sales answers for it through the registry. NULL until the order is made.
+    order_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
 
 
 class AppointmentSubject(TenantOwned, Base):
@@ -62,3 +65,20 @@ class AppointmentSubject(TenantOwned, Base):
     appointment_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
     subject_type: Mapped[str] = mapped_column(String(64))
     subject_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+
+
+class AppointmentItem(TenantOwned, Base):
+    """A catalog service the appointment is for (billed once for each record the appointment is about). Items are core, so the reference
+    is a real composite foreign key: another organization's item cannot be named."""
+
+    __tablename__ = "appointment_items"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "appointment_id"], ["appointments.organization_id", "appointments.id"], ondelete="CASCADE", name="fk_appointment_items_appointment"
+        ),
+        ForeignKeyConstraint(["organization_id", "item_id"], ["items.organization_id", "items.id"], ondelete="RESTRICT", name="fk_appointment_items_item_same_organization"),
+        UniqueConstraint("appointment_id", "item_id", name="uq_appointment_items_once"),
+    )
+
+    appointment_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))

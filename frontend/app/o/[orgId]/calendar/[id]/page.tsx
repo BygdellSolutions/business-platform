@@ -61,6 +61,8 @@ function AppointmentSummary({ appointment, zone }: { appointment: Appointment; z
     ["Practitioner", appointment.practitioner_name],
     ["Customer", appointment.customer_name],
     ["Horses", appointment.subjects.map((subject) => subject.label ?? "a horse").join(", ") || null],
+    ["Services", appointment.items.map((item) => item.name ?? "a service").join(", ") || null],
+    ["Order", appointment.order_number !== null ? `Order ${appointment.order_number} (${appointment.order_status})` : null],
     ["Location", appointment.location],
     ["Notes", appointment.notes],
   ];

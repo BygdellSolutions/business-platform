@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.entity_registry import EntityType, ParentSpec, Registry
 from app.core.tenant import TenantContext
 from app.core.tenant_scope import get_scoped
+from app.modules.sales import booking
 from app.modules.sales.models import Transaction, TransactionLine, TransactionStatus
 
 
@@ -69,5 +70,8 @@ def register(registry: Registry) -> None:
         )
     )
     registry.add_hook("order.numbers", _order_numbers)
+    registry.add_hook("order.statuses", booking.statuses)
+    registry.add_hook("order.create_from_booking", booking.create_from_booking)
+    registry.add_hook("order.sync_from_booking", booking.sync_from_booking)
     registry.add_currency_guard(_transactions_fix_the_currency)
     registry.add_reference_guard(_service_subjects_are_referenced)
