@@ -4,6 +4,9 @@ All notable changes to `business-platform` will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- The organization picker (`/organizations`) is laid out in three separate sections: your organizations as full-width buttons with the role beside them (and "Create organization" below), a "Website" section with the "Go to homepage" button, and sign out.
+
 ### Added
 - A signed-in user can reach the public homepage: "Go to homepage" on the organization picker and in the account menu opens `/?home` (the proxy skips its redirect for it), and the homepage then offers "Open the app" instead of "Sign in".
 - The login page has a "Go to homepage" link, and a browser that is already signed in and opens `/login` is sent on to the page it asked for (or the organization picker). Only a session the backend accepts counts, so a stale cookie still shows the form.
