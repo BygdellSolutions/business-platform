@@ -34,7 +34,7 @@ test.describe("logout", () => {
     expect((await context.cookies()).map((c) => c.name)).not.toContain("bp_session");
     expect((await context.cookies()).map((c) => c.name)).not.toContain("bp_csrf");
     expect(await backendStatus(token)).toBe(401); // ... and after logout it is dead: revoked on the server, not just forgotten
-    await page.goto("/");
+    await page.goto("/organizations");
     await expect(page).toHaveURL(/\/login$/);
   });
 

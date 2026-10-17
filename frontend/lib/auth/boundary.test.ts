@@ -114,7 +114,7 @@ describe("the authentication mode is decided in one place", () => {
       "app/login/page.tsx",
       "app/o/[orgId]/layout.tsx",
       "app/o/[orgId]/settings/page.tsx", // says whether the danger zone checks a password
-      "app/page.tsx",
+      "app/organizations/page.tsx",
       "app/setup/page.tsx",
       "lib/auth/credential.ts",
       "lib/auth/handlers.ts",

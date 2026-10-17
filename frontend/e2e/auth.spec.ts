@@ -4,7 +4,7 @@ import { FREDRIK, MARIA, ORG_A, ORG_B, signIn, signInViaUi, openUserMenu } from 
 
 test.describe("development sign-in", () => {
   test("everything redirects to /dev-login without an identity", async ({ page }) => {
-    for (const url of ["/", `/o/${ORG_A.id}`, `/o/${ORG_B.id}`]) {
+    for (const url of ["/organizations", `/o/${ORG_A.id}`, `/o/${ORG_B.id}`]) {
       await page.goto(url);
       await expect(page).toHaveURL(/\/dev-login$/);
     }
@@ -19,7 +19,7 @@ test.describe("development sign-in", () => {
 
     await expect(page.getByTestId("login-error")).toContainText("does not know an active user");
     expect((await context.cookies()).find((c) => c.name === "bp_dev_user")).toBeUndefined();
-    await page.goto("/");
+    await page.goto("/organizations");
     await expect(page).toHaveURL(/\/dev-login$/);
   });
 
@@ -95,5 +95,19 @@ test.describe("development sign-in", () => {
     await page.reload();
 
     await expect(page).toHaveURL(/\/dev-login$/);
+  });
+});
+
+test.describe("the public homepage", () => {
+  test("shows information and a sign-in link without an identity, and sends a signed-in user into the app", async ({ page }) => {
+    await page.goto("/");
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await page.getByRole("link", { name: "Sign in", exact: true }).click();
+    await expect(page).toHaveURL(/\/dev-login$/);
+
+    await signInViaUi(page, FREDRIK);
+    await page.goto("/");
+    await expect(page).toHaveURL(/\/organizations$/);
   });
 });
