@@ -334,3 +334,58 @@ def test_another_organizations_order_cannot_be_cancelled_through_an_appointment(
     assert client.post(f"/api/appointments/{made['id']}/order/cancel", headers={**people["owner"][1], **_etag(made)}).status_code == 404
     assert client.patch(f"/api/appointments/{made['id']}", json={"status": "cancelled", "cancel_order": True}, headers={**people["owner"][1], **_etag(made)}).status_code == 404
     assert _order_status(client, their_headers, made["order_id"]) == "draft"
+
+
+# --- deleting an appointment that has an order ---------------------------------------------------------------------------------------------
+
+
+def _delete(client: TestClient, headers, appointment: dict, **params):
+    return client.delete(f"/api/appointments/{appointment['id']}", params=params, headers={**headers, **_etag(appointment)})
+
+
+def test_deleting_an_appointment_leaves_its_draft_order_unless_asked_to_delete_it_too(client: TestClient, world):
+    headers, appointment = _made(client, world)
+    assert _delete(client, headers, appointment).status_code == 204
+    assert _order_status(client, headers, appointment["order_id"]) == "draft"
+
+    headers, second = _made(client, world)
+    assert _delete(client, headers, second, delete_order="true").status_code == 204
+    assert client.get(f"/api/transactions/{second['order_id']}", headers=headers).status_code == 404
+    assert client.get(f"/api/appointments/{second['id']}", headers=headers).status_code == 404
+
+
+def test_an_appointment_with_a_completed_order_cannot_be_deleted_and_nothing_changes(client: TestClient, world):
+    headers, appointment = _made(client, world)
+    order = client.get(f"/api/transactions/{appointment['order_id']}", headers=headers).json()
+    assert client.post(f"/api/transactions/{appointment['order_id']}/complete", headers={**headers, "If-Match": f'"{order["version"]}"'}).status_code == 200
+    appointment = client.get(f"/api/appointments/{appointment['id']}", headers=headers).json()
+    for params in ({}, {"delete_order": "true"}):
+        refused = _delete(client, headers, appointment, **params)
+        assert refused.status_code == 409
+        assert refused.json()["detail"]["code"] == "order_completed"
+    assert client.get(f"/api/appointments/{appointment['id']}", headers=headers).status_code == 200
+    assert _order_status(client, headers, appointment["order_id"]) == "completed"
+
+
+def test_delete_order_needs_an_order_a_draft_and_the_right_to_write(client: TestClient, world):
+    people = world[7]
+    headers, appointment = _made(client, world)
+    bare = _book(client, headers)
+    assert _delete(client, headers, bare, delete_order="true").status_code == 409
+    assert client.get(f"/api/appointments/{bare['id']}", headers=headers).status_code == 200
+    cancelled = _patch(client, headers, appointment, status="cancelled", cancel_order=True)
+    assert _delete(client, headers, cancelled, delete_order="true").status_code == 409  # a cancelled order is not a draft
+    assert client.get(f"/api/appointments/{appointment['id']}", headers=headers).status_code == 200
+    assert _delete(client, people["viewer"][1], cancelled, delete_order="true").status_code == 403
+    assert _delete(client, headers, cancelled).status_code == 204  # a cancelled order does not hold the appointment back
+
+
+def test_another_organizations_order_cannot_be_deleted_through_an_appointment(client: TestClient, db_session: Session, world):
+    people = world[7]
+    other = make_org(db_session, "Other")
+    their_customer = make_customer(db_session, other, "Umeå HK")
+    their_item = make_item(db_session, other, "Massage")
+    _, their_headers = _person(db_session, other, Role.OWNER, "Their Owner")
+    made = _order(client, their_headers, _book(client, their_headers, customer_id=str(their_customer.id), items=[str(their_item.id)])).json()
+    assert _delete(client, people["owner"][1], made, delete_order="true").status_code == 404
+    assert _order_status(client, their_headers, made["order_id"]) == "draft"

@@ -357,10 +357,27 @@ def cancel_order(
 
 @router.delete("/{appointment_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_appointment(
-    appointment_id: uuid.UUID, if_match: str | None = Header(default=None), ctx: TenantContext = Depends(record_writer), db: Session = Depends(get_db)
+    appointment_id: uuid.UUID,
+    delete_order: bool = False,
+    if_match: str | None = Header(default=None),
+    ctx: TenantContext = Depends(record_writer),
+    db: Session = Depends(get_db),
 ) -> Response:
-    """Remove an appointment for good (cancel it instead to keep it on record). The history records that it was deleted."""
+    """Remove an appointment for good (cancel it instead to keep it on record). The history records that it was deleted.
+
+    A completed order (so also an invoiced one) is money: the appointment is then refused (409), cancel it instead. A draft order stays
+    unless `delete_order` is set, which deletes it in the same step (either both go or neither)."""
     appointment = get_scoped_or_404(db, ctx, Appointment, appointment_id, for_update=True)
     ensure_current(if_match, appointment.version, "appointment", appointment.id)
+    order_status = _asked("order.statuses", db, ctx, {appointment.order_id}).get(appointment.order_id) if appointment.order_id else None
+    if order_status == "completed":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={"code": "order_completed", "message": "This appointment has a completed order, so it cannot be deleted. Cancel it instead."},
+        )
+    if delete_order:
+        if order_status is None:
+            raise HTTPException(status.HTTP_409_CONFLICT, detail={"code": "no_order", "message": "This appointment has no order (it may have been deleted)"})
+        _answer("order.delete_draft", db, ctx, appointment.order_id)  # refuses anything but a draft (409)
     delete_or_409(db, appointment, "Appointment is referenced by other records", after_delete=audit.deletion(db, ctx, appointment, "appointment", fields=AUDITED))
     return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -1,7 +1,7 @@
 """What Scheduling asks Sales for, in words neither module needs to import from the other.
 
 An appointment can make a draft order (and later bring it up to date). Scheduling describes WHAT should be billed as a `BookingOrder`
-and asks through the registry (`order.create_from_booking`, `order.sync_from_booking`, `order.cancel_draft`, `order.statuses`); Sales answers. Nothing here
+and asks through the registry (`order.create_from_booking`, `order.sync_from_booking`, `order.cancel_draft`, `order.delete_draft`, `order.statuses`); Sales answers. Nothing here
 knows what a horse or an order line is.
 """
 

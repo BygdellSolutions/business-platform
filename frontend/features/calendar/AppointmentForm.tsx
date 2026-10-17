@@ -215,8 +215,8 @@ export function AppointmentForm({
     router.refresh();
   }
 
-  async function remove(current: Appointment) {
-    const gone = await run(() => apiFetch<null>(orgId, `/appointments/${current.id}`, { method: "DELETE", ifMatch: current.version }));
+  async function remove(current: Appointment, withOrder = false) {
+    const gone = await run(() => apiFetch<null>(orgId, `/appointments/${current.id}${withOrder ? "?delete_order=true" : ""}`, { method: "DELETE", ifMatch: current.version }));
     if (gone === null) return;
     router.push(backToCalendar);
     router.refresh();
@@ -261,6 +261,7 @@ export function AppointmentForm({
   }
 
   const cancelled = record?.status === "cancelled";
+  const hasCompletedOrder = record?.order_status === "completed";
   const hasDraftOrder = record !== undefined && record.order_id !== null && record.order_number !== null && record.order_status === "draft";
   const personOptions = [...(state.practitioner === NOBODY ? [{ value: NOBODY, label: "Choose a practitioner" }] : []), ...people.map((person) => ({ value: person.user_id, label: person.name }))];
   if (state.practitioner !== NOBODY && !people.some((person) => person.user_id === state.practitioner)) {
@@ -450,13 +451,20 @@ export function AppointmentForm({
           )}
           <ConfirmButton
             label="Delete"
-            question="Delete this appointment for good?"
-            confirmLabel="Yes, delete it"
+            question={hasDraftOrder ? `Delete this appointment for good? Its draft order ${record.order_number} can be deleted too.` : "Delete this appointment for good?"}
+            confirmLabel={hasDraftOrder ? "Delete appointment" : "Yes, delete it"}
+            alsoLabel={hasDraftOrder ? "Delete appointment and order" : undefined}
+            onAlso={hasDraftOrder ? () => void remove(record, true) : undefined}
             declineLabel="No, go back"
-            disabled={pending}
+            disabled={pending || hasCompletedOrder}
             onConfirm={() => void remove(record)}
             testId="delete-appointment"
           />
+          {hasCompletedOrder && (
+            <span className="text-xs text-zinc-500" data-testid="delete-blocked">
+              This appointment has a completed order, so it cannot be deleted. Cancel it instead.
+            </span>
+          )}
         </div>
       )}
     </div>

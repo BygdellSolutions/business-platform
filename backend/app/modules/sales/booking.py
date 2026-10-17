@@ -86,6 +86,18 @@ def cancel_draft(db: Session, ctx: TenantContext, order_id: uuid.UUID) -> int:
     return transaction.number
 
 
+def delete_draft(db: Session, ctx: TenantContext, order_id: uuid.UUID) -> int:
+    """Delete a DRAFT order together with the booking that made it, as deleting it by hand would (its lines go with it). Nothing is
+    committed: the caller commits it with the booking. Returns the order's number."""
+    transaction = _lock(db, ctx, order_id)
+    _require_draft(transaction, "deleted with its booking")
+    number = transaction.number
+    audit.deleted(db, ctx, transaction, "transaction")
+    db.delete(transaction)
+    db.flush()
+    return number
+
+
 def sync_from_booking(db: Session, ctx: TenantContext, order_id: uuid.UUID, order: BookingOrder) -> dict:
     """Bring a DRAFT order up to date with its booking; returns how many lines were added, removed and kept (edited, so left alone)."""
     transaction = _lock(db, ctx, order_id)
