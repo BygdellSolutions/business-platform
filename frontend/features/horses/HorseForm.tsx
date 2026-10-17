@@ -38,10 +38,10 @@ interface FormState {
   active: boolean;
 }
 
-function toState(horse?: Horse): FormState {
+function toState(horse?: Horse, initialOwner?: PickerEntity): FormState {
   return {
     name: horse?.name ?? "",
-    owner: horse ? customerEntity(horse.owner) : null,
+    owner: horse ? customerEntity(horse.owner) : (initialOwner ?? null),
     stable: horse?.stable ? customerEntity(horse.stable) : null,
     birth_year: horse?.birth_year === null || horse === undefined ? "" : String(horse.birth_year),
     sex: horse?.sex ?? "",
@@ -68,12 +68,12 @@ function wholeNumber(text: string): number | null | "invalid" {
  * inactive customer may not be NEWLY assigned, but one already assigned stays valid, so an
  * edit never sends a reference that did not change).
  */
-export function HorseForm({ horse }: { horse?: Horse }) {
+export function HorseForm({ horse, initialOwner }: { horse?: Horse; initialOwner?: PickerEntity }) {
   const orgId = useOrgId();
   const router = useRouter();
   const { pending, error, run } = useMutation();
   const [record, setRecord] = useState<Horse | undefined>(horse);
-  const [state, setState] = useState<FormState>(() => toState(horse));
+  const [state, setState] = useState<FormState>(() => toState(horse, initialOwner));
   const [local, setLocal] = useState<FieldErrors>({});
   const [notice, setNotice] = useState<"saved" | "unchanged" | null>(null);
 

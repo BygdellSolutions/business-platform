@@ -11,6 +11,7 @@ export function CollapsibleSection({
   testId,
   toggleTestId,
   className = "max-w-4xl",
+  defaultOpen = false,
   children,
 }: {
   title: string;
@@ -20,11 +21,13 @@ export function CollapsibleSection({
   /** On the <details> (whose `open` attribute says whether it is open). */
   toggleTestId: string;
   className?: string;
+  /** Open when the page is drawn (the person can still close it). The sections of lists start closed; the main content of a page may start open. */
+  defaultOpen?: boolean;
   children: ReactNode;
 }) {
   return (
     <section aria-label={title} data-testid={testId} className={`panel flex flex-col ${className}`}>
-      <details data-testid={toggleTestId} className="group">
+      <details data-testid={toggleTestId} className="group" open={defaultOpen || undefined}>
         <summary className="flex cursor-pointer list-none items-center gap-2 select-none [&::-webkit-details-marker]:hidden">
           <span aria-hidden="true" className="inline-block text-sm text-zinc-500 transition-transform group-open:rotate-90">
             ▶

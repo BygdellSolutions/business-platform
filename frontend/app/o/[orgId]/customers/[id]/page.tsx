@@ -1,13 +1,15 @@
 import { RecordHistory } from "@/components/history/RecordHistory";
 import { RecordMeta } from "@/components/history/RecordMeta";
 import { ServiceList } from "@/components/history/ServiceList";
+import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { CustomerBought } from "@/features/customers/CustomerBought";
 import { CustomerDetails } from "@/features/customers/CustomerDetails";
 import { CustomerForm } from "@/features/customers/CustomerForm";
+import { CustomerHorses, HORSES_SHOWN } from "@/features/customers/CustomerHorses";
 import { CustomerOrders } from "@/features/customers/CustomerOrders";
 import { Notice } from "@/components/ui/Notice";
 import { readActiveRole } from "@/lib/active-role";
-import type { BoughtLine, Customer, InvoiceStateOfOrder, Organization, ServiceRecord, TransactionSummary } from "@/lib/api/types";
+import type { BoughtLine, Customer, Horse, InvoiceStateOfOrder, Organization, ServiceRecord, TransactionSummary } from "@/lib/api/types";
 import { readRecordHistory } from "@/lib/history-server";
 import { canWriteRecords } from "@/lib/roles";
 import { requireUuid, serverRead } from "@/lib/server-api";
@@ -30,7 +32,7 @@ export default async function CustomerPage({
   const { orgId, id } = await params;
   const { created } = await searchParams;
   const recordId = requireUuid(id);
-  const [customer, role, organization, history, services, orderRows, bought] = await Promise.all([
+  const [customer, role, organization, history, services, orderRows, bought, owned, stabled] = await Promise.all([
     serverRead<Customer>(orgId, `/api/customers/${recordId}`),
     readActiveRole(orgId),
     serverRead<Organization>(orgId, "/api/organization"),
@@ -38,6 +40,9 @@ export default async function CustomerPage({
     serverRead<ServiceRecord[]>(orgId, "/api/transactions/services", `?${new URLSearchParams({ billing_customer_id: recordId })}`),
     serverRead<TransactionSummary[]>(orgId, "/api/transactions", `?${new URLSearchParams({ billing_customer_id: recordId, limit: String(ORDERS_SHOWN + 1) })}`),
     serverRead<BoughtLine[]>(orgId, "/api/transactions/bought", `?${new URLSearchParams({ billing_customer_id: recordId, limit: String(BOUGHT_SHOWN) })}`),
+    // One more than shown is asked for, to know whether there are more horses than the section lists.
+    serverRead<Horse[]>(orgId, "/api/horses", `?${new URLSearchParams({ owner_customer_id: recordId, limit: String(HORSES_SHOWN + 1) })}`),
+    serverRead<Horse[]>(orgId, "/api/horses", `?${new URLSearchParams({ stable_customer_id: recordId, limit: String(HORSES_SHOWN + 1) })}`),
   ]);
   // One more than shown is asked for, to know whether the Orders list has more.
   const orders = orderRows.slice(0, ORDERS_SHOWN);
@@ -54,7 +59,10 @@ export default async function CustomerPage({
       </p>
       {created === "1" && <Notice testId="created">Customer created.</Notice>}
       <RecordMeta record={customer} people={history.history.people} timeZone={organization.timezone} />
-      {canWriteRecords(role) ? <CustomerForm key={customer.id} customer={customer} canSetDiscount={role === "owner" || role === "admin"} /> : <CustomerDetails customer={customer} />}
+      <CollapsibleSection title="Customer information" testId="customer-info" toggleTestId="info-toggle" className="max-w-3xl" defaultOpen>
+        {canWriteRecords(role) ? <CustomerForm key={customer.id} customer={customer} canSetDiscount={role === "owner" || role === "admin"} /> : <CustomerDetails customer={customer} />}
+      </CollapsibleSection>
+      <CustomerHorses orgId={orgId} customerId={recordId} owned={owned} stabled={stabled} canWrite={canWriteRecords(role)} />
       <CustomerOrders orgId={orgId} customerId={recordId} orders={orders} invoices={invoices} hasMore={orderRows.length > ORDERS_SHOWN} />
       <CustomerBought orgId={orgId} lines={bought} />
       <ServiceList orgId={orgId} services={services} timeZone={organization.timezone} title="Services billed to this customer" />
