@@ -3,7 +3,7 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 
 import type { JournalMark, MarkSide, MarkTool } from "@/lib/api/types";
-import { illustrationOf, LATEST_DIAGRAM } from "./HorseDiagram";
+import { illustrationOf, LATEST_DIAGRAM, type Illustration } from "./HorseDiagram";
 import { clamp01, length, MIN_LINE_LENGTH, moved, newMark, numberOf, SIDE_LABELS } from "./marks";
 
 export type ActiveTool = "select" | MarkTool;
@@ -87,17 +87,7 @@ function NumberBadge({ mark, number, selected, width, height }: { mark: JournalM
  * (`touch-action: none` keeps a finger drawing instead of scrolling the page.) `version` is the illustration the marks were
  * drawn on; an entry always shows its own.
  */
-export function DiagramCanvas({
-  side,
-  marks,
-  version = LATEST_DIAGRAM,
-  editable = false,
-  tool = "select",
-  selectedId = null,
-  onSelect,
-  onAdd,
-  onMove,
-}: {
+interface CanvasProps {
   side: MarkSide;
   marks: JournalMark[];
   version?: number;
@@ -107,8 +97,36 @@ export function DiagramCanvas({
   onSelect?: (id: string | null) => void;
   onAdd?: (mark: JournalMark) => void;
   onMove?: (mark: JournalMark) => void;
-}) {
-  const { width, height, Art } = illustrationOf(version);
+}
+
+/** An entry drawn on an illustration this build does not have is not drawn on another one: it says so (the marks are still listed in words). */
+export function DiagramCanvas(props: CanvasProps) {
+  const version = props.version ?? LATEST_DIAGRAM;
+  const illustration = illustrationOf(version);
+  if (illustration === null) {
+    return (
+      <div role="alert" data-testid="unsupported-diagram" className="rounded border border-amber-400 p-3 text-sm">
+        This entry was drawn on diagram version {version}, which this version of the application does not have, so its marks are not shown on a picture
+        (they would land on the wrong place). The marks are listed below. Reload the page; if this stays, the application needs to be updated.
+      </div>
+    );
+  }
+  return <SupportedCanvas {...props} version={version} illustration={illustration} />;
+}
+
+function SupportedCanvas({
+  side,
+  marks,
+  version,
+  editable = false,
+  tool = "select",
+  selectedId = null,
+  onSelect,
+  onAdd,
+  onMove,
+  illustration,
+}: CanvasProps & { version: number; illustration: Illustration }) {
+  const { width, height, Art } = illustration;
   const { k } = geometry(width, height);
   const svg = useRef<SVGSVGElement>(null);
   const [drawing, setDrawing] = useState<{ start: number[]; current: number[] } | null>(null);

@@ -16,6 +16,7 @@ export const NAV: NavItem[] = [
   { label: "Dashboard", path: "", enabled: true },
   { label: "Orders", path: "/transactions", enabled: true, section: "Sales" },
   { label: "Invoices", path: "/invoices", enabled: true, section: "Sales" },
+  { label: "Scheduling", path: "/calendar", enabled: true, section: "Calendar" },
   { label: "Customers", path: "/customers", enabled: true, section: "Contacts" },
   { label: "Suppliers", path: "/suppliers", enabled: true, section: "Contacts" },
   { label: "Catalog", path: "/catalog", enabled: true, section: "Products" },

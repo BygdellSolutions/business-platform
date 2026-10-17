@@ -8,6 +8,7 @@ import { SessionsPanel } from "@/features/account/SessionsPanel";
 import { authMode } from "@/lib/auth/config";
 import { loginPath, requireCredential } from "@/lib/auth/credential";
 import { getCurrentUser, getMfaStatus, getOwnSessions, needsMfaSetup } from "@/lib/orgs";
+import { SECONDARY_LINK } from "@/components/ui/Button";
 
 export const dynamic = "force-dynamic"; // depends on AUTH_MODE at run time, never on the build's environment
 
@@ -65,7 +66,7 @@ export default async function AccountPage() {
         </section>
       )}
       {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-      <a href="/" className="text-sm underline">Back to your organizations</a>
+      <a href="/" className={`${SECONDARY_LINK} self-start`}>Back to your organizations</a>
     </main>
   );
 }

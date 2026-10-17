@@ -65,7 +65,10 @@ export const ILLUSTRATIONS: Record<number, Illustration> = {
 /** The illustration new entries are drawn on (the backend's DIAGRAM_VERSION). */
 export const LATEST_DIAGRAM = 2;
 
-/** The illustration of a stored version; one this build does not know is shown on the newest picture rather than not at all. */
-export function illustrationOf(version: number): Illustration {
-  return ILLUSTRATIONS[version] ?? ILLUSTRATIONS[LATEST_DIAGRAM];
+/**
+ * The illustration of a stored version, or null for one this build does not have. Never a substitute: a mark is a fraction of the
+ * picture it was drawn on, so on another picture it would sit on the wrong part of the horse without anything saying so.
+ */
+export function illustrationOf(version: number): Illustration | null {
+  return ILLUSTRATIONS[version] ?? null;
 }

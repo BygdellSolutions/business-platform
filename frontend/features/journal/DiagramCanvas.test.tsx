@@ -22,6 +22,23 @@ function setup(tool: ActiveTool, marks: JournalMark[] = []) {
   return { onAdd, onMove, onSelect };
 }
 
+describe("an illustration this build does not have", () => {
+  it("is not replaced by another picture: it says so, draws nothing and takes no marks", () => {
+    const onAdd = vi.fn();
+    render(<DiagramCanvas side="left" marks={[{ id: "m", number: 1, side: "left", tool: "x", points: [[0.5, 0.5]] }]} version={99} editable tool="x" onAdd={onAdd} />);
+    expect(screen.getByTestId("unsupported-diagram").textContent).toContain("diagram version 99");
+    expect(screen.queryByTestId("diagram-left")).toBeNull(); // no picture, so no mark can land on the wrong place
+    expect(screen.queryByTestId("mark")).toBeNull();
+    expect(onAdd).not.toHaveBeenCalled();
+  });
+
+  it("still draws the versions it has", () => {
+    render(<DiagramCanvas side="left" marks={[]} version={1} />);
+    expect(screen.getByTestId("diagram-left")).toBeTruthy();
+    expect(screen.queryByTestId("unsupported-diagram")).toBeNull();
+  });
+});
+
 describe("drawing on the diagram", () => {
   it("places an X or an O where tapped, as fractions of the diagram", () => {
     const { onAdd, onSelect } = setup("x");
@@ -101,11 +118,6 @@ describe("selecting and moving", () => {
     expect(screen.getByTestId("diagram-left").getAttribute("viewBox")).toBe("0 0 1000 711");
     expect(document.querySelector("image")?.getAttribute("href")).toBe("/diagrams/horse-v2.svg");
     expect(drawn()?.getAttribute("cx")).toBe("250"); // the same 25 % of the width, on the other picture
-  });
-
-  it("shows an entry of a version this build does not know on the newest picture instead of nothing", () => {
-    render(<DiagramCanvas side="left" marks={[]} version={99} />);
-    expect(screen.getByTestId("diagram-left").getAttribute("viewBox")).toBe("0 0 1000 711");
   });
 
   it("writes each mark's number in a badge on the picture, the same number as in the list and the notes", () => {

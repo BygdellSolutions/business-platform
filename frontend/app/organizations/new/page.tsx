@@ -4,6 +4,7 @@ import { Notice } from "@/components/ui/Notice";
 import { CreateOrganizationForm } from "@/features/organizations/CreateOrganizationForm";
 import { loginPath, requireCredential } from "@/lib/auth/credential";
 import { getCurrentUser } from "@/lib/orgs";
+import { SECONDARY_LINK } from "@/components/ui/Button";
 
 /**
  * Create an organization. Not under `/o/{id}`: there is no organization yet. Authentication identifies the user; the
@@ -32,7 +33,7 @@ export default async function NewOrganizationPage() {
       )}
       {/* A plain anchor: leaving this page is a full navigation, like every organization switch. */}
       {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-      <a href="/" className="text-sm underline">Back to your organizations</a>
+      <a href="/" className={`${SECONDARY_LINK} self-start`}>Back to your organizations</a>
     </main>
   );
 }

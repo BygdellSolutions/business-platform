@@ -163,6 +163,7 @@ class JournalRead(BaseModel):
     order_number: int | None = None  # the linked order's number (none when it no longer exists)
     marks: list[Mark]
     diagram_version: int
+    next_mark_number: int  # the number the next new mark gets (a number is never reused within an entry)
     status: str
     version: int  # send back as If-Match when changing or finalizing a draft
     finalized_at: datetime | None

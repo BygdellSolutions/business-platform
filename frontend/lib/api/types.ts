@@ -1045,6 +1045,8 @@ export interface JournalEntry {
   order_number: number | null;
   marks: JournalMark[];
   diagram_version: number;
+  /** The number the next new mark gets: one past the highest ever handed out in the entry (a number is never reused). */
+  next_mark_number: number;
   status: "draft" | "final";
   /** Sent back as If-Match when the draft is changed or finalized. */
   version: number;
@@ -1069,3 +1071,46 @@ export interface JournalUpdate {
   order_id?: string | null;
   marks?: JournalMark[];
 }
+
+export interface AppointmentSubject {
+  subject_type: string;
+  subject_id: string;
+  label: string | null;
+}
+
+/** A booking in the calendar (GET /api/appointments). Times are instants; the pages show them in the organization's time zone. */
+export interface Appointment {
+  id: string;
+  number: number;
+  version: number;
+  title: string;
+  starts_at: string;
+  ends_at: string;
+  location: string | null;
+  notes: string | null;
+  status: "scheduled" | "cancelled";
+  practitioner_user_id: string | null;
+  practitioner_name: string | null;
+  customer_id: string | null;
+  customer_name: string | null;
+  /** The records the appointment is about (horses), by name. */
+  subjects: AppointmentSubject[];
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+}
+
+export interface AppointmentCreate {
+  title: string;
+  starts_at: string;
+  ends_at: string;
+  location?: string | null;
+  notes?: string | null;
+  practitioner_user_id?: string | null;
+  customer_id?: string | null;
+  /** The whole list of records it is about; at most 50. */
+  subjects?: { subject_type: string; subject_id: string }[];
+}
+
+export type AppointmentUpdate = Partial<AppointmentCreate> & { status?: "scheduled" | "cancelled" };

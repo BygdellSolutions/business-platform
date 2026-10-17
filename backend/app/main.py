@@ -15,7 +15,7 @@ from app.core.entity_registry import registry
 from app.core.internal_auth import InternalAuthMiddleware
 from app.core.logging_config import configure_logging, log
 from app.core.request_context import RequestContextMiddleware
-from app.modules import custom_fields, equine, inventory, invoicing, sales
+from app.modules import custom_fields, equine, inventory, invoicing, sales, scheduling
 
 configure_logging("backend")
 
@@ -100,6 +100,7 @@ app.include_router(invoicing.router)
 app.include_router(invoicing.invoiceable_router)
 app.include_router(inventory.router)
 app.include_router(inventory.availability_router)
+app.include_router(scheduling.router)
 
 # Modules register what they expose to generic capabilities; nothing imports a module
 # except here. validate() fails fast at startup on an inconsistent registration.
@@ -109,4 +110,5 @@ sales.register(registry)
 custom_fields.register(registry)
 invoicing.register(registry)
 inventory.register(registry)
+scheduling.register(registry)
 registry.validate()

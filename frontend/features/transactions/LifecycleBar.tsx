@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { useOrgId } from "@/components/shell/org-context";
-import { Button } from "@/components/ui/Button";
+import { Button, SECONDARY_LINK } from "@/components/ui/Button";
 import { ConfirmButton } from "@/components/ui/ConfirmButton";
 import { Notice } from "@/components/ui/Notice";
 import { useEditor } from "@/features/transactions/editor-context";
@@ -135,7 +135,7 @@ export function LifecycleBar({ canInvoice = true, invoiceState = "none" }: { can
                 {method.label}
               </Button>
             ))}
-            <button type="button" className="text-sm underline" onClick={() => setChoosingMethod(false)}>
+            <button type="button" className={SECONDARY_LINK} onClick={() => setChoosingMethod(false)}>
               Back
             </button>
           </span>
@@ -231,7 +231,7 @@ export function LifecycleBar({ canInvoice = true, invoiceState = "none" }: { can
           ) : (
             <>
               Added to a draft invoice.{" "}
-              <Link href={`/o/${orgId}/invoices/${invoiced.id}`} className="underline" data-testid="open-draft-invoice">
+              <Link href={`/o/${orgId}/invoices/${invoiced.id}`} className={SECONDARY_LINK} data-testid="open-draft-invoice">
                 Open the draft invoice
               </Link>
             </>

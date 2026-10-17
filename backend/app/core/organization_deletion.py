@@ -39,6 +39,8 @@ TABLES_IN_DELETE_ORDER = (
     "custom_field_values",
     "custom_field_options",
     "custom_field_definitions",
+    "appointment_subjects",
+    "appointments",
     "transaction_lines",
     "transactions",
     "horse_journal_corrections",

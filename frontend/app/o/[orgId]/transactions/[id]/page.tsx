@@ -10,6 +10,7 @@ import type { InvoiceStateOfOrder, LineFulfillment, Organization, StockDemand, T
 import { readRecordHistory } from "@/lib/history-server";
 import { canMutateInvoices, canWriteRecords } from "@/lib/roles";
 import { requireUuid, serverRead } from "@/lib/server-api";
+import { SECONDARY_LINK } from "@/components/ui/Button";
 
 /**
  * The transaction, read on the server: the single source of truth for the editor, which
@@ -53,7 +54,7 @@ export default async function TransactionPage({
         <h1 className="text-[28px] leading-tight font-semibold tracking-tight" data-testid="record-name">
           Order {transaction.number} · {transaction.transaction_date}
         </h1>
-        <Link href={`/o/${orgId}/transactions`} className="text-sm underline">
+        <Link href={`/o/${orgId}/transactions`} className={SECONDARY_LINK}>
           Back to orders
         </Link>
       </div>
@@ -61,13 +62,16 @@ export default async function TransactionPage({
       <RecordMeta record={transaction} people={history.history.people} timeZone={organization.timezone} />
       {invoice && invoice.invoices.length > 0 && (
         // Invoicing by delivery: an order can be on several invoices, one per delivery.
-        <p className="flex flex-wrap gap-x-3 text-sm" data-testid="order-invoice">
-          {invoice.invoices.map((entry) => (
-            <Link key={entry.invoice_id} href={`/o/${orgId}/invoices/${entry.invoice_id}`} className="underline">
-              {entry.status === "issued" ? `Invoice ${entry.number_text ?? ""}` : "Draft invoice"}
-            </Link>
-          ))}
-        </p>
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-zinc-500">{invoice.invoices.length === 1 ? "This order is on:" : "This order is on these invoices:"}</span>
+          <p className="flex flex-wrap gap-2" data-testid="order-invoice">
+            {invoice.invoices.map((entry) => (
+              <Link key={entry.invoice_id} href={`/o/${orgId}/invoices/${entry.invoice_id}`} className="badge tone-primary !px-3 !py-1 !text-sm hover:brightness-95 after:ml-1.5 after:content-['→']">
+                {entry.status === "issued" ? `Invoice ${entry.number_text ?? ""}` : "Draft invoice"}
+              </Link>
+            ))}
+          </p>
+        </div>
       )}
       <TransactionEditor
         key={transaction.id}

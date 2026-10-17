@@ -6,7 +6,7 @@ import { useMemo, useState, type FormEvent } from "react";
 
 import { useOrgId } from "@/components/shell/org-context";
 import { ActiveToggle } from "@/components/ui/ActiveToggle";
-import { Button } from "@/components/ui/Button";
+import { Button, SECONDARY_LINK } from "@/components/ui/Button";
 import { EntityPicker, type PickerEntity } from "@/components/ui/EntityPicker";
 import { ErrorSummary } from "@/components/ui/ErrorSummary";
 import { CheckboxField, SelectField, TextField } from "@/components/ui/Field";
@@ -174,7 +174,7 @@ export function HorseForm({ horse }: { horse?: Horse }) {
           <Button type="submit" disabled={pending} data-testid="submit">
             {pending ? "Saving…" : record ? "Save changes" : "Create horse"}
           </Button>
-          <Link href={`/o/${orgId}/horses`} className="text-sm underline">
+          <Link href={`/o/${orgId}/horses`} className={SECONDARY_LINK}>
             {record ? "Back to horses" : "Cancel"}
           </Link>
         </div>

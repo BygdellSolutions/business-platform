@@ -6,7 +6,7 @@ import { useState, type FormEvent } from "react";
 
 import { useOrgId } from "@/components/shell/org-context";
 import { ActiveToggle } from "@/components/ui/ActiveToggle";
-import { Button } from "@/components/ui/Button";
+import { Button, SECONDARY_LINK } from "@/components/ui/Button";
 import { ErrorSummary } from "@/components/ui/ErrorSummary";
 import { CheckboxField, DecimalField, SelectField, TextField } from "@/components/ui/Field";
 import { Notice } from "@/components/ui/Notice";
@@ -149,7 +149,7 @@ export function CustomerForm({ customer, canSetDiscount = false }: { customer?: 
           <Button type="submit" disabled={pending} data-testid="submit">
             {pending ? "Saving…" : record ? "Save changes" : "Create customer"}
           </Button>
-          <Link href={`/o/${orgId}/customers`} className="text-sm underline">
+          <Link href={`/o/${orgId}/customers`} className={SECONDARY_LINK}>
             {record ? "Back to customers" : "Cancel"}
           </Link>
         </div>

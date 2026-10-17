@@ -22,7 +22,7 @@ const fail = <T,>(status: number, body: unknown): ApiResult<T> => ({ ok: false, 
 function entry(overrides: Partial<JournalEntry> = {}): JournalEntry {
   return {
     id: ENTRY, number: 12, horse_id: HORSE, visit_at: "2026-10-15T12:30:00Z", practitioner_user_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", practitioner_name: "Tina Therapist", body: "", follow_up_on: null, marks: [],
-    diagram_version: 1, status: "draft", version: 1, finalized_at: null, finalized_by: null, created_at: "", updated_at: "", created_by: null, updated_by: null,
+    diagram_version: 1, next_mark_number: 1, status: "draft", version: 1, finalized_at: null, finalized_by: null, created_at: "", updated_at: "", created_by: null, updated_by: null,
     created_by_name: "Tina Therapist", finalized_by_name: null, can_change: true, can_correct: false, corrections: [], ...overrides,
   };
 }
@@ -88,6 +88,13 @@ describe("writing an entry", () => {
     expect(screen.getAllByTestId("mark")).toHaveLength(1);
     await userEvent.click(screen.getByTestId("delete-listed-mark"));
     expect(screen.queryByTestId("marks-list")).toBeNull();
+  });
+
+  it("offers no drawing tools for an entry drawn on a diagram this build lacks, and still lists its marks", () => {
+    mount(entry({ diagram_version: 99, marks: [{ id: "11111111-1111-4111-8111-111111111111", number: 1, side: "left", tool: "x", points: [[0.5, 0.5]] }], next_mark_number: 2 }));
+    expect(screen.getByTestId("unsupported-diagram")).toBeTruthy();
+    expect(screen.queryByRole("toolbar", { name: "Drawing tools" })).toBeNull();
+    expect(screen.getByTestId("marks-list").textContent).toContain("1. X on the horse's left side");
   });
 
   it("keeps the marks of each side apart", async () => {

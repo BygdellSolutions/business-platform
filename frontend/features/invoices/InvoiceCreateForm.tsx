@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useEffectEvent, useRef, useState, useTransition, type FormEvent } from "react";
 
 import { useOrgId } from "@/components/shell/org-context";
-import { Button } from "@/components/ui/Button";
+import { Button, SECONDARY_LINK } from "@/components/ui/Button";
 import { DecimalText } from "@/components/ui/DecimalText";
 import { ErrorSummary } from "@/components/ui/ErrorSummary";
 import { FieldShell } from "@/components/ui/Field";
@@ -304,7 +304,7 @@ export function InvoiceCreateForm({
           <Button type="submit" disabled={pending || selection.length === 0 || dateErrors.length > 0 || dueErrors.length > 0} data-testid="submit">
             {pending ? "Creating…" : "Create draft invoice"}
           </Button>
-          <Link href={`/o/${orgId}/invoices`} className="text-sm underline">
+          <Link href={`/o/${orgId}/invoices`} className={SECONDARY_LINK}>
             Cancel
           </Link>
         </div>
