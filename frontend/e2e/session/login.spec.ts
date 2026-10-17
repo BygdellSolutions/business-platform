@@ -35,6 +35,17 @@ test.describe("who gets in, and who is sent to /login", () => {
     await expect(page.getByTestId("organization-list").getByRole("link")).toHaveText([ORG_A.name, ORG_B.name]);
   });
 
+  test("a signed-in browser that opens /login is sent on, and the login offers a way back to the homepage", async ({ page }) => {
+    await page.goto("/login");
+    await page.getByRole("link", { name: "Go to homepage" }).click();
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+
+    await signInThroughPage(page, FREDRIK);
+    await page.goto("/login");
+    await expect(page).toHaveURL(/\/organizations$/);
+  });
+
   test("a user with one organization goes straight to it, with the role they hold there", async ({ page }) => {
     await signInThroughPage(page, MARIA);
 
