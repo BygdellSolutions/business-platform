@@ -231,6 +231,8 @@ def document_from_credit_note(note: Any) -> PdfDocument:
         net=negative(_text(data["net_amount"])),
         vat=negative(_text(data["vat_amount"])),
         gross=negative(_text(data["gross_amount"])),
+        vat_sek=negative(_text(data["vat_amount_sek"])) if data.get("vat_amount_sek") is not None else None,
+        vat_rate_used=_text(data["vat_exchange_rate"]) if data.get("vat_exchange_rate") is not None else None,
         credit=PdfCredit(
             invoice_number=_text(data["invoice_number_text"]), invoice_date=_text(data["invoice_date"]), reason=_text(data["reason"])
         ),

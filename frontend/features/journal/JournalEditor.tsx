@@ -10,16 +10,26 @@ import { ErrorSummary } from "@/components/ui/ErrorSummary";
 import { CONTROL } from "@/components/ui/controls";
 import { FieldShell, TextAreaField } from "@/components/ui/Field";
 import { apiFetch } from "@/lib/api/client";
-import type { Colleague, JournalEntry, JournalUpdate, MarkSide, MarkTool } from "@/lib/api/types";
+import type { Colleague, JournalEntry, JournalUpdate, MarkSide, MarkTool, ServiceRecord } from "@/lib/api/types";
 import { problemsFrom, useMutation } from "@/lib/forms";
 import { DiagramCanvas, type ActiveTool } from "./DiagramCanvas";
 import { describe, editorReducer, initialState, numberOf, sameMarks, SIDE_LABELS, TOOL_LABELS } from "./marks";
 
-const CONTROLS = ["visit_at", "practitioner_user_id", "body", "follow_up_on", "marks"] as const;
+const CONTROLS = ["visit_at", "practitioner_user_id", "body", "follow_up_on", "order_id", "marks"] as const;
 const TOOLS: { tool: ActiveTool; label: string }[] = [
   { tool: "select", label: "Select / move" },
   ...(["line", "arrow", "x", "o"] as MarkTool[]).map((tool) => ({ tool, label: TOOL_LABELS[tool] })),
 ];
+
+/** The orders this horse has had services on (one entry per order), plus the one already linked even when it is not among them. */
+function linkable(services: ServiceRecord[], saved: JournalEntry): { id: string; label: string }[] {
+  const options = new Map<string, string>();
+  for (const service of services) {
+    if (!options.has(service.transaction_id)) options.set(service.transaction_id, `Order ${service.transaction_number} · ${service.description} · ${service.transaction_date}`);
+  }
+  if (saved.order_id && !options.has(saved.order_id)) options.set(saved.order_id, saved.order_number !== null ? `Order ${saved.order_number}` : "Linked order (no longer exists)");
+  return [...options].map(([id, label]) => ({ id, label }));
+}
 
 /** The day of a stored instant as the value of a date input (the browser's own time zone). The time of day is not kept track of. */
 function toLocalInput(iso: string): string {
@@ -44,6 +54,8 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
   const [visitAt, setVisitAt] = useState(toLocalInput(entry.visit_at));
   const [practitioner, setPractitioner] = useState(entry.practitioner_user_id ?? "");
   const [colleagues, setColleagues] = useState<Colleague[]>([]);
+  const [services, setServices] = useState<ServiceRecord[]>([]);
+  const [orderId, setOrderId] = useState(entry.order_id ?? "");
   const [body, setBody] = useState(entry.body);
   const [followUp, setFollowUp] = useState(entry.follow_up_on ?? "");
   const [editor, dispatch] = useReducer(editorReducer, entry.marks, initialState);
@@ -59,6 +71,7 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
     practitioner !== (saved.practitioner_user_id ?? "") ||
     body !== saved.body ||
     followUp !== (saved.follow_up_on ?? "") ||
+    orderId !== (saved.order_id ?? "") ||
     !sameMarks(editor.marks, saved.marks));
 
   useEffect(() => {
@@ -68,6 +81,15 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
     });
     return () => controller.abort();
   }, [orgId]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const query = new URLSearchParams({ subject_type: "horse", subject_id: entry.horse_id });
+    void apiFetch<ServiceRecord[]>(orgId, `/transactions/services?${query}`, { signal: controller.signal }).then((result) => {
+      if (result.ok && Array.isArray(result.data)) setServices(result.data);
+    });
+    return () => controller.abort();
+  }, [orgId, entry.horse_id]);
 
   useEffect(() => {
     if (!dirty) return;
@@ -86,6 +108,7 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
     if (practitioner !== (saved.practitioner_user_id ?? "") && practitioner !== "") update.practitioner_user_id = practitioner;
     if (body !== saved.body) update.body = body;
     if (followUp !== (saved.follow_up_on ?? "")) update.follow_up_on = followUp === "" ? null : followUp;
+    if (orderId !== (saved.order_id ?? "")) update.order_id = orderId === "" ? null : orderId;
     if (!sameMarks(editor.marks, saved.marks)) update.marks = editor.marks;
     return update;
   }
@@ -162,6 +185,18 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
           </FieldShell>
         </div>
         
+        <FieldShell label="Linked order (optional)" name="order_id" error={problems.byField.order_id} hint="An order this horse was treated on. The journal text is never copied into the order or its invoice.">
+          {(control) => (
+            <select {...control} value={orderId} onChange={(event) => setOrderId(event.target.value)} className={CONTROL}>
+              <option value="">No linked order</option>
+              {linkable(services, saved).map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          )}
+        </FieldShell>
       </div>
 
       <div className="panel flex flex-col gap-3">

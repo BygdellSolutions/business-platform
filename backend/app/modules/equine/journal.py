@@ -17,14 +17,15 @@ import uuid
 from datetime import date, datetime, time, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import Pagination, Sorting, pagination, sorted_by, sorting
 from app.core import audit
 from app.core.authz import roles_required
 from app.core.db import get_db
-from app.core.query import commit_and_refresh
+from app.core.entity_registry import registry
+from app.core.query import commit_and_refresh, contains_pattern, number_matches
 from app.core.tenant import TenantContext
 from app.core.tenant_scope import create_scoped, get_scoped_or_404, reference_error, scoped_select
 from app.core.versioning import ensure_current
@@ -40,7 +41,7 @@ CHANGE_ANY = (Role.OWNER, Role.ADMIN)
 PREVIEW_LENGTH = 160
 # What the horse's history records of an entry. The text and the marks are the journal's own content and are not copied into the
 # history; the entry itself is the record of them (frozen at finalization).
-AUDITED = ("visit_at", "practitioner_user_id", "practitioner_name", "follow_up_on", "status", "finalized_at")
+AUDITED = ("visit_at", "practitioner_user_id", "practitioner_name", "follow_up_on", "order_id", "status", "finalized_at")
 
 
 def _practitioner(db: Session, ctx: TenantContext, user_id: uuid.UUID) -> User:
@@ -69,6 +70,25 @@ def _numbered(marks: list[dict]) -> list[dict]:
     return result
 
 
+def _order_numbers(db: Session, ctx: TenantContext, ids: set[uuid.UUID]) -> dict[uuid.UUID, int]:
+    """The numbers of these orders of THIS organization, from Sales through the registry (an order that is gone is simply missing)."""
+    found: dict[uuid.UUID, int] = {}
+    for answer in registry.call_hooks("order.numbers", db, ctx.organization_id, ids) if ids else []:
+        found.update(answer)
+    return found
+
+
+def _check_order(db: Session, ctx: TenantContext, order_id: uuid.UUID) -> None:
+    if order_id not in _order_numbers(db, ctx, {order_id}):  # a foreign or made-up id is refused alike
+        reference_error("order_id", "Choose an order of this organization", "reference.not_found")
+
+
+def _matches(q: str):
+    """Entries whose text or practitioner contains `q`, or whose number is `q`."""
+    pattern = contains_pattern(q)
+    return or_(HorseJournalEntry.body.ilike(pattern, escape="\\"), HorseJournalEntry.practitioner_name.ilike(pattern, escape="\\"), number_matches(HorseJournalEntry.number, q))
+
+
 def _may_change(ctx: TenantContext, entry: HorseJournalEntry) -> bool:
     return ctx.role in CHANGE_ANY or entry.created_by == ctx.user.id
 
@@ -91,6 +111,7 @@ def _read(db: Session, ctx: TenantContext, entry: HorseJournalEntry) -> JournalR
             "finalized_by_name": names.get(entry.finalized_by),
             "can_change": entry.status == JOURNAL_DRAFT and _may_change(ctx, entry),
             "can_correct": entry.status == JOURNAL_FINAL and _may_change(ctx, entry),
+            "order_number": _order_numbers(db, ctx, {entry.order_id}).get(entry.order_id) if entry.order_id else None,
             "corrections": [CorrectionRead.model_validate(c).model_copy(update={"created_by_name": author_names.get(c.created_by)}) for c in corrections],
         }
     )
@@ -117,6 +138,7 @@ def _require_own_draft(ctx: TenantContext, entry: HorseJournalEntry) -> None:
 @router.get("", response_model=list[JournalSummary])
 def list_entries(
     horse_id: uuid.UUID,
+    q: str | None = Query(default=None, max_length=255, description="The text, who did it, or the entry number contains"),
     date_from: date | None = Query(default=None, description="Visits on or after this day"),
     date_to: date | None = Query(default=None, description="Visits on or before this day"),
     page: Pagination = Depends(pagination),
@@ -128,6 +150,8 @@ def list_entries(
 for its text and marks)."""
     get_scoped_or_404(db, ctx, Horse, horse_id)
     query = scoped_select(HorseJournalEntry, ctx).where(HorseJournalEntry.horse_id == horse_id)
+    if q:
+        query = query.where(_matches(q))
     if date_from is not None:
         query = query.where(HorseJournalEntry.visit_at >= datetime.combine(date_from, time.min, tzinfo=timezone.utc))
     if date_to is not None:
@@ -156,6 +180,8 @@ for its text and marks)."""
 @router.post("", response_model=JournalRead, status_code=status.HTTP_201_CREATED)
 def create_entry(horse_id: uuid.UUID, payload: JournalCreate, ctx: TenantContext = Depends(journal_access), db: Session = Depends(get_db)) -> JournalRead:
     get_scoped_or_404(db, ctx, Horse, horse_id)
+    if payload.order_id is not None:
+        _check_order(db, ctx, payload.order_id)
     practitioner = _practitioner(db, ctx, payload.practitioner_user_id) if payload.practitioner_user_id is not None else ctx.user
     entry = create_scoped(
         db,
@@ -167,6 +193,7 @@ def create_entry(horse_id: uuid.UUID, payload: JournalCreate, ctx: TenantContext
         practitioner_name=practitioner.name,
         body=payload.body,
         follow_up_on=payload.follow_up_on,
+        order_id=payload.order_id,
         marks=_numbered([mark.model_dump(mode="json", exclude_none=False) for mark in payload.marks]),
         diagram_version=DIAGRAM_VERSION,
         status=JOURNAL_DRAFT,
@@ -196,6 +223,8 @@ def update_entry(
     values = {field: getattr(payload, field) for field in payload.model_fields_set}
     if "marks" in values:
         values["marks"] = _numbered([mark.model_dump(mode="json") for mark in values["marks"]])
+    if values.get("order_id") is not None:
+        _check_order(db, ctx, values["order_id"])
     if "practitioner_user_id" in values:
         chosen = _practitioner(db, ctx, values["practitioner_user_id"])
         values["practitioner_name"] = chosen.name  # the name as it is now, kept with the entry
@@ -288,6 +317,7 @@ def draft_summary(ctx: TenantContext = Depends(journal_access), db: Session = De
 
 @overview.get("/drafts", response_model=list[JournalSummary])
 def list_drafts(
+    q: str | None = Query(default=None, max_length=255, description="The text, who did it, or the entry number contains"),
     page: Pagination = Depends(pagination),
     sort: Sorting = Depends(sorting),
     ctx: TenantContext = Depends(journal_access),
@@ -307,6 +337,8 @@ def list_drafts(
         .add_columns(Horse.name)
         .join(Horse, (Horse.organization_id == HorseJournalEntry.organization_id) & (Horse.id == HorseJournalEntry.horse_id))
     )
+    if q:
+        query = query.where(_matches(q))
     rows = db.execute(sorted_by(query, sort, columns, (HorseJournalEntry.visit_at.asc(), HorseJournalEntry.number.asc())).limit(page.limit).offset(page.offset)).all()
     names = _names(db, [entry for entry, _ in rows])
     return [

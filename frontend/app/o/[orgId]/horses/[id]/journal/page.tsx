@@ -58,7 +58,7 @@ export default async function JournalPage({
       <NewJournalEntry horseId={horse.id} />
 
       <div className="panel flex flex-col gap-4">
-        <ListFilters action={journalBase} params={list} search={false} activeStatus={false}>
+        <ListFilters action={journalBase} params={list} activeStatus={false}>
           <label className={FILTER_LABEL}>
             From
             <input type="date" name="date_from" defaultValue={list.extra.date_from ?? ""} className={CONTROL} />

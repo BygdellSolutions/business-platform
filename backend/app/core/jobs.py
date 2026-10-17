@@ -62,3 +62,46 @@ def once(db: Session, key: str) -> bool:
     so the claim and the effect commit or roll back together (a crash before the commit leaves neither)."""
     claimed = db.execute(insert(JobEffect).values(key=key).on_conflict_do_nothing().returning(JobEffect.key)).first()
     return claimed is not None
+
+
+# --- fairness between organizations, and jobs that failed for good ---------------------------------------------------------------
+
+class TooManyJobs(Exception):
+    """The organization already has as many jobs of this queue waiting or running as it may (try again when some have finished)."""
+
+
+def enqueue_for_organization(
+    db: Session, task: str, *, queue: str, organization_id: uuid.UUID, args: dict[str, Any] | None = None, max_active: int = 2, **options: Any
+) -> int:
+    """`enqueue` for work done on behalf of ONE organization, with a cap on how many such jobs of this queue it may have waiting or
+    running at once, so a large export or import by one tenant never fills the queue for the others. The organization id travels in
+    the job's arguments (and nowhere else: the job reads it from there). Two requests at the same instant cannot both slip under the
+    cap: the check runs under a lock on (organization, queue) held until the transaction ends."""
+    db.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"), {"key": f"jobs:{organization_id}:{queue}"})
+    active = db.execute(
+        text(
+            "SELECT count(*) FROM procrastinate_jobs WHERE queue_name = :queue AND args ->> 'organization_id' = :org AND status IN ('todo', 'doing')"
+        ),
+        {"queue": queue, "org": str(organization_id)},
+    ).scalar_one()
+    if active >= max_active:
+        raise TooManyJobs(f"{active} {queue} jobs are already waiting or running for this organization")
+    return enqueue(db, task, queue=queue, args={**(args or {}), "organization_id": str(organization_id)}, **options)
+
+
+def failed_jobs(db: Session) -> list[dict[str, Any]]:
+    """The jobs that failed for good (no retry left), oldest first: what an operator has to look at. Arguments are ids only by rule."""
+    rows = db.execute(
+        text(
+            "SELECT id, queue_name, task_name, attempts, args, scheduled_at FROM procrastinate_jobs WHERE status = 'failed' ORDER BY id"
+        )
+    ).mappings()
+    return [dict(row) for row in rows]
+
+
+def retry_failed(db: Session, job_id: int) -> bool:
+    """Put one failed job back in the queue (by hand, after the cause is fixed). False when there is no such failed job."""
+    moved = db.execute(
+        text("UPDATE procrastinate_jobs SET status = 'todo', scheduled_at = now() WHERE id = :id AND status = 'failed'"), {"id": job_id}
+    ).rowcount
+    return moved == 1

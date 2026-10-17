@@ -6,6 +6,7 @@ from procrastinate import JobContext
 
 from app.core.config import settings
 from app.core.db import SessionLocal
+from app.core.jobs import failed_jobs
 from app.scripts.admin import purge
 from app.worker.queue import app
 
@@ -39,3 +40,15 @@ async def recover_stalled_jobs(context: JobContext, timestamp: int) -> None:
 async def remove_old_jobs(context: JobContext, timestamp: int) -> None:
     """Finished jobs are kept a week for inspection; failed ones stay until someone looks at them."""
     await context.app.job_manager.delete_old_jobs(nb_hours=24 * 7, include_failed=False)
+
+
+@app.periodic(cron="*/10 * * * *")
+@app.task(name="maintenance.report_failed_jobs", queue="maintenance", queueing_lock="maintenance.report_failed_jobs")
+def report_failed_jobs(timestamp: int) -> None:
+    """Say, at ERROR level (so the platform's log alerting sees it), that jobs failed for good and which. Until email exists this and
+    `admin failed-jobs` are how it is noticed; a failed job stays until an operator retries it (`admin retry-job`) or it is removed."""
+    with SessionLocal() as db:
+        failed = failed_jobs(db)
+    if failed:
+        log.error("jobs failed for good", extra={"count": len(failed), "jobs": [(job["id"], job["task_name"]) for job in failed[:20]]})
+

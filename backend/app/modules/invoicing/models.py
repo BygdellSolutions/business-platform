@@ -399,6 +399,7 @@ class CreditNote(TenantOwned, Base):
             ["organization_id", "invoice_id"], ["invoices.organization_id", "invoices.id"], ondelete="RESTRICT", name="fk_credit_notes_invoice"
         ),
         CheckConstraint("number >= 1", name="ck_credit_notes_number_positive"),
+        CheckConstraint("vat_exchange_rate IS NULL OR vat_exchange_rate > 0", name="ck_credit_notes_vat_exchange_rate_positive"),
         CheckConstraint("length(btrim(reason)) > 0", name="ck_credit_notes_reason"),
         CheckConstraint(
             "net_amount > 0 AND vat_amount >= 0 AND gross_amount = net_amount + vat_amount", name="ck_credit_notes_totals"
@@ -421,6 +422,9 @@ class CreditNote(TenantOwned, Base):
     net_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     vat_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     gross_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    # On an invoice in another currency: the invoice's exchange rate and the VAT credited in SEK at that rate (frozen when the note is made).
+    vat_exchange_rate: Mapped[Decimal | None] = mapped_column(Numeric(12, 6))
+    vat_amount_sek: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
     issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     issued_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
 

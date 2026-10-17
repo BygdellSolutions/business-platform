@@ -1040,6 +1040,9 @@ export interface JournalEntry {
   practitioner_name: string;
   body: string;
   follow_up_on: string | null;
+  /** The order this visit was billed on, if linked, and its number (null when the order no longer exists). */
+  order_id: string | null;
+  order_number: number | null;
   marks: JournalMark[];
   diagram_version: number;
   status: "draft" | "final";
@@ -1063,5 +1066,6 @@ export interface JournalUpdate {
   practitioner_user_id?: string;
   body?: string;
   follow_up_on?: string | null;
+  order_id?: string | null;
   marks?: JournalMark[];
 }

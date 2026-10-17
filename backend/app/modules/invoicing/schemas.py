@@ -367,6 +367,8 @@ class CreditNoteSummary(BaseModel):
     net_amount: MoneyOut
     vat_amount: MoneyOut
     gross_amount: MoneyOut
+    vat_exchange_rate: RateOut | None = None  # the credited invoice's exchange rate, for a foreign-currency invoice
+    vat_amount_sek: MoneyOut | None = None  # the credited VAT in SEK at that rate
     issued_at: datetime
     issued_by_name: str | None
 

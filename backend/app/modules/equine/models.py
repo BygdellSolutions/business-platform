@@ -142,6 +142,8 @@ class HorseJournalEntry(TenantOwned, Numbered, Authored, Base):
     practitioner_name: Mapped[str] = mapped_column(String(255))
     body: Mapped[str] = mapped_column(Text, default="", server_default="")
     follow_up_on: Mapped[date | None] = mapped_column(Date)
+    # The order this visit was billed on, if any: an id only (Sales answers for it through the registry; see journal.py).
+    order_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     marks: Mapped[list] = mapped_column(JSONB, default=list, server_default=text("'[]'::jsonb"))
     diagram_version: Mapped[int] = mapped_column(Integer, default=DIAGRAM_VERSION, server_default=text("1"))
     status: Mapped[str] = mapped_column(String(16), default=JOURNAL_DRAFT, server_default="draft")

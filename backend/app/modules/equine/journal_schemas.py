@@ -73,6 +73,7 @@ class JournalCreate(BaseModel):
     practitioner_user_id: uuid.UUID | None = None  # a member of the organization; defaults to the author
     body: Body = ""
     follow_up_on: date | None = None
+    order_id: uuid.UUID | None = None  # an order of this organization (optional)
     marks: list[Mark] = Field(default_factory=list, max_length=JOURNAL_MAX_MARKS)
 
     _aware = field_validator("visit_at")(_aware)
@@ -88,6 +89,7 @@ class JournalUpdate(BaseModel):
     practitioner_user_id: uuid.UUID | None = None
     body: Body | None = None
     follow_up_on: date | None = None
+    order_id: uuid.UUID | None = None  # null removes the link
     marks: list[Mark] | None = Field(default=None, max_length=JOURNAL_MAX_MARKS)
 
     _aware = field_validator("visit_at")(_aware)
@@ -157,6 +159,8 @@ class JournalRead(BaseModel):
     practitioner_name: str
     body: str
     follow_up_on: date | None
+    order_id: uuid.UUID | None
+    order_number: int | None = None  # the linked order's number (none when it no longer exists)
     marks: list[Mark]
     diagram_version: int
     status: str

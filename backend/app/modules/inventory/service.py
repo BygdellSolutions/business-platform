@@ -51,16 +51,15 @@ def on_hand(db: Session, organization_id: uuid.UUID, item_ids: "Iterable[uuid.UU
         return {item_id: quantity for item_id, quantity in db.execute(latest)}
     ids = list(set(item_ids))
     result = {item_id: ZERO for item_id in ids}
-    if not ids:
-        return result
-    last = (
-        select(func.max(StockMovement.sequence))
-        .where(StockMovement.organization_id == organization_id, StockMovement.item_id.in_(ids))
-        .group_by(StockMovement.item_id)
-    )
-    latest = select(StockMovement.item_id, StockMovement.quantity_after).where(StockMovement.sequence.in_(last))
-    for item_id, quantity in db.execute(latest):
-        result[item_id] = quantity
+    for chunk in in_chunks(ids):  # a long list is asked in short statements (see app.core.query.in_chunks)
+        last = (
+            select(func.max(StockMovement.sequence))
+            .where(StockMovement.organization_id == organization_id, StockMovement.item_id.in_(chunk))
+            .group_by(StockMovement.item_id)
+        )
+        latest = select(StockMovement.item_id, StockMovement.quantity_after).where(StockMovement.sequence.in_(last))
+        for item_id, quantity in db.execute(latest):
+            result[item_id] = quantity
     return result
 
 
@@ -68,20 +67,19 @@ def committed(db: Session, organization_id: uuid.UUID, item_ids: Iterable[uuid.U
     """Units already promised per item: what open backorders still wait for."""
     ids = list(set(item_ids))
     result = {item_id: ZERO for item_id in ids}
-    if not ids:
-        return result
-    rows = db.execute(
-        select(LineFulfillment.item_id, func.sum(LineFulfillment.backordered - LineFulfillment.fulfilled_later))
-        .where(
-            LineFulfillment.organization_id == organization_id,
-            LineFulfillment.item_id.in_(ids),
-            LineFulfillment.cancelled_at.is_(None),
-            LineFulfillment.fulfilled_later < LineFulfillment.backordered,
+    for chunk in in_chunks(ids):
+        rows = db.execute(
+            select(LineFulfillment.item_id, func.sum(LineFulfillment.backordered - LineFulfillment.fulfilled_later))
+            .where(
+                LineFulfillment.organization_id == organization_id,
+                LineFulfillment.item_id.in_(chunk),
+                LineFulfillment.cancelled_at.is_(None),
+                LineFulfillment.fulfilled_later < LineFulfillment.backordered,
+            )
+            .group_by(LineFulfillment.item_id)
         )
-        .group_by(LineFulfillment.item_id)
-    )
-    for item_id, quantity in rows:
-        result[item_id] = quantity
+        for item_id, quantity in rows:
+            result[item_id] = quantity
     return result
 
 
@@ -89,20 +87,19 @@ def incoming(db: Session, organization_id: uuid.UUID, item_ids: Iterable[uuid.UU
     """Units on their way per item: what open incoming deliveries have not brought yet."""
     ids = list(set(item_ids))
     result = {item_id: ZERO for item_id in ids}
-    if not ids:
-        return result
-    rows = db.execute(
-        select(IncomingStock.item_id, func.sum(IncomingStock.quantity - IncomingStock.received))
-        .where(
-            IncomingStock.organization_id == organization_id,
-            IncomingStock.item_id.in_(ids),
-            IncomingStock.cancelled_at.is_(None),
-            IncomingStock.received < IncomingStock.quantity,
+    for chunk in in_chunks(ids):
+        rows = db.execute(
+            select(IncomingStock.item_id, func.sum(IncomingStock.quantity - IncomingStock.received))
+            .where(
+                IncomingStock.organization_id == organization_id,
+                IncomingStock.item_id.in_(chunk),
+                IncomingStock.cancelled_at.is_(None),
+                IncomingStock.received < IncomingStock.quantity,
+            )
+            .group_by(IncomingStock.item_id)
         )
-        .group_by(IncomingStock.item_id)
-    )
-    for item_id, quantity in rows:
-        result[item_id] = quantity
+        for item_id, quantity in rows:
+            result[item_id] = quantity
     return result
 
 
@@ -114,18 +111,17 @@ def allocated(
     draft's own lines (what that draft may still count on)."""
     ids = list(set(item_ids))
     result = {item_id: ZERO for item_id in ids}
-    if not ids:
-        return result
-    query = (
-        select(TransactionLine.item_id, func.sum(TransactionLine.quantity))
-        .join(Transaction, (Transaction.organization_id == TransactionLine.organization_id) & (Transaction.id == TransactionLine.transaction_id))
-        .where(TransactionLine.organization_id == organization_id, TransactionLine.item_id.in_(ids), Transaction.status == TransactionStatus.DRAFT)
-        .group_by(TransactionLine.item_id)
-    )
-    if except_transaction is not None:
-        query = query.where(Transaction.id != except_transaction)
-    for item_id, quantity in db.execute(query):
-        result[item_id] = quantity
+    for chunk in in_chunks(ids):
+        query = (
+            select(TransactionLine.item_id, func.sum(TransactionLine.quantity))
+            .join(Transaction, (Transaction.organization_id == TransactionLine.organization_id) & (Transaction.id == TransactionLine.transaction_id))
+            .where(TransactionLine.organization_id == organization_id, TransactionLine.item_id.in_(chunk), Transaction.status == TransactionStatus.DRAFT)
+            .group_by(TransactionLine.item_id)
+        )
+        if except_transaction is not None:
+            query = query.where(Transaction.id != except_transaction)
+        for item_id, quantity in db.execute(query):
+            result[item_id] = quantity
     return result
 
 

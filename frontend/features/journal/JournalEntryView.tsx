@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
@@ -39,6 +40,18 @@ export function JournalEntryView({ entry, timeZone }: { entry: JournalEntry; tim
         <p data-testid="entry-visit">
           <strong>Visit:</strong> {formatDay(entry.visit_at, timeZone)} · <strong>Practitioner:</strong> {entry.practitioner_name}
         </p>
+        {entry.order_id && (
+          <p data-testid="entry-order">
+            <strong>Order:</strong>{" "}
+            {entry.order_number !== null ? (
+              <Link href={`/o/${orgId}/transactions/${entry.order_id}`} className="underline">
+                Order {entry.order_number}
+              </Link>
+            ) : (
+              <span className="text-zinc-500">the linked order no longer exists</span>
+            )}
+          </p>
+        )}
         {entry.follow_up_on && (
           <p data-testid="entry-follow-up">
             <strong>Follow-up:</strong> {entry.follow_up_on}

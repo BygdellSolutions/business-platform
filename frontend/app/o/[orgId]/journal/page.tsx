@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { ListFilters } from "@/components/ui/ListFilters";
 import { Pagination } from "@/components/ui/Pagination";
 import { JournalTable } from "@/features/journal/JournalTable";
 import { readActiveRole } from "@/lib/active-role";
@@ -56,8 +57,9 @@ export default async function DraftJournalPage({
         {role === "employee" ? "Your entries that are not finalized yet." : "Entries not finalized yet, of every horse."} Open one to finish or delete it.
       </p>
       <div className="panel flex flex-col gap-3">
+        <ListFilters action={journalBase} params={list} activeStatus={false} />
         {entries.length === 0 ? (
-          <p data-testid="empty">No draft journal entries. Everything is finalized.</p>
+          <p data-testid="empty">{list.q ? "No draft entries match." : "No draft journal entries. Everything is finalized."}</p>
         ) : (
           <JournalTable
             orgId={orgId}

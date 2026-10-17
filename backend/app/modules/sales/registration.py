@@ -41,6 +41,11 @@ def _service_subjects_are_referenced(db: Session, entity_key: str, organization_
     ) is not None
 
 
+def _order_numbers(db: Session, organization_id: uuid.UUID, ids) -> dict[uuid.UUID, int]:
+    """The numbers of the orders of ONE organization among `ids` (the answer to the hook other modules ask, never their rows)."""
+    return dict(db.execute(select(Transaction.id, Transaction.number).where(Transaction.organization_id == organization_id, Transaction.id.in_(list(ids)))).all())
+
+
 def register(registry: Registry) -> None:
     """Expose transactions and their lines to generic capabilities (custom fields,
     lifecycle validation) without importing any of them."""
@@ -63,5 +68,6 @@ def register(registry: Registry) -> None:
             is_editable=_line_is_editable,
         )
     )
+    registry.add_hook("order.numbers", _order_numbers)
     registry.add_currency_guard(_transactions_fix_the_currency)
     registry.add_reference_guard(_service_subjects_are_referenced)

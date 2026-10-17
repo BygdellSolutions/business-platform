@@ -9,7 +9,7 @@ records a return movement if it tracks the item); Invoicing never imports Invent
 import uuid
 from collections import defaultdict
 from collections.abc import Sequence
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
@@ -145,6 +145,8 @@ def create_credit_note(db: Session, ctx: TenantContext, invoice_id: uuid.UUID, p
         by_rate[row.vat_rate][1] += row.vat_amount
 
     organization = db.scalar(select(Organization).where(Organization.id == ctx.organization_id))
+    # An invoice in another currency stated its VAT in SEK at a rate; the credit note states the credited VAT in SEK at THAT rate.
+    rate = invoice.vat_exchange_rate if invoice.currency != "SEK" else None
     number = numbering.allocate_number(db, ctx.organization_id, invoice.series)
     note = CreditNote(
         organization_id=ctx.organization_id,
@@ -160,6 +162,8 @@ def create_credit_note(db: Session, ctx: TenantContext, invoice_id: uuid.UUID, p
         net_amount=net,
         vat_amount=vat,
         gross_amount=net + vat,
+        vat_exchange_rate=rate,
+        vat_amount_sek=(vat * rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) if rate is not None else None,
         issued_at=clock.utcnow(),
         issued_by=ctx.user.id,
     )
@@ -231,6 +235,8 @@ def _summary(note: CreditNote, issued_by_name: str | None) -> dict:
         net_amount=note.net_amount,
         vat_amount=note.vat_amount,
         gross_amount=note.gross_amount,
+        vat_exchange_rate=note.vat_exchange_rate,
+        vat_amount_sek=note.vat_amount_sek,
         issued_at=note.issued_at,
         issued_by_name=issued_by_name,
     )

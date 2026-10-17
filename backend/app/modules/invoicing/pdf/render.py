@@ -58,7 +58,8 @@ from app.modules.invoicing.pdf.labels import decimal_separator, labels
 #    "Ingen moms debiteras eftersom"). Everything else prints as in 12.
 # 14: an invoice in another currency prints its VAT amount in SEK and the exchange rate that gave it. Everything else prints as in 13.
 # 15: a service line shows the day it was performed, without the time. Everything else prints as in 14.
-TEMPLATE_VERSION = 15
+# 16: a credit note on an invoice in another currency prints the credited VAT in SEK and the invoice's exchange rate (as the invoice does). Everything else prints as in 15.
+TEMPLATE_VERSION = 16
 ACCENT = colors.HexColor("#1f4e5f")
 ACCENT_LIGHT = colors.HexColor("#e8f0f2")
 # Room for the footer columns (up to five lines each) above the page number.

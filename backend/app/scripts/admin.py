@@ -138,6 +138,21 @@ def reset_mfa(db: Session, *, email: str) -> None:
     mfa_service.reset_by_operator(db, _user_by_email(db, email), clock.utcnow())
 
 
+def failed_jobs_report(db: Session) -> list[str]:
+    """One line per job that failed for good: id, queue, task, attempts (arguments are ids only; they are shown for diagnosis)."""
+    from app.core import jobs
+
+    return [f"{job['id']}  {job['queue_name']}  {job['task_name']}  attempts={job['attempts']}  args={job['args']}" for job in jobs.failed_jobs(db)]
+
+
+def retry_job(db: Session, *, job_id: int) -> None:
+    from app.core import jobs
+
+    if not jobs.retry_failed(db, job_id):
+        raise OperatorError(f"There is no failed job {job_id}.")
+    db.commit()
+
+
 def purge(db: Session) -> dict[str, int]:
     now = clock.utcnow()
     counts = sessions.purge_records(db, now)
@@ -179,6 +194,10 @@ def build_parser() -> argparse.ArgumentParser:
     revoke_all = commands.add_parser("revoke-all-sessions", help="EMERGENCY: end every active session of every user (people sign in again)")
     revoke_all.add_argument("--yes-end-all-sessions", action="store_true", dest="confirmed", help="required: confirms this ends every session")
 
+    commands.add_parser("failed-jobs", help="list the background jobs that failed for good")
+    retry = commands.add_parser("retry-job", help="put one failed background job back in the queue (after the cause is fixed)")
+    retry.add_argument("--id", required=True, type=int, dest="job_id")
+
     commands.add_parser("purge", help="delete expired sessions, used or expired setup tokens and old security events")
     return parser
 
@@ -216,6 +235,12 @@ def main(argv: list[str] | None = None) -> int:
                 if not args.confirmed:
                     raise OperatorError("This ends EVERY session of EVERY user. Run it again with --yes-end-all-sessions to confirm.")
                 print(f"{revoke_all_sessions(db)} session(s) ended. Everyone signs in again.")
+            elif args.command == "failed-jobs":
+                lines = failed_jobs_report(db)
+                print("\n".join(lines) if lines else "No failed jobs.")
+            elif args.command == "retry-job":
+                retry_job(db, job_id=args.job_id)
+                print(f"Job {args.job_id} is queued again.")
             elif args.command == "purge":
                 print(", ".join(f"{name}: {count}" for name, count in purge(db).items()))
     except OperatorError as error:
