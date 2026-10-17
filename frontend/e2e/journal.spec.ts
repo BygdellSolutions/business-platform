@@ -273,3 +273,26 @@ test("the journal is searched by its text, and an entry offers the orders of its
   await expect(page.getByLabel(/Linked order/)).toHaveValue(""); // no order yet, and a horse without services has none to offer
   await expect(page.getByLabel(/Linked order/).locator("option")).toHaveText(["No linked order"]);
 });
+
+test("a draft saves itself: nothing is pressed, and the text and the mark are there after a reload", async ({ page, context }) => {
+  world = createWorld({ label: "Journal autosave" });
+  await signIn(context, world.email);
+  const horse = await createHorse(context, world.orgId, { name: "Kalle", owner_customer_id: (await createCustomer(context, world.orgId, "Anna Andersson")).id });
+  await startEntry(page, world.orgId, horse.id);
+
+  await page.getByLabel(/Observations/).fill("Written and never saved by hand.");
+  await expect(page.getByTestId("save-status")).toHaveText("Unsaved changes");
+  await expect(page.getByTestId("save-status")).toHaveText("All changes saved", { timeout: 10_000 }); // by itself, a moment after the last change
+  await expect(page.getByTestId("saved")).toHaveText("Draft saved automatically.");
+
+  await page.getByTestId("tool-x").click();
+  const area = await box(page);
+  await page.mouse.click(area.x + area.width * 0.4, area.y + area.height * 0.4);
+  await expect(page.getByTestId("marks-list").locator("li")).toHaveCount(1);
+  await expect(page.getByTestId("save-status")).toHaveText("All changes saved", { timeout: 10_000 });
+
+  await page.reload();
+  await expect(page.getByLabel(/Observations/)).toHaveValue("Written and never saved by hand.");
+  await expect(page.getByTestId("marks-list").locator("li")).toHaveCount(1);
+  await expect(page.getByTestId("save-status")).toHaveText("All changes saved");
+});

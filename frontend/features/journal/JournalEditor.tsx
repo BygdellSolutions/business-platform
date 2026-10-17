@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useReducer, useState, type KeyboardEvent } from "react";
+import { useEffect, useReducer, useRef, useState, type KeyboardEvent } from "react";
 
 import { useOrgId } from "@/components/shell/org-context";
 import { Button } from "@/components/ui/Button";
@@ -42,12 +42,19 @@ function toLocalInput(iso: string): string {
 /** A chosen day as the instant that is stored: noon that day, so a day is the same day wherever it is shown. */
 const noonOf = (day: string): string => new Date(`${day}T12:00:00`).toISOString();
 
+/** A draft is saved by itself this long after the last change (a lost note is the worst thing that can happen in a journal). */
+export const AUTOSAVE_MS = 2000;
+/** When a save fails because the connection or the server failed, it is tried again this long after. */
+const RETRY_MS = 10_000;
+
 /**
- * Writing a journal entry (a draft): when and who, one horse diagram per side with drawing marks, and one text. Nothing is saved
- * until "Save draft"; the page says plainly when there are unsaved changes and asks the browser before leaving with any. The draft is
- * saved against the version it was opened on, so a change made elsewhere is refused (nothing overwritten) and shown here.
+ * Writing a journal entry (a draft): when and who, one horse diagram per side with drawing marks, and one text. The draft is saved by
+ * itself a moment after the last change (and when the tab is left), and "Save draft" does it at once; the page says plainly when there
+ * are unsaved changes and asks the browser before leaving with any. Every save is made against the version the draft was last saved
+ * at, one at a time, so a change made elsewhere is refused (nothing overwritten) and shown here; then saving by itself stops. A change
+ * the server refuses as invalid is not sent again until it changes; a failed connection is tried again. `autosaveMs` null turns it off.
  */
-export function JournalEditor({ entry }: { entry: JournalEntry }) {
+export function JournalEditor({ entry, autosaveMs = AUTOSAVE_MS }: { entry: JournalEntry; autosaveMs?: number | null }) {
   const orgId = useOrgId();
   const router = useRouter();
   const { pending, error, run } = useMutation();
@@ -66,6 +73,8 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [deleted, setDeleted] = useState(false);
+  const saveRef = useRef<(auto?: boolean) => Promise<JournalEntry | null>>(async () => null);
+  const [sent, setSent] = useState("");
 
   const dirty =
     !deleted && (
@@ -104,6 +113,29 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
   const stale = error?.kind === "conflict" && error.code === "stale_record";
   const finalError = error?.kind === "conflict" && error.code === "journal_entry_final";
 
+  // Saving by itself. What would be sent now, as text: a change to it restarts the wait (so it saves after the LAST change), and what
+  // the server refused as invalid is not sent again until it is different.
+  const content = JSON.stringify(changes());
+  const cannotSucceed = stale || finalError || error?.kind === "forbidden" || error?.kind === "not_found" || error?.kind === "unauthorized";
+  const retryLater = error?.kind === "network" || error?.kind === "server";
+  useEffect(() => {
+    saveRef.current = save;
+  });
+  const refused = (error?.kind === "validation" || error?.kind === "client") && content === sent;
+  useEffect(() => {
+    if (autosaveMs === null || !dirty || pending || cannotSucceed || refused || content === "{}") return;
+    const timer = setTimeout(() => void saveRef.current(true), retryLater ? RETRY_MS : autosaveMs);
+    return () => clearTimeout(timer);
+  }, [autosaveMs, dirty, pending, cannotSucceed, refused, retryLater, content]);
+  useEffect(() => {
+    if (autosaveMs === null) return;
+    const leave = () => {
+      if (document.visibilityState === "hidden") void saveRef.current(true); // the tab is left or the window closed: save what is there now
+    };
+    document.addEventListener("visibilitychange", leave);
+    return () => document.removeEventListener("visibilitychange", leave);
+  }, [autosaveMs]);
+
   function changes(): JournalUpdate {
     const update: JournalUpdate = {};
     if (visitAt !== toLocalInput(saved.visit_at) && visitAt !== "") update.visit_at = noonOf(visitAt);
@@ -115,14 +147,15 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
     return update;
   }
 
-  async function save(): Promise<JournalEntry | null> {
-    setNotice(null);
+  async function save(auto = false): Promise<JournalEntry | null> {
     const update = changes();
     if (Object.keys(update).length === 0) return saved;
+    setNotice(null);
+    setSent(JSON.stringify(update));
     const result = await run(() => apiFetch<JournalEntry>(orgId, `/horses/${entry.horse_id}/journal/${entry.id}`, { method: "PATCH", body: update, ifMatch: saved.version }));
     if (result === null) return null;
     setSaved(result);
-    setNotice("Draft saved.");
+    setNotice(auto ? "Draft saved automatically." : "Draft saved.");
     return result;
   }
 
@@ -280,7 +313,7 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
         </div>
       )}
       {finalError && <p role="alert">This entry has been finalized elsewhere and can no longer be changed.</p>}
-      {error && !stale && !finalError && error.kind !== "validation" && <p role="alert">{error.message}</p>}
+      {error && !stale && !finalError && error.kind !== "validation" && <p role="alert">{error.message}{retryLater && autosaveMs !== null ? " It will be tried again shortly." : ""}</p>}
       {notice && !dirty && (
         <p role="status" data-testid="saved">
           {notice}
@@ -311,6 +344,11 @@ export function JournalEditor({ entry }: { entry: JournalEntry }) {
         <span role="status" aria-live="polite" data-testid="save-status" className={dirty ? "text-sm font-medium text-amber-700" : "text-sm text-zinc-500"}>
           {status}
         </span>
+        {autosaveMs !== null && !cannotSucceed && (
+          <span className="text-xs text-zinc-500" data-testid="autosave-note">
+            Changes are saved automatically a moment after you stop.
+          </span>
+        )}
       </div>
     </div>
   );

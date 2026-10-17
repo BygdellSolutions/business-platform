@@ -53,12 +53,14 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
-const mount = (value = entry()) =>
+// Saving by itself is off in these tests (they decide when a save happens); the tests of it below turn it on.
+const mount = (value = entry(), autosaveMs: number | null = null) =>
   render(
     <OrgScope orgId={ORG}>
-      <JournalEditor entry={value} />
+      <JournalEditor entry={value} autosaveMs={autosaveMs} />
     </OrgScope>,
   );
+const saves = () => calls().filter((call) => (call[2] as { method?: string } | undefined)?.method === "PATCH");
 const status = () => screen.getByTestId("save-status").textContent;
 const tap = (x: number, y: number) => fireEvent.pointerDown(screen.getByTestId("diagram-left"), { clientX: x, clientY: y, pointerId: 1 });
 
@@ -295,5 +297,102 @@ describe("finalizing", () => {
     await screen.findByTestId("stale");
     expect(calls()).toHaveLength(1);
     expect(router.refresh).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("saving by itself", () => {
+  it("saves the draft a moment after the last change, once, against the version it was opened on", async () => {
+    answers.push(ok(entry({ body: "Stiff shoulder", version: 2 })));
+    mount(entry(), 60);
+    await userEvent.type(screen.getByLabelText(/Observations/), "Stiff shoulder"); // many keystrokes, one save
+    expect(status()).toBe("Unsaved changes");
+    await waitFor(() => expect(status()).toBe("All changes saved"));
+    expect(saves()).toEqual([[ORG, `/horses/${HORSE}/journal/${ENTRY}`, { method: "PATCH", body: { body: "Stiff shoulder" }, ifMatch: 1 }]]);
+    expect(screen.getByTestId("saved").textContent).toBe("Draft saved automatically.");
+  });
+
+  it("waits while the writing goes on, and the next change after a save is saved against the new version", async () => {
+    answers.push(ok(entry({ body: "a", version: 2 })), ok(entry({ body: "ab", version: 3 })));
+    mount(entry(), 80);
+    await userEvent.type(screen.getByLabelText(/Observations/), "a");
+    await waitFor(() => expect(saves()).toHaveLength(1));
+    await userEvent.type(screen.getByLabelText(/Observations/), "b");
+    await waitFor(() => expect(saves()).toHaveLength(2));
+    expect(saves()[1][2]).toEqual({ method: "PATCH", body: { body: "ab" }, ifMatch: 2 });
+  });
+
+  it("saves nothing when nothing changed, and nothing by itself when it is switched off", async () => {
+    mount(entry(), 30);
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(saves()).toEqual([]);
+    const { unmount } = mount(entry(), null);
+    await userEvent.type(screen.getAllByLabelText(/Observations/)[1], "x");
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(saves()).toEqual([]);
+    unmount();
+  });
+
+  it("stops when the draft was changed somewhere else, and says so", async () => {
+    answers.push(fail(409, { detail: { code: "stale_record", message: "stale", current_version: 3 } }));
+    mount(entry(), 40);
+    await userEvent.type(screen.getByLabelText(/Observations/), "x");
+    await screen.findByTestId("stale");
+    await userEvent.type(screen.getByLabelText(/Observations/), "y"); // more writing does not try again: it cannot succeed
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(saves()).toHaveLength(1);
+    expect(screen.queryByTestId("autosave-note")).toBeNull();
+  });
+
+  it("does not send again what the server refused as invalid, until it is different", async () => {
+    answers.push(fail(422, { detail: [{ loc: ["body", "body"], msg: "String should have at most 20000 characters", type: "string_too_long" }] }), ok(entry({ body: "xy", version: 2 })));
+    mount(entry(), 40);
+    await userEvent.type(screen.getByLabelText(/Observations/), "x");
+    await waitFor(() => expect(saves()).toHaveLength(1));
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(saves()).toHaveLength(1); // the same text is not sent again and again
+    await userEvent.type(screen.getByLabelText(/Observations/), "y");
+    await waitFor(() => expect(saves()).toHaveLength(2)); // changed: tried again
+    await waitFor(() => expect(status()).toBe("All changes saved"));
+  });
+
+  it("tries again later when the connection failed, and saves then", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      answers.push(fail(503, {}), ok(entry({ body: "x", version: 2 })));
+      mount(entry(), 40);
+      await userEvent.type(screen.getByLabelText(/Observations/), "x", { advanceTimers: vi.advanceTimersByTime });
+      await vi.advanceTimersByTimeAsync(100);
+      await waitFor(() => expect(saves()).toHaveLength(1));
+      expect(await screen.findByText(/It will be tried again shortly/)).toBeTruthy();
+      await vi.advanceTimersByTimeAsync(10_500);
+      await waitFor(() => expect(saves()).toHaveLength(2));
+      await waitFor(() => expect(status()).toBe("All changes saved"));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("saves at once when the tab is left, without waiting for the pause", async () => {
+    answers.push(ok(entry({ body: "x", version: 2 })));
+    mount(entry(), 60_000);
+    await userEvent.type(screen.getByLabelText(/Observations/), "x");
+    expect(saves()).toEqual([]);
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+    try {
+      document.dispatchEvent(new Event("visibilitychange"));
+      await waitFor(() => expect(saves()).toHaveLength(1));
+    } finally {
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+    }
+  });
+
+  it("saves drawn marks by itself too", async () => {
+    answers.push(ok(entry({ version: 2 })));
+    mount(entry(), 40);
+    await userEvent.click(screen.getByTestId("tool-x"));
+    tap(100, 75);
+    await waitFor(() => expect(saves()).toHaveLength(1));
+    expect((saves()[0][2] as { body: { marks: unknown[] } }).body.marks).toHaveLength(1);
   });
 });
