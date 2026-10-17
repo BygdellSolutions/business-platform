@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { PRIMARY_LINK, SECONDARY_LINK } from "@/components/ui/Button";
-import { loginPath } from "@/lib/auth/credential";
+import { getCredential, loginPath } from "@/lib/auth/credential";
 
 // Evaluated per request: the sign-in target depends on the runtime auth mode (see the login page).
 export const dynamic = "force-dynamic";
@@ -33,8 +33,11 @@ const SAFEGUARDS = [
 ] as const;
 
 /** Public landing page. Signed-in visitors never reach it: proxy.ts sends them to /organizations. */
-export default function Home() {
-  const signIn = loginPath();
+export default async function Home() {
+  // Signed-in visitors get here only through a "Go to homepage" link (proxy.ts skips its redirect for /?home).
+  const signedIn = (await getCredential()) !== null;
+  const signIn = signedIn ? "/organizations" : loginPath();
+  const action = signedIn ? "Open the app" : "Sign in";
   return (
     <div className="flex min-h-screen flex-col">
       <header className="border-b border-border bg-topbar">
@@ -46,7 +49,7 @@ export default function Home() {
             <a href="#safe" className="hover:text-foreground">Your data</a>
           </nav>
           <a href={signIn} className={SECONDARY_LINK}>
-            Sign in
+            {action}
           </a>
         </div>
       </header>
@@ -62,13 +65,13 @@ export default function Home() {
             </p>
             <div className="flex flex-wrap items-center gap-3">
               <a href={signIn} className={`${PRIMARY_LINK} h-11 px-5 text-base`}>
-                Sign in
+                {action}
               </a>
               <a href="#how" className={`${SECONDARY_LINK} h-11 px-5 text-base`}>
                 See how it works
               </a>
             </div>
-            <p className="text-sm text-muted">Accounts are by invitation. Ask the person who runs your organization.</p>
+            {!signedIn && <p className="text-sm text-muted">Accounts are by invitation. Ask the person who runs your organization.</p>}
           </div>
 
           {/* A drawn example of one job moving through the system; decorative, so hidden from screen readers. */}
@@ -161,7 +164,7 @@ export default function Home() {
             Horses, owners, stables and treatment journals are a module on top of a general platform. Customers, prices, orders and invoices do not assume you work with horses, so the same foundation can serve other kinds of businesses.
           </p>
           <a href={signIn} className={`${PRIMARY_LINK} h-11 px-5 text-base`}>
-            Sign in
+            {action}
           </a>
         </section>
       </main>

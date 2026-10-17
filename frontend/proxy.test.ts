@@ -54,6 +54,12 @@ describe("the public homepage", () => {
     expect(new URL(home("bp_dev_user=anna%40dev.test").headers.get("location")!).pathname).toBe("/organizations");
   });
 
+  it("is shown to a signed-in visitor who asks for it with /?home", () => {
+    dev();
+    const request = new NextRequest("http://localhost/?home", { headers: { cookie: "bp_dev_user=anna%40dev.test" } });
+    expect(proxy(request).headers.get("location")).toBeNull();
+  });
+
   it("redirects only the root", () => {
     dev();
     const response = proxy(new NextRequest("http://localhost/login", { headers: { cookie: "bp_dev_user=anna%40dev.test" } }));

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { SignOut } from "@/components/shell/SignOut";
@@ -50,6 +51,11 @@ export default async function Home() {
           </a>
         </p>
       )}
+      <p>
+        <Link href="/?home" prefetch={false} className="underline">
+          Go to homepage
+        </Link>
+      </p>
       {(mode === "dev" || mode === "session") && <SignOut mode={mode} />}
     </main>
   );

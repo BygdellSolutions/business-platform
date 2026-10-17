@@ -109,5 +109,9 @@ test.describe("the public homepage", () => {
     await signInViaUi(page, FREDRIK);
     await page.goto("/");
     await expect(page).toHaveURL(/\/organizations$/);
+
+    await page.getByRole("link", { name: "Go to homepage" }).click();
+    await expect(page).toHaveURL(/\/\?home$/);
+    await expect(page.getByRole("link", { name: "Open the app" }).first()).toBeVisible();
   });
 });

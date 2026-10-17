@@ -13,11 +13,11 @@ import { credentialFromRequest } from "@/lib/auth/credential";
  * must not duplicate with a different value. The other security headers are static and live in next.config.ts.
  *
  * It also sends a visitor who carries a credential from the public homepage straight into the app. Only the cookie's
- * shape is checked (no backend call); /organizations validates it for real and bounces a stale one to the login.
+ * shape is checked (no backend call), and "/?home" (the "Go to homepage" links) skips it; /organizations validates it for real and bounces a stale one to the login.
  */
 export function proxy(request: NextRequest) {
   const response =
-    request.nextUrl.pathname === "/" && credentialFromRequest(request) !== null
+    request.nextUrl.pathname === "/" && !request.nextUrl.searchParams.has("home") && credentialFromRequest(request) !== null
       ? NextResponse.redirect(new URL("/organizations", request.url))
       : NextResponse.next();
   const hsts = hstsPolicy();
