@@ -630,3 +630,10 @@ export function purgeUsersByEmail(emails: string[]): void {
     ].join("; "),
   );
 }
+
+/** The id of the signed-in user (a booking is always for a real person: by default the one who makes it). */
+export async function currentUserId(context: BrowserContext, orgId: string): Promise<string> {
+  const response = await context.request.get(bffUrl(orgId, "/me/user"));
+  expect(response.status(), await response.text()).toBe(200);
+  return ((await response.json()) as { id: string }).id;
+}

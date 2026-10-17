@@ -112,6 +112,8 @@ export function CalendarDnD({
       }
       const column = targetAt(event, "[data-column]");
       if (!column?.dataset.day) return { change: null, text: "" };
+      // Nobody is not a person to give a booking to (an older booking that has none may still move within its own column).
+      if (column.dataset.assign === "true" && (column.dataset.who ?? "") === "" && press.who !== "") return { change: null, text: "Drop it in a person's column" };
       const raw = firstHour * 60 + ((event.clientY - (press.y - press.top) - column.getBoundingClientRect().top) / hourPx) * 60;
       const minutes = snapMinutes(raw);
       const moved = movedTo(press.startsAt, press.endsAt, column.dataset.day, minutes, zone);

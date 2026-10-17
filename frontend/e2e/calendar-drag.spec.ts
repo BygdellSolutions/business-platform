@@ -1,7 +1,7 @@
 import type { BrowserContext, Locator, Page } from "@playwright/test";
 
 import { expect, test } from "./fixtures";
-import { bffUrl, createWorld, signIn, type World } from "./support";
+import { bffUrl, createWorld, currentUserId, signIn, sql, testRow, type World } from "./support";
 
 /**
  * Drag and drop in the calendar: a booking is moved to another time, day or person, its end is dragged, and what must not change
@@ -14,7 +14,7 @@ test.afterEach(() => world?.cleanup());
 const WEEK = "view=week&date=2026-10-19"; // Monday 19 October 2026 (the organization has no time zone set, so times are UTC)
 
 async function book(context: BrowserContext, orgId: string, body: Record<string, unknown>) {
-  const response = await context.request.post(bffUrl(orgId, "/appointments"), { data: body });
+  const response = await context.request.post(bffUrl(orgId, "/appointments"), { data: { practitioner_user_id: await currentUserId(context, orgId), ...body } });
   expect(response.status(), await response.text()).toBe(201);
   return (await response.json()) as { id: string; version: number };
 }
@@ -169,4 +169,33 @@ test("a viewer cannot drag a booking", async ({ page, context }) => {
   await dragBy(page, page.getByTestId("appointment"), 0, 96);
   const same = await appointmentOf(context, world.orgId, booked.id);
   expect(instant(same.starts_at)).toBe("2026-10-19T08:00:00.000Z");
+});
+
+test("a booking cannot be dropped in the column of nobody (only an older booking without a person can be there)", async ({ page, context }) => {
+  world = createWorld({ label: "Drag nobody" });
+  world.addMember("employee");
+  await signIn(context, world.email);
+  const [colleague, owner] = await people(context, world.orgId); // by name: employee, owner
+  const booked = await book(context, world.orgId, { title: "Mine", starts_at: "2026-10-19T08:00:00Z", ends_at: "2026-10-19T09:00:00Z", practitioner_user_id: owner.user_id });
+  // a booking from before every booking had a person (the API no longer makes one)
+  testRow(`insert into appointments (organization_id, title, starts_at, ends_at) values (${sql(world.orgId)}, 'Older', '2026-10-19T12:00:00Z', '2026-10-19T13:00:00Z')`);
+
+  await page.goto(`/o/${world.orgId}/calendar?view=day&date=2026-10-19`);
+  await expect(page.getByTestId("column-heading")).toHaveText([colleague.name, owner.name, "Nobody in particular"]);
+  const mine = page.getByTestId("appointment").filter({ hasText: "Mine" });
+  await expect(mine).toBeVisible();
+  const from = (await page.getByTestId("column").nth(1).boundingBox())!;
+  const nobody = (await page.getByTestId("column").nth(2).boundingBox())!;
+  let sent = 0;
+  page.on("request", (request) => {
+    if (request.method() === "PATCH") sent += 1;
+  });
+  await dragBy(page, mine, nobody.x - from.x, 0);
+  await expect(page.getByTestId("column").nth(1).getByTestId("appointment").filter({ hasText: "Mine" })).toHaveCount(1); // still the owner's
+  await page.waitForTimeout(800); // time for a request, if one were sent
+  expect(sent).toBe(0); // refused before anything was sent, not by an error afterwards
+  await expect(page.getByTestId("calendar-message")).toHaveCount(0);
+  const same = await appointmentOf(context, world.orgId, booked.id);
+  expect(same.practitioner_user_id).toBe(owner.user_id);
+  expect(same.version).toBe(booked.version);
 });

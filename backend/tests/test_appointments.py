@@ -14,10 +14,19 @@ MORNING = {"starts_at": "2026-10-19T09:00:00+02:00", "ends_at": "2026-10-19T10:0
 WINDOW = {"from": "2026-10-19T00:00:00+02:00", "to": "2026-10-26T00:00:00+02:00"}
 
 
+IDS: dict[str, str] = {}  # the user id behind each set of headers, by email
+
+
 def _person(db: Session, org, role: Role, name: str):
     user = make_user(db, name=name)
     add_member(db, org, user, role)
+    IDS[user.email] = str(user.id)
     return user, {"X-Dev-User-Email": user.email}
+
+
+def _prac(headers) -> dict:
+    """The practitioner a booking needs: the person whose headers these are (every booking is for a real person)."""
+    return {"practitioner_user_id": IDS[headers["X-Dev-User-Email"]]}
 
 
 @pytest.fixture
@@ -30,7 +39,7 @@ def world(db_session: Session):
 
 
 def _book(client: TestClient, headers, **body) -> dict:
-    response = client.post("/api/appointments", json={"title": "Massage", **MORNING, **body}, headers=headers)
+    response = client.post("/api/appointments", json={"title": "Massage", **MORNING, **_prac(headers), **body}, headers=headers)
     assert response.status_code == 201, response.text
     return response.json()
 
@@ -121,7 +130,7 @@ def test_an_appointment_cannot_point_at_another_organizations_records(client: Te
         {"practitioner_user_id": str(their_owner.id)},
         {"subjects": [HORSE(their_kalle)]},
     ):
-        response = client.post("/api/appointments", json={"title": "x", **MORNING, **body}, headers=headers)
+        response = client.post("/api/appointments", json={"title": "x", **MORNING, **_prac(headers), **body}, headers=headers)
         assert response.status_code == 422, (body, response.text)
         assert _listed(client, headers) == []  # nothing was saved
     mine = _book(client, headers)
@@ -139,7 +148,7 @@ def test_everyone_may_look_but_a_viewer_may_not_book(client: TestClient, world):
         assert [a["id"] for a in _listed(client, people[name][1])] == [booked["id"]]
         assert client.get(f"/api/appointments/{booked['id']}", headers=people[name][1]).status_code == 200
     viewer = people["viewer"][1]
-    assert client.post("/api/appointments", json={"title": "x", **MORNING}, headers=viewer).status_code == 403
+    assert client.post("/api/appointments", json={"title": "x", **MORNING, **_prac(people["owner"][1])}, headers=viewer).status_code == 403
     assert client.patch(f"/api/appointments/{booked['id']}", json={"title": "x"}, headers={**viewer, **_etag(booked)}).status_code == 403
     assert client.delete(f"/api/appointments/{booked['id']}", headers={**viewer, **_etag(booked)}).status_code == 403
 
@@ -168,7 +177,7 @@ def test_only_those_who_do_the_work_can_be_the_practitioner(client: TestClient, 
     ],
 )
 def test_bad_bookings_are_refused(client: TestClient, world, body):
-    assert client.post("/api/appointments", json={"title": "x", **MORNING, **body}, headers=world[3]["owner"][1]).status_code == 422
+    assert client.post("/api/appointments", json={"title": "x", **MORNING, **_prac(world[3]["owner"][1]), **body}, headers=world[3]["owner"][1]).status_code == 422
 
 
 @pytest.mark.parametrize("params", [{"from": WINDOW["from"]}, {"from": "2026-10-19T00:00:00", "to": "2026-10-20T00:00:00"}, {"from": WINDOW["to"], "to": WINDOW["from"]}, {"from": "2026-01-01T00:00:00+00:00", "to": "2026-12-31T00:00:00+00:00"}])
@@ -267,7 +276,7 @@ def test_every_horse_in_the_list_must_belong_to_this_organization(client: TestCl
     _, anna, kalle, people = world
     headers = people["owner"][1]
     their_kalle = two_organizations[3]
-    assert client.post("/api/appointments", json={"title": "x", **MORNING, "subjects": [HORSE(kalle), HORSE(their_kalle)]}, headers=headers).status_code == 422
+    assert client.post("/api/appointments", json={"title": "x", **MORNING, **_prac(headers), "subjects": [HORSE(kalle), HORSE(their_kalle)]}, headers=headers).status_code == 422
     assert _listed(client, headers) == []  # not even the horse that was fine was saved
     mine = _book(client, headers, subjects=[HORSE(kalle)])
     response = client.patch(f"/api/appointments/{mine['id']}", json={"subjects": [HORSE(kalle), HORSE(their_kalle)]}, headers={**headers, **_etag(mine)})
@@ -278,7 +287,7 @@ def test_every_horse_in_the_list_must_belong_to_this_organization(client: TestCl
 def test_an_appointment_takes_at_most_fifty_horses(client: TestClient, world):
     _, _, _, people = world
     many = [{"subject_type": "horse", "subject_id": str(uuid4())} for _ in range(51)]
-    assert client.post("/api/appointments", json={"title": "x", **MORNING, "subjects": many}, headers=people["owner"][1]).status_code == 422
+    assert client.post("/api/appointments", json={"title": "x", **MORNING, **_prac(people["owner"][1]), "subjects": many}, headers=people["owner"][1]).status_code == 422
 
 
 def test_the_history_names_the_horses_of_a_booking(client: TestClient, db_session: Session, world):
@@ -293,3 +302,33 @@ def test_the_history_names_the_horses_of_a_booking(client: TestClient, db_sessio
     client.patch(f"/api/appointments/{booked['id']}", json={"subjects": [HORSE(kalle), HORSE(storm)]}, headers={**headers, **_etag(booked)})
     events = list(db_session.scalars(select(AuditEvent).where(AuditEvent.entity_type == "appointment").order_by(AuditEvent.id)))
     assert [e.changes["subjects"] for e in events] == [{"from": None, "to": "Kalle"}, {"from": "Kalle", "to": "Kalle, Storm"}]
+
+
+# --- the practitioner is always a real person --------------------------------------------------------------------------------------------------
+
+
+def test_a_booking_needs_a_practitioner_and_cannot_be_left_without_one(client: TestClient, world):
+    headers = world[3]["owner"][1]
+    without = client.post("/api/appointments", json={"title": "x", **MORNING}, headers=headers)
+    assert without.status_code == 422 and "practitioner_user_id" in without.text
+    assert client.post("/api/appointments", json={"title": "x", **MORNING, "practitioner_user_id": None}, headers=headers).status_code == 422
+    booked = _book(client, headers)
+    cleared = client.patch(f"/api/appointments/{booked['id']}", json={"practitioner_user_id": None}, headers={**headers, **_etag(booked)})
+    assert cleared.status_code == 422  # a person can be changed to another person, not to nobody
+    assert client.get(f"/api/appointments/{booked['id']}", headers=headers).json()["practitioner_user_id"] == booked["practitioner_user_id"]
+
+
+def test_an_older_booking_without_a_practitioner_still_reads_and_can_be_given_one(client: TestClient, db_session: Session, world):
+    from sqlalchemy import update
+
+    from app.modules.scheduling.models import Appointment
+
+    headers = world[3]["owner"][1]
+    booked = _book(client, headers, title="Older")
+    db_session.execute(update(Appointment).where(Appointment.id == booked["id"]).values(practitioner_user_id=None))  # as bookings were before
+    db_session.flush()
+    older = client.get(f"/api/appointments/{booked['id']}", headers=headers).json()
+    assert older["practitioner_user_id"] is None and older["practitioner_name"] is None
+    other = _prac(world[3]["employee"][1])
+    fixed = client.patch(f"/api/appointments/{booked['id']}", json=other, headers={**headers, "If-Match": f'"{older["version"]}"'})
+    assert fixed.status_code == 200 and fixed.json()["practitioner_user_id"] == other["practitioner_user_id"]

@@ -56,7 +56,7 @@ class AppointmentCreate(BaseModel):
     ends_at: datetime
     location: Short | None = None
     notes: Notes | None = None
-    practitioner_user_id: uuid.UUID | None = None
+    practitioner_user_id: uuid.UUID  # who does the work: always a real person (a member who works with bookings)
     customer_id: uuid.UUID | None = None
     subjects: list[SubjectRef] = Field(default_factory=list, max_length=MAX_SUBJECTS)
     items: list[uuid.UUID] = Field(default_factory=list, max_length=MAX_SERVICES)  # catalog services
@@ -91,7 +91,7 @@ class AppointmentUpdate(BaseModel):
     _distinct = field_validator("subjects")(_distinct)
     _distinct_items = field_validator("items")(_distinct_ids)
 
-    @field_validator("title", "starts_at", "ends_at", "status", "subjects", "items")
+    @field_validator("title", "starts_at", "ends_at", "status", "subjects", "items", "practitioner_user_id")
     @classmethod
     def not_null(cls, value):
         # Runs only for fields that were sent; these are required.

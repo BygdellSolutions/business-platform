@@ -22,6 +22,7 @@ import { blankToNull, problemsFrom, useMutation } from "@/lib/forms";
 
 const CONTROLS = ["title", "starts_at", "ends_at", "location", "notes", "practitioner_user_id", "customer_id", "subjects", "items"] as const;
 const SUBJECT_TYPE = "horse";
+// A booking is always for a real person. Empty only while none is chosen (an older booking that had none, or an organization with nobody to choose).
 const NOBODY = "";
 const DEFAULT_MINUTES = 60;
 
@@ -163,12 +164,16 @@ export function AppointmentForm({
   async function create() {
     const when = instants();
     if (when === null) return;
+    if (state.practitioner === NOBODY) {
+      setLocal(["Choose who does the work."]);
+      return;
+    }
     const body: AppointmentCreate = {
       title: state.title,
       ...when,
       location: blankToNull(state.location),
       notes: blankToNull(state.notes),
-      practitioner_user_id: state.practitioner === NOBODY ? null : state.practitioner,
+      practitioner_user_id: state.practitioner,
       customer_id: state.customer?.id ?? null,
       subjects: subjects(),
       items: state.services.map((service) => service.id),
@@ -188,8 +193,7 @@ export function AppointmentForm({
     if (new Date(when.ends_at).getTime() !== new Date(current.ends_at).getTime()) body.ends_at = when.ends_at;
     if (blankToNull(state.location) !== current.location) body.location = blankToNull(state.location);
     if (blankToNull(state.notes) !== current.notes) body.notes = blankToNull(state.notes);
-    const practitioner = state.practitioner === NOBODY ? null : state.practitioner;
-    if (practitioner !== current.practitioner_user_id) body.practitioner_user_id = practitioner;
+    if (state.practitioner !== NOBODY && state.practitioner !== current.practitioner_user_id) body.practitioner_user_id = state.practitioner; // never cleared
     if ((state.customer?.id ?? null) !== current.customer_id) body.customer_id = state.customer?.id ?? null;
     const had = current.subjects.filter((subject) => subject.subject_type === SUBJECT_TYPE).map((subject) => subject.subject_id).sort();
     if (JSON.stringify(had) !== JSON.stringify(state.horses.map((horse) => horse.id).sort())) body.subjects = subjects();
@@ -248,7 +252,7 @@ export function AppointmentForm({
   }
 
   const cancelled = record?.status === "cancelled";
-  const personOptions = [{ value: NOBODY, label: "Nobody in particular" }, ...people.map((person) => ({ value: person.user_id, label: person.name }))];
+  const personOptions = [...(state.practitioner === NOBODY ? [{ value: NOBODY, label: "Choose a practitioner" }] : []), ...people.map((person) => ({ value: person.user_id, label: person.name }))];
   if (state.practitioner !== NOBODY && !people.some((person) => person.user_id === state.practitioner)) {
     personOptions.push({ value: state.practitioner, label: record?.practitioner_name ?? "Former colleague" });
   }
@@ -273,7 +277,7 @@ export function AppointmentForm({
           </FieldShell>
         </div>
         <p className="text-xs text-zinc-500">Times are in the organization&apos;s time zone ({zone ?? "UTC"}).</p>
-        <SelectField label="Practitioner" name="practitioner_user_id" value={state.practitioner} onChange={(value) => set("practitioner", value)} options={personOptions} error={problems.byField.practitioner_user_id} hint="Who does the work." />
+        <SelectField label="Practitioner" name="practitioner_user_id" value={state.practitioner} onChange={(value) => set("practitioner", value)} options={personOptions} error={problems.byField.practitioner_user_id} hint="Who does the work: always a person." />
         <EntityPicker label="Customer" name="customer_id" value={state.customer} onChange={(customer) => set("customer", customer)} search={customers} clearable error={problems.byField.customer_id} hint="Optional." />
         <div className="flex flex-col gap-2" data-testid="horses">
           <EntityPicker

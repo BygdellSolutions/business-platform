@@ -1,7 +1,7 @@
 import type { BrowserContext } from "@playwright/test";
 
 import { expect, test } from "./fixtures";
-import { bffUrl, createCustomer, createHorse, createItem, createWorld, ifMatch, picker, signIn, type World } from "./support";
+import { bffUrl, createCustomer, createHorse, createItem, createWorld, currentUserId, ifMatch, picker, signIn, type World } from "./support";
 
 /**
  * Services on a booking, and the draft order made from it: the button, the link to the order, bringing the order up to date after a horse
@@ -25,7 +25,7 @@ async function setup(context: BrowserContext) {
 
 async function book(context: BrowserContext, body: Record<string, unknown>) {
   const response = await context.request.post(bffUrl(world.orgId, "/appointments"), {
-    data: { title: "Stable day", starts_at: "2026-10-19T08:00:00Z", ends_at: "2026-10-19T10:00:00Z", ...body },
+    data: { title: "Stable day", starts_at: "2026-10-19T08:00:00Z", ends_at: "2026-10-19T10:00:00Z", practitioner_user_id: await currentUserId(context, world.orgId), ...body },
   });
   expect(response.status(), await response.text()).toBe(201);
   return (await response.json()) as { id: string; version: number; order_id: string | null };

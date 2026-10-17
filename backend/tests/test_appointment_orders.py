@@ -12,10 +12,19 @@ MORNING = {"starts_at": "2026-10-19T08:00:00+00:00", "ends_at": "2026-10-19T10:0
 HORSE = lambda horse: {"subject_type": "horse", "subject_id": str(horse.id)}  # noqa: E731
 
 
+IDS: dict[str, str] = {}  # the user id behind each set of headers, by email
+
+
 def _person(db: Session, org, role: Role, name: str):
     user = make_user(db, name=name)
     add_member(db, org, user, role)
+    IDS[user.email] = str(user.id)
     return user, {"X-Dev-User-Email": user.email}
+
+
+def _prac(headers) -> dict:
+    """The practitioner a booking needs: the person whose headers these are (every booking is for a real person)."""
+    return {"practitioner_user_id": IDS[headers["X-Dev-User-Email"]]}
 
 
 @pytest.fixture
@@ -32,7 +41,7 @@ def world(db_session: Session):
 
 
 def _book(client: TestClient, headers, **body) -> dict:
-    response = client.post("/api/appointments", json={"title": "Stable day", **MORNING, **body}, headers=headers)
+    response = client.post("/api/appointments", json={"title": "Stable day", **MORNING, **_prac(headers), **body}, headers=headers)
     assert response.status_code == 201, response.text
     return response.json()
 
@@ -75,8 +84,8 @@ def test_an_appointment_names_its_services_by_name_and_only_catalog_services_are
     assert [i["name"] for i in fewer["items"]] == ["Massage"] and fewer["version"] == booked["version"] + 1
     assert _patch(client, headers, fewer, items=[str(massage.id)])["version"] == fewer["version"]  # the same again changes nothing
     assert _patch(client, headers, fewer, title="Renamed")["items"][0]["name"] == "Massage"  # a save without items leaves them
-    assert client.post("/api/appointments", json={"title": "x", **MORNING, "items": [str(product.id)]}, headers=headers).status_code == 422  # a product is not a service
-    assert client.post("/api/appointments", json={"title": "x", **MORNING, "items": [str(massage.id), str(massage.id)]}, headers=headers).status_code == 422
+    assert client.post("/api/appointments", json={"title": "x", **MORNING, **_prac(headers), "items": [str(product.id)]}, headers=headers).status_code == 422  # a product is not a service
+    assert client.post("/api/appointments", json={"title": "x", **MORNING, **_prac(headers), "items": [str(massage.id), str(massage.id)]}, headers=headers).status_code == 422
 
 
 def test_another_organizations_service_cannot_be_named(client: TestClient, db_session: Session, world):
@@ -84,7 +93,7 @@ def test_another_organizations_service_cannot_be_named(client: TestClient, db_se
     headers = people["owner"][1]
     other = make_org(db_session, "Other")
     theirs = make_item(db_session, other, "Their massage")
-    assert client.post("/api/appointments", json={"title": "x", **MORNING, "items": [str(theirs.id)]}, headers=headers).status_code == 422
+    assert client.post("/api/appointments", json={"title": "x", **MORNING, **_prac(headers), "items": [str(theirs.id)]}, headers=headers).status_code == 422
     mine = _book(client, headers)
     assert client.patch(f"/api/appointments/{mine['id']}", json={"items": [str(theirs.id)]}, headers={**headers, **_etag(mine)}).status_code == 422
     assert client.get(f"/api/appointments/{mine['id']}", headers=headers).json()["items"] == []

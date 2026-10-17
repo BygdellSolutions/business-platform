@@ -1,7 +1,7 @@
 import type { BrowserContext } from "@playwright/test";
 
 import { expect, test } from "./fixtures";
-import { bffUrl, createCustomer, createHorse, createWorld, picker, signIn, type World } from "./support";
+import { bffUrl, createCustomer, createHorse, createWorld, currentUserId, picker, signIn, type World } from "./support";
 
 /**
  * Scheduling: appointments are booked in the browser, shown per day (a column per person), week and month, changed, cancelled and
@@ -18,7 +18,7 @@ test.afterEach(() => {
 const WEEK = "view=week&date=2026-10-19"; // Monday 19 October 2026 (the organization has no time zone set, so times are UTC)
 
 async function book(context: BrowserContext, orgId: string, body: Record<string, unknown>) {
-  const response = await context.request.post(bffUrl(orgId, "/appointments"), { data: body });
+  const response = await context.request.post(bffUrl(orgId, "/appointments"), { data: { practitioner_user_id: await currentUserId(context, orgId), ...body } });
   expect(response.status(), await response.text()).toBe(201);
   return (await response.json()) as { id: string; version: number };
 }
@@ -40,7 +40,8 @@ test("an appointment is booked, changed, cancelled and deleted in the browser", 
   await page.getByLabel("Title", { exact: true }).fill("Massage Kalle");
   await page.getByLabel("Start time").fill("09:00");
   await page.getByLabel("End time").fill("10:30");
-  await page.getByLabel("Practitioner").selectOption({ index: 1 });
+  await expect(page.getByLabel("Practitioner")).toHaveValue(world.userIds[0]); // the signed-in person is chosen to begin with
+  expect(await page.getByLabel("Practitioner").locator("option").allTextContents()).not.toContain("Nobody in particular");
   await page.getByTestId("submit").click();
 
   await expect(page.getByTestId("appointment")).toHaveCount(1);
@@ -82,7 +83,7 @@ test("the day shows a column per person, the week and month show everyone, and a
   const [colleague, owner] = await people(context, world.orgId); // by name: employee, owner
   await book(context, world.orgId, { title: "Owner's visit", starts_at: "2026-10-19T08:00:00Z", ends_at: "2026-10-19T09:00:00Z", practitioner_user_id: owner.user_id });
   await book(context, world.orgId, { title: "Colleague's visit", starts_at: "2026-10-19T08:30:00Z", ends_at: "2026-10-19T09:30:00Z", practitioner_user_id: colleague.user_id });
-  await book(context, world.orgId, { title: "Nobody's visit", starts_at: "2026-10-20T10:00:00Z", ends_at: "2026-10-20T11:00:00Z" });
+  await book(context, world.orgId, { title: "Third visit", starts_at: "2026-10-20T10:00:00Z", ends_at: "2026-10-20T11:00:00Z", practitioner_user_id: colleague.user_id });
 
   await page.goto(`/o/${world.orgId}/calendar?view=day&date=2026-10-19`);
   await expect(page.getByTestId("column-heading")).toHaveText([colleague.name, owner.name]);
@@ -97,7 +98,7 @@ test("the day shows a column per person, the week and month show everyone, and a
 
   await page.goto(`/o/${world.orgId}/calendar?view=month&date=2026-10-19`);
   await expect(page.getByTestId("appointment")).toHaveCount(3);
-  await expect(page.getByTestId("month-day").filter({ hasText: "Nobody's visit" })).toHaveAttribute("data-day", "2026-10-20");
+  await expect(page.getByTestId("month-day").filter({ hasText: "Third visit" })).toHaveAttribute("data-day", "2026-10-20");
   await page.getByTestId("calendar-next").click();
   await expect(page.getByTestId("calendar-title")).toHaveText("November 2026");
   await expect(page.getByTestId("appointment")).toHaveCount(0);
