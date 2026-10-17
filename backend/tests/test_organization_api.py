@@ -57,6 +57,7 @@ def test_the_response_has_no_secrets_or_foreign_ids(client, db_session):
         "phone", "email", "registered_office", "website", "bankgiro", "plusgiro", "iban", "bic", "payment_terms_days", "approved_for_f_tax", "document_language",
         # When the owner last downloaded a copy of the data, and whether that is recent enough to delete without saying "no copy".
         "last_export_at", "recent_export",
+        "has_logo",  # whether there is a logo; the picture itself is a separate endpoint
     }
 
 

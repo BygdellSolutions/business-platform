@@ -112,7 +112,7 @@ REQUIRED_FUNCTIONS = {
 TENANT_TABLES = {
     "appointment_items", "appointment_subjects", "appointments", "audit_events", "credit_note_lines", "credit_note_pdfs", "credit_note_vat_rows", "credit_notes", "custom_field_definitions", "custom_field_options", "custom_field_values", "customers", "horse_journal_corrections", "horse_journal_entries", "horse_notes", "horses", "invoice_counters", "invoice_holds", "invoice_lines",
     "invoice_payments", "invoice_pdfs", "invoice_return_events", "invoice_return_lines", "invoice_returns", "invoice_transactions", "invoice_vat_rows", "invoices", "item_discounts", "incoming_stock", "items", "line_fulfillments", "organization_creation_requests",
-    "organization_invitations", "organization_users", "record_counters", "stock_movements", "suppliers", "transaction_lines", "transactions",
+    "organization_invitations", "organization_logos", "organization_users", "record_counters", "stock_movements", "suppliers", "transaction_lines", "transactions",
 }  # `security_events.organization_id` is deliberately nullable (an event may be about no organization)
 CORE_TABLES = ("organizations", "users", "organization_users")
 HEX64 = "^[0-9a-f]{64}$"
