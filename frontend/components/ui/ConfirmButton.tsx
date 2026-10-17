@@ -23,7 +23,7 @@ export function ConfirmButton({
 }: {
   label: string;
   confirmLabel: string;
-  /** A second way to go ahead, shown between the two ("Yes, cancel it and the draft order"). Both are needed for it to appear. */
+  /** A second way to go ahead, shown between the two ("Cancel appointment and order"). Both are needed for it to appear. */
   alsoLabel?: string;
   onAlso?: () => void;
   /** The button that backs out. It says what happens ("No, go back", "No, back to the draft"): a bare "Keep" does not say what is kept. */

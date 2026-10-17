@@ -439,8 +439,8 @@ export function AppointmentForm({
             <ConfirmButton
               label="Cancel appointment"
               question={hasDraftOrder ? `Cancel this appointment? It stays on record. Its draft order ${record.order_number} can be cancelled too.` : "Cancel this appointment? It stays on record."}
-              confirmLabel={hasDraftOrder ? "Yes, cancel only the appointment" : "Yes, cancel it"}
-              alsoLabel={hasDraftOrder ? "Yes, cancel it and the draft order" : undefined}
+              confirmLabel={hasDraftOrder ? "Cancel appointment" : "Yes, cancel it"}
+              alsoLabel={hasDraftOrder ? "Cancel appointment and order" : undefined}
               onAlso={hasDraftOrder ? () => void change(record, { status: "cancelled", cancel_order: true }) : undefined}
               declineLabel="No, keep it booked"
               disabled={pending}
