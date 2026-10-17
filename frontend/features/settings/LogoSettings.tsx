@@ -93,11 +93,18 @@ export function LogoSettings({ logo, canEdit }: { logo: OrganizationLogo | null;
       )}
       {canEdit ? (
         <form onSubmit={(event) => void upload(event)} className="flex flex-col gap-3" aria-label="Upload logo">
-          <label className="flex flex-col gap-1 text-sm font-medium">
-            {logo !== null ? "Replace logo" : "Upload logo"}
-            <input ref={input} type="file" accept="image/png,image/jpeg" onChange={onChoose} data-testid="logo-file" className="text-sm font-normal" />
-            <span className="text-xs font-normal text-muted">PNG or JPEG, up to 700 KB. Transparent PNGs work. A wide or tall logo is scaled to fit.</span>
-          </label>
+          <div className="flex flex-col gap-1">
+            <span className="text-sm font-medium">{logo !== null ? "Replace logo" : "Upload logo"}</span>
+            {/* The browser's own file control cannot be styled or reworded, so it is hidden and this button opens it. */}
+            <input ref={input} type="file" accept="image/png,image/jpeg" onChange={onChoose} data-testid="logo-file" aria-label="Logo file" tabIndex={-1} className="sr-only" />
+            <div className="flex items-center gap-3">
+              <Button type="button" onClick={() => input.current?.click()} disabled={pending} data-testid="logo-choose">
+                Choose file
+              </Button>
+              {file !== null && <span className="min-w-0 truncate text-sm" data-testid="logo-file-name">{file.name}</span>}
+            </div>
+            <span className="text-xs text-muted">PNG or JPEG, up to 700 KB. Transparent PNGs work. A wide or tall logo is scaled to fit.</span>
+          </div>
           {problem !== null && <ErrorSummary messages={[problem]} />}
           <ErrorSummary messages={messages} />
           {notice === "saved" && <Notice testId="logo-saved">Logo saved.</Notice>}

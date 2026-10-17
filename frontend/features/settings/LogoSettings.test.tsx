@@ -56,6 +56,16 @@ describe("what is shown", () => {
 });
 
 describe("uploading", () => {
+  it("offers a 'Choose file' button instead of the browser's file control, and names the chosen file", async () => {
+    mount(null);
+    const click = vi.spyOn(screen.getByTestId("logo-file"), "click");
+    await userEvent.click(screen.getByRole("button", { name: "Choose file" }));
+    expect(click).toHaveBeenCalled();
+    expect(screen.queryByTestId("logo-file-name")).toBeNull();
+    await userEvent.upload(screen.getByTestId("logo-file"), png());
+    expect(screen.getByTestId("logo-file-name")).toHaveTextContent("logo.png");
+  });
+
   it("sends the chosen file as base64 JSON and refreshes the page", async () => {
     mocked.mockResolvedValue(ok({}));
     mount(null);
