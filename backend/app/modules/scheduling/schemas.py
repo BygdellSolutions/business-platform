@@ -86,6 +86,7 @@ class AppointmentUpdate(BaseModel):
     customer_id: uuid.UUID | None = None
     subjects: list[SubjectRef] | None = Field(default=None, max_length=MAX_SUBJECTS)  # the whole new list (empty clears it)
     items: list[uuid.UUID] | None = Field(default=None, max_length=MAX_SERVICES)  # the whole new list of services
+    cancel_order: bool = False  # with status "cancelled": cancel the appointment's DRAFT order in the same step (it is not a stored field)
 
     _aware = field_validator("starts_at", "ends_at")(aware)
     _distinct = field_validator("subjects")(_distinct)

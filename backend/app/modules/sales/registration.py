@@ -73,5 +73,6 @@ def register(registry: Registry) -> None:
     registry.add_hook("order.statuses", booking.statuses)
     registry.add_hook("order.create_from_booking", booking.create_from_booking)
     registry.add_hook("order.sync_from_booking", booking.sync_from_booking)
+    registry.add_hook("order.cancel_draft", booking.cancel_draft)
     registry.add_currency_guard(_transactions_fix_the_currency)
     registry.add_reference_guard(_service_subjects_are_referenced)

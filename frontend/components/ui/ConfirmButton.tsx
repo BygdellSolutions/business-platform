@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/Button";
 export function ConfirmButton({
   label,
   confirmLabel,
+  alsoLabel,
+  onAlso,
   declineLabel = "No, go back",
   oneLine = false,
   question,
@@ -21,6 +23,9 @@ export function ConfirmButton({
 }: {
   label: string;
   confirmLabel: string;
+  /** A second way to go ahead, shown between the two ("Yes, cancel it and the draft order"). Both are needed for it to appear. */
+  alsoLabel?: string;
+  onAlso?: () => void;
   /** The button that backs out. It says what happens ("No, go back", "No, back to the draft"): a bare "Keep" does not say what is kept. */
   declineLabel?: string;
   /** The question and its buttons stay on one line (in a table row, where a wrapped question would make the row taller). */
@@ -52,6 +57,18 @@ export function ConfirmButton({
       >
         {confirmLabel}
       </Button>
+      {alsoLabel !== undefined && onAlso !== undefined && (
+        <Button
+          type="button"
+          onClick={() => {
+            setAsking(false);
+            onAlso();
+          }}
+          data-testid={testId ? `${testId}-also` : undefined}
+        >
+          {alsoLabel}
+        </Button>
+      )}
       <Button type="button" onClick={() => setAsking(false)} data-testid={testId ? `${testId}-keep` : undefined}>
         {declineLabel}
       </Button>

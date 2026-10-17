@@ -23,6 +23,7 @@ from app.core.org_time import organization_zone
 from app.core.tenant import TenantContext
 from app.core.tenant_scope import create_scoped, resolve_reference
 from app.models import Customer
+from app.core.lifecycle import CANCEL as EVENT_CANCEL, ensure_valid, run_effects
 from app.modules.sales.api import _lock, _new_line_values, _require_draft
 from app.modules.sales.models import Transaction, TransactionLine, TransactionStatus
 from app.modules.sales.schemas import LineCreate
@@ -68,6 +69,21 @@ def create_from_booking(db: Session, ctx: TenantContext, order: BookingOrder) ->
     db.flush()
     db.refresh(transaction)
     return {"id": transaction.id, "number": transaction.number}
+
+
+def cancel_draft(db: Session, ctx: TenantContext, order_id: uuid.UUID) -> int:
+    """Cancel a DRAFT order because its booking was cancelled, with the checks and effects of cancelling it by hand. Nothing is committed:
+    the caller commits it together with the booking. Returns the order's number."""
+    transaction = _lock(db, ctx, order_id)
+    _require_draft(transaction, "cancelled with its booking")
+    ensure_valid(db, ctx, EVENT_CANCEL, "transaction", transaction.id)
+    before = audit.snapshot(transaction)
+    transaction.status = TransactionStatus.CANCELLED
+    transaction.version += 1
+    audit.updated(db, ctx, transaction, "transaction", before, action="cancelled")
+    db.flush()
+    run_effects(db, ctx, EVENT_CANCEL, "transaction", transaction.id)
+    return transaction.number
 
 
 def sync_from_booking(db: Session, ctx: TenantContext, order_id: uuid.UUID, order: BookingOrder) -> dict:

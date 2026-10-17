@@ -213,7 +213,12 @@ def update_appointment(
 ) -> AppointmentRead:
     appointment = get_scoped_or_404(db, ctx, Appointment, appointment_id, for_update=True)
     ensure_current(if_match, appointment.version, "appointment", appointment.id)
-    values = {field: getattr(payload, field) for field in payload.model_fields_set if field not in ("subjects", "items")}
+    values = {field: getattr(payload, field) for field in payload.model_fields_set if field not in ("subjects", "items", "cancel_order")}
+    if payload.cancel_order:
+        if payload.status != CANCELLED or appointment.status == CANCELLED:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="cancel_order only goes with cancelling an appointment that is booked")
+        if appointment.order_id is None or appointment.order_id not in _asked("order.numbers", db, ctx, {appointment.order_id}):
+            raise HTTPException(status.HTTP_409_CONFLICT, detail={"code": "no_order", "message": "This appointment has no order (it may have been deleted)"})
     _validate_references(db, ctx, values, appointment)
     try:
         check_span(values.get("starts_at", appointment.starts_at), values.get("ends_at", appointment.ends_at))
@@ -231,6 +236,8 @@ def update_appointment(
     _validate_new_items(db, ctx, wanted_items - set(existing_items))
     items_changed = wanted_items != set(existing_items)
 
+    # Asked before anything of the appointment changes, under the same commit: a completed order refuses (409) and nothing is cancelled.
+    number = _answer("order.cancel_draft", db, ctx, appointment.order_id) if payload.cancel_order else None
     before = audit.snapshot(appointment, AUDITED)
     names_before = _names(db, ctx, set(existing)) if subjects_changed else ""
     services_before = _item_names(db, ctx, set(existing_items)) if items_changed else ""
@@ -253,6 +260,8 @@ def update_appointment(
         changes["subjects"] = {"from": names_before or None, "to": _names(db, ctx, wanted) or None}
     if items_changed:
         changes["services"] = {"from": services_before or None, "to": _item_names(db, ctx, wanted_items) or None}
+    if number is not None:
+        changes["order"] = {"from": f"Order {number}", "to": f"Order {number} cancelled"}
     if changes:
         audit.stamp(appointment, ctx)
         audit.record(db, ctx, entity_type="appointment", entity_id=appointment.id, action=audit.UPDATED, changes=changes)
@@ -325,6 +334,25 @@ def update_order(
     result = _answer("order.sync_from_booking", db, ctx, appointment.order_id, order)
     db.commit()
     return OrderUpdateResult(added=result["added"], removed=result["removed"], kept=result["kept"], appointment=_read(db, ctx, appointment))
+
+
+@router.post("/{appointment_id}/order/cancel", response_model=AppointmentRead)
+def cancel_order(
+    appointment_id: uuid.UUID, if_match: str | None = Header(default=None), ctx: TenantContext = Depends(record_writer), db: Session = Depends(get_db)
+) -> AppointmentRead:
+    """Cancel the appointment's DRAFT order without touching the appointment's status (a completed order is refused, 409: that is done on the order)."""
+    appointment = get_scoped_or_404(db, ctx, Appointment, appointment_id, for_update=True)
+    ensure_current(if_match, appointment.version, "appointment", appointment.id)
+    if appointment.order_id is None or appointment.order_id not in _asked("order.numbers", db, ctx, {appointment.order_id}):
+        raise HTTPException(status.HTTP_409_CONFLICT, detail={"code": "no_order", "message": "This appointment has no order (it may have been deleted)"})
+    number = _answer("order.cancel_draft", db, ctx, appointment.order_id)
+    audit.record(
+        db, ctx, entity_type="appointment", entity_id=appointment.id, action=audit.UPDATED, changes={"order": {"from": f"Order {number}", "to": f"Order {number} cancelled"}}
+    )
+    appointment.version += 1
+    audit.stamp(appointment, ctx)
+    commit_and_refresh(db, appointment)
+    return _read(db, ctx, appointment)
 
 
 @router.delete("/{appointment_id}", status_code=status.HTTP_204_NO_CONTENT)

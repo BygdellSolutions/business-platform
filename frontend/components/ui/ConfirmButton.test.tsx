@@ -31,6 +31,16 @@ describe("ConfirmButton", () => {
     expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
   });
 
+  it("can offer a second way to go ahead, and runs only the one that was chosen", async () => {
+    const onConfirm = vi.fn();
+    const onAlso = vi.fn();
+    render(<ConfirmButton {...props} alsoLabel="Yes, and the order too" onAlso={onAlso} onConfirm={onConfirm} />);
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await userEvent.click(screen.getByRole("button", { name: "Yes, and the order too" }));
+    expect(onAlso).toHaveBeenCalledTimes(1);
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
   it("can name what backing out means for the thing being confirmed", async () => {
     const onConfirm = vi.fn();
     render(<ConfirmButton {...props} declineLabel="No, back to the draft" onConfirm={onConfirm} />);

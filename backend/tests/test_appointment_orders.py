@@ -255,3 +255,82 @@ def test_a_completed_order_is_not_updated(client: TestClient, world):
     assert refused.status_code == 409
     assert len(_lines(client, headers, appointment["order_id"])) == 1  # untouched
     assert client.get(f"/api/appointments/{appointment['id']}", headers=headers).json()["order_status"] == "completed"
+
+
+# --- cancelling the appointment with its draft order -------------------------------------------------------------------------------------
+
+
+def _order_status(client: TestClient, headers, order_id: str) -> str:
+    return client.get(f"/api/transactions/{order_id}", headers=headers).json()["status"]
+
+
+def test_cancelling_an_appointment_can_cancel_its_draft_order_too(client: TestClient, world):
+    headers, appointment = _made(client, world)
+    cancelled = _patch(client, headers, appointment, status="cancelled", cancel_order=True)
+    assert cancelled["status"] == "cancelled" and cancelled["order_status"] == "cancelled"
+    assert _order_status(client, headers, appointment["order_id"]) == "cancelled"
+
+
+def test_cancelling_an_appointment_alone_leaves_its_order(client: TestClient, world):
+    headers, appointment = _made(client, world)
+    cancelled = _patch(client, headers, appointment, status="cancelled")
+    assert cancelled["order_status"] == "draft"
+    assert _order_status(client, headers, appointment["order_id"]) == "draft"
+
+
+def test_a_completed_order_is_never_cancelled_with_its_appointment_and_nothing_changes(client: TestClient, world):
+    headers, appointment = _made(client, world)
+    order = client.get(f"/api/transactions/{appointment['order_id']}", headers=headers).json()
+    assert client.post(f"/api/transactions/{appointment['order_id']}/complete", headers={**headers, "If-Match": f'"{order["version"]}"'}).status_code == 200
+    refused = client.patch(f"/api/appointments/{appointment['id']}", json={"status": "cancelled", "cancel_order": True}, headers={**headers, **_etag(appointment)})
+    assert refused.status_code == 409
+    assert client.get(f"/api/appointments/{appointment['id']}", headers=headers).json()["status"] == "scheduled"  # the appointment was not cancelled either
+    assert _order_status(client, headers, appointment["order_id"]) == "completed"
+
+
+def test_cancel_order_needs_a_cancellation_and_an_order(client: TestClient, world):
+    _, umea, _, _, massage, _, _, people = world
+    headers, appointment = _made(client, world)
+    not_cancelling = client.patch(f"/api/appointments/{appointment['id']}", json={"cancel_order": True}, headers={**headers, **_etag(appointment)})
+    assert not_cancelling.status_code == 422
+    bare = _book(client, headers)
+    no_order = client.patch(f"/api/appointments/{bare['id']}", json={"status": "cancelled", "cancel_order": True}, headers={**headers, **_etag(bare)})
+    assert no_order.status_code == 409
+    assert _order_status(client, headers, appointment["order_id"]) == "draft"
+
+
+def test_a_viewer_cannot_cancel_an_appointment_and_its_order(client: TestClient, world):
+    people = world[7]
+    headers, appointment = _made(client, world)
+    refused = client.patch(
+        f"/api/appointments/{appointment['id']}", json={"status": "cancelled", "cancel_order": True}, headers={**people["viewer"][1], **_etag(appointment)}
+    )
+    assert refused.status_code == 403
+    assert _order_status(client, headers, appointment["order_id"]) == "draft"
+
+
+def test_the_order_can_be_cancelled_on_its_own_while_the_appointment_stays_booked(client: TestClient, world):
+    people = world[7]
+    headers, appointment = _made(client, world)
+    refused = client.post(f"/api/appointments/{appointment['id']}/order/cancel", headers={**people["viewer"][1], **_etag(appointment)})
+    assert refused.status_code == 403
+    stale = client.post(f"/api/appointments/{appointment['id']}/order/cancel", headers={**headers, "If-Match": '"999"'})
+    assert stale.status_code in (409, 412)
+    done = client.post(f"/api/appointments/{appointment['id']}/order/cancel", headers={**headers, **_etag(appointment)})
+    assert done.status_code == 200, done.text
+    assert done.json()["status"] == "scheduled" and done.json()["order_status"] == "cancelled"
+    again = client.post(f"/api/appointments/{appointment['id']}/order/cancel", headers={**headers, **_etag(done.json())})
+    assert again.status_code == 409  # a cancelled order cannot be cancelled again
+
+
+def test_another_organizations_order_cannot_be_cancelled_through_an_appointment(client: TestClient, db_session: Session, world):
+    people = world[7]
+    other = make_org(db_session, "Other")
+    their_customer = make_customer(db_session, other, "Umeå HK")
+    their_item = make_item(db_session, other, "Massage")
+    _, their_headers = _person(db_session, other, Role.OWNER, "Their Owner")
+    theirs = _book(client, their_headers, customer_id=str(their_customer.id), items=[str(their_item.id)])
+    made = _order(client, their_headers, theirs).json()
+    assert client.post(f"/api/appointments/{made['id']}/order/cancel", headers={**people["owner"][1], **_etag(made)}).status_code == 404
+    assert client.patch(f"/api/appointments/{made['id']}", json={"status": "cancelled", "cancel_order": True}, headers={**people["owner"][1], **_etag(made)}).status_code == 404
+    assert _order_status(client, their_headers, made["order_id"]) == "draft"

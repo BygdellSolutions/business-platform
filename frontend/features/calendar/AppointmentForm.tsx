@@ -245,6 +245,15 @@ export function AppointmentForm({
     router.refresh();
   }
 
+  async function cancelOrder(current: Appointment) {
+    setOrderNotice(null);
+    const done = await run(() => apiFetch<Appointment>(orgId, `/appointments/${current.id}/order/cancel`, { method: "POST", ifMatch: current.version }));
+    if (done === null) return;
+    setRecord(done);
+    setOrderNotice(`Order ${done.order_number ?? ""} cancelled.`.replace("  ", " "));
+    router.refresh();
+  }
+
   function onSubmit(event: FormEvent) {
     event.preventDefault();
     setNotice(null);
@@ -252,6 +261,7 @@ export function AppointmentForm({
   }
 
   const cancelled = record?.status === "cancelled";
+  const hasDraftOrder = record !== undefined && record.order_id !== null && record.order_number !== null && record.order_status === "draft";
   const personOptions = [...(state.practitioner === NOBODY ? [{ value: NOBODY, label: "Choose a practitioner" }] : []), ...people.map((person) => ({ value: person.user_id, label: person.name }))];
   if (state.practitioner !== NOBODY && !people.some((person) => person.user_id === state.practitioner)) {
     personOptions.push({ value: state.practitioner, label: record?.practitioner_name ?? "Former colleague" });
@@ -368,6 +378,15 @@ export function AppointmentForm({
                 <Button type="button" disabled={pending || dirty || record.order_status !== "draft"} onClick={() => void updateOrder(record)} data-testid="update-order">
                   Update order
                 </Button>
+                <ConfirmButton
+                  label="Cancel order"
+                  question={`Cancel draft order ${record.order_number}? It stays on record.`}
+                  confirmLabel="Yes, cancel the order"
+                  declineLabel="No, keep the order"
+                  disabled={pending || record.order_status !== "draft"}
+                  onConfirm={() => void cancelOrder(record)}
+                  testId="cancel-order"
+                />
                 <span className="text-xs text-zinc-500">
                   {record.order_status !== "draft"
                     ? "The order is no longer a draft, so it is changed on the order itself."
@@ -419,8 +438,10 @@ export function AppointmentForm({
           ) : (
             <ConfirmButton
               label="Cancel appointment"
-              question="Cancel this appointment? It stays on record."
-              confirmLabel="Yes, cancel it"
+              question={hasDraftOrder ? `Cancel this appointment? It stays on record. Its draft order ${record.order_number} can be cancelled too.` : "Cancel this appointment? It stays on record."}
+              confirmLabel={hasDraftOrder ? "Yes, cancel only the appointment" : "Yes, cancel it"}
+              alsoLabel={hasDraftOrder ? "Yes, cancel it and the draft order" : undefined}
+              onAlso={hasDraftOrder ? () => void change(record, { status: "cancelled", cancel_order: true }) : undefined}
               declineLabel="No, keep it booked"
               disabled={pending}
               onConfirm={() => void change(record, { status: "cancelled" })}
