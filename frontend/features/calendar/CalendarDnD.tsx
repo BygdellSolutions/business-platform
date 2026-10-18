@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 
+import { BUTTON_VARIANTS } from "@/components/ui/Button";
 import { apiFetch } from "@/lib/api/client";
 import type { Appointment, AppointmentUpdate } from "@/lib/api/types";
 import { SNAP_MINUTES, dayDifference, movedTo, resizedTo, shiftedByDays, snapMinutes, timeText } from "@/lib/calendar";
@@ -60,6 +61,8 @@ export function CalendarDnD({
   const root = useRef<HTMLDivElement>(null);
   const [hint, setHint] = useState<{ x: number; y: number; text: string } | null>(null);
   const [message, setMessage] = useState<{ text: string; problem: boolean } | null>(null);
+  /** A finished booking was dropped: the answer to "move it anyway?" decides whether the move is saved or the booking snaps back. */
+  const [asking, setAsking] = useState<{ resize: boolean; yes: () => void; no: () => void } | null>(null);
   const settled = useRef<HTMLElement[]>([]);
   const waited = useRef(false);
   const dragged = useRef(false);
@@ -128,8 +131,6 @@ export function CalendarDnD({
       const target = event.target as HTMLElement;
       const element = target.closest<HTMLElement>("[data-movable]");
       if (!element || !container?.contains(element)) return;
-      // A page left open past a booking's end must not let it be dragged unless the person unlocked finished bookings.
-      if (element.dataset.unlocked !== "true" && new Date(element.dataset.end ?? "").getTime() < Date.now()) return;
       const press: Press = {
         element,
         kind: target.closest("[data-resize]") ? "resize" : "move",
@@ -177,20 +178,39 @@ export function CalendarDnD({
           clear(element);
           return;
         }
-        const result = await apiFetch<Appointment>(orgId, `/appointments/${press.id}`, { method: "PATCH", body: change, ifMatch: press.version });
-        if (result.ok) {
-          settled.current.push(element);
-          setMessage({ text: "Saved.", problem: false });
+        const save = async () => {
+          const result = await apiFetch<Appointment>(orgId, `/appointments/${press.id}`, { method: "PATCH", body: change, ifMatch: press.version });
+          if (result.ok) {
+            settled.current.push(element);
+            setMessage({ text: "Saved.", problem: false });
+            startTransition(() => router.refresh());
+            return;
+          }
+          clear(element);
+          const stale = result.error.kind === "conflict" && result.error.code === "stale_record";
+          setMessage({
+            text: stale ? "This booking was changed by someone else, so it was not moved. The calendar has been reloaded." : `It was not moved: ${result.error.message}`,
+            problem: true,
+          });
           startTransition(() => router.refresh());
+        };
+        // A booking that has ended is not moved by a slip of the hand: the person confirms first (also when the page was drawn before it ended).
+        const finished = element.dataset.done === "true" || new Date(press.endsAt).getTime() < Date.now();
+        if (finished) {
+          setAsking({
+            resize: press.kind === "resize",
+            yes: () => {
+              setAsking(null);
+              void save();
+            },
+            no: () => {
+              setAsking(null);
+              clear(element);
+            },
+          });
           return;
         }
-        clear(element);
-        const stale = result.error.kind === "conflict" && result.error.code === "stale_record";
-        setMessage({
-          text: stale ? "This booking was changed by someone else, so it was not moved. The calendar has been reloaded." : `It was not moved: ${result.error.message}`,
-          problem: true,
-        });
-        startTransition(() => router.refresh());
+        await save();
       };
 
       element.addEventListener("pointermove", move);
@@ -213,6 +233,31 @@ export function CalendarDnD({
         <p role={message.problem ? "alert" : "status"} data-testid="calendar-message" className={`text-sm ${message.problem ? "text-red-700" : "text-secondary"}`}>
           {message.text}
         </p>
+      )}
+      {asking && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" data-testid="finished-backdrop">
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="finished-title"
+            className="panel flex max-w-sm flex-col gap-3 shadow-lg"
+            data-testid="finished-dialog"
+            onKeyDown={(event) => event.key === "Escape" && asking.no()}
+          >
+            <h2 id="finished-title" className="text-base font-semibold">
+              This appointment is already finished
+            </h2>
+            <p className="text-sm text-secondary">{asking.resize ? "Do you want to change when it ended?" : "Do you want to move it?"}</p>
+            <div className="flex gap-3">
+              <button type="button" onClick={asking.yes} className={BUTTON_VARIANTS.primary} data-testid="finished-yes">
+                Yes, {asking.resize ? "change it" : "move it"}
+              </button>
+              <button type="button" autoFocus onClick={asking.no} className={BUTTON_VARIANTS.secondary} data-testid="finished-no">
+                No, leave it
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       {hint && (
         <div aria-hidden className="pointer-events-none fixed z-50 rounded bg-zinc-900 px-2 py-1 text-xs text-white shadow" style={{ left: hint.x + 14, top: hint.y + 14 }} data-testid="drag-hint">

@@ -200,7 +200,7 @@ test("a booking cannot be dropped in the column of nobody (only an older booking
   expect(same.version).toBe(booked.version);
 });
 
-test("a booking that has ended is marked done and cannot be dragged, only changed by opening it", async ({ page, context }) => {
+test("dragging a booking that has ended asks first: No leaves it, Yes moves it", async ({ page, context }) => {
   world = createWorld({ label: "Drag done" });
   await signIn(context, world.email);
   const booked = await book(context, world.orgId, { title: "Old visit", starts_at: "2020-10-19T08:00:00Z", ends_at: "2020-10-19T09:00:00Z" });
@@ -209,56 +209,44 @@ test("a booking that has ended is marked done and cannot be dragged, only change
   const block = page.getByTestId("appointment");
   await expect(block).toHaveAttribute("data-done", "true");
   await expect(block).toContainText("✓ Old visit");
-  await expect(block).not.toHaveAttribute("data-movable", "true");
-  await expect(block.locator("[data-resize]")).toHaveCount(0);
+  await expect(page.getByTestId("unlock-done")).toHaveCount(0);
 
-  const columns = page.getByTestId("column");
-  const monday = (await columns.nth(0).boundingBox())!;
-  const tuesday = (await columns.nth(1).boundingBox())!;
-  await dragBy(page, block, tuesday.x - monday.x, 96);
+  await dragBy(page, block, 0, 96); // two hours later, the same day
+  await expect(page.getByTestId("finished-dialog")).toContainText("This appointment is already finished");
+  await page.getByTestId("finished-no").click();
+  await expect(page.getByTestId("finished-dialog")).toHaveCount(0);
   const same = await appointmentOf(context, world.orgId, booked.id);
   expect([instant(same.starts_at), instant(same.ends_at)]).toEqual(["2020-10-19T08:00:00.000Z", "2020-10-19T09:00:00.000Z"]); // nothing moved
 
-  await block.click(); // opening it is the deliberate way to change it
-  await expect(page).toHaveURL(new RegExp(`/calendar/${booked.id}`));
-});
-
-test("a booking that has not ended yet stays draggable", async ({ page, context }) => {
-  world = createWorld({ label: "Drag not done" });
-  await signIn(context, world.email);
-  await book(context, world.orgId, { title: "Coming visit", starts_at: "2030-10-21T08:00:00Z", ends_at: "2030-10-21T09:00:00Z" });
-  await page.goto(`/o/${world.orgId}/calendar?${WEEK}`);
-  await expect(page.getByTestId("appointment")).not.toHaveAttribute("data-done", "true");
-  await expect(page.getByTestId("appointment")).toHaveAttribute("data-movable", "true");
-});
-
-test("unlocking finished bookings lets one be dragged (a visit moved to later the same day), and locking stops it again", async ({ page, context }) => {
-  world = createWorld({ label: "Drag unlock" });
-  await signIn(context, world.email);
-  const booked = await book(context, world.orgId, { title: "Missed visit", starts_at: "2020-10-19T08:00:00Z", ends_at: "2020-10-19T09:00:00Z" });
-  await page.goto(`/o/${world.orgId}/calendar?view=week&date=2020-10-19`);
-
-  await page.getByTestId("unlock-done").click();
-  await expect(page).toHaveURL(/unlock=1/);
-  await expect(page.getByTestId("unlock-done")).toHaveText("Lock finished bookings");
-  await expect(page.getByTestId("appointment")).toHaveAttribute("data-movable", "true");
-  const columns = page.getByTestId("column");
-  const monday = (await columns.nth(0).boundingBox())!;
-  await dragBy(page, page.getByTestId("appointment"), 0, 96); // two hours later, the same day
+  await dragBy(page, block, 0, 96);
+  await page.getByTestId("finished-yes").click();
   await expect(page.getByTestId("calendar-message")).toHaveText("Saved.");
   const moved = await appointmentOf(context, world.orgId, booked.id);
   expect([instant(moved.starts_at), instant(moved.ends_at)]).toEqual(["2020-10-19T10:00:00.000Z", "2020-10-19T11:00:00.000Z"]);
-  expect(monday.width).toBeGreaterThan(0);
-
-  await page.getByTestId("unlock-done").click(); // locked again
-  await expect(page.getByTestId("appointment")).not.toHaveAttribute("data-movable", "true");
 });
 
-test("the unlock button is only offered when the view has a finished booking", async ({ page, context }) => {
-  world = createWorld({ label: "Drag no unlock" });
+test("stretching the end of a finished booking asks too, and Escape means No", async ({ page, context }) => {
+  world = createWorld({ label: "Drag done resize" });
   await signIn(context, world.email);
-  await book(context, world.orgId, { title: "Coming visit", starts_at: "2030-10-21T08:00:00Z", ends_at: "2030-10-21T09:00:00Z" });
+  const booked = await book(context, world.orgId, { title: "Old session", starts_at: "2020-10-19T09:00:00Z", ends_at: "2020-10-19T10:00:00Z" });
+  await page.goto(`/o/${world.orgId}/calendar?view=week&date=2020-10-19`);
+
+  await dragBy(page, page.getByTestId("appointment"), 0, 48, 1); // the bottom edge, one hour further
+  await expect(page.getByTestId("finished-dialog")).toContainText("when it ended");
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("finished-dialog")).toHaveCount(0);
+  const same = await appointmentOf(context, world.orgId, booked.id);
+  expect(instant(same.ends_at)).toBe("2020-10-19T10:00:00.000Z");
+});
+
+test("a booking that has not ended yet moves without a question", async ({ page, context }) => {
+  world = createWorld({ label: "Drag not done" });
+  await signIn(context, world.email);
+  const booked = await book(context, world.orgId, { title: "Coming visit", starts_at: "2030-10-21T08:00:00Z", ends_at: "2030-10-21T09:00:00Z" });
   await page.goto(`/o/${world.orgId}/calendar?${WEEK}`);
-  await expect(page.getByTestId("appointment")).toBeVisible();
-  await expect(page.getByTestId("unlock-done")).toHaveCount(0);
+  await expect(page.getByTestId("appointment")).not.toHaveAttribute("data-done", "true");
+  await dragBy(page, page.getByTestId("appointment"), 0, 96);
+  await expect(page.getByTestId("calendar-message")).toHaveText("Saved.");
+  await expect(page.getByTestId("finished-dialog")).toHaveCount(0);
+  expect(instant((await appointmentOf(context, world.orgId, booked.id)).starts_at)).toBe("2030-10-21T10:00:00.000Z");
 });
