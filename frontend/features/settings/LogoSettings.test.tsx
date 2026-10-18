@@ -10,10 +10,13 @@ import type { OrganizationLogo } from "@/lib/api/types";
 const router = { push: vi.fn(), refresh: vi.fn() };
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
 vi.mock("@/lib/api/client", () => ({ apiFetch: vi.fn() }));
+vi.mock("@/lib/logo-picture", () => ({ prepareLogo: vi.fn() }));
 import { apiFetch } from "@/lib/api/client";
+import { prepareLogo } from "@/lib/logo-picture";
 
 const A = "00000000-0000-4000-8000-0000000000a1";
 const mocked = vi.mocked(apiFetch);
+const prepare = vi.mocked(prepareLogo);
 const LOGO: OrganizationLogo = { data_base64: "iVBORw0KGgo=", width: 300, height: 100 };
 const ok = <T,>(data: T, status = 200): ApiResult<T> => ({ ok: true, status, data });
 
@@ -28,6 +31,11 @@ function mount(logo: OrganizationLogo | null, canEdit = true) {
 const png = (bytes = 10, type = "image/png") => new File([new Uint8Array(bytes)], "logo.png", { type });
 
 beforeEach(() => {
+  prepare.mockReset();
+  // Unless a test says otherwise the picture is used as it is, which is what the real function does for a small PNG or JPEG.
+  prepare.mockImplementation(async (file: File) =>
+    (file.type === "image/png" || file.type === "image/jpeg") && file.size <= 700_000 ? { file, note: null } : { problem: "Choose a picture file, such as a PNG or JPEG." },
+  );
   mocked.mockReset();
   router.refresh.mockReset();
 });
@@ -37,6 +45,7 @@ describe("what is shown", () => {
     mount(LOGO);
     expect(screen.getByTestId("logo-preview")).toHaveAttribute("src", `data:image/png;base64,${LOGO.data_base64}`);
     expect(screen.getByTestId("logo-remove")).toBeInTheDocument();
+    expect(screen.getAllByText("Replace logo")).toHaveLength(1); // said once: only the button
     expect(screen.getByRole("button", { name: "Replace logo" })).toBeDisabled(); // nothing chosen yet
   });
 
@@ -80,15 +89,26 @@ describe("uploading", () => {
     expect(router.refresh).toHaveBeenCalled();
   });
 
-  it("refuses a wrong type or a too large file before sending anything", async () => {
+  it("explains a file that is not a picture before sending anything", async () => {
     mount(null);
     // applyAccept: false so the browser-side accept filter does not hide the wrong type from the handler.
-    await userEvent.setup({ applyAccept: false }).upload(screen.getByTestId("logo-file"), png(10, "image/gif"));
-    expect(screen.getByText("The logo must be a PNG or JPEG image.")).toBeInTheDocument();
-    await userEvent.upload(screen.getByTestId("logo-file"), png(700_001));
-    expect(screen.getByText("The file is larger than 700 KB.")).toBeInTheDocument();
+    await userEvent.setup({ applyAccept: false }).upload(screen.getByTestId("logo-file"), new File(["hello"], "notes.txt", { type: "text/plain" }));
+    expect(await screen.findByText("Choose a picture file, such as a PNG or JPEG.")).toBeInTheDocument();
     expect(screen.getByTestId("logo-upload")).toBeDisabled();
     expect(mocked).not.toHaveBeenCalled();
+  });
+
+  it("makes a too big picture smaller, says so, and sends the smaller copy", async () => {
+    const small = new File([new Uint8Array(300_000)], "logo.png", { type: "image/png" });
+    prepare.mockResolvedValue({ file: small, note: "Your picture was made smaller to fit (5.0 MB to 300 KB)." });
+    mocked.mockResolvedValue(ok({}));
+    mount(null);
+    await userEvent.upload(screen.getByTestId("logo-file"), png(5_000_000));
+
+    expect(await screen.findByTestId("logo-resized")).toHaveTextContent("5.0 MB to 300 KB");
+    await userEvent.click(screen.getByTestId("logo-upload"));
+    await waitFor(() => expect(mocked).toHaveBeenCalledTimes(1));
+    expect(((mocked.mock.calls[0][2]?.body as { data_base64: string }).data_base64.length * 3) / 4).toBeLessThanOrEqual(300_000); // the copy, not the original
   });
 
   it("shows the backend's reason when it refuses the image", async () => {

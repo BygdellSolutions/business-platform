@@ -143,6 +143,8 @@ def upload_logo(
         db, ctx, entity_type="organization", entity_id=organization.id, action="logo_changed",
         changes={"logo_id": {"from": str(previous) if previous else None, "to": str(logo.id)}},
     )
+    db.commit()  # the session is not committed for us: without this the new version and the audit event are rolled back when the request ends
+    db.refresh(organization)
     return read_organization_profile(db, organization)
 
 
@@ -155,6 +157,7 @@ def remove_logo(ctx: TenantContext = Depends(roles_required(Role.OWNER)), db: Se
             changes={"logo_id": {"from": str(organization.logo_id), "to": None}},
         )
         organization.logo_id = None  # the version stays: issued documents may refer to it
+    db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

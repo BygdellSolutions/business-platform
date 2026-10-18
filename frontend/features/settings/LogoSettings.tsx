@@ -10,10 +10,10 @@ import { Notice } from "@/components/ui/Notice";
 import { apiFetch } from "@/lib/api/client";
 import type { Organization, OrganizationLogo } from "@/lib/api/types";
 import { problemsFrom, useMutation } from "@/lib/forms";
+import { prepareLogo } from "@/lib/logo-picture";
 
-/** The backend's own limit (700 kB): checking here only saves a round trip, FastAPI still decides. */
-const MAX_BYTES = 700_000;
-const ACCEPTED = ["image/png", "image/jpeg"];
+/** What the file picker offers: any ordinary picture. A picture that is not a PNG or JPEG, or is over 700 KB, is converted here (see lib/logo-picture.ts). */
+const ACCEPT = "image/png,image/jpeg,image/webp,image/gif";
 
 /** The file as base64 (the browser's only door to the backend carries JSON), without the `data:` prefix. */
 function readAsBase64(file: File): Promise<string> {
@@ -31,21 +31,34 @@ export function LogoSettings({ logo, canEdit }: { logo: OrganizationLogo | null;
   const router = useRouter();
   const { pending, error, run } = useMutation();
   const input = useRef<HTMLInputElement>(null);
+  // The file as the person chose it (for its name) and the file that will be sent (the same, or a smaller copy of it).
+  const [chosen, setChosen] = useState<File | null>(null);
   const [file, setFile] = useState<File | null>(null);
+  const [resized, setResized] = useState<string | null>(null);
+  const [preparing, setPreparing] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [notice, setNotice] = useState<"saved" | "removed" | null>(null);
   // A structured refusal ({code, message}, here "invalid_logo") carries its own wording; `problemsFrom` only knows field errors.
   const messages = error?.kind === "validation" && error.code !== undefined ? [error.message] : problemsFrom(error, []).general;
 
-  function onChoose(event: ChangeEvent<HTMLInputElement>) {
-    const chosen = event.target.files?.[0] ?? null;
+  async function onChoose(event: ChangeEvent<HTMLInputElement>) {
+    const picked = event.target.files?.[0] ?? null;
     setNotice(null);
     setFile(null);
-    if (chosen === null) return setProblem(null);
-    if (!ACCEPTED.includes(chosen.type)) return setProblem("The logo must be a PNG or JPEG image.");
-    if (chosen.size > MAX_BYTES) return setProblem("The file is larger than 700 KB.");
+    setChosen(null);
+    setResized(null);
+    if (picked === null) return setProblem(null);
+    setChosen(picked);
+    setPreparing(true);
+    const prepared = await prepareLogo(picked); // too big or not a PNG/JPEG: made into one that fits; otherwise untouched
+    setPreparing(false);
+    if ("problem" in prepared) {
+      setChosen(null);
+      return setProblem(prepared.problem);
+    }
     setProblem(null);
-    setFile(chosen);
+    setFile(prepared.file);
+    setResized(prepared.note);
   }
 
   async function upload(event: FormEvent) {
@@ -55,6 +68,8 @@ export function LogoSettings({ logo, canEdit }: { logo: OrganizationLogo | null;
     const saved = await run(() => apiFetch<Organization>(orgId, "/organization/logo", { method: "POST", body: { data_base64 } }));
     if (saved === null) return;
     setFile(null);
+    setChosen(null);
+    setResized(null);
     if (input.current) input.current.value = "";
     setNotice("saved");
     router.refresh(); // the preview is read again from the backend
@@ -93,24 +108,35 @@ export function LogoSettings({ logo, canEdit }: { logo: OrganizationLogo | null;
       )}
       {canEdit ? (
         <form onSubmit={(event) => void upload(event)} className="flex flex-col gap-3" aria-label="Upload logo">
-          <div className="flex flex-col gap-1">
-            <span className="text-sm font-medium">{logo !== null ? "Replace logo" : "Upload logo"}</span>
-            {/* The browser's own file control cannot be styled or reworded, so it is hidden and this button opens it. */}
-            <input ref={input} type="file" accept="image/png,image/jpeg" onChange={onChoose} data-testid="logo-file" aria-label="Logo file" tabIndex={-1} className="sr-only" />
-            <div className="flex items-center gap-3">
-              <Button type="button" onClick={() => input.current?.click()} disabled={pending} data-testid="logo-choose">
-                Choose file
-              </Button>
-              {file !== null && <span className="min-w-0 truncate text-sm" data-testid="logo-file-name">{file.name}</span>}
-            </div>
-            <span className="text-xs text-muted">PNG or JPEG, up to 700 KB. Transparent PNGs work. A wide or tall logo is scaled to fit.</span>
+          {/* The browser's own file control cannot be styled or reworded, so it is hidden and this button opens it. */}
+          <input ref={input} type="file" accept={ACCEPT} onChange={(event) => void onChoose(event)} data-testid="logo-file" aria-label="Logo file" tabIndex={-1} className="sr-only" />
+          <div className="flex items-center gap-3">
+            <Button type="button" onClick={() => input.current?.click()} disabled={pending || preparing} data-testid="logo-choose">
+              Choose file
+            </Button>
+            {chosen !== null && (
+              <span className="min-w-0 truncate text-sm" data-testid="logo-file-name">
+                {chosen.name}
+              </span>
+            )}
           </div>
-          {problem !== null && <ErrorSummary messages={[problem]} />}
+          <span className="text-xs text-muted">A PNG or JPEG. A big picture is made smaller for you. Transparent PNGs work, and a wide or tall logo is scaled to fit.</span>
+          {preparing && (
+            <p className="text-sm text-secondary" role="status" data-testid="logo-preparing">
+              Getting the picture ready…
+            </p>
+          )}
+          {resized !== null && <Notice testId="logo-resized">{resized}</Notice>}
+          {problem !== null && (
+            <div data-testid="logo-problem">
+              <ErrorSummary messages={[problem]} />
+            </div>
+          )}
           <ErrorSummary messages={messages} />
           {notice === "saved" && <Notice testId="logo-saved">Logo saved.</Notice>}
           {notice === "removed" && <Notice testId="logo-removed">Logo removed.</Notice>}
           <div className="flex gap-2">
-            <Button type="submit" disabled={pending || file === null} data-testid="logo-upload">
+            <Button type="submit" disabled={pending || preparing || file === null} data-testid="logo-upload">
               {pending ? "Saving…" : logo !== null ? "Replace logo" : "Upload logo"}
             </Button>
             {logo !== null && (

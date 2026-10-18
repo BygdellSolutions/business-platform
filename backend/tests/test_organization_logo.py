@@ -230,3 +230,52 @@ def test_the_logo_is_in_the_hash_by_its_checksum_and_the_text_is_still_printed()
     with_logo = plain.model_copy(update={"logo": png, "logo_sha256": hashlib.sha256(png).hexdigest()})
     assert source_sha256(with_logo) != source_sha256(plain)
     assert "Fredrik Horse Therapy AB" in "".join(page.extract_text() for page in reader(render.render_pdf(with_logo)).pages)
+
+
+# --- the changes are COMMITTED, not only visible to the request's own transaction ----------------------------------------------
+# The other tests share one rollback-only transaction, so a handler that forgot to commit still passed them (and the screen said
+# "Logo saved" while nothing was kept). These use the real application with a real database, and look from a second session.
+
+
+@pytest.fixture
+def committed(dev_auth):
+    from tests.invoicing_support import build_committed_world, purge_organization
+
+    world = build_committed_world("Logo")
+    yield world
+    purge_organization(world.org_id, [world.user_id])
+
+
+def test_an_uploaded_logo_is_kept_after_the_request_ends(committed):
+    from fastapi.testclient import TestClient
+
+    from app.core.db import SessionLocal
+    from app.main import app
+    from app.models import Organization
+
+    sent = TestClient(app).post(LOGO, json={"data_base64": base64.b64encode(picture()).decode()}, headers=committed.headers)
+    assert sent.status_code == 200, sent.text
+
+    with SessionLocal() as other_session:  # a fresh transaction: only committed data is visible here
+        organization = other_session.get(Organization, committed.org_id)
+        assert organization.logo_id is not None
+        stored = other_session.scalars(select(OrganizationLogo).where(OrganizationLogo.organization_id == committed.org_id)).all()
+        assert [row.id for row in stored] == [organization.logo_id]
+        events = other_session.scalars(select(AuditEvent).where(AuditEvent.organization_id == committed.org_id, AuditEvent.action == "logo_changed")).all()
+        assert len(events) == 1
+
+
+def test_removing_a_logo_is_kept_too_and_the_version_stays(committed):
+    from fastapi.testclient import TestClient
+
+    from app.core.db import SessionLocal
+    from app.main import app
+    from app.models import Organization
+
+    http = TestClient(app)
+    http.post(LOGO, json={"data_base64": base64.b64encode(picture()).decode()}, headers=committed.headers)
+    assert http.delete(LOGO, headers=committed.headers).status_code == 204
+
+    with SessionLocal() as other_session:
+        assert other_session.get(Organization, committed.org_id).logo_id is None
+        assert len(other_session.scalars(select(OrganizationLogo).where(OrganizationLogo.organization_id == committed.org_id)).all()) == 1
