@@ -49,9 +49,9 @@ export async function signInViaUi(page: Page, email: string): Promise<void> {
 }
 
 /** Create a customer through the BFF (as the context's signed-in user) in the given organization. */
-export async function createCustomer(context: BrowserContext, orgId: string, name: string) {
+export async function createCustomer(context: BrowserContext, orgId: string, name: string, extra: Record<string, unknown> = {}) {
   const response = await context.request.post(bffUrl(orgId, "/customers"), {
-    data: { customer_type: "person", name },
+    data: { customer_type: "person", name, ...extra },
   });
   expect(response.status(), await response.text()).toBe(201);
   return (await response.json()) as { id: string; name: string };

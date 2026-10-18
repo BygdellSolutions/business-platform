@@ -1956,6 +1956,29 @@ export interface InventorySummary {
 
 /** A note on a horse (GET /api/horses/{id}/notes), newest first. */
 
+/** One attempt to email an issued invoice to a customer (kept also when it failed). */
+export interface InvoiceEmailLog {
+
+  id: string;
+
+  to_email: string;
+
+  subject: string;
+
+  note: string | null;
+
+  /** sent: delivered; queued: the mail service will deliver it; failed: it did not go (see error). */
+
+  status: "sent" | "queued" | "failed";
+
+  error: string | null;
+
+  created_at: string;
+
+  sent_by_name: string | null;
+
+}
+
 /** A file kept with a horse (a PDF or a picture); its bytes are fetched separately, from `/horses/{id}/documents/{id}/file`. */
 export interface HorseDocument {
 

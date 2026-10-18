@@ -3,11 +3,12 @@ import Link from "next/link";
 import { RecordHistory } from "@/components/history/RecordHistory";
 import { RecordMeta } from "@/components/history/RecordMeta";
 import { Notice } from "@/components/ui/Notice";
+import { EmailInvoicePanel } from "@/features/invoices/EmailInvoicePanel";
 import { InvoiceView } from "@/features/invoices/InvoiceView";
 import { CreditNotesPanel } from "@/features/invoices/CreditNotesPanel";
 import { PaymentsPanel } from "@/features/invoices/PaymentsPanel";
 import { ReturnsPanel } from "@/features/invoices/ReturnsPanel";
-import type { Invoice, Organization } from "@/lib/api/types";
+import type { Invoice, InvoiceEmailLog, Organization } from "@/lib/api/types";
 import { requireCredential } from "@/lib/auth/credential";
 import { readRecordHistory } from "@/lib/history-server";
 import { getMemberships } from "@/lib/orgs";
@@ -40,6 +41,8 @@ export default async function InvoicePage({
     serverRead<Organization>(orgId, "/api/organization"),
     readRecordHistory(orgId, "invoice", recordId),
   ]);
+  // Only an issued invoice can be emailed; the list of attempts is read for it alone.
+  const emails = invoice.status === "issued" ? await serverRead<InvoiceEmailLog[]>(orgId, `/api/invoices/${recordId}/emails`) : [];
   const issuedBy = history.history.people.find((person) => person.id === invoice.issued_by)?.name ?? "not recorded";
   const role = memberships.status === "ok" ? memberships.memberships.find((membership) => membership.id === orgId)?.role : undefined;
 
@@ -76,6 +79,16 @@ export default async function InvoicePage({
         </p>
       )}
       <InvoiceView key={invoice.id} invoice={invoice} canMutate={canMutateInvoices(role)} timeZone={organization.timezone} />
+      {invoice.status === "issued" && (
+        <EmailInvoicePanel
+          key={`email-${invoice.id}`} // not keyed by the list: the message about the attempt just made must survive the refresh
+          invoiceId={invoice.id}
+          customerEmail={invoice.customer_snapshot.email ?? null}
+          canSend={canMutateInvoices(role)}
+          emails={emails}
+          timeZone={organization.timezone}
+        />
+      )}
       <PaymentsPanel
         key={`payments-${invoice.id}-${invoice.payments.length}-${invoice.credit_notes.length}`}
         invoice={invoice}
