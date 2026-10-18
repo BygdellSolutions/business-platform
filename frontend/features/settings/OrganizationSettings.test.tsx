@@ -42,6 +42,8 @@ function organization(overrides: Partial<Organization> = {}): Organization {
     payment_terms_days: null,
     approved_for_f_tax: null,
     document_language: null,
+    invoice_email_subject: null,
+    invoice_email_message: null,
     ...overrides,
   };
 }

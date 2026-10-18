@@ -81,3 +81,53 @@ test("an employee and a viewer see the list but no form; another organization ca
   expect(forged.status()).toBe(404);
   expect((await context.request.get(bffUrl(other.orgId, `/invoices/${issued.id}/emails`))).status()).toBe(404);
 });
+
+test("the pre-made text from Settings is filled in on the invoice, can be changed, and is what is sent", async ({ page, context }) => {
+  world = createWorld({ label: "InvoiceEmailText" });
+  await signIn(context, world.email);
+
+  await page.goto(`/o/${world.orgId}/settings`);
+  const settings = page.getByTestId("invoice-email-settings");
+  await settings.getByLabel("Subject").fill("Faktura {invoice_number} från {organization}");
+  await settings.getByLabel("Message").fill("Hej {customer}!\n\nFörfaller {due_date}. Betala med referens {payment_reference}.\n\nVänliga hälsningar");
+  await settings.getByTestId("save-invoice-email").click();
+  await expect(settings.getByTestId("invoice-email-saved")).toBeVisible();
+
+  const { issued } = await issuedInvoice(context, world.orgId);
+  await page.goto(`/o/${world.orgId}/invoices/${issued.id}`);
+  const panel = page.getByTestId("email-invoice");
+  const subject = panel.getByLabel("Subject");
+  const message = panel.getByLabel("Message (optional)");
+  await expect(subject).toHaveValue(new RegExp(`^Faktura ${issued.number_text} från InvoiceEmailText`));
+  await expect(message).toHaveValue(/^Hej Anna Andersson!\n\nFörfaller (\d{4}-\d{2}-\d{2}|-)\. Betala med referens \d+\./);
+  await expect(message).not.toHaveValue(/\{/); // every word in curly brackets was filled in
+
+  await message.fill((await message.inputValue()) + "\n\nPS. Ring om något är oklart.");
+  await panel.getByTestId("send-invoice-email").click();
+  await expect(panel.getByTestId("invoice-email")).toHaveCount(1);
+  const sent = testRow(`select subject || '|' || note from invoice_emails where invoice_id = ${sql(issued.id)}`);
+  expect(sent).toContain("Faktura ");
+  expect(sent).toContain("PS. Ring om något är oklart.");
+  await expect(message).toHaveValue(/PS\. Ring om något är oklart\./); // nothing was sent (no mail service here), so what was written is kept for another try
+});
+
+test("a word that is not a placeholder is refused in Settings, and an admin-only form is read-only for an employee", async ({ page, context }) => {
+  world = createWorld({ label: "InvoiceEmailWords" });
+  await signIn(context, world.email);
+  await page.goto(`/o/${world.orgId}/settings`);
+  const settings = page.getByTestId("invoice-email-settings");
+  await settings.getByLabel("Subject").fill("Hej {custmer}");
+  await settings.getByTestId("save-invoice-email").click();
+  await expect(settings.getByText(/These are not known: \{custmer\}/)).toBeVisible();
+  await expect(settings.getByLabel("Subject")).toHaveValue("Hej {custmer}"); // what was typed is kept
+  expect(testRow(`select coalesce(invoice_email_subject, 'none') from organizations where id = ${sql(world.orgId)}`)).toBe("none");
+
+  await settings.getByLabel("Subject").fill("Faktura {invoice_number}");
+  await settings.getByTestId("save-invoice-email").click();
+  await expect(settings.getByTestId("invoice-email-saved")).toBeVisible();
+
+  await signIn(context, world.addMember("employee"));
+  await page.goto(`/o/${world.orgId}/settings`);
+  await expect(page.getByTestId("setting-invoice_email_subject")).toHaveText("Faktura {invoice_number}");
+  await expect(page.getByTestId("save-invoice-email")).toHaveCount(0);
+});

@@ -342,6 +342,12 @@ export interface Organization extends Profile {
 
   document_language: DocumentLanguage | null;
 
+  /** The pre-made subject and message of an invoice email, with placeholders such as {customer} (null: the built-in subject, no message). */
+
+  invoice_email_subject: string | null;
+
+  invoice_email_message: string | null;
+
   /** Whether the organization has a logo for its documents (the picture is read from /organization/logo). */
 
   has_logo?: boolean;
@@ -407,6 +413,10 @@ export type OrganizationUpdate = Partial<Profile> & {
   approved_for_f_tax?: boolean | null;
 
   document_language?: DocumentLanguage | null;
+
+  invoice_email_subject?: string | null;
+
+  invoice_email_message?: string | null;
 
 } & Partial<Record<SellerTextField, string | null>>;
 
@@ -1955,6 +1965,17 @@ export interface InventorySummary {
 
 
 /** A note on a horse (GET /api/horses/{id}/notes), newest first. */
+
+/** The send form's starting point: the customer's address and the organization's subject and message with this invoice's facts filled in. */
+export interface InvoiceEmailDraft {
+
+  to: string;
+
+  subject: string;
+
+  message: string;
+
+}
 
 /** One attempt to email an issued invoice to a customer (kept also when it failed). */
 export interface InvoiceEmailLog {

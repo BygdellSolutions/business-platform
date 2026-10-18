@@ -9,11 +9,11 @@ import { ErrorSummary } from "@/components/ui/ErrorSummary";
 import { Notice } from "@/components/ui/Notice";
 import { TextAreaField, TextField } from "@/components/ui/Field";
 import { apiFetch } from "@/lib/api/client";
-import type { InvoiceEmailLog } from "@/lib/api/types";
+import type { InvoiceEmailDraft, InvoiceEmailLog } from "@/lib/api/types";
 import { problemsFrom, useMutation } from "@/lib/forms";
 import { formatDay } from "@/lib/timestamps";
 
-const CONTROLS = ["to", "note"] as const;
+const CONTROLS = ["to", "subject", "note"] as const;
 
 /** What a failed attempt means to the person, in plain words (the code is the backend's short word, never the provider's text). */
 export function failureText(code: string | null): string {
@@ -32,18 +32,19 @@ const STATUS_TEXT: Record<string, string> = { sent: "Sent", queued: "On its way"
 
 /**
  * Email an ISSUED invoice to the customer: the invoice's own PDF is attached, the email comes from the organization's name and replies go
- * to the organization. The address is the customer's, filled in and changeable; every attempt, including the ones that failed, is listed
+ * to the organization. The address, the subject and the message start from the draft (the customer's address and the organization's
+ * pre-made text from Settings, filled in with this invoice's facts) and can be changed before sending; every attempt, including the ones that failed, is listed
  * below. Only the people who do the books see the form; anyone who can read the invoice sees the list.
  */
 export function EmailInvoicePanel({
   invoiceId,
-  customerEmail,
+  draft,
   canSend,
   emails,
   timeZone,
 }: {
   invoiceId: string;
-  customerEmail: string | null;
+  draft: InvoiceEmailDraft;
   canSend: boolean;
   emails: InvoiceEmailLog[];
   timeZone: string | null;
@@ -51,8 +52,9 @@ export function EmailInvoicePanel({
   const orgId = useOrgId();
   const router = useRouter();
   const { pending, error, run } = useMutation();
-  const [to, setTo] = useState(customerEmail ?? "");
-  const [note, setNote] = useState("");
+  const [to, setTo] = useState(draft.to);
+  const [subject, setSubject] = useState(draft.subject);
+  const [note, setNote] = useState(draft.message);
   const [result, setResult] = useState<InvoiceEmailLog | null>(null);
   const problems = problemsFrom(error, CONTROLS);
   // A structured refusal ({code, message}) carries its own wording (an invoice that is not issued, the daily limit).
@@ -61,10 +63,10 @@ export function EmailInvoicePanel({
   async function submit(event: FormEvent) {
     event.preventDefault();
     setResult(null);
-    const sent = await run(() => apiFetch<InvoiceEmailLog>(orgId, `/invoices/${invoiceId}/email`, { method: "POST", body: { to, note: note.trim() === "" ? null : note } }));
+    const sent = await run(() => apiFetch<InvoiceEmailLog>(orgId, `/invoices/${invoiceId}/email`, { method: "POST", body: { to, subject: subject.trim() === "" ? null : subject, note: note.trim() === "" ? null : note } }));
     if (sent === null) return;
     setResult(sent);
-    if (sent.status !== "failed") setNote("");
+    if (sent.status !== "failed") setNote(draft.message); // ready for the next one: the pre-made text again
     router.refresh(); // the list below is read again from the server
   }
 
@@ -74,13 +76,14 @@ export function EmailInvoicePanel({
       {canSend ? (
         <form onSubmit={submit} noValidate aria-label="Send invoice by email" className="flex flex-col gap-3">
           <TextField label="Send to" name="to" value={to} onChange={setTo} inputMode="email" autoComplete="off" error={problems.byField.to} />
-          {customerEmail === null && (
+          {draft.to === "" && (
             <p className="text-xs text-secondary" data-testid="no-customer-email">
               This customer has no email address on the invoice. Type one above.
             </p>
           )}
-          <TextAreaField label="Message (optional)" name="note" value={note} onChange={setNote} rows={3} error={problems.byField.note} />
-          <p className="text-xs text-secondary">The invoice is attached as a PDF. The email comes from your organization&apos;s name and replies go to your organization.</p>
+          <TextField label="Subject" name="subject" value={subject} onChange={setSubject} autoComplete="off" error={problems.byField.subject} />
+          <TextAreaField label="Message (optional)" name="note" value={note} onChange={setNote} rows={6} error={problems.byField.note} />
+          <p className="text-xs text-secondary">The invoice is attached as a PDF, after the invoice number, amount, due date and payment details. The email comes from your organization&apos;s name and replies go to your organization. The pre-made text is set in Settings.</p>
           <ErrorSummary messages={general} />
           {result !== null &&
             (result.status === "failed" ? (

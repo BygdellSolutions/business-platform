@@ -114,7 +114,7 @@ def placeholder_values(invoice: Invoice) -> dict[str, str]:
         "customer": invoice.customer_name,
         "invoice_number": str(invoice.number_text or ""),
         "amount": _money(invoice.gross_amount, invoice.currency, _language(invoice)),
-        "due_date": _day(invoice.due_date) if invoice.due_date else "",
+        "due_date": _day(invoice.due_date),  # "-" when the invoice has none, as in the built-in text
         "payment_reference": ocr.ocr_reference(invoice.number) if invoice.number is not None else "",
         "organization": str(invoice.issuer_snapshot.get("name") or ""),
     }

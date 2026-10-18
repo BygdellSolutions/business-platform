@@ -8,7 +8,7 @@ import { InvoiceView } from "@/features/invoices/InvoiceView";
 import { CreditNotesPanel } from "@/features/invoices/CreditNotesPanel";
 import { PaymentsPanel } from "@/features/invoices/PaymentsPanel";
 import { ReturnsPanel } from "@/features/invoices/ReturnsPanel";
-import type { Invoice, InvoiceEmailLog, Organization } from "@/lib/api/types";
+import type { Invoice, InvoiceEmailDraft, InvoiceEmailLog, Organization } from "@/lib/api/types";
 import { requireCredential } from "@/lib/auth/credential";
 import { readRecordHistory } from "@/lib/history-server";
 import { getMemberships } from "@/lib/orgs";
@@ -42,7 +42,10 @@ export default async function InvoicePage({
     readRecordHistory(orgId, "invoice", recordId),
   ]);
   // Only an issued invoice can be emailed; the list of attempts is read for it alone.
-  const emails = invoice.status === "issued" ? await serverRead<InvoiceEmailLog[]>(orgId, `/api/invoices/${recordId}/emails`) : [];
+  const [emails, emailDraft] =
+    invoice.status === "issued"
+      ? await Promise.all([serverRead<InvoiceEmailLog[]>(orgId, `/api/invoices/${recordId}/emails`), serverRead<InvoiceEmailDraft>(orgId, `/api/invoices/${recordId}/email-draft`)])
+      : [[], null];
   const issuedBy = history.history.people.find((person) => person.id === invoice.issued_by)?.name ?? "not recorded";
   const role = memberships.status === "ok" ? memberships.memberships.find((membership) => membership.id === orgId)?.role : undefined;
 
@@ -79,11 +82,11 @@ export default async function InvoicePage({
         </p>
       )}
       <InvoiceView key={invoice.id} invoice={invoice} canMutate={canMutateInvoices(role)} timeZone={organization.timezone} />
-      {invoice.status === "issued" && (
+      {invoice.status === "issued" && emailDraft !== null && (
         <EmailInvoicePanel
           key={`email-${invoice.id}`} // not keyed by the list: the message about the attempt just made must survive the refresh
           invoiceId={invoice.id}
-          customerEmail={invoice.customer_snapshot.email ?? null}
+          draft={emailDraft}
           canSend={canMutateInvoices(role)}
           emails={emails}
           timeZone={organization.timezone}

@@ -135,6 +135,7 @@ def test_the_draft_fills_in_the_invoice_facts_and_the_customer_address(client: T
     assert draft["subject"].startswith(f"Faktura {invoice['number_text']} (") and invoice["currency"] in draft["subject"]
     assert draft["message"].startswith("Hej Anna Andersson! Förfaller ") and draft["message"].endswith("/Org A")
     assert "{" not in draft["subject"] + draft["message"]
+    assert "Förfaller -." in draft["message"] or "Förfaller 20" in draft["message"]  # an invoice without a due date says "-", not nothing
     assert draft["to"] == (two.a_customer.email or "")
 
 
