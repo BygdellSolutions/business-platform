@@ -10,6 +10,7 @@ from app.models.organization_logo import OrganizationLogo
 from app.models.organization_request import OrganizationCreationRequest
 from app.models.organization_user import OrganizationUser, Role
 from app.models.record_counter import RecordCounter
+from app.models.support_ticket import SupportTicket
 from app.models.supplier import Supplier
 from app.models.user import User
 
@@ -36,5 +37,6 @@ __all__ = [
     "RecordCounter",
     "Role",
     "Supplier",
+    "SupportTicket",
     "User",
 ]

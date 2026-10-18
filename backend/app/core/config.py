@@ -118,6 +118,19 @@ class Settings(BaseSettings):
     trust_client_ip_header: bool = False
     client_ip_header: str = "x-client-ip"
 
+    # --- outgoing email (app/core/email.py) ---------------------------------------------------------------------------------------------
+    # "log": nothing is sent (the message is only noted in the log without its text), which is what development, tests and a
+    # deployment that has no provider yet use. "cloudflare": Cloudflare Email Service over its REST API; it needs the account id,
+    # an API token allowed to send email, and a sender address on a domain that is onboarded for sending.
+    email_provider: Literal["log", "cloudflare"] = "log"
+    cloudflare_account_id: str | None = None
+    email_api_token: SecretStr | None = None
+    email_from: str = "no-reply@mail.bygdell.solutions"
+    # Where support requests are mailed (the person's own address is the Reply-To).
+    support_inbox: str = "support@bygdell.solutions"
+    support_tickets_per_hour: int = 5  # per source and per email address
+    support_tickets_global_per_hour: int = 300  # safety valve: beyond it the form answers "busy" instead of filling the table
+
     # --- request admission (app/core/admission.py) -----------------------------------------------------------------------------------
     # Per PROCESS: at most `admission_max_running` requests run, at most `admission_max_waiting` more queue for at most
     # `admission_wait_seconds`, and the rest get an immediate 503. These are the load test's starting values (12 / 48 / 1 s),

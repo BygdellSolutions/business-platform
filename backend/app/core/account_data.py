@@ -15,7 +15,7 @@ from datetime import datetime
 from sqlalchemy import delete, select, text, update
 from sqlalchemy.orm import Session
 
-from app.core import mfa_service, security_events
+from app.core import mfa_service, security_events, support
 from app.models import Organization, OrganizationUser, User
 from app.models.auth import AuthSession, MfaChallenge, SecurityEvent, UserCredential, UserMfa, UserRecoveryCode, UserSetupToken
 
@@ -87,5 +87,7 @@ def erase_account(db: Session, user: User, now: datetime) -> None:
     # Invitations addressed to this email keep their place in the organization's history but no longer name the person.
     db.execute(text("UPDATE organization_invitations SET email = :new WHERE email = :old"), {"new": placeholder, "old": old_email})
     db.execute(update(User).where(User.id == locked.id).values(email=placeholder, name=ERASED_NAME, is_active=False, max_owned_organizations=0))
+    support.erase_user_tickets(db, locked.id)  # what the person wrote to support goes with the account
+    db.execute(text("UPDATE support_tickets SET email = 'erased', email_lower = 'erased', name = NULL, message = '[erased]' WHERE email_lower = :old"), {"old": old_email.lower()})
     security_events.record(db, "account_erased", now, actor_user_id=locked.id)
     db.commit()

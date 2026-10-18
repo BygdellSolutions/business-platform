@@ -57,7 +57,7 @@ class SlidingWindow:
             self._hits.clear()
 
 
-_windows = {"user": SlidingWindow(), "org": SlidingWindow(), "heavy": SlidingWindow(), "export": SlidingWindow()}
+_windows = {"user": SlidingWindow(), "org": SlidingWindow(), "heavy": SlidingWindow(), "export": SlidingWindow(), "support": SlidingWindow()}
 
 
 def enforce(bucket: str, key: str, limit: int, window: float = WINDOW_SECONDS) -> None:

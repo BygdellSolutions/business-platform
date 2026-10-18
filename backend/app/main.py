@@ -7,7 +7,7 @@ from sqlalchemy.exc import InterfaceError, OperationalError
 from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 
 from app import registrations
-from app.api import auth, customers, health, history, invitations, items, me, members, metrics as metrics_api, mfa as mfa_api, organization, organizations, suppliers
+from app.api import auth, customers, health, history, invitations, items, me, members, metrics as metrics_api, mfa as mfa_api, organization, organizations, suppliers, support as support_api
 from app.core import metrics
 from app.core.admission import AdmissionMiddleware
 from app.core.config import settings
@@ -83,6 +83,7 @@ app.include_router(metrics_api.router)
 app.include_router(auth.router)
 app.include_router(mfa_api.router)
 app.include_router(me.router)
+app.include_router(support_api.router)
 app.include_router(customers.router)
 app.include_router(suppliers.router)
 app.include_router(items.router)

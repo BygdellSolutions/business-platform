@@ -153,6 +153,53 @@ def retry_job(db: Session, *, job_id: int) -> None:
     db.commit()
 
 
+def support_tickets_report(db: Session) -> list[str]:
+    """One line per OPEN ticket, newest first: reference, when, what happened to its email, who, and the first words. The full text is in `support-show`."""
+    from app.core import support
+
+    return [
+        f"{t.reference}  {t.created_at:%Y-%m-%d %H:%M}  email={t.email_status}{'/' + t.email_error if t.email_error else ''}  {t.email}  {t.message[:60]!r}"
+        for t in support.open_tickets(db)
+    ]
+
+
+def _ticket(db: Session, reference: str):
+    from app.core import support
+
+    ticket = support.ticket_by_reference(db, reference)
+    if ticket is None:
+        raise OperatorError(f"There is no ticket {reference}.")
+    return ticket
+
+
+def support_show(db: Session, *, reference: str) -> str:
+    t = _ticket(db, reference)
+    lines = [
+        f"{t.reference}  {t.status}  {t.created_at.isoformat()}",
+        f"From: {t.name or '-'} <{t.email}>  signed in: {'yes' if t.user_id else 'no'}",
+        f"Email to support: {t.email_status} {t.email_error or ''}  confirmation: {t.confirmation_status or '-'}",
+        "",
+        t.message,
+    ]
+    return chr(10).join(lines)
+
+
+def support_close(db: Session, *, reference: str) -> None:
+    ticket = _ticket(db, reference)
+    ticket.status = "closed"
+    db.commit()
+
+
+def support_resend(db: Session, *, reference: str) -> str:
+    """Try the emails of a ticket again (after email was configured or a failure was fixed). Returns what happened."""
+    from app.core import support
+
+    ticket = _ticket(db, reference)
+    support.deliver(db, ticket)
+    db.refresh(ticket)
+    return f"email to support: {ticket.email_status}{'/' + ticket.email_error if ticket.email_error else ''}"
+
+
 def purge(db: Session) -> dict[str, int]:
     now = clock.utcnow()
     counts = sessions.purge_records(db, now)
@@ -198,6 +245,11 @@ def build_parser() -> argparse.ArgumentParser:
     retry = commands.add_parser("retry-job", help="put one failed background job back in the queue (after the cause is fixed)")
     retry.add_argument("--id", required=True, type=int, dest="job_id")
 
+    commands.add_parser("support-tickets", help="list the open support tickets (messages from the support page), newest first")
+    for name, helptext in (("support-show", "print one support ticket in full"), ("support-close", "mark a support ticket as answered"), ("support-resend", "try the emails of a support ticket again (after email was set up)")):
+        sub = commands.add_parser(name, help=helptext)
+        sub.add_argument("--ref", required=True, dest="reference", help="the ticket number, like SUP-K7M2Q9XD")
+
     commands.add_parser("purge", help="delete expired sessions, used or expired setup tokens and old security events")
     return parser
 
@@ -241,6 +293,16 @@ def main(argv: list[str] | None = None) -> int:
             elif args.command == "retry-job":
                 retry_job(db, job_id=args.job_id)
                 print(f"Job {args.job_id} is queued again.")
+            elif args.command == "support-tickets":
+                lines = support_tickets_report(db)
+                print(chr(10).join(lines) if lines else "No open tickets.")
+            elif args.command == "support-show":
+                print(support_show(db, reference=args.reference))
+            elif args.command == "support-close":
+                support_close(db, reference=args.reference)
+                print("Ticket closed.")
+            elif args.command == "support-resend":
+                print(support_resend(db, reference=args.reference))
             elif args.command == "purge":
                 print(", ".join(f"{name}: {count}" for name, count in purge(db).items()))
     except OperatorError as error:
