@@ -1,12 +1,9 @@
 import { RecordHistory } from "@/components/history/RecordHistory";
 import { RecordMeta } from "@/components/history/RecordMeta";
-import { ServiceList } from "@/components/history/ServiceList";
-import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
-import { CustomerBought } from "@/features/customers/CustomerBought";
+import { CustomerDialogs } from "@/features/customers/CustomerDialogs";
 import { CustomerDetails } from "@/features/customers/CustomerDetails";
 import { CustomerForm } from "@/features/customers/CustomerForm";
-import { CustomerHorses, HORSES_SHOWN } from "@/features/customers/CustomerHorses";
-import { CustomerOrders } from "@/features/customers/CustomerOrders";
+import { HORSES_SHOWN, horsesOfCustomer } from "@/features/customers/CustomerHorses";
 import { Notice } from "@/components/ui/Notice";
 import { readActiveRole } from "@/lib/active-role";
 import type { BoughtLine, Customer, Horse, InvoiceStateOfOrder, Organization, ServiceRecord, TransactionSummary } from "@/lib/api/types";
@@ -49,6 +46,23 @@ export default async function CustomerPage({
   const invoices =
     orders.length === 0 ? [] : await serverRead<InvoiceStateOfOrder[]>(orgId, "/api/invoices/by-transaction", `?${new URLSearchParams({ ids: orders.map((order) => order.id).join(",") })}`);
 
+  const dialogs = (
+    <CustomerDialogs
+      orgId={orgId}
+      customerId={recordId}
+      owned={owned}
+      stabled={stabled}
+      horseCount={horsesOfCustomer(owned.slice(0, HORSES_SHOWN), stabled.slice(0, HORSES_SHOWN)).length}
+      orders={orders}
+      ordersHaveMore={orderRows.length > ORDERS_SHOWN}
+      invoices={invoices}
+      bought={bought}
+      services={services}
+      canWrite={canWriteRecords(role)}
+      timeZone={organization.timezone}
+    />
+  );
+
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-[28px] leading-tight font-semibold tracking-tight" data-testid="record-name">
@@ -59,13 +73,17 @@ export default async function CustomerPage({
       </p>
       {created === "1" && <Notice testId="created">Customer created.</Notice>}
       <RecordMeta record={customer} people={history.history.people} timeZone={organization.timezone} />
-      <CollapsibleSection title="Customer information" testId="customer-info" toggleTestId="info-toggle" className="max-w-3xl" defaultOpen>
-        {canWriteRecords(role) ? <CustomerForm key={customer.id} customer={customer} canSetDiscount={role === "owner" || role === "admin"} /> : <CustomerDetails customer={customer} />}
-      </CollapsibleSection>
-      <CustomerHorses orgId={orgId} customerId={recordId} owned={owned} stabled={stabled} canWrite={canWriteRecords(role)} />
-      <CustomerOrders orgId={orgId} customerId={recordId} orders={orders} invoices={invoices} hasMore={orderRows.length > ORDERS_SHOWN} />
-      <CustomerBought orgId={orgId} lines={bought} />
-      <ServiceList orgId={orgId} services={services} timeZone={organization.timezone} title="Services billed to this customer" />
+      <section aria-label="Customer information" data-testid="customer-info" className="panel flex max-w-3xl flex-col gap-2">
+        <h2 className="text-lg font-semibold">Customer information</h2>
+        {canWriteRecords(role) ? (
+          <CustomerForm key={customer.id} customer={customer} canSetDiscount={role === "owner" || role === "admin"} actions={dialogs} />
+        ) : (
+          <>
+            <div className="flex flex-wrap gap-2">{dialogs}</div>
+            <CustomerDetails customer={customer} />
+          </>
+        )}
+      </section>
       <RecordHistory data={history} entityType="customer" timeZone={organization.timezone} />
     </div>
   );

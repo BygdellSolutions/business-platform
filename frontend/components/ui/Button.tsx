@@ -37,6 +37,7 @@ export const ICONS = {
   stock: "M3 8l9-5 9 5v9l-9 5-9-5zM3 8l9 5 9-5M12 13v9",
   incoming: "M2 6h12v10H2zM14 10h4l4 3v3h-8M6 19a2 2 0 1 0 0-.01M18 19a2 2 0 1 0 0-.01",
   discount: "M3 12V4h8l10 10-8 8zM7.5 8.5h.01",
+  horse: "M5 20V9l4-4 3 2 4-2 3 4v11M9 20v-5M15 20v-5M9 9h.01",
   journal: "M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3zM9 8h6M9 12h6",
   document: "M7 3h8l4 4v14H7zM15 3v5h4M10 13h6M10 17h6",
   note: "M4 20h4L19 9l-4-4L4 16zM13 7l4 4",

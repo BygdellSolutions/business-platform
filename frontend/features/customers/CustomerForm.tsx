@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 
 import { useOrgId } from "@/components/shell/org-context";
 import { ActiveToggle } from "@/components/ui/ActiveToggle";
@@ -52,7 +52,7 @@ function toState(customer?: Customer): FormState {
  * control. There is no organization field: the BFF and FastAPI take the organization from
  * the URL.
  */
-export function CustomerForm({ customer, canSetDiscount = false }: { customer?: Customer; canSetDiscount?: boolean }) {
+export function CustomerForm({ customer, canSetDiscount = false, actions }: { customer?: Customer; canSetDiscount?: boolean; /** Buttons shown beside "Deactivate customer" (an existing customer only). */ actions?: ReactNode }) {
   const orgId = useOrgId();
   const router = useRouter();
   const { pending, error, run } = useMutation();
@@ -115,7 +115,9 @@ export function CustomerForm({ customer, canSetDiscount = false }: { customer?: 
           active={record.active}
           noun="customer"
           onChanged={(updated) => setRecord((current) => (current ? { ...current, active: updated.active, updated_at: updated.updated_at } : updated))}
-        />
+        >
+          {actions}
+        </ActiveToggle>
       )}
       <form onSubmit={onSubmit} noValidate className="panel flex max-w-3xl flex-col gap-4" aria-label={record ? "Edit customer" : "New customer"}>
         <SelectField label="Type" name="customer_type" value={state.customer_type} onChange={(value) => set("customer_type", value as CustomerType)} options={TYPES} error={problems.byField.customer_type} />

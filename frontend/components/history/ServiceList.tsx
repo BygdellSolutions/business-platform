@@ -69,7 +69,7 @@ export function ServiceList({ orgId, services, timeZone, title, bare = false }: 
   // In a pop-up window the window has the title and the frame already.
   if (bare) return <div data-testid="service-list" className="flex flex-col gap-2">{body}</div>;
   return (
-    <CollapsibleSection title={title} count={services.length} testId="service-list" toggleTestId="services-toggle">
+    <CollapsibleSection title={title} count={services.length} testId="service-list" toggleTestId="services-toggle" bare={bare}>
       {body}
     </CollapsibleSection>
   );

@@ -32,19 +32,21 @@ export function CustomerOrders({
   orders,
   invoices,
   hasMore,
+  bare = false,
 }: {
   orgId: string;
   customerId: string;
   orders: TransactionSummary[];
   invoices: InvoiceStateOfOrder[];
   hasMore: boolean;
+  bare?: boolean;
 }) {
   const invoiceOf = new Map(invoices.map((state) => [state.transaction_id, state]));
   const allOrders = `/o/${orgId}/transactions?billing_customer_id=${customerId}`;
 
   const sorted = useSortedRows(orders, SORT_COLUMNS);
   return (
-    <CollapsibleSection title={hasMore ? "Latest orders" : "Orders"} count={orders.length} testId="customer-orders" toggleTestId="orders-toggle">
+    <CollapsibleSection title={hasMore ? "Latest orders" : "Orders"} count={orders.length} testId="customer-orders" toggleTestId="orders-toggle" bare={bare}>
       {orders.length === 0 ? (
         <p className="text-sm text-zinc-500" data-testid="no-orders">
           No orders yet.

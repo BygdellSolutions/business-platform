@@ -5,6 +5,7 @@ All notable changes to `business-platform` will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- On a customer, Horses, Orders, Products bought and Services billed are now tinted buttons with icons and counts, beside "Deactivate customer", that open pop-up windows (as on invoices, catalog items and horses). "Customer information" is always shown and can no longer be collapsed.
 - On a horse, Journal, Documents, Notes and Services performed are now tinted buttons with icons and counts, beside "Deactivate horse", that open pop-up windows (as on invoices and catalog items) instead of four sections stacked down the page. An accountant or viewer still gets no Journal button.
 - Units are no longer shown or asked for anywhere in the app: removed from order and invoice lines, credit notes, returns, the customer's bought table, supplier deliveries and the ad-hoc line forms (an ad-hoc line no longer needs a unit; it is stored as "pcs"). PDFs and the stored data are unchanged. On a catalog item the Stock button shows what is on hand in brackets, and "Tracks stock: Yes" in the catalog list is a coloured badge.
 - The catalog list shows whether an item tracks stock (Yes/No) instead of the on hand, draft, available, sold, incoming and stock-state columns, which the Inventory page already shows. The Inventory page no longer has a Unit column.

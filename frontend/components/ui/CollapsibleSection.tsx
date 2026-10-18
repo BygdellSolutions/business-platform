@@ -12,6 +12,7 @@ export function CollapsibleSection({
   toggleTestId,
   className = "max-w-4xl",
   defaultOpen = false,
+  bare = false,
   children,
 }: {
   title: string;
@@ -23,8 +24,11 @@ export function CollapsibleSection({
   className?: string;
   /** Open when the page is drawn (the person can still close it). The sections of lists start closed; the main content of a page may start open. */
   defaultOpen?: boolean;
+  /** Inside a pop-up window, which has the title and the frame already: just the content (still carrying `testId`). */
+  bare?: boolean;
   children: ReactNode;
 }) {
+  if (bare) return <div data-testid={testId} className="flex flex-col gap-2">{children}</div>;
   return (
     <section aria-label={title} data-testid={testId} className={`panel flex flex-col ${className}`}>
       <details data-testid={toggleTestId} className="group" open={defaultOpen || undefined}>

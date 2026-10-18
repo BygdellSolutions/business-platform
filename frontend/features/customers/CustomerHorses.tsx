@@ -33,19 +33,21 @@ export function CustomerHorses({
   owned,
   stabled,
   canWrite,
+  bare = false,
 }: {
   orgId: string;
   customerId: string;
   owned: Horse[];
   stabled: Horse[];
   canWrite: boolean;
+  bare?: boolean;
 }) {
   const rows = horsesOfCustomer(owned.slice(0, HORSES_SHOWN), stabled.slice(0, HORSES_SHOWN));
   const moreOwned = owned.length > HORSES_SHOWN;
   const moreStabled = stabled.length > HORSES_SHOWN;
   const base = `/o/${orgId}/horses`;
   return (
-    <CollapsibleSection title="Horses" count={rows.length} testId="customer-horses" toggleTestId="horses-toggle">
+    <CollapsibleSection title="Horses" count={rows.length} testId="customer-horses" toggleTestId="horses-toggle" bare={bare}>
       {rows.length === 0 ? (
         <p className="text-sm text-zinc-500" data-testid="no-horses">
           No horses owned by or stabled at this customer.

@@ -35,9 +35,9 @@ test("the customer's orders and the products bought are listed on the customer's
 
   await page.goto(`/o/${world.orgId}/customers/${customer.id}`);
 
+  await expect(page.getByTestId("open-orders")).toContainText("Orders (3)");
+  await page.getByTestId("open-orders").click();
   const orders = page.getByTestId("customer-orders");
-  await expect(orders.getByTestId("orders-toggle")).not.toHaveAttribute("open"); // closed until wanted
-  await orders.getByRole("heading", { name: "Orders (3)" }).click();
   await expect(orders.getByTestId("customer-order")).toHaveCount(3);
   await expect(orders.getByTestId("customer-order-invoice").filter({ hasText: "Not invoiced yet" })).toHaveCount(1);
   await expect(orders.getByTestId("customer-order-invoice").filter({ hasText: `Invoice ${invoice.number_text}` })).toHaveCount(1);
@@ -45,9 +45,9 @@ test("the customer's orders and the products bought are listed on the customer's
   const columns = async (section: string) => (await page.getByTestId(section).getByRole("columnheader").allTextContents()).map((text) => text.replace(/[▲▼↕]/g, "").trim());
   expect((await columns("customer-orders")).slice(0, 3)).toEqual(["Order no.", "Date", "Status"]);
 
+  await page.keyboard.press("Escape");
+  await page.getByTestId("open-bought").click();
   const bought = page.getByTestId("customer-bought");
-  await expect(bought.getByTestId("bought-toggle")).not.toHaveAttribute("open"); // each section opens on its own
-  await bought.getByRole("heading", { name: /Products and other lines bought/ }).click();
   await expect(bought.getByTestId("bought-row")).toHaveCount(3);
   await expect(bought.getByTestId("bought-row").filter({ hasText: "Fly spray" })).toHaveCount(1);
   expect((await columns("customer-bought")).slice(0, 3)).toEqual(["Order no.", "Date", "Status"]); // the same first columns as the orders

@@ -30,13 +30,13 @@ test("a customer's page lists the horses they own and the horses at their stable
   await createHorse(context, world.orgId, { name: "Bella", owner_customer_id: stable.id, stable_customer_id: stable.id }); // a stable's own horse standing at its own stable
 
   await page.goto(`/o/${world.orgId}/customers/${anna.id}`);
-  await page.getByTestId("horses-toggle").getByRole("heading", { name: /^Horses/ }).click();
-  await expect(page.getByTestId("customer-horses").getByRole("heading", { name: "Horses (2)" })).toBeVisible();
+  await page.getByTestId("open-horses").click();
+  await expect(page.getByTestId("open-horses")).toContainText("Horses (2)");
   await expect(page.getByTestId("customer-horse-link")).toHaveText(["Kalle", "Storm"]);
   await expect(page.getByTestId("customer-horse-role")).toHaveText(["Owner", "Owner"]);
 
   await page.goto(`/o/${world.orgId}/customers/${stable.id}`);
-  await page.getByTestId("horses-toggle").getByRole("heading", { name: /^Horses/ }).click();
+  await page.getByTestId("open-horses").click();
   await expect(page.getByTestId("customer-horse-link")).toHaveText(["Bella", "Kalle"]);
   await expect(page.getByTestId("customer-horse-role")).toHaveText(["Owner and stable", "Stable"]);
 
@@ -50,7 +50,7 @@ test("New horse on a customer's page starts a horse with that customer as the ow
   const anna = await createCustomer(context, world.orgId, "Anna Andersson");
 
   await page.goto(`/o/${world.orgId}/customers/${anna.id}`);
-  await page.getByTestId("horses-toggle").getByRole("heading", { name: /^Horses/ }).click();
+  await page.getByTestId("open-horses").click();
   await expect(page.getByTestId("no-horses")).toBeVisible();
   await page.getByTestId("new-customer-horse").click();
   await expect(page.getByTestId("picker-owner_customer_id").getByRole("combobox")).toHaveValue("Anna Andersson");
@@ -59,7 +59,7 @@ test("New horse on a customer's page starts a horse with that customer as the ow
   await expect(page.getByTestId("record-name")).toHaveText("Kalle");
 
   await page.goto(`/o/${world.orgId}/customers/${anna.id}`);
-  await page.getByTestId("horses-toggle").getByRole("heading", { name: /^Horses/ }).click();
+  await page.getByTestId("open-horses").click();
   await expect(page.getByTestId("customer-horse-link")).toHaveText(["Kalle"]);
 });
 
@@ -87,7 +87,7 @@ test("another organization's horses never appear on a customer's page", async ({
   const myAnna = await createCustomer(context, world.orgId, "Anna Andersson"); // the same name in both organizations
 
   await page.goto(`/o/${world.orgId}/customers/${myAnna.id}`);
-  await page.getByTestId("horses-toggle").getByRole("heading", { name: /^Horses/ }).click();
+  await page.getByTestId("open-horses").click();
   await expect(page.getByTestId("no-horses")).toBeVisible();
   await expect(page.locator("body")).not.toContainText("Secret Horse");
 });
@@ -98,16 +98,13 @@ test("the customer information is open at first and can be folded away; a viewer
   const anna = await createCustomer(context, world.orgId, "Anna Andersson");
 
   await page.goto(`/o/${world.orgId}/customers/${anna.id}`);
-  await expect(page.getByTestId("info-toggle")).toHaveAttribute("open", "");
-  await expect(page.getByLabel("Name")).toBeVisible();
-  await page.getByTestId("info-toggle").getByRole("heading", { name: "Customer information" }).click();
-  await expect(page.getByLabel("Name")).toBeHidden();
-  await page.getByTestId("info-toggle").getByRole("heading", { name: "Customer information" }).click();
+  await expect(page.getByTestId("customer-info").getByRole("heading", { name: "Customer information" })).toBeVisible(); // always shown, not collapsible
+  await expect(page.getByTestId("info-toggle")).toHaveCount(0);
   await expect(page.getByLabel("Name")).toBeVisible();
 
   await signIn(context, world.addMember("viewer"));
   await page.goto(`/o/${world.orgId}/customers/${anna.id}`);
   await expect(page.getByTestId("customer-info")).toContainText("Anna Andersson");
-  await page.getByTestId("horses-toggle").getByRole("heading", { name: /^Horses/ }).click();
+  await page.getByTestId("open-horses").click();
   await expect(page.getByTestId("new-customer-horse")).toHaveCount(0);
 });

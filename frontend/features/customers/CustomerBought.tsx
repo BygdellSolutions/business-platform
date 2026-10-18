@@ -26,10 +26,10 @@ const SORT_COLUMNS: Record<string, (r: BoughtLine) => SortValue> = {
  * What a customer bought besides services (catalog items and ad-hoc lines), newest order first, with a link to the
  * product and the order. Quantity and unit are separate columns; amounts are the backend's strings.
  */
-export function CustomerBought({ orgId, lines }: { orgId: string; lines: BoughtLine[] }) {
+export function CustomerBought({ orgId, lines, bare = false }: { orgId: string; lines: BoughtLine[]; bare?: boolean }) {
   const sorted = useSortedRows(lines, SORT_COLUMNS);
   return (
-    <CollapsibleSection title="Products and other lines bought" count={lines.length} testId="customer-bought" toggleTestId="bought-toggle">
+    <CollapsibleSection title="Products and other lines bought" count={lines.length} testId="customer-bought" toggleTestId="bought-toggle" bare={bare}>
       {lines.length === 0 ? (
         <p className="text-sm text-zinc-500" data-testid="no-bought">
           Nothing yet (services are listed separately).
