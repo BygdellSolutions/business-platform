@@ -1,8 +1,11 @@
 import Link from "next/link";
 
 import { BUTTON_VARIANTS, PRIMARY_LINK } from "@/components/ui/Button";
+import { AttentionStrip } from "@/features/dashboard/AttentionStrip";
 import { SummaryCard } from "@/features/dashboard/SummaryCard";
-import type { DraftOverview, InventorySummary, InvoicingSummary, Organization, SalesSummary } from "@/lib/api/types";
+import { TodayList } from "@/features/dashboard/TodayList";
+import type { Appointment, DraftOverview, InventorySummary, InvoicingSummary, Organization, SalesSummary } from "@/lib/api/types";
+import { windowOf } from "@/lib/calendar";
 import { getCredential } from "@/lib/auth/credential";
 import { getMemberships } from "@/lib/orgs";
 import { canUseJournal, canWriteRecords } from "@/lib/roles";
@@ -26,7 +29,7 @@ export default async function Dashboard({
   const requested = (await searchParams).month;
   // Only a well-formed month up to the organization's current one is passed on (the backend refuses a future month);
   // anything else shows the current month.
-  const { today } = await serverRead<Organization>(orgId, "/api/organization");
+  const { today, timezone } = await serverRead<Organization>(orgId, "/api/organization");
   const month = typeof requested === "string" && MONTH.test(requested) && requested <= today.slice(0, 7) ? requested : null;
   const monthQuery = month ? `?${new URLSearchParams({ month })}` : "";
   // The layout has already validated the user and the organization; this read is memoized.
@@ -34,12 +37,14 @@ export default async function Dashboard({
   const result = credential ? await getMemberships(credential) : null;
   const organization = result?.status === "ok" ? result.memberships.find((m) => m.id === orgId) : undefined;
   const role = organization?.role;
-  const [sales, invoicing, inventory, journal] = await Promise.all([
+  const todayWindow = windowOf("day", today, timezone);
+  const [sales, invoicing, inventory, journal, bookings] = await Promise.all([
     serverRead<SalesSummary>(orgId, "/api/transactions/summary", monthQuery),
     serverRead<InvoicingSummary>(orgId, "/api/invoices/summary", monthQuery),
     serverRead<InventorySummary>(orgId, "/api/inventory/summary"),
     // Accountants and viewers have no journal: nothing is even asked of the backend for them.
     canUseJournal(role) ? serverRead<DraftOverview>(orgId, "/api/journal/summary") : Promise.resolve(null),
+    serverRead<Appointment[]>(orgId, "/api/appointments", `?${new URLSearchParams(todayWindow)}`),
   ]);
   const base = `/o/${orgId}`;
 
@@ -65,6 +70,19 @@ export default async function Dashboard({
           )}
         </div>
       </div>
+
+      <AttentionStrip
+        items={[
+          { label: "past due date", count: invoicing.past_due.count, href: `${base}/invoices?payment=overdue` },
+          { label: "ready to invoice", count: invoicing.ready_to_invoice.count, href: `${base}/invoices/new` },
+          { label: "refunds due", count: invoicing.refund_due.count, href: `${base}/invoices?payment=refund_due` },
+          { label: "returns to follow up", count: invoicing.returns_follow_up_due, href: `${base}/invoices?returns=follow_up_due` },
+          { label: "out of stock", count: inventory.out_of_stock, href: `${base}/inventory?state=out_of_stock` },
+          { label: "low on stock", count: inventory.low_stock, href: `${base}/inventory?state=low_stock` },
+        ]}
+      />
+
+      <TodayList orgId={orgId} appointments={bookings} zone={timezone} />
 
       <section aria-label="To do" className="flex flex-col gap-2">
         <h2 className="text-lg font-semibold">To do</h2>

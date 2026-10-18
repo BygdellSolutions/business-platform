@@ -25,6 +25,7 @@ export function SummaryCard({
   const body = (
     <div
       data-testid={testId}
+      title={typeof note === "string" ? note : undefined}
       className={`flex h-full flex-col gap-1 rounded-xl border p-4 ${
         tone === "attention" && count > 0 ? "tint tone-warning" : "border-border bg-panel shadow-xs"
       }`}
@@ -38,7 +39,8 @@ export function SummaryCard({
           <DecimalText value={entry.amount} /> {entry.currency}
         </span>
       ))}
-      {note && <span className="text-xs text-zinc-500">{note}</span>}
+      {/* The explanation shows on the cards that ask for action; on the others it is a tooltip, to keep the page quiet. */}
+      {note && (tone === "attention" && count > 0 ? <span className="text-xs text-zinc-500">{note}</span> : null)}
     </div>
   );
   return href ? (
