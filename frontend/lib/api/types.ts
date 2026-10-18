@@ -534,7 +534,7 @@ export interface ItemCreate {
 
   description: string | null;
 
-  unit: string;
+  unit?: string;
 
   /** Exactly one of the two; a price incl. VAT is stored as the nearest price excl. VAT. */
 

@@ -137,7 +137,6 @@ export default async function CatalogPage({
                   <SortHeader label="Product" sortKey="name" current={list.sort} dir={list.dir} href={sortHref(base, list, "name")} />
                   <SortHeader label="SKU" sortKey="sku" current={list.sort} dir={list.dir} href={sortHref(base, list, "sku")} />
                   <SortHeader label="Type" sortKey="type" current={list.sort} dir={list.dir} href={sortHref(base, list, "type")} />
-                  <SortHeader label="Unit" sortKey="unit" current={list.sort} dir={list.dir} href={sortHref(base, list, "unit")} />
                   <SortHeader label="Base price" sortKey="price" current={list.sort} dir={list.dir} href={sortHref(base, list, "price")} align="right" title="The normal price, excl. VAT (a promotion never changes it)" />
                   <SortHeader label="Promotion" sortKey="promotion" current={list.sort} dir={list.dir} href={sortHref(base, list, "promotion")} />
                   <SortHeader label="Promotion duration" sortKey="promotion_ends" current={list.sort} dir={list.dir} href={sortHref(base, list, "promotion_ends")} />
@@ -172,7 +171,6 @@ export default async function CatalogPage({
                       {item.sku}
                     </td>
                     <td className="py-1 pr-4">{ITEM_TYPE_LABELS[item.type]}</td>
-                    <td className="py-1 pr-4">{item.unit}</td>
                     {/* Every amount is exactly the string the backend sent: no parsing, rounding or arithmetic here. */}
                     <td className="py-1 pr-4 text-right" data-testid="item-price">
                       <DecimalText value={item.price_ex_vat} />

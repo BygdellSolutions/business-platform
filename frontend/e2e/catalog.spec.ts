@@ -22,7 +22,6 @@ const vat = (page: Page) => page.getByLabel("VAT rate (%)", { exact: true });
 async function fillItem(page: Page, fields: { name: string; unit?: string; price: string; vat: string; type?: "service" | "product" }) {
   await page.getByLabel("Type", { exact: true }).selectOption(fields.type ?? "service");
   await page.getByLabel("Name", { exact: true }).fill(fields.name);
-  await page.getByLabel("Unit", { exact: true }).fill(fields.unit ?? "piece");
   await price(page).fill(fields.price);
   await vat(page).fill(fields.vat);
 }
@@ -136,7 +135,6 @@ test.describe("decimal values survive the whole round trip unchanged", () => {
     const name = unique("Inc VAT");
     await page.goto(`${list}/new`);
     await page.getByLabel("Name").fill(name);
-    await page.getByLabel("Unit").fill("hour");
     await page.getByLabel("Price is entered").selectOption("inc");
     await page.getByLabel("Price including VAT").fill("1000");
     await page.getByLabel("VAT rate (%)").fill("25");
@@ -154,7 +152,6 @@ test.describe("create", () => {
     await page.getByLabel("Type", { exact: true }).selectOption("product");
     await page.getByLabel("Name", { exact: true }).fill(name);
     await page.getByLabel("Description", { exact: true }).fill("Massage för häst – 60 min");
-    await page.getByLabel("Unit", { exact: true }).fill("kg");
     await price(page).fill("19.99");
     await vat(page).fill("12");
     await page.getByTestId("submit").click();
@@ -162,7 +159,7 @@ test.describe("create", () => {
     await expect(page.getByTestId("created")).toBeVisible();
     await expect(page.getByTestId("record-name")).toHaveText(name);
     expect(testRow(`select organization_id || '|' || type || '|' || description || '|' || unit || '|' || price_ex_vat::text || '|' || vat_rate::text || '|' || active from items where name = ${sql(name)}`)).toBe(
-      `${ORG_A.id}|product|Massage för häst – 60 min|kg|19.99|12.00|true`,
+      `${ORG_A.id}|product|Massage för häst – 60 min|pcs|19.99|12.00|true`,
     );
   });
 
@@ -215,7 +212,6 @@ test.describe("create", () => {
     await page.getByTestId("submit").click();
 
     await expect(page.getByTestId("error-name")).toBeVisible();
-    await expect(page.getByTestId("error-unit")).toBeVisible();
     await expect(page.getByTestId("error-price_ex_vat")).toHaveCount(0);
   });
 
@@ -331,7 +327,6 @@ test.describe("list, search and filters", () => {
     await page.getByLabel("Type", { exact: true }).selectOption("charge");
     await expect(page.getByLabel("Track stock")).toHaveCount(0); // a charge never holds stock
     await page.getByLabel("Name").fill(name);
-    await page.getByLabel("Unit").fill("km");
     await page.getByLabel("Price excluding VAT").fill("25.00");
     await page.getByLabel("VAT rate (%)").fill("25");
     await page.getByTestId("submit").click();

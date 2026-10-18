@@ -5,6 +5,7 @@ All notable changes to `business-platform` will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- The catalog no longer asks for or shows a "Unit" (the quantity already says it): removed from the item form, the catalog list, the item details and the stock, backorder and incoming panels. `unit` is optional when creating an item (default "pcs") and is still stored, because orders and invoices copy it.
 - The order page's actions look like the invoice's: "Paid now", "Invoice", "Reopen" and "Download receipt" have the soft accent tint and an icon, and "Paid now" asks how it was paid (Swish, Card, Cash, with the not-everything-is-in-stock warning) in a pop-up window instead of swapping the buttons in place.
 - The invoice number is said once on the invoice, in the heading ("Invoice 1011"); the boxed copy of the number beside it is gone.
 - The buttons on an invoice (Download PDF, Send invoice by email, Record payment, Returns, Credit notes) have a soft accent tint, a thin accent edge and a small icon, so they read as things to press instead of looking like plain content; light and dark checked on screen.

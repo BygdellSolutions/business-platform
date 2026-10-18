@@ -53,9 +53,9 @@ export default async function ItemPage({
       )}
       {item.track_stock && (
         <>
-          <StockPanel itemId={item.id} unit={item.unit} stock={stock} figures={availability[0] ?? null} canAdjust={canWriteRecords(role)} timeZone={organization.timezone} />
-          <BackordersPanel itemId={item.id} unit={item.unit} backorders={backorders} canAllocate={canWriteRecords(role)} />
-          <IncomingPanel itemId={item.id} unit={item.unit} incoming={incoming} canWrite={canWriteRecords(role)} timeZone={organization.timezone} />
+          <StockPanel itemId={item.id} stock={stock} figures={availability[0] ?? null} canAdjust={canWriteRecords(role)} timeZone={organization.timezone} />
+          <BackordersPanel itemId={item.id} backorders={backorders} canAllocate={canWriteRecords(role)} />
+          <IncomingPanel itemId={item.id} incoming={incoming} canWrite={canWriteRecords(role)} timeZone={organization.timezone} />
         </>
       )}
       <ItemDiscounts itemId={item.id} discounts={discounts} canManage={role === "owner" || role === "admin"} />

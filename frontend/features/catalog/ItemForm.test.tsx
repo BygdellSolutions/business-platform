@@ -58,7 +58,6 @@ function mount(orgId: string, existing?: Item) {
 
 async function fillNew(price: string, vat: string) {
   await userEvent.type(screen.getByLabelText("Name"), "Saddle fitting");
-  await userEvent.type(screen.getByLabelText("Unit"), "hour");
   await userEvent.type(screen.getByLabelText("Price excluding VAT"), price);
   await userEvent.type(screen.getByLabelText("VAT rate (%)"), vat);
 }
@@ -111,7 +110,7 @@ describe("decimals are strings from the input to the request body", () => {
 
     const body = mocked.mock.calls[0][2]?.body as Record<string, unknown>;
     expect(Object.values(body).filter((value) => typeof value === "number")).toEqual([]);
-    expect(body).toEqual({ type: "service", name: "Saddle fitting", description: null, unit: "hour", price_ex_vat: "8.20", vat_rate: "25", active: true, sku: null, track_stock: false });
+    expect(body).toEqual({ type: "service", name: "Saddle fitting", description: null, price_ex_vat: "8.20", vat_rate: "25", active: true, sku: null, track_stock: false });
   });
 
   it("sends a price typed incl. VAT as price_inc_vat and shows what the backend stored", async () => {
@@ -166,8 +165,7 @@ describe("only the shape of a decimal is checked locally", () => {
   it.each(["", "abc", "1,5", "1e2", "-1", "1.", ".5", "1 000"])("%j is not sent: it is not a decimal at all", async (typed) => {
     mount(A);
     await userEvent.type(screen.getByLabelText("Name"), "Saddle fitting");
-    await userEvent.type(screen.getByLabelText("Unit"), "hour");
-    if (typed !== "") await userEvent.type(screen.getByLabelText("Price excluding VAT"), typed); // typing "" is not an event
+      if (typed !== "") await userEvent.type(screen.getByLabelText("Price excluding VAT"), typed); // typing "" is not an event
     await userEvent.type(screen.getByLabelText("VAT rate (%)"), "25");
 
     await userEvent.click(screen.getByRole("button", { name: "Create item" }));
@@ -200,7 +198,6 @@ describe("only the shape of a decimal is checked locally", () => {
         detail: [
           { loc: ["body", "price_ex_vat"], msg: "Value error, must be a non-negative decimal within the allowed precision", type: "value_error" },
           { loc: ["body", "vat_rate"], msg: "Input should be less than or equal to 100", type: "less_than_equal" },
-          { loc: ["body", "unit"], msg: "String should have at most 32 characters", type: "string_too_long" },
           { loc: ["body", "type"], msg: "Input should be 'service' or 'product'", type: "enum" },
         ],
       }),
@@ -212,7 +209,6 @@ describe("only the shape of a decimal is checked locally", () => {
 
     expect(await screen.findByTestId("error-price_ex_vat")).toHaveTextContent("must be a non-negative decimal within the allowed precision");
     expect(screen.getByTestId("error-vat_rate")).toHaveTextContent("less than or equal to 100");
-    expect(screen.getByTestId("error-unit")).toHaveTextContent("at most 32");
     expect(screen.getByTestId("error-type")).toBeInTheDocument();
     expect(screen.queryByTestId("error-name")).toBeNull();
     expect(screen.getByLabelText("Price excluding VAT")).toHaveValue("1.005"); // the draft is kept

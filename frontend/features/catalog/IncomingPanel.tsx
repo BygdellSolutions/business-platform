@@ -64,13 +64,11 @@ const STATES: Record<Incoming["state"], string> = {
  */
 export function IncomingPanel({
   itemId,
-  unit,
   incoming,
   canWrite,
   timeZone,
 }: {
   itemId: string;
-  unit: string;
   incoming: Incoming[];
   canWrite: boolean;
   timeZone: string | null;
@@ -184,7 +182,6 @@ export function IncomingPanel({
               <tr className="border-b border-zinc-300 dark:border-zinc-700">
                 <SortHeader label="Order date" {...sorted.header("ordered")} />
                 <SortHeader label="Expected" {...sorted.header("expected")} />
-                <SortHeader label="Unit" {...sorted.header("unit")} />
                 <SortHeader label="Ordered" {...sorted.header("quantity")} align="right" />
                 <SortHeader label="Received" {...sorted.header("received")} align="right" />
                 <SortHeader label="Still expected" {...sorted.header("remaining")} align="right" />
@@ -210,7 +207,6 @@ export function IncomingPanel({
                       <span className="text-zinc-500">not given</span>
                     )}
                   </td>
-                  <td className="py-1 pr-4">{unit}</td>
                   <td
                     className="py-1 pr-4 text-right"
                     data-testid="incoming-ordered"
@@ -357,7 +353,7 @@ export function IncomingPanel({
         >
           <h3 className="font-medium">Record a delivery on its way</h3>
           <DecimalField
-            label={`Quantity (unit: ${unit})`}
+            label={`Quantity`}
             name="quantity"
             value={form.quantity}
             onChange={set("quantity")}
@@ -395,7 +391,7 @@ export function IncomingPanel({
             value={form.unit_cost}
             onChange={set("unit_cost")}
             error={problems.byField.unit_cost}
-            hint={`What you pay per unit (${unit}). It can be filled in later, for example from the supplier's invoice.`}
+            hint={`What you pay per unit. It can be filled in later, for example from the supplier's invoice.`}
           />
           <TextField
             label="Reference (optional)"

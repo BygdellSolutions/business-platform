@@ -129,7 +129,7 @@ def test_create_validation(client: TestClient, member, override):
     assert client.post("/api/items", json={**VALID, **override}, headers=headers).status_code == 422
 
 
-@pytest.mark.parametrize("missing", ["type", "name", "unit", "price_ex_vat", "vat_rate"])
+@pytest.mark.parametrize("missing", ["type", "name", "price_ex_vat", "vat_rate"])
 def test_create_requires_every_core_field(client: TestClient, member, missing):
     _, headers = member
     body = {k: v for k, v in VALID.items() if k != missing}
@@ -243,3 +243,11 @@ def test_a_charge_is_its_own_type_never_stock_and_billed_as_a_catalog_line(clien
     assert line.status_code == 201 and line.json()["net_amount"] == "1050.00"
     as_service = client.post(f"/api/transactions/{tx.id}/lines", json={"kind": "service", "item_id": created.json()["id"], "quantity": "1"}, headers=owner)
     assert as_service.status_code == 422
+
+
+def test_an_item_made_without_a_unit_gets_the_default(client: TestClient, member):
+    _, headers = member
+    body = {k: v for k, v in VALID.items() if k != "unit"}
+    response = client.post("/api/items", json=body, headers=headers)
+    assert response.status_code == 201, response.text
+    assert response.json()["unit"] == "pcs"

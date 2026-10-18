@@ -331,7 +331,6 @@ test.describe("two tabs", () => {
     await tabB.goto(catalog(ORG_B.id, `?q=${encodeURIComponent(name)}`));
 
     await tabA.getByLabel("Name", { exact: true }).fill(name);
-    await tabA.getByLabel("Unit", { exact: true }).fill("h");
     await tabA.getByLabel("Price excluding VAT", { exact: true }).fill("0.10");
     await tabA.getByLabel("VAT rate (%)", { exact: true }).fill("25");
     await tabA.getByTestId("submit").click();

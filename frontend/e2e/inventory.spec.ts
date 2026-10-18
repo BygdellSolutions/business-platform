@@ -227,7 +227,6 @@ test("a new product can be created with what is on hand, and a product without t
   await page.goto(`/o/${world.orgId}/catalog/new`);
   await page.getByLabel("Type").selectOption("product");
   await page.getByLabel("Name", { exact: true }).fill("Hoof oil");
-  await page.getByLabel("Unit", { exact: true }).fill("pcs");
   await page.getByLabel("Price excluding VAT").fill("90");
   await page.getByLabel("VAT rate (%)").fill("25");
   await page.getByLabel("Track stock").check();

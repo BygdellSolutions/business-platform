@@ -31,7 +31,7 @@ const SORT_COLUMNS: Record<string, (r: Backorder) => SortValue> = {
  * The open backorders of one product, oldest first. When stock is on hand, "Propose" asks the backend how it would be
  * shared (oldest first); the person may change the quantities and then confirms. Nothing is delivered until then.
  */
-export function BackordersPanel({ itemId, unit, backorders, canAllocate }: { itemId: string; unit: string; backorders: Backorder[]; canAllocate: boolean }) {
+export function BackordersPanel({ itemId, backorders, canAllocate }: { itemId: string; backorders: Backorder[]; canAllocate: boolean }) {
   const orgId = useOrgId();
   const router = useRouter();
   const { pending, error, run } = useMutation();
@@ -80,7 +80,6 @@ export function BackordersPanel({ itemId, unit, backorders, canAllocate }: { ite
               <SortHeader label="Order no." {...sorted.header("number")} align="right" />
               <SortHeader label="Completed" {...sorted.header("date")} />
               <SortHeader label="Customer" {...sorted.header("customer")} />
-              <SortHeader label="Unit" {...sorted.header("unit")} />
               <SortHeader label="Waiting" {...sorted.header("waiting")} align="right" />
               <SortHeader label="State" {...sorted.header("state")} />
               {canAllocate && <th className="py-1">Deliver now</th>}
@@ -98,7 +97,6 @@ export function BackordersPanel({ itemId, unit, backorders, canAllocate }: { ite
                   {backorder.transaction_date}
                 </td>
                 <td className="py-1 pr-4">{backorder.customer_name}</td>
-                <td className="py-1 pr-4">{unit}</td>
                 <td className="py-1 pr-4 text-right" data-testid="backorder-waiting">
                   {trimQuantity(backorder.remaining)}
                 </td>

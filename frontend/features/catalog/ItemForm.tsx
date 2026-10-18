@@ -32,7 +32,6 @@ const CONTROLS = [
   "type",
   "name",
   "description",
-  "unit",
   "price_ex_vat",
   "price_inc_vat",
   "vat_rate",
@@ -63,7 +62,6 @@ interface FormState {
   type: ItemType;
   name: string;
   description: string;
-  unit: string;
   /** Whether `price` is typed excl. or incl. VAT; the backend turns a price incl. VAT into the stored price excl. */
   price_mode: "ex" | "inc";
   price: string;
@@ -81,7 +79,6 @@ function toState(item?: Item): FormState {
     type: item?.type ?? "service",
     name: item?.name ?? "",
     description: item?.description ?? "",
-    unit: item?.unit ?? "",
     price_mode: "ex",
     price: item?.price_ex_vat ?? "",
     vat_rate: item?.vat_rate ?? "",
@@ -131,7 +128,6 @@ export function ItemForm({ item }: { item?: Item }) {
       type: state.type,
       name: state.name,
       description: blankToNull(state.description),
-      unit: state.unit,
       [priceField]: parsed.price,
       vat_rate: parsed.vat,
       active: state.active,
@@ -179,7 +175,6 @@ export function ItemForm({ item }: { item?: Item }) {
     if (state.name !== current.name) body.name = state.name;
     if (blankToNull(state.description) !== current.description)
       body.description = blankToNull(state.description);
-    if (state.unit !== current.unit) body.unit = state.unit;
     if (parsed.vat !== current.vat_rate) body.vat_rate = parsed.vat;
     // Incl. VAT, the typed amount is what counts, so a new VAT rate resends it (and the price excl. VAT follows).
     if (
@@ -285,15 +280,6 @@ export function ItemForm({ item }: { item?: Item }) {
           value={state.description}
           onChange={(value) => set("description", value)}
           error={errorsFor("description")}
-        />
-        <TextField
-          label="Unit"
-          name="unit"
-          value={state.unit}
-          onChange={(value) => set("unit", value)}
-          error={errorsFor("unit")}
-          hint="For example hour, piece or kg."
-          autoComplete="off"
         />
         <SelectField
           label="Price is entered"

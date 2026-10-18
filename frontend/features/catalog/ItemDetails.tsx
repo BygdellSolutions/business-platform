@@ -17,7 +17,6 @@ export function ItemDetails({ item }: { item: Item }) {
         { label: "Article number", value: item.sku },
         { label: "Name", value: item.name },
         { label: "Description", value: item.description },
-        { label: "Unit", value: item.unit },
         // The same order and meaning as the catalog's price columns: every price excl. VAT except "Incl. VAT".
         { label: "Base price", value: <DecimalText value={item.price_ex_vat} />, testId: "detail-price" },
         {

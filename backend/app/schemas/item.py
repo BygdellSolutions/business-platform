@@ -25,7 +25,7 @@ class ItemCreate(BaseModel):
     type: ItemType
     name: Name
     description: Description | None = None
-    unit: Unit
+    unit: Unit = "pcs"  # not asked for in the catalog (the quantity says it); still stored because orders and invoices copy it
     # Exactly one of the two: a price entered incl. VAT is stored as the nearest price excl. VAT.
     price_ex_vat: MoneyIn | None = None
     price_inc_vat: MoneyIn | None = None
