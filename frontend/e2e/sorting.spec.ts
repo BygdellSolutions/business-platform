@@ -48,7 +48,7 @@ test("a table on a record's page sorts in place", async ({ page, context }) => {
     expect(response.status(), await response.text()).toBe(201);
   }
   await page.goto(`/o/${world.orgId}/suppliers/${supplier.id}`);
-  await page.getByRole("heading", { name: /Deliveries from this supplier/ }).click();
+  await page.getByTestId("open-deliveries").click();
   await page.getByTestId("sort-unit_cost").click();
   await expect.poll(() => page.getByTestId("delivery-unit-cost").allTextContents()).toEqual(["9.90", "45.00", "120.00"]);
   await page.getByTestId("sort-unit_cost").click();

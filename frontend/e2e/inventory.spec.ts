@@ -137,7 +137,7 @@ test("a delivery on its way is recorded, received in part, and the rest cancelle
   await expect(incoming.getByTestId("incoming-unit-cost")).toHaveText("63.00");
   await expect(incoming.getByTestId("supplier-link")).toHaveText("Horse Supplies AB");
   await incoming.getByTestId("supplier-link").click();
-  await page.getByRole("heading", { name: "Deliveries from this supplier (1)" }).click();
+  await page.getByTestId("open-deliveries").click();
   await expect(page.getByTestId("supplier-delivery")).toContainText("Fly spray");
   await expect(page.getByTestId("delivery-unit-cost")).toHaveText("63.00");
   await expect(page.getByTestId("delivery-ordered-on")).toHaveText(/^\d{4}-\d{2}-\d{2}$/);

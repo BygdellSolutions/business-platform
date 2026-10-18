@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 
 import { useOrgId } from "@/components/shell/org-context";
 import { PROFILE_CONTROLS, ProfileFields } from "@/components/profile/ProfileFields";
@@ -47,7 +47,7 @@ function toState(supplier?: Supplier): FormState {
  * Create (no `supplier`) or edit (`supplier` = the saved record), like the customer form. The backend decides what is
  * acceptable; its 422 answers are shown on the matching control. There is no organization field.
  */
-export function SupplierForm({ supplier }: { supplier?: Supplier }) {
+export function SupplierForm({ supplier, actions }: { supplier?: Supplier; /** Buttons shown beside "Deactivate supplier" (an existing supplier only). */ actions?: ReactNode }) {
   const orgId = useOrgId();
   const router = useRouter();
   const { pending, error, run } = useMutation();
@@ -113,7 +113,9 @@ export function SupplierForm({ supplier }: { supplier?: Supplier }) {
           active={record.active}
           noun="supplier"
           onChanged={(updated) => setRecord((current) => (current ? { ...current, active: updated.active, updated_at: updated.updated_at } : updated))}
-        />
+        >
+          {actions}
+        </ActiveToggle>
       )}
       <form onSubmit={onSubmit} noValidate className="panel flex max-w-3xl flex-col gap-4" aria-label={record ? "Edit supplier" : "New supplier"}>
         <TextField label="Name" name="name" value={state.name} onChange={(value) => set("name", value)} error={problems.byField.name} autoComplete="off" />
