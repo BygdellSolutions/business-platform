@@ -5,6 +5,7 @@ import { DecimalText } from "@/components/ui/DecimalText";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ListFilters } from "@/components/ui/ListFilters";
 import { Notice } from "@/components/ui/Notice";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { Pagination } from "@/components/ui/Pagination";
 import { SortHeader } from "@/components/ui/SortHeader";
 import { CustomerFilter } from "@/features/customers/CustomerFilter";
@@ -55,9 +56,7 @@ export default async function InvoicesPage({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-4">
-        <h1 className="text-[28px] leading-tight font-semibold tracking-tight">Invoices</h1>
-      </div>
+      <PageHeader title="Invoices" description="Issued and draft invoices, payments and credit notes." />
       {first(raw.deleted) === "1" && <Notice testId="deleted">Draft deleted. Its orders can be invoiced again.</Notice>}
 
       {(list.extra.paid_from || list.extra.paid_to) && (

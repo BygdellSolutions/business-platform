@@ -5,6 +5,7 @@ import { PRIMARY_LINK } from "@/components/ui/Button";
 import { DecimalText } from "@/components/ui/DecimalText";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ListFilters } from "@/components/ui/ListFilters";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { Pagination } from "@/components/ui/Pagination";
 import { SortHeader } from "@/components/ui/SortHeader";
 import { CustomerFilter } from "@/features/customers/CustomerFilter";
@@ -53,14 +54,17 @@ export default async function TransactionsPage({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-4">
-        <h1 className="text-[28px] leading-tight font-semibold tracking-tight">Orders</h1>
-        {canWrite && (
+      <PageHeader
+        title="Orders"
+        description="What customers buy. Completed orders can be invoiced."
+        actions={
+        canWrite && (
           <Link href={`${base}/new`} className={PRIMARY_LINK} data-testid="new-transaction">
             New order
           </Link>
-        )}
-      </div>
+        )
+        }
+      />
 
       <div className="panel flex flex-col gap-4">
         <ListFilters action={base} params={list} search={false} activeStatus={false}>

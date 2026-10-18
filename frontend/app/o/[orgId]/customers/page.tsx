@@ -3,6 +3,7 @@ import Link from "next/link";
 import { PRIMARY_LINK } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ListFilters } from "@/components/ui/ListFilters";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { Pagination } from "@/components/ui/Pagination";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { SortHeader } from "@/components/ui/SortHeader";
@@ -34,14 +35,17 @@ export default async function CustomersPage({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-4">
-        <h1 className="text-[28px] leading-tight font-semibold tracking-tight">Customers</h1>
-        {canWrite && (
+      <PageHeader
+        title="Customers"
+        description="The people and companies you sell to."
+        actions={
+        canWrite && (
           <Link href={`${base}/new`} className={PRIMARY_LINK} data-testid="new-customer">
             New customer
           </Link>
-        )}
-      </div>
+        )
+        }
+      />
 
       <div className="panel flex flex-col gap-4">
         <ListFilters action={base} params={list} />

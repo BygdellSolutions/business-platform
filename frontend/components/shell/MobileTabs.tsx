@@ -36,7 +36,7 @@ export function MobileTabs({ orgId, items }: { orgId: string; items: NavItem[] }
   const moreCurrent = rest.some((item) => isCurrent(base, item, pathname));
 
   return (
-    <nav aria-label="Main (phone)" className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-sidebar pb-[env(safe-area-inset-bottom)] md:hidden" data-testid="mobile-tabs">
+    <nav aria-label="Main (bottom bar)" className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-sidebar pb-[env(safe-area-inset-bottom)] md:hidden" data-testid="mobile-tabs">
       <ul className="grid grid-cols-5">
         {bar.map((item) => {
           const current = isCurrent(base, item, pathname);
