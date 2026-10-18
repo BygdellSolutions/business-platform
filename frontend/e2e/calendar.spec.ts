@@ -224,3 +224,19 @@ test("a done appointment cannot be cancelled or deleted, an upcoming one can", a
   await expect(page.getByTestId("cancel-appointment")).toBeVisible();
   await expect(page.getByTestId("delete-appointment")).toBeEnabled();
 });
+
+test("the week number is shown in the day, week and month views", async ({ page, context }) => {
+  world = createWorld({ label: "CalendarWeek" });
+  await signIn(context, world.email);
+  const week = page.getByTestId("calendar-week");
+
+  await page.goto(`/o/${world.orgId}/calendar?view=day&date=2030-10-23`);
+  await expect(week).toHaveText("Week 43");
+  await page.goto(`/o/${world.orgId}/calendar?view=week&date=2030-10-21`);
+  await expect(week).toHaveText("Week 43");
+  await page.getByTestId("calendar-next").click();
+  await expect(week).toHaveText("Week 44");
+  await page.goto(`/o/${world.orgId}/calendar?view=month&date=2030-10-21`);
+  await expect(week).toHaveText("Weeks 40–44");
+  await expect(page.getByTestId("month-week-number").first()).toHaveText("W40"); // the first row starts Monday 30 September
+});

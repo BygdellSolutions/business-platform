@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { clashing, dayDifference, daysOf, hourRange, isRealDay, localParts, minutesOf, mondayOf, movedTo, place, resizedTo, shiftedByDays, snapMinutes, step, titleOf, windowOf, zonedInstant, type Booking } from "@/lib/calendar";
+import { isoWeek, weekLabel, clashing, dayDifference, daysOf, hourRange, isRealDay, localParts, minutesOf, mondayOf, movedTo, place, resizedTo, shiftedByDays, snapMinutes, step, titleOf, windowOf, zonedInstant, type Booking } from "@/lib/calendar";
 
 const STOCKHOLM = "Europe/Stockholm";
 
@@ -140,5 +140,24 @@ describe("moving and resizing a booking", () => {
     expect(resizedTo(start, "2026-10-19", 9 * 60, STOCKHOLM)).toBeNull(); // not after the start
     expect(resizedTo(start, "2026-10-19", 8 * 60, STOCKHOLM)).toBeNull();
     expect(resizedTo(start, "2026-10-19", 24 * 60, STOCKHOLM)).toBe("2026-10-19T22:00:00.000Z"); // the end of the day
+  });
+});
+
+describe("week numbers", () => {
+  it("follows ISO 8601, also around the new year", () => {
+    expect(isoWeek("2026-10-19")).toBe(43);
+    expect(isoWeek("2026-10-25")).toBe(43); // Sunday ends the week
+    expect(isoWeek("2026-10-26")).toBe(44);
+    expect(isoWeek("2026-01-01")).toBe(1); // a Thursday: week 1
+    expect(isoWeek("2027-01-01")).toBe(53); // a Friday, still in 2026's last week
+    expect(isoWeek("2024-12-30")).toBe(1); // belongs to 2025's week 1
+    expect(isoWeek("2020-12-31")).toBe(53);
+  });
+
+  it("labels a day or week by its week and a month by the weeks it touches", () => {
+    expect(weekLabel("day", "2026-10-21")).toBe("Week 43");
+    expect(weekLabel("week", "2026-10-26")).toBe("Week 44");
+    expect(weekLabel("month", "2026-10-15")).toBe("Weeks 40–44");
+    expect(weekLabel("month", "2026-12-10")).toBe("Weeks 49–53");
   });
 });

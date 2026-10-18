@@ -82,6 +82,23 @@ export function daysOf(view: CalendarView, day: string): string[] {
   return Array.from({ length: view === "week" ? 7 : 42 }, (_, index) => addDays(start, index));
 }
 
+/** The ISO 8601 week number of a day (weeks start on Monday and week 1 holds the year's first Thursday), as used in Sweden. */
+export function isoWeek(day: string): number {
+  const [y, m, d] = day.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7)); // the Thursday of this week decides the year
+  const yearStart = Date.UTC(date.getUTCFullYear(), 0, 1);
+  return Math.ceil(((date.getTime() - yearStart) / 86400000 + 1) / 7);
+}
+
+/** "Week 43" for a day or a week, "Weeks 40–44" for the weeks a month touches. */
+export function weekLabel(view: CalendarView, day: string): string {
+  if (view !== "month") return `Week ${isoWeek(day)}`;
+  const first = firstOfMonth(day);
+  const last = addDays(firstOfMonth(addDays(first, 31)), -1);
+  return `Weeks ${isoWeek(first)}–${isoWeek(last)}`;
+}
+
 /** What to ask the backend for: from the start of the first day to the start of the day after the last. */
 export function windowOf(view: CalendarView, day: string, zone: string | null): { from: string; to: string } {
   const days = daysOf(view, day);

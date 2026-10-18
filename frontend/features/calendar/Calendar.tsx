@@ -16,6 +16,8 @@ import {
   timeText,
   titleOf,
   weekdayName,
+  weekLabel,
+  isoWeek,
   type CalendarView,
 } from "@/lib/calendar";
 
@@ -103,6 +105,9 @@ export function Calendar(props: CalendarProps) {
           <h2 className="px-2 text-lg font-semibold" data-testid="calendar-title">
             {titleOf(view, day)}
           </h2>
+          <span className="rounded-md border border-border bg-surface-hover px-2 py-0.5 text-sm text-secondary" data-testid="calendar-week">
+            {weekLabel(view, day)}
+          </span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div role="group" aria-label="View" className="flex gap-1">
@@ -353,6 +358,11 @@ function MonthGrid(props: CalendarProps & { link: (view: CalendarView, day: stri
           const inMonth = cell.slice(0, 7) === day.slice(0, 7);
           return (
             <div key={cell} className={`min-h-24 border-t border-l border-border-strong p-1 ${inMonth ? "" : "bg-surface-hover/40 text-secondary"}`} data-testid="month-day" data-month-day data-day={cell}>
+              {days.indexOf(cell) % 7 === 0 && (
+                <span className="float-right text-[11px] text-muted" data-testid="month-week-number" title={`Week ${isoWeek(cell)}`}>
+                  W{isoWeek(cell)}
+                </span>
+              )}
               <Link href={link("day", cell)} className={`text-xs ${cell === today ? "rounded bg-accent px-1.5 py-0.5 font-semibold text-white" : "font-medium"}`}>
                 {dayOfMonth(cell)}
               </Link>
