@@ -367,7 +367,7 @@ class InvoiceEmail(TenantOwned, Authored, Base):
     reply_to: Mapped[str | None] = mapped_column(String(254))
     sender_address: Mapped[str] = mapped_column(String(254))
     subject: Mapped[str] = mapped_column(String(200))
-    note: Mapped[str | None] = mapped_column(String(1000))
+    note: Mapped[str | None] = mapped_column(String(2000))
     pdf_sha256: Mapped[str] = mapped_column(String(64))
     status: Mapped[str] = mapped_column(String(10))
     error: Mapped[str | None] = mapped_column(String(32))

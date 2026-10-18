@@ -63,6 +63,9 @@ class Organization(BusinessProfile, Base):
     approved_for_f_tax: Mapped[bool | None] = mapped_column(Boolean)
     # The language of the organization's documents (invoice PDFs): 'sv' or 'en'. NULL: English, as before.
     document_language: Mapped[str | None] = mapped_column(String(2))
+    # The subject and the message an invoice email starts with (see app.core.message_templates); NULL: the built-in subject and no message.
+    invoice_email_subject: Mapped[str | None] = mapped_column(String(200))
+    invoice_email_message: Mapped[str | None] = mapped_column(String(2000))
     # The current logo version (see OrganizationLogo); NULL = no logo. use_alter: the two tables point at each other.
     logo_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("organization_logos.id", ondelete="SET NULL", use_alter=True, name="fk_organizations_logo")

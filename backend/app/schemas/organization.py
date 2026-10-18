@@ -4,6 +4,7 @@ from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, Field, StringConstraints, field_validator
 
+from app.core import message_templates
 from app.core.org_time import is_known_zone
 
 from app.schemas.profile import CurrencyCode, ProfileIn, ProfileRead, optional_text
@@ -38,6 +39,24 @@ RegisteredOffice = optional_text(128)
 GiroNumber = optional_text(32)
 Iban = Annotated[Annotated[str, StringConstraints(pattern=r"^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$")] | None, BeforeValidator(_compact_upper)]
 Bic = Annotated[Annotated[str, StringConstraints(pattern=r"^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$")] | None, BeforeValidator(_compact_upper)]
+
+
+def _template(single_line: bool):
+    def check(value):
+        if value is None:
+            return value
+        if single_line and (chr(10) in value or chr(13) in value):
+            raise ValueError("must be a single line")
+        if (problem := message_templates.problem(value)) is not None:
+            raise ValueError(problem)
+        return value
+
+    return check
+
+
+# The pre-made subject and message of an invoice email (see app.core.message_templates): only the known placeholders may appear.
+InvoiceEmailSubject = Annotated[optional_text(200), AfterValidator(_template(True))]
+InvoiceEmailMessage = Annotated[optional_text(2000), AfterValidator(_template(False))]
 PaymentTermsDays = Annotated[int, Field(ge=0, le=365)]
 DocumentLanguage = Literal["sv", "en"]
 
@@ -83,6 +102,8 @@ class OrganizationUpdate(ProfileIn):
     payment_terms_days: PaymentTermsDays | None = None
     approved_for_f_tax: bool | None = None
     document_language: DocumentLanguage | None = None
+    invoice_email_subject: InvoiceEmailSubject = None
+    invoice_email_message: InvoiceEmailMessage = None
 
     @field_validator("name", "default_currency")
     @classmethod
@@ -130,6 +151,8 @@ class OrganizationRead(ProfileRead):
     payment_terms_days: int | None
     approved_for_f_tax: bool | None
     document_language: str | None
+    invoice_email_subject: str | None = None
+    invoice_email_message: str | None = None
     has_logo: bool = False  # the picture itself is read from GET /api/organization/logo
     # The organization's current date in its time zone (UTC when none is set): the default for new dates.
     today: date

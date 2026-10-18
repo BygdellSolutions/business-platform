@@ -27,14 +27,14 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from typing import Annotated
 
-from app.core import audit, clock, rate_limit
+from app.core import audit, clock, message_templates, rate_limit
 from app.core import email as mail
 from app.core.authz import roles_required
 from app.core.config import settings
 from app.core.db import get_db
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import create_scoped, get_scoped_or_404, scoped_select
-from app.models import Role, User
+from app.models import Organization, Role, User
 from app.modules.invoicing import ocr
 from app.modules.invoicing.models import Invoice, InvoiceEmail, InvoiceStatus
 from app.modules.invoicing.pdf import service as pdf_service
@@ -50,7 +50,17 @@ class InvoiceEmailSend(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     to: Annotated[str, StringConstraints(strip_whitespace=True, max_length=254)]
-    note: Annotated[str, StringConstraints(strip_whitespace=True, max_length=1000)] | None = None
+    # The subject and the message as the person saw them in the form (pre-filled from the organization's templates); none: the built-in subject.
+    subject: Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)] | None = None
+    note: Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)] | None = None
+
+
+class InvoiceEmailDraft(BaseModel):
+    """What the send form starts with: the customer's address and the subject and message from the organization's templates, filled in."""
+
+    to: str
+    subject: str
+    message: str
 
 
 class InvoiceEmailRead(BaseModel):
@@ -89,13 +99,34 @@ def _day(value: date | None) -> str:
     return value.isoformat() if value else "-"
 
 
-def compose(invoice: Invoice, *, note: str | None, language: str) -> tuple[str, str]:
+def _language(invoice: Invoice) -> str:
+    return "sv" if invoice.issuer_snapshot.get("document_language") != "en" else "en"
+
+
+def default_subject(invoice: Invoice) -> str:
+    organization = str(invoice.issuer_snapshot.get("name") or "")
+    return f"Faktura {invoice.number_text} från {organization}" if _language(invoice) == "sv" else f"Invoice {invoice.number_text} from {organization}"
+
+
+def placeholder_values(invoice: Invoice) -> dict[str, str]:
+    """The facts a template can use, all from the stored invoice (never from today's customer or organization records)."""
+    return {
+        "customer": invoice.customer_name,
+        "invoice_number": str(invoice.number_text or ""),
+        "amount": _money(invoice.gross_amount, invoice.currency, _language(invoice)),
+        "due_date": _day(invoice.due_date) if invoice.due_date else "",
+        "payment_reference": ocr.ocr_reference(invoice.number) if invoice.number is not None else "",
+        "organization": str(invoice.issuer_snapshot.get("name") or ""),
+    }
+
+
+def compose(invoice: Invoice, *, note: str | None, language: str, subject: str | None = None) -> tuple[str, str]:
     """The subject and the text, from the stored invoice and its issuer snapshot only."""
     issuer = invoice.issuer_snapshot
     organization = str(issuer.get("name") or "")
     sv = language == "sv"
     amount = _money(invoice.gross_amount, invoice.currency, language)
-    subject = f"Faktura {invoice.number_text} från {organization}" if sv else f"Invoice {invoice.number_text} from {organization}"
+    subject = subject or default_subject(invoice)
     lines = [
         "Hej," if sv else "Hello,",
         "",
@@ -145,6 +176,21 @@ def list_invoice_emails(invoice_id: uuid.UUID, ctx: TenantContext = Depends(get_
     return _sent_by(db, rows)
 
 
+@router.get("/{invoice_id}/email-draft", response_model=InvoiceEmailDraft)
+def invoice_email_draft(invoice_id: uuid.UUID, ctx: TenantContext = Depends(get_tenant_context), db: Session = Depends(get_db)) -> InvoiceEmailDraft:
+    """The send form's starting point: the customer's address, and the subject and message from the organization's templates with this
+    invoice's facts filled in (or the built-in subject and an empty message when it has none)."""
+    invoice = _issued_invoice(db, ctx, invoice_id)
+    organization = db.execute(select(Organization).where(Organization.id == ctx.organization_id)).scalar_one()
+    values = placeholder_values(invoice)
+    customer_email = invoice.customer_snapshot.get("email")
+    return InvoiceEmailDraft(
+        to=customer_email if isinstance(customer_email, str) else "",
+        subject=message_templates.render(organization.invoice_email_subject, values) if organization.invoice_email_subject else default_subject(invoice),
+        message=message_templates.render(organization.invoice_email_message, values) if organization.invoice_email_message else "",
+    )
+
+
 @router.post("/{invoice_id}/email", response_model=InvoiceEmailRead, status_code=status.HTTP_201_CREATED)
 def email_invoice(
     invoice_id: uuid.UUID,
@@ -178,7 +224,7 @@ def email_invoice(
     issuer = invoice.issuer_snapshot
     organization = str(issuer.get("name") or "")
     language = "sv" if issuer.get("document_language") != "en" else "en"
-    subject, text = compose(invoice, note=payload.note or None, language=language)
+    subject, text = compose(invoice, note=payload.note or None, language=language, subject=payload.subject or None)
     sender = f"{sender_local_part(organization)}@{settings.invoice_email_domain}"
     reply_to = issuer.get("email") if isinstance(issuer.get("email"), str) and mail.looks_like_address(issuer["email"]) else ctx.user.email
 

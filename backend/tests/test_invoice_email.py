@@ -199,7 +199,7 @@ def test_unknown_fields_and_a_huge_note_are_refused(client: TestClient, db_sessi
     FakeProvider(monkeypatch)
     assert send(client, two.a, invoice, {**GOOD, "from": "ceo@evil.test"}).status_code == 422  # the sender is never the caller's choice
     assert send(client, two.a, invoice, {**GOOD, "cc": "x@example.test"}).status_code == 422
-    assert send(client, two.a, invoice, {**GOOD, "note": "x" * 1001}).status_code == 422
+    assert send(client, two.a, invoice, {**GOOD, "note": "x" * 2001}).status_code == 422
 
 
 @pytest.mark.parametrize(("role", "allowed"), [(Role.OWNER, True), (Role.ADMIN, True), (Role.ACCOUNTANT, True), (Role.EMPLOYEE, False), (Role.VIEWER, False)])
