@@ -155,6 +155,21 @@ export function isInvoicePdfPath(apiPath: string): boolean {
   return INVOICE_PDF_PATH.test(apiPath);
 }
 
+// A file kept with a horse: the upload (POST, a JSON body that carries the file as base64) and the file itself (GET, binary).
+const HORSE_DOCUMENTS_PATH = /^\/api\/horses\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/documents$/i;
+const HORSE_DOCUMENT_FILE_PATH = /^\/api\/horses\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/documents\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/file$/i;
+
+/** A document is at most 10 MB; as base64 inside JSON that is about 13.4 MB, so this one path may carry a bigger body than the others. */
+export const MAX_DOCUMENT_UPLOAD_BODY_BYTES = 14_200_000;
+
+export function isHorseDocumentsPath(apiPath: string): boolean {
+  return HORSE_DOCUMENTS_PATH.test(apiPath);
+}
+
+export function isHorseDocumentFilePath(apiPath: string): boolean {
+  return HORSE_DOCUMENT_FILE_PATH.test(apiPath);
+}
+
 /** The one streamed download: the complete copy of the organization's data (POST). */
 export function isOrganizationExportPath(apiPath: string): boolean {
   return apiPath === "/api/organization/export";

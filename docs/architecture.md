@@ -109,6 +109,17 @@ Umeå HK can pay even though Anna owns Kalle.
 
 Therefore billing relationships and domain relationships must remain separate.
 
+### Horse documents
+
+A horse can have files kept with it (a vet report, an x-ray photo, a passport scan): PDF, JPEG, PNG or WebP, at most 10 MB each and 100 per horse. Decided with the owner 2026-10-18:
+
+- **Storage:** in PostgreSQL, table `horse_documents` (migration `d4f6a8c0e2b3`), like the organization logo. The bytes are a `deferred` column, so listing never loads them. The foreign key is composite `(organization_id, horse_id)`, so the database refuses a document of another organization's horse; CHECKs hold the type, the size (1 byte to 10 MB) and that the stored size equals the length of the bytes. Move to object storage only when measured needs justify it.
+- **Access:** the same as the horse record: every member can list and open documents, whoever may change records (owner, admin, accountant, employee) uploads and deletes, a viewer only reads. Another organization's horse or document is a 404.
+- **Upload path:** JSON with the file as base64 (`POST /api/horses/{id}/documents`), so the BFF stays JSON-only on the way in. That one path may carry 14.2 MB instead of 1 MB (`MAX_DOCUMENT_UPLOAD_BODY_BYTES`) and a longer read deadline, and `experimental.proxyClientMaxBodySize` is 15 MB because Next.js buffers (and silently cuts) the body of a request that passes the proxy at 10 MB. The backend decodes strictly, caps the size, checks the declared type against the first bytes (so a program or an HTML page cannot pass as a PDF or a picture), refuses SVG and everything else, and cleans the file name (no folder, no control characters). Uploads are also rate-limited like other heavy endpoints.
+- **Open path:** `GET /api/horses/{id}/documents/{doc}/file` is the BFF's third binary pass-through (after the invoice PDF and the export ZIP): validated (type, signature, size, SHA-256 = ETag) with its headers rebuilt (`nosniff`, no store; a picture also gets `default-src 'none'; sandbox`). It is shown inline in a new tab; the app's `X-Frame-Options: DENY` means there is no in-page PDF viewer.
+- **History and deletion:** adding and deleting are recorded in the horse's history with the file name, type and size, never the content. Deleting removes the file for good (after a confirmation). A horse itself is never deleted, so its documents leave only with the whole organization. The organization export carries them as files under `horse-documents/`, and the deletion and restore-check table lists include `horse_documents`.
+- **Not done:** virus scanning, in-page PDF preview, renaming a document, and a per-organization storage quota.
+
 ---
 
 ## 9. Transactions / sales must remain generic

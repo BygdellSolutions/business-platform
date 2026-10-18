@@ -17,6 +17,7 @@ export const FIELD_LABELS: Record<string, Record<string, string>> = {
   },
   item: { type: "Type", name: "Name", description: "Description", unit: "Unit", price_ex_vat: "Price excl. VAT", vat_rate: "VAT %", active: "Active" },
   horse_note: { body: "Note" },
+  horse_document: { filename: "File name", content_type: "Type", byte_size: "Size (bytes)" },
   appointment: {
     title: "Title",
     starts_at: "Starts",

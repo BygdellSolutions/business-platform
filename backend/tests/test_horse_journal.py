@@ -5,9 +5,11 @@ drafts, conflict detection on drafts, finalization, the bounds on text and drawi
 """
 
 import uuid
+from datetime import timedelta
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import event, text
 from sqlalchemy.orm import Session
 
 from app.models import Role
@@ -549,3 +551,99 @@ def test_entries_have_numbers_per_organization_and_the_list_sorts_by_its_columns
     client.patch(_url(horse, b), json={"follow_up_on": "2026-11-20"}, headers={**people["owner"], **_if_match(b)})
     assert order(sort="follow_up")[0] == 2 and order(sort="follow_up", dir="desc")[0] == 2  # entries without a follow-up date come last either way
     assert client.get(_url(horse), params={"sort": "preview"}, headers=people["owner"]).status_code == 422  # a column the list does not offer
+
+
+# --- a long history (J5): every list is bounded, whatever the size of the history ----------------------------------------
+
+
+def _bulk_entries(db: Session, org, horse, count: int, *, by: str = "Tina Therapist") -> None:
+    """`count` finished-looking drafts for one horse, one visit a day backwards from today, made in a single statement (the database numbers them)."""
+    db.execute(
+        text(
+            "INSERT INTO horse_journal_entries (organization_id, horse_id, visit_at, practitioner_name, body, status, marks, version, diagram_version, next_mark_number) "
+            "SELECT :org, :horse, now() - make_interval(days => g), :by, 'Visit ' || g || ' ' || repeat('treated the shoulder. ', 20), 'draft', '[]'::jsonb, 1, 2, 1 "
+            "FROM generate_series(1, :count) AS g"
+        ),
+        {"org": org.id, "horse": horse.id, "by": by, "count": count},
+    )
+    db.flush()
+
+
+def _statements_during(db: Session, call) -> tuple[list[str], object]:
+    seen: list[str] = []
+
+    def record(conn, cursor, statement, *rest):
+        seen.append(statement)
+
+    engine = db.get_bind()
+    event.listen(engine, "before_cursor_execute", record)
+    try:
+        result = call()
+    finally:
+        event.remove(engine, "before_cursor_execute", record)
+    return seen, result
+
+
+def test_a_long_history_is_listed_in_bounded_pages_with_a_constant_number_of_queries(client: TestClient, db_session: Session, world):
+    org, horse, people = world
+    owner = people["owner"]
+    _bulk_entries(db_session, org, horse, 5)
+    small, _ = _statements_during(db_session, lambda: client.get(_url(horse), params={"limit": 25}, headers=owner))
+
+    _bulk_entries(db_session, org, horse, 3000)
+    big, response = _statements_during(db_session, lambda: client.get(_url(horse), params={"limit": 25}, headers=owner))
+
+    rows = response.json()
+    assert response.status_code == 200 and len(rows) == 25  # a page, not the history
+    assert all("body" not in row for row in rows)  # a summary row: the text is fetched by opening an entry
+    assert len(big) == len(small), (len(small), len(big))  # no query per entry: the same few statements for 5 entries and for 3,005
+    assert [row["visit_at"] for row in rows] == sorted((row["visit_at"] for row in rows), reverse=True)  # newest first
+    assert client.get(_url(horse), params={"limit": 201}, headers=owner).status_code == 422  # a page can never be asked to be the history
+    default = client.get(_url(horse), headers=owner).json()
+    assert len(default) <= 50
+
+
+def test_pages_cover_a_long_history_exactly_once_and_the_date_range_and_search_stay_bounded(client: TestClient, db_session: Session, world):
+    org, horse, people = world
+    owner = people["owner"]
+    _bulk_entries(db_session, org, horse, 600)
+
+    seen: list[str] = []
+    for offset in range(0, 650, 200):
+        seen += [row["id"] for row in client.get(_url(horse), params={"limit": 200, "offset": offset}, headers=owner).json()]
+    assert len(seen) == 600 and len(set(seen)) == 600  # every entry on exactly one page, none twice, none missing
+
+    today = db_session.scalar(text("SELECT (now() - interval '10 days')::date"))
+    week = client.get(_url(horse), params={"date_from": str(today - timedelta(days=3)), "date_to": str(today), "limit": 200}, headers=owner).json()
+    assert 4 <= len(week) <= 5  # only the visits of those days
+    found = client.get(_url(horse), params={"q": "Visit 17 ", "limit": 200}, headers=owner).json()
+    assert 1 <= len(found) <= 200
+
+
+def test_a_long_history_of_one_horse_is_invisible_and_free_for_another(client: TestClient, db_session: Session, world):
+    org, horse, people = world
+    owner = people["owner"]
+    other_horse = make_horse(db_session, org, "Storm", owner=make_customer(db_session, org, "Bo Berg"))
+    _bulk_entries(db_session, org, horse, 1500)
+    _bulk_entries(db_session, org, other_horse, 3, by="Someone Else")
+
+    listed = client.get(_url(other_horse), params={"limit": 200}, headers=owner).json()
+    assert len(listed) == 3 and {row["practitioner_name"] for row in listed} == {"Someone Else"}  # not the neighbour's 1,500
+
+
+def test_the_list_uses_the_index_for_the_default_order(db_session: Session, world):
+    org, horse, _ = world
+    _bulk_entries(db_session, org, horse, 5000)
+    db_session.execute(text("ANALYZE horse_journal_entries"))
+    plan = "\n".join(
+        row[0]
+        for row in db_session.execute(
+            text(
+                "EXPLAIN SELECT id FROM horse_journal_entries WHERE organization_id = :org AND horse_id = :horse "
+                "ORDER BY visit_at DESC, number DESC LIMIT 25"
+            ),
+            {"org": org.id, "horse": horse.id},
+        )
+    )
+    assert "ix_horse_journal_entries_horse_visit" in plan, plan  # not a scan of the whole table, and no sort of every entry
+    assert "Sort" not in plan.split("Index")[0] or "Incremental Sort" in plan, plan

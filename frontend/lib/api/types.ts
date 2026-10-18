@@ -1956,6 +1956,23 @@ export interface InventorySummary {
 
 /** A note on a horse (GET /api/horses/{id}/notes), newest first. */
 
+/** A file kept with a horse (a PDF or a picture); its bytes are fetched separately, from `/horses/{id}/documents/{id}/file`. */
+export interface HorseDocument {
+
+  id: string;
+
+  filename: string;
+
+  content_type: string;
+
+  byte_size: number;
+
+  created_at: string;
+
+  created_by_name: string | null;
+
+}
+
 export interface HorseNote {
 
   id: string;
