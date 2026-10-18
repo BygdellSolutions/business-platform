@@ -104,8 +104,8 @@ def _language(invoice: Invoice) -> str:
 
 
 def default_subject(invoice: Invoice) -> str:
-    organization = str(invoice.issuer_snapshot.get("name") or "")
-    return f"Faktura {invoice.number_text} från {organization}" if _language(invoice) == "sv" else f"Invoice {invoice.number_text} from {organization}"
+    """Just the document and its number: the organization is already the sender's name at the top of the mail, so it is not repeated."""
+    return f"Faktura {invoice.number_text}" if _language(invoice) == "sv" else f"Invoice {invoice.number_text}"
 
 
 def placeholder_values(invoice: Invoice) -> dict[str, str]:

@@ -80,7 +80,8 @@ def test_the_frozen_pdf_goes_as_an_attachment_from_the_organization_with_the_fac
     assert headers["Authorization"] == "Bearer secret-token-value"
     assert body["from"] == {"address": "org-a@invoices.bygdell.solutions", "name": "Org A"}  # the receiver sees whom it is from
     assert body["to"] == ["kund@example.test"]
-    assert body["subject"] == f"Faktura {invoice['number_text']} från Org A" or body["subject"] == f"Invoice {invoice['number_text']} from Org A"
+    assert body["subject"] in (f"Faktura {invoice['number_text']}", f"Invoice {invoice['number_text']}")  # no "from Org A": the sender name says it
+    assert "Org A" not in body["subject"]
     [attachment] = body["attachments"]
     assert attachment["type"] == "application/pdf" and attachment["disposition"] == "attachment" and attachment["filename"].endswith(".pdf")
     assert base64.b64decode(attachment["content"]) == pdf_of(client, two.a, invoice)  # the very bytes a download gives

@@ -51,4 +51,20 @@ describe("Modal", () => {
     fireEvent(screen.getByTestId("d"), new Event("close"));
     expect(onClose).toHaveBeenCalledTimes(3);
   });
+
+  it("does not report a close the page itself asked for, so opening another window in its place does not close that one", () => {
+    const onClose = vi.fn();
+    const { rerender } = render(
+      <Modal open onClose={onClose} title="T" testId="d">
+        <p>x</p>
+      </Modal>,
+    );
+    rerender(
+      <Modal open={false} onClose={onClose} title="T" testId="d">
+        <p>x</p>
+      </Modal>,
+    );
+    fireEvent(screen.getByTestId("d"), new Event("close")); // the browser says the dialog closed, after the page closed it
+    expect(onClose).not.toHaveBeenCalled();
+  });
 });

@@ -25,6 +25,7 @@ test("a paid invoice is credited in full, the refund is recorded, and the credit
   await page.keyboard.press("Escape"); // closes the window
 
   const credits = page.getByTestId("credit-notes");
+  await page.getByTestId("open-credits").click(); // Credit notes is a pop-up window beside Download PDF
   await expect(credits.getByTestId("no-credit-notes")).toBeVisible();
   await credits.getByTestId("open-credit").click();
   await credits.getByTestId("credit-all").click();
@@ -35,15 +36,15 @@ test("a paid invoice is credited in full, the refund is recorded, and the credit
 
   await expect(credits.getByTestId("credit-note-row")).toHaveCount(1);
   await expect(credits.getByTestId("credit-note-row")).toContainText("Customer cancelled");
-  await expect(page.getByTestId("invoice-status")).toHaveText("Credited");
   await expect(credits.getByText("Everything on this invoice is credited.")).toBeVisible();
-  await page.getByTestId("open-payments").click();
-  await expect(payments.getByTestId("refund-due-amount")).toBeVisible();
-  await page.keyboard.press("Escape");
-
   const download = page.waitForEvent("download");
   await credits.getByTestId("download-pdf").click();
   expect((await download).suggestedFilename()).toMatch(/^credit-note-\d+\.pdf$/);
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("invoice-status")).toHaveText("Credited");
+  await page.getByTestId("open-payments").click();
+  await expect(payments.getByTestId("refund-due-amount")).toBeVisible();
+  await page.keyboard.press("Escape");
 
   await page.goto(`/o/${world.orgId}/invoices?payment=refund_due`);
   await expect(page.getByTestId("invoice-row")).toHaveCount(1);

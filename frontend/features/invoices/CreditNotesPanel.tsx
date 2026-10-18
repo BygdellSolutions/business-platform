@@ -56,10 +56,13 @@ export function CreditNotesPanel({
   canCredit,
   timeZone,
   creditReturnId,
+  bare = false,
 }: {
   invoice: Invoice;
   canCredit: boolean;
   timeZone: string | null;
+  /** Shown inside a pop-up window, which has the title and the frame already. */
+  bare?: boolean;
   /** An approved return case to credit: the form opens with its lines and reason, and the credit note closes it. */
   creditReturnId?: string;
 }) {
@@ -120,8 +123,8 @@ export function CreditNotesPanel({
   if (invoice.credit_notes.length === 0 && !canCredit) return null;
 
   return (
-    <section id="credit-notes" aria-label="Credit notes" data-testid="credit-notes" className="panel flex max-w-4xl flex-col gap-3">
-      <h2 className="text-lg font-semibold">Credit notes</h2>
+    <section id="credit-notes" aria-label="Credit notes" data-testid="credit-notes" className={bare ? "flex flex-col gap-3" : "panel flex max-w-4xl flex-col gap-3"}>
+      {!bare && <h2 className="text-lg font-semibold">Credit notes</h2>}
       {created && (
         <p role="status" data-testid="credit-created" className="text-sm text-green-800 dark:text-green-300">
           Credit note {created} created.

@@ -143,7 +143,8 @@ def test_without_templates_the_draft_has_the_built_in_subject_and_no_message(cli
     two = Two(db_session)
     invoice = issued(db_session, client, two)
     draft = client.get(f"{INVOICES}/{invoice['id']}/email-draft", headers=two.a).json()
-    assert draft["subject"] in (f"Faktura {invoice['number_text']} från Org A", f"Invoice {invoice['number_text']} from Org A") and draft["message"] == ""
+    assert draft["subject"] in (f"Faktura {invoice['number_text']}", f"Invoice {invoice['number_text']}") and draft["message"] == ""
+    assert "Org A" not in draft["subject"]
 
 
 def test_the_organization_name_in_a_draft_is_the_one_frozen_on_the_invoice(client: TestClient, db_session: Session):

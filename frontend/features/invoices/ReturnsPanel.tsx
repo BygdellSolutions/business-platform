@@ -36,7 +36,23 @@ const EVENT_WORDS: Record<InvoiceReturn["events"][number]["kind"], string> = {
  * form below opens with the case's lines and its credit note closes the case) or rejected with a reason. Every step and
  * note is in the case's log. The backend enforces the order of the steps and the quantities.
  */
-export function ReturnsPanel({ invoice, canHandle, today, timeZone }: { invoice: Invoice; canHandle: boolean; today: string; timeZone: string | null }) {
+export function ReturnsPanel({
+  invoice,
+  canHandle,
+  today,
+  timeZone,
+  bare = false,
+  onCredit,
+}: {
+  invoice: Invoice;
+  canHandle: boolean;
+  today: string;
+  timeZone: string | null;
+  /** Shown inside a pop-up window, which has the title and the frame already. */
+  bare?: boolean;
+  /** Called with a return's id when it is time to write its credit note; without it the page address says so (`?credit_return=`). */
+  onCredit?: (returnId: string) => void;
+}) {
   const orgId = useOrgId();
   const router = useRouter();
   const { pending, error, run } = useMutation();
@@ -64,11 +80,11 @@ export function ReturnsPanel({ invoice, canHandle, today, timeZone }: { invoice:
   }
 
   return (
-    <section aria-label="Returns" data-testid="returns" className="panel flex max-w-4xl flex-col gap-3">
-      <h2 className="text-lg font-semibold">Returns</h2>
+    <section aria-label="Returns" data-testid="returns" className={bare ? "flex flex-col gap-3" : "panel flex max-w-4xl flex-col gap-3"}>
+      {!bare && <h2 className="text-lg font-semibold">Returns</h2>}
       {invoice.returns.length === 0 && <p className="text-sm text-zinc-500">No return cases. Open one when a customer asks to send something back, so it is followed up.</p>}
       {invoice.returns.map((item) => (
-        <ReturnCase key={`${item.id}-${item.events.length}`} invoice={invoice} item={item} canHandle={canHandle} timeZone={timeZone} today={today} />
+        <ReturnCase key={`${item.id}-${item.events.length}`} invoice={invoice} item={item} canHandle={canHandle} timeZone={timeZone} today={today} onCredit={onCredit} />
       ))}
 
       {canHandle && returnable.length > 0 && !opening && (
@@ -133,7 +149,7 @@ export function ReturnsPanel({ invoice, canHandle, today, timeZone }: { invoice:
   );
 }
 
-function ReturnCase({ invoice, item, canHandle, timeZone, today }: { invoice: Invoice; item: InvoiceReturn; canHandle: boolean; timeZone: string | null; today: string }) {
+function ReturnCase({ invoice, item, canHandle, timeZone, today, onCredit }: { invoice: Invoice; item: InvoiceReturn; canHandle: boolean; timeZone: string | null; today: string; onCredit?: (returnId: string) => void }) {
   const orgId = useOrgId();
   const router = useRouter();
   const { pending, error, run } = useMutation();
@@ -156,8 +172,13 @@ function ReturnCase({ invoice, item, canHandle, timeZone, today }: { invoice: In
     router.refresh();
   }
 
+  function credit() {
+    if (onCredit) onCredit(item.id);
+    else router.push(`?credit_return=${item.id}#credit-notes`);
+  }
+
   function approve() {
-    void step("/approve", {}, () => router.push(`?credit_return=${item.id}#credit-notes`));
+    void step("/approve", {}, credit);
   }
 
   return (
@@ -211,7 +232,7 @@ function ReturnCase({ invoice, item, canHandle, timeZone, today }: { invoice: In
             </Button>
           )}
           {item.state === "approved" && (
-            <Button type="button" disabled={pending} onClick={() => router.push(`?credit_return=${item.id}#credit-notes`)} data-testid="return-credit">
+            <Button type="button" disabled={pending} onClick={credit} data-testid="return-credit">
               Create the credit note
             </Button>
           )}

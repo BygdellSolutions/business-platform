@@ -5,8 +5,6 @@ import { RecordMeta } from "@/components/history/RecordMeta";
 import { Notice } from "@/components/ui/Notice";
 import { InvoiceDialogs } from "@/features/invoices/InvoiceDialogs";
 import { InvoiceView } from "@/features/invoices/InvoiceView";
-import { CreditNotesPanel } from "@/features/invoices/CreditNotesPanel";
-import { ReturnsPanel } from "@/features/invoices/ReturnsPanel";
 import type { Invoice, InvoiceEmailDraft, InvoiceEmailLog, Organization } from "@/lib/api/types";
 import { requireCredential } from "@/lib/auth/credential";
 import { readRecordHistory } from "@/lib/history-server";
@@ -87,17 +85,17 @@ export default async function InvoicePage({
         timeZone={organization.timezone}
         actions={
           emailDraft !== null ? (
-            <InvoiceDialogs invoice={invoice} canMutate={canMutateInvoices(role)} emailDraft={emailDraft} emails={emails} today={organization.today} timeZone={organization.timezone} />
+            <InvoiceDialogs
+              invoice={invoice}
+              canMutate={canMutateInvoices(role)}
+              emailDraft={emailDraft}
+              emails={emails}
+              today={organization.today}
+              timeZone={organization.timezone}
+              initialCreditReturn={typeof creditReturn === "string" ? creditReturn : undefined}
+            />
           ) : null
         }
-      />
-      <ReturnsPanel key={`returns-${invoice.id}-${invoice.returns.length}`} invoice={invoice} canHandle={canMutateInvoices(role)} today={organization.today} timeZone={organization.timezone} />
-      <CreditNotesPanel
-        key={`credits-${invoice.id}-${invoice.credit_notes.length}-${typeof creditReturn === "string" ? creditReturn : ""}`}
-        invoice={invoice}
-        canCredit={canMutateInvoices(role)}
-        timeZone={organization.timezone}
-        creditReturnId={typeof creditReturn === "string" ? creditReturn : undefined}
       />
       <RecordHistory data={history} entityType="invoice" timeZone={organization.timezone} />
     </div>

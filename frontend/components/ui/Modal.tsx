@@ -23,8 +23,10 @@ export function Modal({
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  const wanted = useRef(open);
 
   useEffect(() => {
+    wanted.current = open;
     const element = dialog.current;
     if (element === null) return;
     // (jsdom, used by the unit tests, has no showModal: there the dialog is simply shown with its `open` attribute.)
@@ -43,8 +45,11 @@ export function Modal({
       ref={dialog}
       aria-labelledby={titleId}
       data-testid={testId}
-      // Escape: the browser closes the dialog itself; the page is told so that it forgets it was open.
-      onClose={onClose}
+      // Escape: the browser closes the dialog itself; the page is told so that it forgets it was open. A close the page asked for (another window
+      // opening in its place) is not reported back, or it would close that other window too.
+      onClose={() => {
+        if (wanted.current) onClose();
+      }}
       // A press on the dimmed backdrop lands on the dialog element itself, never on its content.
       onClick={(event) => {
         if (event.target === dialog.current) onClose();
