@@ -33,6 +33,21 @@ export default async function ItemPage({
     serverRead<Backorder[]>(orgId, "/api/inventory/backorders", `?${new URLSearchParams({ item_id: recordId })}`),
   ]);
 
+  const dialogs = (
+    <ItemDialogs
+      itemId={item.id}
+      tracksStock={item.track_stock}
+      stock={stock}
+      figures={availability[0] ?? null}
+      backorders={backorders}
+      incoming={incoming}
+      discounts={discounts}
+      canWriteRecords={canWriteRecords(role)}
+      canManageDiscounts={role === "owner" || role === "admin"}
+      timeZone={organization.timezone}
+    />
+  );
+
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-[28px] leading-tight font-semibold tracking-tight" data-testid="record-name">
@@ -44,22 +59,15 @@ export default async function ItemPage({
       {created === "1" && <Notice testId="created">Item created.</Notice>}
       {stockResult === "failed" && <Notice testId="stock-failed">The opening stock was not recorded. Record it with the Stock button below.</Notice>}
       <RecordMeta record={item} people={history.history.people} timeZone={organization.timezone} />
-      {canWriteRecords(role) ? <ItemForm key={item.id} item={item} /> : <ItemDetails item={item} />}
+      {canWriteRecords(role) ? <ItemForm key={item.id} item={item} actions={dialogs} /> : (
+        <>
+          <div className="flex flex-wrap gap-2">{dialogs}</div>
+          <ItemDetails item={item} />
+        </>
+      )}
       {item.type === "product" && !item.track_stock && canWriteRecords(role) && (
         <Notice testId="stock-off">This product does not track stock. Tick “Track stock” above and save to record what is on hand.</Notice>
       )}
-      <ItemDialogs
-        itemId={item.id}
-        tracksStock={item.track_stock}
-        stock={stock}
-        figures={availability[0] ?? null}
-        backorders={backorders}
-        incoming={incoming}
-        discounts={discounts}
-        canWriteRecords={canWriteRecords(role)}
-        canManageDiscounts={role === "owner" || role === "admin"}
-        timeZone={organization.timezone}
-      />
       <RecordHistory data={history} entityType="item" timeZone={organization.timezone} />
     </div>
   );

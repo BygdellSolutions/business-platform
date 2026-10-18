@@ -48,7 +48,7 @@ export function ItemDialogs({
   const onTheWay = incoming.filter((delivery) => delivery.state === "expected" || delivery.state === "partially_received").length;
   return (
     <>
-      <div className="flex flex-wrap gap-2" data-testid="item-actions">
+      <>
         {tracksStock && (
           <Button type="button" variant="tonal" onClick={() => setOpen("stock")} data-testid="open-stock">
             <ButtonIcon path={ICONS.stock} />
@@ -71,7 +71,7 @@ export function ItemDialogs({
           <ButtonIcon path={ICONS.discount} />
           {discounts.length > 0 ? `Campaign discounts (${discounts.length})` : "Campaign discounts"}
         </Button>
-      </div>
+      </>
       {tracksStock && (
         <>
           <Modal open={open === "stock"} onClose={close} title="Stock" testId="stock-dialog">

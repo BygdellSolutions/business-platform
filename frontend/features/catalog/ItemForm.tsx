@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 
 import { useOrgId } from "@/components/shell/org-context";
 import { ActiveToggle } from "@/components/ui/ActiveToggle";
@@ -90,7 +90,7 @@ function toState(item?: Item): FormState {
   };
 }
 
-export function ItemForm({ item }: { item?: Item }) {
+export function ItemForm({ item, actions }: { item?: Item; /** Buttons shown beside "Deactivate item" (an existing item only). */ actions?: ReactNode }) {
   const orgId = useOrgId();
   const router = useRouter();
   const { pending, error, run } = useMutation();
@@ -241,7 +241,9 @@ export function ItemForm({ item }: { item?: Item }) {
                 : updated,
             )
           }
-        />
+        >
+          {actions}
+        </ActiveToggle>
       )}
       <form
         onSubmit={onSubmit}

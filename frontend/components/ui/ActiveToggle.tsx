@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import type { ReactNode } from "react";
 
 import { useOrgId } from "@/components/shell/org-context";
 import { Button } from "@/components/ui/Button";
@@ -20,6 +21,7 @@ export function ActiveToggle<T extends { active: boolean }>({
   noun,
   version,
   onChanged,
+  children,
 }: {
   path: string;
   active: boolean;
@@ -27,6 +29,8 @@ export function ActiveToggle<T extends { active: boolean }>({
   /** The record's version, for records that guard changes with If-Match (items). */
   version?: number;
   onChanged: (record: T) => void;
+  /** More buttons beside the toggle (for example a catalog item's Stock). */
+  children?: ReactNode;
 }) {
   const orgId = useOrgId();
   const router = useRouter();
@@ -41,11 +45,12 @@ export function ActiveToggle<T extends { active: boolean }>({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <StatusBadge active={active} />
         <Button type="button" onClick={toggle} disabled={pending} data-testid="toggle-active">
           {active ? `Deactivate ${noun}` : `Reactivate ${noun}`}
         </Button>
+        {children}
       </div>
       <ErrorSummary messages={problemsFrom(error, []).general} />
     </div>
