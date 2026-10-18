@@ -5,6 +5,7 @@ All notable changes to `business-platform` will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- The catalog list shows whether an item tracks stock (Yes/No) instead of the on hand, draft, available, sold, incoming and stock-state columns, which the Inventory page already shows. The Inventory page no longer has a Unit column.
 - On a catalog item, Stock, Backorders, Incoming and Campaign discounts are now tinted buttons with icons, beside "Deactivate item", that open pop-up windows (as on an invoice) instead of four panels stacked down the page; a link to `#backorders` still opens the Backorders window.
 - The catalog no longer asks for or shows a "Unit" (the quantity already says it): removed from the item form, the catalog list, the item details and the stock, backorder and incoming panels. `unit` is optional when creating an item (default "pcs") and is still stored, because orders and invoices copy it.
 - The order page's actions look like the invoice's: "Paid now", "Invoice", "Reopen" and "Download receipt" have the soft accent tint and an icon, and "Paid now" asks how it was paid (Swish, Card, Cash, with the not-everything-is-in-stock warning) in a pop-up window instead of swapping the buttons in place.

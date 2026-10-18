@@ -9,10 +9,9 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Pagination } from "@/components/ui/Pagination";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { SortHeader } from "@/components/ui/SortHeader";
-import { StockBadges } from "@/features/catalog/StockBadges";
 import { ITEM_TYPES, ITEM_TYPE_LABELS } from "@/features/catalog/item-types";
 import { readActiveRole } from "@/lib/active-role";
-import type { Item, ItemAvailability } from "@/lib/api/types";
+import type { Item } from "@/lib/api/types";
 import {
   backendQuery,
   listHref, sortHref,
@@ -24,34 +23,9 @@ import { serverRead } from "@/lib/server-api";
 import { trimQuantity } from "@/lib/decimal";
 import { formatShortDate } from "@/lib/dates";
 
-const SORTS = ["number", "name", "sku", "type", "unit", "price", "promotion", "promotion_ends", "current_price", "price_inc_vat", "vat_rate", "on_hand", "allocated", "available", "committed", "incoming", "active"] as const;
+const SORTS = ["number", "name", "sku", "type", "price", "promotion", "promotion_ends", "current_price", "price_inc_vat", "vat_rate", "active"] as const;
 
 const TYPES = ITEM_TYPES;
-
-/** The stock columns of one row: empty for an item that does not track stock. */
-function StockCells({ figures }: { figures: ItemAvailability | undefined }) {
-  if (!figures) return <td colSpan={6} />;
-  return (
-    <>
-      <td className="py-1 pr-4 text-right" data-testid="item-on-hand">
-        {trimQuantity(figures.on_hand)}
-      </td>
-      <td className="py-1 pr-4 text-right" data-testid="item-allocated">
-        {trimQuantity(figures.allocated)}
-      </td>
-      <td className="py-1 pr-4 text-right" data-testid="item-available">
-        {trimQuantity(figures.available)}
-      </td>
-      <td className="py-1 pr-4 text-right">
-        {trimQuantity(figures.committed)}
-      </td>
-      <td className="py-1 pr-4 text-right">{trimQuantity(figures.incoming)}</td>
-      <td className="py-1 pr-4" data-testid="item-stock-states">
-        <StockBadges states={figures.states} />
-      </td>
-    </>
-  );
-}
 
 export default async function CatalogPage({
   params,
@@ -65,18 +39,6 @@ export default async function CatalogPage({
   const list = parseListParams(await searchParams, TYPES, [], {}, SORTS);
   const { rows: items, hasNext } = pageOf(
     await serverRead<Item[]>(orgId, "/api/items", backendQuery(list)),
-  );
-  const tracked = items.filter((item) => item.track_stock);
-  const stock = new Map(
-    tracked.length === 0
-      ? []
-      : (
-          await serverRead<ItemAvailability[]>(
-            orgId,
-            "/api/inventory/availability",
-            `?${new URLSearchParams(tracked.map((item) => ["item_id", item.id]))}`,
-          )
-        ).map((entry) => [entry.item_id, entry]),
   );
   const base = `/o/${orgId}/catalog`;
   const filtered = list.q !== "" || list.active !== "all" || list.type !== "";
@@ -125,7 +87,7 @@ export default async function CatalogPage({
             action={!filtered && canWrite ? <Link href={`${base}/new`} className={PRIMARY_LINK}>Add your first item</Link> : undefined}
           />
         ) : (
-          // Wide on purpose (prices and stock side by side): the table scrolls sideways instead of squeezing cells.
+          // Wide on purpose (many price columns side by side): the table scrolls sideways instead of squeezing cells.
           <div className="overflow-x-auto">
             <table
               data-testid="items-table"
@@ -143,12 +105,7 @@ export default async function CatalogPage({
                   <SortHeader label="Current price" sortKey="current_price" current={list.sort} dir={list.dir} href={sortHref(base, list, "current_price")} align="right" title="What is charged today, excl. VAT (customer discounts not included)" />
                   <SortHeader label="VAT" sortKey="vat_rate" current={list.sort} dir={list.dir} href={sortHref(base, list, "vat_rate")} align="right" />
                   <SortHeader label="Incl. VAT" sortKey="price_inc_vat" current={list.sort} dir={list.dir} href={sortHref(base, list, "price_inc_vat")} align="right" title="The current price incl. VAT: what a customer pays today" />
-                  <SortHeader label="On hand" sortKey="on_hand" current={list.sort} dir={list.dir} href={sortHref(base, list, "on_hand")} align="right" />
-                  <SortHeader label="On draft orders" sortKey="allocated" current={list.sort} dir={list.dir} href={sortHref(base, list, "allocated")} align="right" />
-                  <SortHeader label="Available" sortKey="available" current={list.sort} dir={list.dir} href={sortHref(base, list, "available")} align="right" />
-                  <SortHeader label="Sold, not delivered" sortKey="committed" current={list.sort} dir={list.dir} href={sortHref(base, list, "committed")} align="right" />
-                  <SortHeader label="Incoming" sortKey="incoming" current={list.sort} dir={list.dir} href={sortHref(base, list, "incoming")} align="right" />
-                  <th className="py-1 pr-4">Stock</th>
+                  <th className="py-1 pr-4">Tracks stock</th>
                   <SortHeader label="Status" sortKey="active" current={list.sort} dir={list.dir} href={sortHref(base, list, "active")} last />
                 </tr>
               </thead>
@@ -196,7 +153,9 @@ export default async function CatalogPage({
                     <td className="py-1 pr-4 text-right" data-testid="item-price-inc-vat">
                       {item.current_price_inc_vat !== null && <DecimalText value={item.current_price_inc_vat} />}
                     </td>
-                    <StockCells figures={stock.get(item.id)} />
+                    <td className="py-1 pr-4" data-testid="item-tracks-stock">
+                      {item.track_stock ? "Yes" : "No"}
+                    </td>
                     <td className="py-1">
                       <StatusBadge active={item.active} />
                     </td>

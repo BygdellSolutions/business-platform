@@ -21,20 +21,18 @@ const STATES = [
   { value: "backordered", label: "Backordered" },
   { value: "incoming", label: "Incoming" },
 ] as const;
-const PRODUCT_SORTS = ["name", "sku", "unit", "on_hand", "allocated", "committed", "available", "incoming", "low_stock_threshold"];
+const PRODUCT_SORTS = ["name", "sku", "on_hand", "allocated", "committed", "available", "incoming", "low_stock_threshold"];
 const BACKLOG_SORTS: Record<string, (r: Backorder) => SortValue> = {
   number: (r) => ({ number: r.transaction_number }),
   date: (r) => ({ text: r.transaction_date }),
   customer: (r) => ({ text: r.customer_name }),
   product: (r) => ({ text: r.item_name }),
-  unit: (r) => ({ text: r.item_unit }),
   waiting: (r) => ({ decimal: r.remaining }),
   state: (r) => ({ text: r.state }),
 };
 const INCOMING_SORTS: Record<string, (r: Incoming) => SortValue> = {
   expected: (r) => ({ text: r.expected_on }),
   product: (r) => ({ text: r.item_name }),
-  unit: (r) => ({ text: r.item_unit }),
   quantity: (r) => ({ decimal: r.quantity }),
   received: (r) => ({ decimal: r.received }),
   remaining: (r) => ({ decimal: r.remaining }),
@@ -120,7 +118,6 @@ export default async function InventoryPage({
                 <tr className="border-b border-zinc-300 dark:border-zinc-700">
                   <SortHeader label="Product" sortKey="name" current={productSort.sort} dir={productSort.dir} href={productSort.hrefs.name} />
                   <SortHeader label="SKU" sortKey="sku" current={productSort.sort} dir={productSort.dir} href={productSort.hrefs.sku} />
-                  <SortHeader label="Unit" sortKey="unit" current={productSort.sort} dir={productSort.dir} href={productSort.hrefs.unit} />
                   <SortHeader label="On hand" sortKey="on_hand" current={productSort.sort} dir={productSort.dir} href={productSort.hrefs.on_hand} align="right" />
                   <SortHeader label="On draft orders" sortKey="allocated" current={productSort.sort} dir={productSort.dir} href={productSort.hrefs.allocated} align="right" title="Reserved on orders that are not finished: meant for a customer, not final yet" />
                   <SortHeader label="Sold, not delivered" sortKey="committed" current={productSort.sort} dir={productSort.dir} href={productSort.hrefs.committed} align="right" title="Completed orders still waiting for stock (backorders)" />
@@ -139,7 +136,6 @@ export default async function InventoryPage({
                       </Link>
                     </td>
                     <td className="py-1 pr-4">{item.sku}</td>
-                    <td className="py-1 pr-4">{item.unit}</td>
                     <td className="py-1 pr-4 text-right" data-testid="stock-row-on-hand">
                       {trimQuantity(item.on_hand)}
                     </td>
@@ -181,7 +177,6 @@ export default async function InventoryPage({
                   <SortHeader label="Completed" sortKey="date" current={backlogSort.sort} dir={backlogSort.dir} href={backlogSort.hrefs.date} />
                   <SortHeader label="Customer" sortKey="customer" current={backlogSort.sort} dir={backlogSort.dir} href={backlogSort.hrefs.customer} />
                   <SortHeader label="Product" sortKey="product" current={backlogSort.sort} dir={backlogSort.dir} href={backlogSort.hrefs.product} />
-                  <SortHeader label="Unit" sortKey="unit" current={backlogSort.sort} dir={backlogSort.dir} href={backlogSort.hrefs.unit} />
                   <SortHeader label="Waiting" sortKey="waiting" current={backlogSort.sort} dir={backlogSort.dir} href={backlogSort.hrefs.waiting} align="right" />
                   <SortHeader label="State" sortKey="state" current={backlogSort.sort} dir={backlogSort.dir} href={backlogSort.hrefs.state} />
                   {canWrite && <th className="py-1" aria-label="Deliver" />}
@@ -204,7 +199,6 @@ export default async function InventoryPage({
                         {backorder.item_name}
                       </Link>
                     </td>
-                    <td className="py-1 pr-4">{backorder.item_unit}</td>
                     <td className="py-1 pr-4 text-right" data-testid="backlog-waiting">
                       {trimQuantity(backorder.remaining)}
                     </td>
@@ -239,7 +233,6 @@ export default async function InventoryPage({
                 <tr className="border-b border-zinc-300 dark:border-zinc-700">
                   <SortHeader label="Expected" sortKey="expected" current={incomingSort.sort} dir={incomingSort.dir} href={incomingSort.hrefs.expected} />
                   <SortHeader label="Product" sortKey="product" current={incomingSort.sort} dir={incomingSort.dir} href={incomingSort.hrefs.product} />
-                  <SortHeader label="Unit" sortKey="unit" current={incomingSort.sort} dir={incomingSort.dir} href={incomingSort.hrefs.unit} />
                   <SortHeader label="Ordered" sortKey="quantity" current={incomingSort.sort} dir={incomingSort.dir} href={incomingSort.hrefs.quantity} align="right" />
                   <SortHeader label="Received" sortKey="received" current={incomingSort.sort} dir={incomingSort.dir} href={incomingSort.hrefs.received} align="right" />
                   <SortHeader label="Still expected" sortKey="remaining" current={incomingSort.sort} dir={incomingSort.dir} href={incomingSort.hrefs.remaining} align="right" />
@@ -256,7 +249,6 @@ export default async function InventoryPage({
                         {row.item_name}
                       </Link>
                     </td>
-                    <td className="py-1 pr-4">{row.item_unit}</td>
                     <td className="py-1 pr-4 text-right" data-testid="incoming-overview-ordered">
                       {trimQuantity(row.quantity)}
                     </td>
