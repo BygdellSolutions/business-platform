@@ -18,7 +18,7 @@ from app.core.query import contains_pattern, in_chunks
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import scoped_select
 from app.models import Customer, Role
-from app.modules.invoicing import credits, delivery, emailing, filters, payments, receipts, returns, service
+from app.modules.invoicing import credits, delivery, emailing, filters, payments, receipt_emailing, receipts, returns, service
 from app.modules.invoicing import sent as sent_mod  # (the list has a parameter called `sent`)
 from app.modules.invoicing.pdf import service as pdf_service
 from app.modules.invoicing.pdf.document import DocumentTooLarge
@@ -800,4 +800,5 @@ def delete_invoice(
     service.delete_draft(db, ctx, invoice_id, if_match)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
+router.include_router(receipt_emailing.router)  # /api/invoices/receipts/{order}/email, /emails, /email-draft
 router.include_router(emailing.router)  # /api/invoices/{id}/email and /emails (an invoice goes to the customer as a PDF attachment)

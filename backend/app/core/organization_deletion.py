@@ -29,6 +29,7 @@ TABLES_IN_DELETE_ORDER = (
     "credit_note_lines",
     "credit_notes",
     "invoice_emails",
+    "receipt_emails",
     "invoice_payments",
     "invoice_pdfs",
     "invoice_vat_rows",

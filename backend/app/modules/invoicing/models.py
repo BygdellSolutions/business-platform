@@ -373,6 +373,34 @@ class InvoiceEmail(TenantOwned, Authored, Base):
     error: Mapped[str | None] = mapped_column(String(32))
 
 
+class ReceiptEmail(TenantOwned, Authored, Base):
+    """One attempt to email the receipt of an order paid at the counter: the same log as `InvoiceEmail`, for a receipt (which belongs to its order)."""
+
+    __tablename__ = "receipt_emails"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "transaction_id"],
+            ["transactions.organization_id", "transactions.id"],
+            ondelete="RESTRICT",
+            name="fk_receipt_emails_transaction_same_organization",
+        ),
+        CheckConstraint("status IN ('sent', 'queued', 'failed')", name="ck_receipt_emails_status"),
+        CheckConstraint("pdf_sha256 ~ '^[0-9a-f]{64}$'", name="ck_receipt_emails_hash_shape"),
+        Index("ix_receipt_emails_transaction", "organization_id", "transaction_id", "created_at"),
+        Index("ix_receipt_emails_organization_created", "organization_id", "created_at"),
+    )
+
+    transaction_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    to_email: Mapped[str] = mapped_column(String(254))
+    reply_to: Mapped[str | None] = mapped_column(String(254))
+    sender_address: Mapped[str] = mapped_column(String(254))
+    subject: Mapped[str] = mapped_column(String(200))
+    note: Mapped[str | None] = mapped_column(String(2000))
+    pdf_sha256: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(10))
+    error: Mapped[str | None] = mapped_column(String(32))
+
+
 PAYMENT_METHODS = ("bankgiro", "plusgiro", "bank_transfer", "swish", "card", "cash", "other")
 
 

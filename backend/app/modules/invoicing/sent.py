@@ -7,10 +7,12 @@ that failed does not count: the customer did not get it.
 import uuid
 from collections.abc import Sequence
 
-from sqlalchemy import exists, select
+from datetime import datetime
+
+from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session
 
-from app.modules.invoicing.models import Invoice, InvoiceEmail
+from app.modules.invoicing.models import Invoice, InvoiceEmail, ReceiptEmail
 
 
 def emailed_invoice_ids(db: Session, organization_id: uuid.UUID, invoice_ids: Sequence[uuid.UUID]) -> set[uuid.UUID]:
@@ -28,3 +30,11 @@ def emailed_invoice_ids(db: Session, organization_id: uuid.UUID, invoice_ids: Se
 def emailed_expression():
     """True for an invoice of the surrounding query that has been emailed (for filtering a list by it)."""
     return exists().where(InvoiceEmail.organization_id == Invoice.organization_id, InvoiceEmail.invoice_id == Invoice.id, InvoiceEmail.status.in_(("sent", "queued")))
+
+
+def emails_since(db: Session, organization_id: uuid.UUID, since: datetime) -> int:
+    """Every email attempt of the organization since `since`, invoices and receipts together, failed ones included (its daily allowance)."""
+    total = 0
+    for model in (InvoiceEmail, ReceiptEmail):
+        total += db.scalar(select(func.count()).select_from(model).where(model.organization_id == organization_id, model.created_at >= since)) or 0
+    return total

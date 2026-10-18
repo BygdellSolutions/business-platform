@@ -36,6 +36,7 @@ from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import create_scoped, get_scoped_or_404, scoped_select
 from app.models import Organization, Role, User
 from app.modules.invoicing import ocr
+from app.modules.invoicing import sent as sent_mod
 from app.modules.invoicing.models import Invoice, InvoiceEmail, InvoiceStatus
 from app.modules.invoicing.pdf import service as pdf_service
 
@@ -206,8 +207,7 @@ def email_invoice(
         )
     invoice = _issued_invoice(db, ctx, invoice_id)
 
-    since = clock.utcnow() - timedelta(days=1)
-    sent_today = db.scalar(select(func.count()).select_from(InvoiceEmail).where(InvoiceEmail.organization_id == ctx.organization_id, InvoiceEmail.created_at >= since)) or 0
+    sent_today = sent_mod.emails_since(db, ctx.organization_id, clock.utcnow() - timedelta(days=1))  # invoices and receipts share the allowance
     if sent_today >= settings.invoice_emails_per_day:
         raise HTTPException(
             status.HTTP_429_TOO_MANY_REQUESTS,
