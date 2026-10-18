@@ -111,7 +111,7 @@ export default async function Dashboard({
               tone="attention"
             />
           )}
-          <SummaryCard title="Draft invoices" count={invoicing.draft_invoices} href={`${base}/invoices?status=draft`} testId="card-draft-invoices" />
+          <SummaryCard title="Draft invoices" count={invoicing.draft_invoices} href={`${base}/invoices?state=draft`} testId="card-draft-invoices" />
           <SummaryCard
             title="Past due date"
             count={invoicing.past_due.count}
@@ -189,7 +189,7 @@ export default async function Dashboard({
             title="Partially paid"
             count={invoicing.partially_paid.count}
             amounts={invoicing.partially_paid.amounts}
-            href={`${base}/invoices?payment=partially_paid`}
+            href={`${base}/invoices?state=partially_paid`}
             note="Some paid; the amount is what is left."
             testId="card-partially-paid"
           />
@@ -235,7 +235,7 @@ export default async function Dashboard({
             title="Invoiced"
             count={invoicing.issued_this_month.count}
             amounts={invoicing.issued_this_month.amounts}
-            href={`${base}/invoices?status=issued&date_from=${sales.month_start}&date_to=${sales.month_end}`}
+            href={`${base}/invoices?state=issued&date_from=${sales.month_start}&date_to=${sales.month_end}`}
             note="Issued invoices, including VAT."
             testId="card-invoiced"
           />
@@ -275,7 +275,7 @@ export default async function Dashboard({
             title="Invoiced"
             count={invoicing.issued_this_year.count}
             amounts={invoicing.issued_this_year.amounts}
-            href={`${base}/invoices?status=issued&date_from=${sales.year_start}&date_to=${sales.year_end}`}
+            href={`${base}/invoices?state=issued&date_from=${sales.year_start}&date_to=${sales.year_end}`}
             note="Issued invoices, including VAT."
             testId="card-year-invoiced"
           />

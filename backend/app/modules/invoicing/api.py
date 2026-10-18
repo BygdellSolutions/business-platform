@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
-from sqlalchemy import Select, and_, case, exists, func, or_, select
+from sqlalchemy import Select, and_, case, exists, func, not_, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import Pagination, Sorting, pagination, sorted_by, sorting
@@ -18,7 +18,8 @@ from app.core.query import contains_pattern, in_chunks
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import scoped_select
 from app.models import Customer, Role
-from app.modules.invoicing import credits, delivery, emailing, payments, receipts, returns, sent, service
+from app.modules.invoicing import credits, delivery, emailing, filters, payments, receipts, returns, service
+from app.modules.invoicing import sent as sent_mod  # (the list has a parameter called `sent`)
 from app.modules.invoicing.pdf import service as pdf_service
 from app.modules.invoicing.pdf.document import DocumentTooLarge
 from app.modules.invoicing.pdf.fonts import UnsupportedCharacters
@@ -217,6 +218,12 @@ def list_invoiceable_transactions(
 
 
 # --- invoices ------------------------------------------------------------------------------------------------------
+
+
+@router.get("/filter-options", response_model=dict[str, list[dict[str, str]]])
+def invoice_filter_options(ctx: TenantContext = Depends(get_tenant_context)) -> dict[str, list[dict[str, str]]]:
+    """The values of the invoice list's filters and the words for them, from the one definition the filters themselves use (see filters.py)."""
+    return filters.options()
 
 
 @router.get("/summary", response_model=InvoicingSummary, dependencies=[Depends(rate_limit.heavy)])
@@ -465,7 +472,15 @@ def list_invoices(
     date_from: date | None = None,
     date_to: date | None = None,
     q: str | None = Query(default=None, max_length=255, description="Customer name or invoice number contains"),
-    payment: Literal["unpaid", "partially_paid", "paid", "open", "overdue", "not_yet_due", "refund_due"] | None = Query(
+    state: filters.InvoiceState | None = Query(
+        default=None,
+        description="The invoice's status as its badge says it: draft, issued (not a draft), unpaid, partially_paid, paid, credited (fully) or partly_credited. "
+        "A fully credited invoice is 'credited' only.",
+    ),
+    sent: filters.SentFilter | None = Query(
+        default=None, description="Issued invoices still waiting to be settled that have (sent) or have not (not_sent) been emailed to the customer"
+    ),
+    payment: filters.PaymentFilter | filters.LegacyPaymentFilter | None = Query(
         default=None,
         description="Issued invoices by payment state (after credit notes); 'open' is anything not fully paid, 'overdue' "
         "open and past the due date, 'not_yet_due' open with the due date today or later (or none), 'refund_due' paid "
@@ -503,6 +518,26 @@ def list_invoices(
                     query = query.where(Invoice.due_date.is_not(None), Invoice.due_date < today)
                 else:
                     query = query.where(or_(Invoice.due_date.is_(None), Invoice.due_date >= today))
+    if state is not None or sent is not None:
+        paid_now, owed_now, credited_now = payments.paid_sum_expression(), payments.owed_expression(), credits.credited_sum_expression()
+        fully_credited = and_(credited_now > 0, credited_now >= Invoice.gross_amount)
+        if state in ("draft", "issued"):
+            query = query.where(Invoice.status == (InvoiceStatus.DRAFT if state == "draft" else InvoiceStatus.ISSUED))
+        elif state == "credited":
+            query = query.where(Invoice.status == InvoiceStatus.ISSUED, fully_credited)
+        elif state == "partly_credited":
+            query = query.where(Invoice.status == InvoiceStatus.ISSUED, credited_now > 0, credited_now < Invoice.gross_amount)
+        elif state is not None:  # unpaid, partially_paid, paid: of the invoices that are not credited away, as the badge says
+            query = query.where(Invoice.status == InvoiceStatus.ISSUED, not_(fully_credited))
+            if state == "unpaid":
+                query = query.where(paid_now <= 0, paid_now < owed_now)
+            elif state == "partially_paid":
+                query = query.where(paid_now > 0, paid_now < owed_now)
+            else:
+                query = query.where(paid_now >= owed_now)
+        if sent is not None:  # the badge "Sent" is shown while the invoice is waiting to be settled; "not sent" is the same set without the email
+            query = query.where(Invoice.status == InvoiceStatus.ISSUED, not_(fully_credited), paid_now < owed_now)
+            query = query.where(sent_mod.emailed_expression() if sent == "sent" else not_(sent_mod.emailed_expression()))
     if paid_from is not None or paid_to is not None:
         # The dashboard's "Paid" figures: invoices that received a payment in the period (reversals are not payments).
         dated = [
@@ -550,7 +585,7 @@ def list_invoices(
     refunded = payments.refunded_amounts(db, ctx.organization_id, [invoice.id for invoice in invoices])
     open_returns = returns.open_counts(db, ctx.organization_id, [invoice.id for invoice in invoices])
     follow_ups = returns.next_follow_ups(db, ctx.organization_id, [invoice.id for invoice in invoices])
-    emailed = sent.emailed_invoice_ids(db, ctx.organization_id, [invoice.id for invoice in invoices])
+    emailed = sent_mod.emailed_invoice_ids(db, ctx.organization_id, [invoice.id for invoice in invoices])
     # "Due today?" is a reminder about a return case, not part of any invoice document; the organization's day (its
     # time zone, a live record) is read only when a listed invoice has an open return, so reading invoices without
     # one touches no live table (tests/test_invoices_historical.py).

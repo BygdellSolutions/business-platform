@@ -7,10 +7,10 @@ that failed does not count: the customer did not get it.
 import uuid
 from collections.abc import Sequence
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
-from app.modules.invoicing.models import InvoiceEmail
+from app.modules.invoicing.models import Invoice, InvoiceEmail
 
 
 def emailed_invoice_ids(db: Session, organization_id: uuid.UUID, invoice_ids: Sequence[uuid.UUID]) -> set[uuid.UUID]:
@@ -23,3 +23,8 @@ def emailed_invoice_ids(db: Session, organization_id: uuid.UUID, invoice_ids: Se
             .distinct()
         )
     )
+
+
+def emailed_expression():
+    """True for an invoice of the surrounding query that has been emailed (for filtering a list by it)."""
+    return exists().where(InvoiceEmail.organization_id == Invoice.organization_id, InvoiceEmail.invoice_id == Invoice.id, InvoiceEmail.status.in_(("sent", "queued")))

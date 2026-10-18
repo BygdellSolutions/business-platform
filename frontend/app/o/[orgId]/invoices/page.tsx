@@ -10,7 +10,7 @@ import { Pagination } from "@/components/ui/Pagination";
 import { SortHeader } from "@/components/ui/SortHeader";
 import { CustomerFilter } from "@/features/customers/CustomerFilter";
 import { InvoiceStatusBadge, RETURN_OPEN_CLASS } from "@/features/invoices/InvoiceStatusBadge";
-import type { Customer, InvoiceSummary } from "@/lib/api/types";
+import type { Customer, InvoiceFilterOptions, InvoiceSummary } from "@/lib/api/types";
 import { requireCredential } from "@/lib/auth/credential";
 import { formatShortDate } from "@/lib/dates";
 import { backendQuery, listHref, sortHref, pageOf, parseListParams, type ExtraSpec } from "@/lib/list-params";
@@ -18,12 +18,30 @@ import { serverRead, serverReadOrNull } from "@/lib/server-api";
 
 const SORTS = ["number", "customer", "invoice_date", "due_date", "status", "returns", "currency", "net", "vat", "gross", "paid", "outstanding", "credited", "refunded"] as const;
 
-const STATUSES = ["draft", "issued"] as const;
-// Exactly the filters GET /api/invoices supports: status, customer, invoice date range, search (customer name or number).
-const PAYMENTS = ["open", "overdue", "not_yet_due", "unpaid", "partially_paid", "paid", "refund_due"] as const;
-const CREDITS = ["any", "partly_credited", "credited"] as const;
-const RETURNS = ["open", "follow_up_due"] as const;
-const EXTRAS: Record<string, ExtraSpec> = { status: STATUSES, payment: PAYMENTS, credit: CREDITS, returns: RETURNS, date_from: "date", date_to: "date", paid_from: "date", paid_to: "date" };
+/**
+ * The filters GET /api/invoices supports. The CHOICES of the four drop-downs (status, sent, payment, returns) are not written here: they are
+ * asked of the backend (`/api/invoices/filter-options`), which builds them from the very types the list accepts, so this page can never offer
+ * a status the invoices no longer have or miss one they have gained.
+ */
+const FILTERS = ["state", "sent", "payment", "returns"] as const;
+const DATES: Record<string, ExtraSpec> = { date_from: "date", date_to: "date", paid_from: "date", paid_to: "date" };
+
+/** One drop-down of the filter row, its choices as the backend gave them (plus "All"). */
+function OptionFilter({ name, label, options, value }: { name: string; label: string; options: { value: string; label: string }[]; value: string | undefined }) {
+  return (
+    <label className={FILTER_LABEL}>
+      {label}
+      <select name={name} defaultValue={value ?? ""} className={CONTROL}>
+        <option value="">All</option>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
 
 /**
  * Invoices as FastAPI lists them. Every word and amount shown is the invoice's own stored content
@@ -40,7 +58,10 @@ export default async function InvoicesPage({
 }) {
   const { orgId } = await params;
   const raw = await searchParams;
-  const list = parseListParams(raw, [], ["customer_id"], EXTRAS, SORTS);
+  const options = await serverRead<InvoiceFilterOptions>(orgId, "/api/invoices/filter-options");
+  // What the address may carry is what the backend offers (an unknown word in the address is ignored, as before).
+  const extras: Record<string, ExtraSpec> = { ...DATES, ...Object.fromEntries(FILTERS.map((name) => [name, options[name].map((option) => option.value)])) };
+  const list = parseListParams(raw, [], ["customer_id"], extras, SORTS);
   const customerId = list.refs.customer_id;
   await requireCredential(`/o/${orgId}`);
 
@@ -70,44 +91,10 @@ export default async function InvoicesPage({
       )}
       <div className="panel flex flex-col gap-4">
         <ListFilters action={base} params={list} activeStatus={false}>
-          <label className={FILTER_LABEL}>
-            Status
-            <select name="status" defaultValue={list.extra.status ?? ""} className={CONTROL}>
-              <option value="">All</option>
-              <option value="draft">Draft</option>
-              <option value="issued">Issued</option>
-            </select>
-          </label>
-          <label className={FILTER_LABEL}>
-            Payment
-            <select name="payment" defaultValue={list.extra.payment ?? ""} className={CONTROL}>
-              <option value="">All</option>
-              <option value="open">Not fully paid</option>
-              <option value="overdue">Overdue</option>
-              <option value="not_yet_due">Not yet due</option>
-              <option value="unpaid">Unpaid</option>
-              <option value="partially_paid">Partially paid</option>
-              <option value="paid">Paid</option>
-              <option value="refund_due">Refund due</option>
-            </select>
-          </label>
-          <label className={FILTER_LABEL}>
-            Credit notes
-            <select name="credit" defaultValue={list.extra.credit ?? ""} className={CONTROL}>
-              <option value="">All</option>
-              <option value="any">Credited (all or part)</option>
-              <option value="partly_credited">Partly credited</option>
-              <option value="credited">Fully credited</option>
-            </select>
-          </label>
-          <label className={FILTER_LABEL}>
-            Returns
-            <select name="returns" defaultValue={list.extra.returns ?? ""} className={CONTROL}>
-              <option value="">All</option>
-              <option value="open">Return open</option>
-              <option value="follow_up_due">Follow-up due</option>
-            </select>
-          </label>
+          <OptionFilter name="state" label="Status" options={options.state} value={list.extra.state} />
+          <OptionFilter name="sent" label="Sent" options={options.sent} value={list.extra.sent} />
+          <OptionFilter name="payment" label="Payment" options={options.payment} value={list.extra.payment} />
+          <OptionFilter name="returns" label="Returns" options={options.returns} value={list.extra.returns} />
           <CustomerFilter key={`customer-${customerId ?? ""}`} name="customer_id" label="Customer" initial={initialCustomer} />
           <label className={FILTER_LABEL}>
             From

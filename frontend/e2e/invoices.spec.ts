@@ -266,7 +266,7 @@ test.describe("issuing", () => {
     await expect(draftRow.getByTestId("invoice-due")).toHaveText("—");
     await expect(draftRow.getByTestId("invoice-net")).toHaveText(draft.net_amount);
     // Only filters the backend supports, applied by the backend.
-    await page.goto(`${list(world)}?status=issued`);
+    await page.goto(`${list(world)}?state=issued`);
     await expect(page.getByTestId("invoice-row")).toHaveCount(1);
     await page.goto(`${list(world)}?q=anna`);
     await expect(page.getByTestId("invoice-row")).toHaveCount(1);

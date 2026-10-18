@@ -1970,6 +1970,19 @@ export interface InventorySummary {
 
 /** A note on a horse (GET /api/horses/{id}/notes), newest first. */
 
+/** The choices of the invoice list's drop-downs, with the words to show, as the backend defines them (so the screen never hard-codes a status). */
+export interface InvoiceFilterOptions {
+
+  state: { value: string; label: string }[];
+
+  sent: { value: string; label: string }[];
+
+  payment: { value: string; label: string }[];
+
+  returns: { value: string; label: string }[];
+
+}
+
 /** The send form's starting point: the customer's address and the organization's subject and message with this invoice's facts filled in. */
 export interface InvoiceEmailDraft {
 

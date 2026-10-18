@@ -50,7 +50,7 @@ test("a paid invoice is credited in full, the refund is recorded, and the credit
   await expect(payments.getByTestId("refund-due-amount")).toHaveCount(0);
   await expect(payments.getByTestId("payment-row").last()).toContainText("Refund");
 
-  await page.goto(`/o/${world.orgId}/invoices?credit=credited`);
+  await page.goto(`/o/${world.orgId}/invoices?state=credited`);
   await expect(page.getByTestId("invoice-row")).toHaveCount(1);
   // The overview shows how much was credited and paid back, not only that it happened.
   const gross = await page.getByTestId("invoice-gross").textContent();
