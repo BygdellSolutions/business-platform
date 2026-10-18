@@ -199,6 +199,9 @@ function TimeGrid(props: CalendarProps & { columns: Column[]; clashes: Set<strin
   const hours = Array.from({ length: last - first }, (_, index) => first + index);
   const slots = Array.from({ length: ((last - first) * 60) / SLOT_MINUTES }, (_, index) => first * 60 + index * SLOT_MINUTES);
   const px = (minutes: number) => ((minutes - first * 60) / 60) * HOUR_PX;
+  // The line for "now" is drawn where the page was made (the server's clock), in today's column only, and only inside the hours shown.
+  const now = localParts(new Date().toISOString(), zone);
+  const nowShown = now.minutes >= first * 60 && now.minutes < last * 60;
 
   if (columns.length === 0) return <p data-testid="calendar-empty">There is nobody to show. Add colleagues under Members.</p>;
 
@@ -236,6 +239,11 @@ function TimeGrid(props: CalendarProps & { columns: Column[]; clashes: Set<strin
                   data-testid="slot"
                 />
               ))}
+            {nowShown && column.day === now.day && (
+              <div className="pointer-events-none absolute inset-x-0 z-10 border-t-2 border-red-600" style={{ top: px(now.minutes) }} data-testid="now-line" aria-hidden>
+                <span className="absolute -top-[5px] -left-1 size-2 rounded-full bg-red-600" />
+              </div>
+            )}
             {blocks.map(({ item, top, height, lane, lanes }) => (
               <Block key={`${item.id}-${column.day}`} {...props} day={column.day} appointment={item} top={px(top)} height={Math.max((height / 60) * HOUR_PX, 22)} lane={lane} lanes={lanes} clash={clashes.has(item.id)} showPerson={showPerson} />
             ))}

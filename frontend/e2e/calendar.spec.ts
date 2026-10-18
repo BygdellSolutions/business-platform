@@ -189,3 +189,20 @@ test("a stable books several horses in one appointment, and the calendar shows t
   await page.goto(`/o/${world.orgId}/calendar?${WEEK}`);
   await expect(page.getByTestId("appointment-horses")).toHaveText("Bella, Kalle");
 });
+
+test("on a phone the calendar opens on the day, unless a view is chosen in the address", async ({ page, context }) => {
+  world = createWorld({ label: "CalendarPhone" });
+  await signIn(context, world.email);
+  await page.setViewportSize({ width: 390, height: 800 });
+
+  await page.goto(`/o/${world.orgId}/calendar`);
+  await expect(page).toHaveURL(/view=day/);
+  await expect(page.getByTestId("calendar")).toHaveAttribute("data-view", "day");
+
+  await page.goto(`/o/${world.orgId}/calendar?view=month`);
+  await expect(page.getByTestId("calendar")).toHaveAttribute("data-view", "month"); // the person's own choice wins
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(`/o/${world.orgId}/calendar`);
+  await expect(page.getByTestId("calendar")).toHaveAttribute("data-view", "week"); // a wide screen keeps the week
+});

@@ -1,4 +1,7 @@
+import { Suspense } from "react";
+
 import { Calendar } from "@/features/calendar/Calendar";
+import { PhoneDefaultView } from "@/features/calendar/PhoneDefaultView";
 import { readActiveRole } from "@/lib/active-role";
 import type { Appointment, Colleague, Organization } from "@/lib/api/types";
 import { VIEWS, isRealDay, windowOf, type CalendarView } from "@/lib/calendar";
@@ -40,6 +43,9 @@ export default async function CalendarPage({
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-[28px] leading-tight font-semibold tracking-tight">Scheduling</h1>
+      <Suspense fallback={null}>
+        <PhoneDefaultView />
+      </Suspense>
       <Calendar orgId={orgId} view={view} day={day} today={today} who={who} people={people} appointments={appointments} zone={zone} canWrite={canWriteRecords(role)} />
     </div>
   );
