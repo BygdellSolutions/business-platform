@@ -5,6 +5,7 @@ All notable changes to `business-platform` will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- The order page's actions look like the invoice's: "Paid now", "Invoice", "Reopen" and "Download receipt" have the soft accent tint and an icon, and "Paid now" asks how it was paid (Swish, Card, Cash, with the not-everything-is-in-stock warning) in a pop-up window instead of swapping the buttons in place.
 - The invoice number is said once on the invoice, in the heading ("Invoice 1011"); the boxed copy of the number beside it is gone.
 - The buttons on an invoice (Download PDF, Send invoice by email, Record payment, Returns, Credit notes) have a soft accent tint, a thin accent edge and a small icon, so they read as things to press instead of looking like plain content; light and dark checked on screen.
 - The invoice email's subject is just "Faktura 1001" / "Invoice 1001": the organization is already the sender's name at the top of the mail, so "från Org" is no longer repeated in the subject.

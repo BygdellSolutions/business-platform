@@ -4,8 +4,9 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { useOrgId } from "@/components/shell/org-context";
-import { Button, SECONDARY_LINK } from "@/components/ui/Button";
+import { Button, ButtonIcon, ICONS, SECONDARY_LINK } from "@/components/ui/Button";
 import { ConfirmButton } from "@/components/ui/ConfirmButton";
+import { Modal } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Notice";
 import { useEditor } from "@/features/transactions/editor-context";
 import { classify } from "@/features/transactions/failures";
@@ -122,43 +123,15 @@ export function LifecycleBar({ canInvoice = true, invoiceState = "none" }: { can
   return (
     <section aria-label="Actions" data-testid="lifecycle" className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-3">
-        {status === "draft" && !choosingMethod && (
-          <Button type="button" disabled={blocked} onClick={() => setChoosingMethod(true)} data-testid="pay-now">
+        {status === "draft" && (
+          <Button type="button" variant="tonal" disabled={blocked} onClick={() => setChoosingMethod(true)} data-testid="pay-now">
+            <ButtonIcon path={ICONS.payment} />
             {running === "pay" ? PROGRESS.pay : "Paid now"}
           </Button>
         )}
-        {status === "draft" && choosingMethod && (
-          <span className="flex flex-wrap items-center gap-2" role="group" aria-label="How was it paid?" data-testid="payment-methods">
-            <span className="text-sm">Paid by</span>
-            {PAYMENT_METHODS.map((method) => (
-              <Button key={method.value} type="button" disabled={blocked} onClick={() => void payNow(method.value)} data-testid={`pay-${method.value}`}>
-                {method.label}
-              </Button>
-            ))}
-            <button type="button" className={SECONDARY_LINK} onClick={() => setChoosingMethod(false)}>
-              Back
-            </button>
-          </span>
-        )}
-        {status === "draft" && choosingMethod && short.length > 0 && (
-          <div className="basis-full">
-          <Notice tone="warning" testId="pay-now-shortage">
-            <p className="font-medium">Not everything is in stock.</p>
-            {short.map((demand) => {
-              const line = transaction.lines.find((entry) => entry.item_id === demand.item_id);
-              return (
-                <p key={demand.item_id}>
-                  {line?.description}: {trimQuantity(demand.available)} of {trimQuantity(demand.requested)} in stock (unit: {line?.unit}). The customer
-                  pays for all {trimQuantity(demand.requested)} now, takes {trimQuantity(demand.available)} today and gets {trimQuantity(demand.shortage)}{" "}
-                  when they arrive.
-                </p>
-              );
-            })}
-          </Notice>
-          </div>
-        )}
         {status === "draft" && !walkIn && (
-          <Button type="button" disabled={blocked} onClick={() => void invoice()} data-testid="invoice-order">
+          <Button type="button" variant="tonal" disabled={blocked} onClick={() => void invoice()} data-testid="invoice-order">
+            <ButtonIcon path={ICONS.invoice} />
             {running === "invoice" ? PROGRESS.invoice : canInvoice ? "Invoice" : "Complete for invoicing"}
           </Button>
         )}
@@ -168,7 +141,8 @@ export function LifecycleBar({ canInvoice = true, invoiceState = "none" }: { can
           </Button>
         )}
         {status === "completed" && !paid && (
-          <Button type="button" disabled={blocked} onClick={() => void step("reopen")} data-testid="reopen">
+          <Button type="button" variant="tonal" disabled={blocked} onClick={() => void step("reopen")} data-testid="reopen">
+            <ButtonIcon path={ICONS.reopen} />
             {running === "reopen" ? PROGRESS.reopen : "Reopen"}
           </Button>
         )}
@@ -186,11 +160,43 @@ export function LifecycleBar({ canInvoice = true, invoiceState = "none" }: { can
           <span className="flex flex-wrap items-center gap-3 text-sm" data-testid="paid-at-counter">
             Paid by {PAYMENT_METHODS.find((method) => method.value === transaction.payment_method)?.label ?? transaction.payment_method} · Receipt{" "}
             {transaction.receipt_number_text}
-            <DownloadPdf invoice={{ id: transaction.id, status: "issued" }} path={`/invoices/receipts/${transaction.id}/pdf`} label="Download receipt" />
+            <DownloadPdf invoice={{ id: transaction.id, status: "issued" }} path={`/invoices/receipts/${transaction.id}/pdf`} label="Download receipt" tonal />
           </span>
         )}
         {status === "cancelled" && <span className="text-sm text-zinc-500">No further actions.</span>}
       </div>
+      {/* "Paid now" asks how it was paid in a pop-up window (like Record payment on an invoice); the content is only there while it is open. */}
+      {status === "draft" && (
+        <Modal open={choosingMethod} onClose={() => setChoosingMethod(false)} title="Paid now: how was it paid?" testId="pay-now-dialog">
+          {choosingMethod && (
+            <div className="flex flex-col gap-3">
+              <span className="flex flex-wrap items-center gap-2" role="group" aria-label="How was it paid?" data-testid="payment-methods">
+                <span className="text-sm">Paid by</span>
+                {PAYMENT_METHODS.map((method) => (
+                  <Button key={method.value} type="button" variant="tonal" disabled={blocked || running !== null} onClick={() => void payNow(method.value)} data-testid={`pay-${method.value}`}>
+                    {method.label}
+                  </Button>
+                ))}
+              </span>
+              {short.length > 0 && (
+                <Notice tone="warning" testId="pay-now-shortage">
+                  <p className="font-medium">Not everything is in stock.</p>
+                  {short.map((demand) => {
+                    const line = transaction.lines.find((entry) => entry.item_id === demand.item_id);
+                    return (
+                      <p key={demand.item_id}>
+                        {line?.description}: {trimQuantity(demand.available)} of {trimQuantity(demand.requested)} in stock (unit: {line?.unit}). The customer
+                        pays for all {trimQuantity(demand.requested)} now, takes {trimQuantity(demand.available)} today and gets {trimQuantity(demand.shortage)}{" "}
+                        when they arrive.
+                      </p>
+                    );
+                  })}
+                </Notice>
+              )}
+            </div>
+          )}
+        </Modal>
+      )}
       {status === "draft" && walkIn && (
         <p className="text-sm text-zinc-500" data-testid="walk-in-hint">
           A walk-in customer pays at the counter; choose a named customer to invoice instead.

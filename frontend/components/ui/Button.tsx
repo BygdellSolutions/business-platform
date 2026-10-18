@@ -33,6 +33,8 @@ export const ICONS = {
   payment: "M3 7h18v10H3zM3 11h18M7 15h3",
   returns: "M9 7H5v4M5 7l3-3M5 11a7 7 0 1 1 2 5",
   credit: "M7 3h8l4 4v14H7zM15 3v5h4M10 13h6M10 17h4",
+  invoice: "M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6",
+  reopen: "M4 12a8 8 0 1 0 3-6.2M4 4v5h5",
 } as const;
 
 export function Button({
