@@ -15,7 +15,7 @@ test.afterEach(() => {
   other?.cleanup();
 });
 
-const WEEK = "view=week&date=2026-10-19"; // Monday 19 October 2026 (the organization has no time zone set, so times are UTC)
+const WEEK = "view=week&date=2030-10-21"; // Monday 21 October 2030 (the organization has no time zone set, so times are UTC)
 
 async function book(context: BrowserContext, orgId: string, body: Record<string, unknown>) {
   const response = await context.request.post(bffUrl(orgId, "/appointments"), { data: { practitioner_user_id: await currentUserId(context, orgId), ...body } });
@@ -33,7 +33,7 @@ test("an appointment is booked, changed, cancelled and deleted in the browser", 
   await signIn(context, world.email);
 
   await page.goto(`/o/${world.orgId}/calendar?${WEEK}`);
-  await expect(page.getByTestId("calendar-title")).toHaveText("19–25 October 2026");
+  await expect(page.getByTestId("calendar-title")).toHaveText("21–27 October 2030");
   await expect(page.getByTestId("appointment")).toHaveCount(0);
 
   await page.getByTestId("new-appointment").click();
@@ -64,7 +64,7 @@ test("an appointment is booked, changed, cancelled and deleted in the browser", 
   await page.goto(`/o/${world.orgId}/calendar?${WEEK}`);
   await expect(page.getByTestId("appointment")).toHaveCount(0); // a cancelled appointment is not shown
 
-  const [mine] = await (await context.request.get(bffUrl(world.orgId, "/appointments?from=2026-10-19T00:00:00Z&to=2026-10-26T00:00:00Z&include_cancelled=true"))).json();
+  const [mine] = await (await context.request.get(bffUrl(world.orgId, "/appointments?from=2030-10-21T00:00:00Z&to=2030-10-28T00:00:00Z&include_cancelled=true"))).json();
   await page.goto(`/o/${world.orgId}/calendar/${mine.id}`);
   await page.getByTestId("restore").click();
   await expect(page.getByTestId("saved")).toBeVisible();
@@ -81,11 +81,11 @@ test("the day shows a column per person, the week and month show everyone, and a
   world.addMember("employee");
   await signIn(context, world.email);
   const [colleague, owner] = await people(context, world.orgId); // by name: employee, owner
-  await book(context, world.orgId, { title: "Owner's visit", starts_at: "2026-10-19T08:00:00Z", ends_at: "2026-10-19T09:00:00Z", practitioner_user_id: owner.user_id });
-  await book(context, world.orgId, { title: "Colleague's visit", starts_at: "2026-10-19T08:30:00Z", ends_at: "2026-10-19T09:30:00Z", practitioner_user_id: colleague.user_id });
-  await book(context, world.orgId, { title: "Third visit", starts_at: "2026-10-20T10:00:00Z", ends_at: "2026-10-20T11:00:00Z", practitioner_user_id: colleague.user_id });
+  await book(context, world.orgId, { title: "Owner's visit", starts_at: "2030-10-21T08:00:00Z", ends_at: "2030-10-21T09:00:00Z", practitioner_user_id: owner.user_id });
+  await book(context, world.orgId, { title: "Colleague's visit", starts_at: "2030-10-21T08:30:00Z", ends_at: "2030-10-21T09:30:00Z", practitioner_user_id: colleague.user_id });
+  await book(context, world.orgId, { title: "Third visit", starts_at: "2030-10-22T10:00:00Z", ends_at: "2030-10-22T11:00:00Z", practitioner_user_id: colleague.user_id });
 
-  await page.goto(`/o/${world.orgId}/calendar?view=day&date=2026-10-19`);
+  await page.goto(`/o/${world.orgId}/calendar?view=day&date=2030-10-21`);
   await expect(page.getByTestId("column-heading")).toHaveText([colleague.name, owner.name]);
   await expect(page.getByTestId("column").first().getByTestId("appointment")).toHaveText(/Colleague's visit/);
   await expect(page.getByTestId("column").last().getByTestId("appointment")).toHaveText(/Owner's visit/);
@@ -96,11 +96,11 @@ test("the day shows a column per person, the week and month show everyone, and a
   await expect(page.getByTestId("appointment")).toHaveCount(1);
   await expect(page.getByTestId("appointment")).toContainText("Owner's visit");
 
-  await page.goto(`/o/${world.orgId}/calendar?view=month&date=2026-10-19`);
+  await page.goto(`/o/${world.orgId}/calendar?view=month&date=2030-10-21`);
   await expect(page.getByTestId("appointment")).toHaveCount(3);
-  await expect(page.getByTestId("month-day").filter({ hasText: "Third visit" })).toHaveAttribute("data-day", "2026-10-20");
+  await expect(page.getByTestId("month-day").filter({ hasText: "Third visit" })).toHaveAttribute("data-day", "2030-10-22");
   await page.getByTestId("calendar-next").click();
-  await expect(page.getByTestId("calendar-title")).toHaveText("November 2026");
+  await expect(page.getByTestId("calendar-title")).toHaveText("November 2030");
   await expect(page.getByTestId("appointment")).toHaveCount(0);
 });
 
@@ -109,11 +109,11 @@ test("two bookings of one person that overlap are marked, two people at once are
   world.addMember("employee");
   await signIn(context, world.email);
   const [colleague, owner] = await people(context, world.orgId);
-  await book(context, world.orgId, { title: "First", starts_at: "2026-10-19T08:00:00Z", ends_at: "2026-10-19T09:00:00Z", practitioner_user_id: owner.user_id });
-  await book(context, world.orgId, { title: "Second", starts_at: "2026-10-19T08:30:00Z", ends_at: "2026-10-19T09:30:00Z", practitioner_user_id: owner.user_id });
-  await book(context, world.orgId, { title: "Elsewhere", starts_at: "2026-10-19T08:30:00Z", ends_at: "2026-10-19T09:30:00Z", practitioner_user_id: colleague.user_id });
+  await book(context, world.orgId, { title: "First", starts_at: "2030-10-21T08:00:00Z", ends_at: "2030-10-21T09:00:00Z", practitioner_user_id: owner.user_id });
+  await book(context, world.orgId, { title: "Second", starts_at: "2030-10-21T08:30:00Z", ends_at: "2030-10-21T09:30:00Z", practitioner_user_id: owner.user_id });
+  await book(context, world.orgId, { title: "Elsewhere", starts_at: "2030-10-21T08:30:00Z", ends_at: "2030-10-21T09:30:00Z", practitioner_user_id: colleague.user_id });
 
-  await page.goto(`/o/${world.orgId}/calendar?view=day&date=2026-10-19`);
+  await page.goto(`/o/${world.orgId}/calendar?view=day&date=2030-10-21`);
   await expect(page.getByTestId("appointment").filter({ hasText: "First" })).toHaveAttribute("data-clash", "true");
   await expect(page.getByTestId("appointment").filter({ hasText: "Second" })).toHaveAttribute("data-clash", "true");
   await expect(page.getByTestId("appointment").filter({ hasText: "Elsewhere" })).not.toHaveAttribute("data-clash", "true");
@@ -123,7 +123,7 @@ test("another organization's appointments are invisible, and its detail page is 
   world = createWorld({ label: "Calendar A" });
   other = createWorld({ label: "Calendar B" });
   await signIn(context, other.email);
-  const theirs = await book(context, other.orgId, { title: "Secret treatment", starts_at: "2026-10-19T08:00:00Z", ends_at: "2026-10-19T09:00:00Z" });
+  const theirs = await book(context, other.orgId, { title: "Secret treatment", starts_at: "2030-10-21T08:00:00Z", ends_at: "2030-10-21T09:00:00Z" });
   await signIn(context, world.email);
 
   await page.goto(`/o/${world.orgId}/calendar?${WEEK}`);
@@ -141,7 +141,7 @@ test("another organization's appointments are invisible, and its detail page is 
 test("a viewer sees the calendar but cannot book", async ({ page, context }) => {
   world = createWorld({ label: "Calendar viewer" });
   await signIn(context, world.email);
-  await book(context, world.orgId, { title: "Visible to all", starts_at: "2026-10-19T08:00:00Z", ends_at: "2026-10-19T09:00:00Z" });
+  await book(context, world.orgId, { title: "Visible to all", starts_at: "2030-10-21T08:00:00Z", ends_at: "2030-10-21T09:00:00Z" });
   await signIn(context, world.addMember("viewer"));
 
   await page.goto(`/o/${world.orgId}/calendar?${WEEK}`);
@@ -158,7 +158,7 @@ test("a stable books several horses in one appointment, and the calendar shows t
   const stable = await createCustomer(context, world.orgId, "Umeå HK");
   for (const name of ["Kalle", "Storm", "Bella"]) await createHorse(context, world.orgId, { name, owner_customer_id: stable.id });
 
-  await page.goto(`/o/${world.orgId}/calendar/new?date=2026-10-19&start=09:00`);
+  await page.goto(`/o/${world.orgId}/calendar/new?date=2030-10-21&start=09:00`);
   await page.getByLabel("Title", { exact: true }).fill("Stable day");
   await page.getByLabel("End time").fill("12:00");
   const addHorse = async (name: string) => {
@@ -178,7 +178,7 @@ test("a stable books several horses in one appointment, and the calendar shows t
   await page.getByTestId("submit").click();
 
   await expect(page.getByTestId("appointment-horses")).toHaveText("Bella, Kalle, Storm"); // by name
-  await page.goto(`/o/${world.orgId}/calendar?view=month&date=2026-10-19`);
+  await page.goto(`/o/${world.orgId}/calendar?view=month&date=2030-10-21`);
   await expect(page.getByTestId("appointment")).toContainText("Bella, Kalle, Storm");
 
   await page.getByTestId("appointment").click();
@@ -205,4 +205,22 @@ test("on a phone the calendar opens on the day, unless a view is chosen in the a
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto(`/o/${world.orgId}/calendar`);
   await expect(page.getByTestId("calendar")).toHaveAttribute("data-view", "week"); // a wide screen keeps the week
+});
+
+test("a done appointment cannot be cancelled or deleted, an upcoming one can", async ({ page, context }) => {
+  world = createWorld({ label: "CalendarDone" });
+  await signIn(context, world.email);
+  const old = await book(context, world.orgId, { title: "Old visit", starts_at: "2020-10-19T08:00:00Z", ends_at: "2020-10-19T09:00:00Z" });
+  const coming = await book(context, world.orgId, { title: "Coming visit", starts_at: "2030-10-21T08:00:00Z", ends_at: "2030-10-21T09:00:00Z" });
+
+  await page.goto(`/o/${world.orgId}/calendar/${old.id}`);
+  await expect(page.getByTestId("done-locked")).toBeVisible();
+  await expect(page.getByTestId("cancel-appointment")).toHaveCount(0);
+  await expect(page.getByTestId("delete-appointment")).toBeDisabled();
+  await expect(page.getByLabel("Title", { exact: true })).toBeEditable(); // its details can still be corrected
+
+  await page.goto(`/o/${world.orgId}/calendar/${coming.id}`);
+  await expect(page.getByTestId("done-locked")).toHaveCount(0);
+  await expect(page.getByTestId("cancel-appointment")).toBeVisible();
+  await expect(page.getByTestId("delete-appointment")).toBeEnabled();
 });

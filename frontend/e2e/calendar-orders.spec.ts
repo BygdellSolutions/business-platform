@@ -11,7 +11,7 @@ import { bffUrl, createCustomer, createHorse, createItem, createWorld, currentUs
 let world: World;
 test.afterEach(() => world?.cleanup());
 
-const WEEK = "view=week&date=2026-10-19";
+const WEEK = "view=week&date=2030-10-21";
 
 async function setup(context: BrowserContext) {
   await signIn(context, world.email);
@@ -25,7 +25,7 @@ async function setup(context: BrowserContext) {
 
 async function book(context: BrowserContext, body: Record<string, unknown>) {
   const response = await context.request.post(bffUrl(world.orgId, "/appointments"), {
-    data: { title: "Stable day", starts_at: "2026-10-19T08:00:00Z", ends_at: "2026-10-19T10:00:00Z", practitioner_user_id: await currentUserId(context, world.orgId), ...body },
+    data: { title: "Stable day", starts_at: "2030-10-21T08:00:00Z", ends_at: "2030-10-21T10:00:00Z", practitioner_user_id: await currentUserId(context, world.orgId), ...body },
   });
   expect(response.status(), await response.text()).toBe(201);
   return (await response.json()) as { id: string; version: number; order_id: string | null };
@@ -49,7 +49,7 @@ test("services are chosen on a booking, and a draft order with a line for each s
   world = createWorld({ label: "Booking order" });
   const { stable, horses } = await setup(context);
 
-  await page.goto(`/o/${world.orgId}/calendar/new?date=2026-10-19&start=09:00`);
+  await page.goto(`/o/${world.orgId}/calendar/new?date=2030-10-21&start=09:00`);
   await page.getByLabel("Title", { exact: true }).fill("Stable day");
   await addFromPicker(page, "subjects", "Kalle");
   await addFromPicker(page, "subjects", "Storm");
@@ -68,7 +68,7 @@ test("services are chosen on a booking, and a draft order with a line for each s
   await expect(page.getByTestId("appointment-order-status")).toHaveText("draft");
   await expect(page.getByTestId("create-order")).toHaveCount(0); // one order per appointment
 
-  const [appointment] = await (await context.request.get(bffUrl(world.orgId, "/appointments?from=2026-10-19T00:00:00Z&to=2026-10-26T00:00:00Z"))).json();
+  const [appointment] = await (await context.request.get(bffUrl(world.orgId, "/appointments?from=2030-10-21T00:00:00Z&to=2030-10-28T00:00:00Z"))).json();
   const lines = await orderLines(context, appointment.order_id);
   expect(lines).toHaveLength(4); // 2 services x 2 horses
   expect(new Set(lines.map((line) => line.subject_id))).toEqual(new Set([horses[0].id, horses[1].id]));
@@ -152,7 +152,7 @@ test("a viewer sees the services and the order but has no buttons", async ({ pag
 test("the calendar marks a booking that has an order", async ({ page, context }) => {
   world = createWorld({ label: "Booking order mark" });
   const { stable, horses, massage } = await setup(context);
-  const booked = await book(context, { customer_id: stable.id, subjects: [horseRef(horses[0])], items: [massage.id], ends_at: "2026-10-19T12:00:00Z" });
+  const booked = await book(context, { customer_id: stable.id, subjects: [horseRef(horses[0])], items: [massage.id], ends_at: "2030-10-21T12:00:00Z" });
   await context.request.post(bffUrl(world.orgId, `/appointments/${booked.id}/order`), { headers: ifMatch(booked.version) });
 
   await page.goto(`/o/${world.orgId}/calendar?${WEEK}`);

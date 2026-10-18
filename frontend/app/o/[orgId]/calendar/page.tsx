@@ -46,7 +46,7 @@ export default async function CalendarPage({
       <Suspense fallback={null}>
         <PhoneDefaultView />
       </Suspense>
-      <Calendar orgId={orgId} view={view} day={day} today={today} who={who} people={people} appointments={appointments} zone={zone} canWrite={canWriteRecords(role)} />
+      <Calendar orgId={orgId} view={view} day={day} today={today} who={who} people={people} appointments={appointments} zone={zone} canWrite={canWriteRecords(role)} unlockDone={first(raw.unlock) === "1"} />
     </div>
   );
 }

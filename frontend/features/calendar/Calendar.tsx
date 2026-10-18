@@ -36,11 +36,14 @@ export interface CalendarProps {
   appointments: Appointment[];
   zone: string | null;
   canWrite: boolean;
+  /** Finished bookings may be dragged too (the person asked for it with the toggle; it lasts until they leave the page). */
+  unlockDone?: boolean;
 }
 
-export function calendarHref(orgId: string, view: CalendarView, day: string, who: string | null): string {
+export function calendarHref(orgId: string, view: CalendarView, day: string, who: string | null, unlock = false): string {
   const params = new URLSearchParams({ view, date: day });
   if (who) params.set("who", who);
+  if (unlock) params.set("unlock", "1");
   return `/o/${orgId}/calendar?${params}`;
 }
 
@@ -73,7 +76,7 @@ export function isDone(appointment: Pick<Appointment, "status" | "ends_at">): bo
   return appointment.status === "scheduled" && new Date(appointment.ends_at).getTime() < Date.now();
 }
 
-const DONE_HINT = "Done. Open it to change it.";
+const DONE_HINT = "Done. Open it to change it, or unlock finished bookings to drag it.";
 
 /** The names of the horses an appointment is about, "Kalle, Storm" (empty when none). */
 export function horsesOf(appointment: Appointment): string {
@@ -84,7 +87,8 @@ const NAV_BUTTON = `${BUTTON_VARIANTS.secondary}`;
 
 export function Calendar(props: CalendarProps) {
   const { orgId, view, day, who, people, appointments, canWrite } = props;
-  const link = (nextView: CalendarView, nextDay: string, nextWho: string | null = who) => calendarHref(orgId, nextView, nextDay, nextWho);
+  const unlock = props.unlockDone === true;
+  const link = (nextView: CalendarView, nextDay: string, nextWho: string | null = who) => calendarHref(orgId, nextView, nextDay, nextWho, unlock);
   const clashes = clashing(appointments);
 
   return (
@@ -118,6 +122,17 @@ export function Calendar(props: CalendarProps) {
               </Link>
             ))}
           </div>
+          {canWrite && (unlock || appointments.some(isDone)) && (
+            <Link
+              href={calendarHref(orgId, view, day, who, !unlock)}
+              className={BUTTON_VARIANTS.secondary}
+              aria-pressed={unlock}
+              title={unlock ? "Finished bookings can be dragged. Click to lock them again." : "Finished bookings are locked so they are not moved by accident. Click to be able to drag them."}
+              data-testid="unlock-done"
+            >
+              {unlock ? "Lock finished bookings" : "Unlock finished bookings"}
+            </Link>
+          )}
           {canWrite && (
             <Link href={newHref(orgId, view === "month" ? props.today : day, null, who)} className={PRIMARY_LINK} data-testid="new-appointment">
               New appointment
@@ -265,6 +280,7 @@ function TimeGrid(props: CalendarProps & { columns: Column[]; clashes: Set<strin
 function Block({
   orgId,
   zone,
+  unlockDone,
   people,
   canWrite,
   day,
@@ -283,7 +299,7 @@ function Block({
   const horses = horsesOf(appointment);
   // A booking can be moved from the day it starts on, and its end dragged when it also ends on that day (a clipped one is changed in the form).
   const done = isDone(appointment);
-  const movable = canWrite && !done && start.day === day;
+  const movable = canWrite && (!done || unlockDone === true) && start.day === day;
   const resizable = movable && end.day === day;
   return (
     <Link
@@ -295,6 +311,7 @@ function Block({
       data-testid="appointment"
       data-clash={clash ? "true" : undefined}
       data-done={done ? "true" : undefined}
+      data-unlocked={done && unlockDone ? "true" : undefined}
       {...(movable ? dragData(appointment) : {})}
     >
       <span className="font-semibold">{clash ? "⚠ " : ""}{done ? "✓ " : ""}{appointment.title}</span>
@@ -364,12 +381,13 @@ function MonthGrid(props: CalendarProps & { link: (view: CalendarView, day: stri
                     <Link
                       href={`/o/${orgId}/calendar/${appointment.id}`}
                       className={`${toneOf({ people }, appointment.practitioner_user_id)} tint relative block truncate rounded px-1 text-xs ${clashes.has(appointment.id) ? "ring-1 ring-red-600" : ""} ${done ? "opacity-60" : ""}`}
-                      style={{ color: "var(--tone-text)", touchAction: props.canWrite && !done ? "none" : undefined }}
+                      style={{ color: "var(--tone-text)", touchAction: props.canWrite && (!done || props.unlockDone) ? "none" : undefined }}
                       title={[appointment.title, horsesOf(appointment), done ? DONE_HINT : ""].filter(Boolean).join(" · ")}
                       draggable={false}
                       data-testid="appointment"
                       data-done={done ? "true" : undefined}
-                      {...(props.canWrite && !done ? dragData(appointment) : {})}
+                      data-unlocked={done && props.unlockDone ? "true" : undefined}
+                      {...(props.canWrite && (!done || props.unlockDone) ? dragData(appointment) : {})}
                     >
                       {done ? "✓ " : ""}{timeText(localParts(appointment.starts_at, zone).minutes)} {appointment.title}
                       {horsesOf(appointment) && <span className="opacity-75"> · {horsesOf(appointment)}</span>}

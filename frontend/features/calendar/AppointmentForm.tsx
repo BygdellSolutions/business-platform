@@ -15,7 +15,7 @@ import { itemSearch } from "@/features/catalog/item-picker";
 import { customerSearch } from "@/features/customers/customer-picker";
 import { apiFetch } from "@/lib/api/client";
 import type { Appointment, AppointmentCreate, AppointmentUpdate, Colleague, Horse, OrderUpdateResult } from "@/lib/api/types";
-import { calendarHref } from "@/features/calendar/Calendar";
+import { calendarHref, isDone } from "@/features/calendar/Calendar";
 import { localParts, minutesOf, timeText, zonedInstant } from "@/lib/calendar";
 import { addDays } from "@/lib/dates";
 import { blankToNull, problemsFrom, useMutation } from "@/lib/forms";
@@ -261,6 +261,8 @@ export function AppointmentForm({
   }
 
   const cancelled = record?.status === "cancelled";
+  // A finished visit is a record of what happened: it can be corrected (the form) but not cancelled or deleted.
+  const done = record !== undefined && isDone(record);
   const hasCompletedOrder = record?.order_status === "completed";
   const hasDraftOrder = record !== undefined && record.order_id !== null && record.order_number !== null && record.order_status === "draft";
   const personOptions = [...(state.practitioner === NOBODY ? [{ value: NOBODY, label: "Choose a practitioner" }] : []), ...people.map((person) => ({ value: person.user_id, label: person.name }))];
@@ -436,7 +438,7 @@ export function AppointmentForm({
             <Button type="button" disabled={pending} onClick={() => void change(record, { status: "scheduled" })} data-testid="restore">
               Restore this appointment
             </Button>
-          ) : (
+          ) : done ? null : (
             <ConfirmButton
               label="Cancel appointment"
               question={hasDraftOrder ? `Cancel this appointment? It stays on record. Its draft order ${record.order_number} can be cancelled too.` : "Cancel this appointment? It stays on record."}
@@ -456,11 +458,16 @@ export function AppointmentForm({
             alsoLabel={hasDraftOrder ? "Delete appointment and order" : undefined}
             onAlso={hasDraftOrder ? () => void remove(record, true) : undefined}
             declineLabel="No, go back"
-            disabled={pending || hasCompletedOrder}
+            disabled={pending || hasCompletedOrder || done}
             onConfirm={() => void remove(record)}
             testId="delete-appointment"
           />
-          {hasCompletedOrder && (
+          {done && (
+            <span className="text-xs text-zinc-500" data-testid="done-locked">
+              This appointment is done, so it cannot be cancelled or deleted. You can still change its details.
+            </span>
+          )}
+          {hasCompletedOrder && !done && (
             <span className="text-xs text-zinc-500" data-testid="delete-blocked">
               This appointment has a completed order, so it cannot be deleted. Cancel it instead.
             </span>
