@@ -2,7 +2,6 @@
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { DangerZone } from "@/features/settings/DangerZone";
 import { EarlierTransactions } from "@/features/settings/EarlierTransactions";
-import { InvoiceEmailSettings } from "@/features/settings/InvoiceEmailSettings";
 import { LogoSettings } from "@/features/settings/LogoSettings";
 import { OrganizationSettings } from "@/features/settings/OrganizationSettings";
 import type { CurrencyStatus, Member, Organization, OrganizationLogo, Role } from "@/lib/api/types";
@@ -40,7 +39,6 @@ export default async function SettingsPage({ params }: { params: Promise<{ orgId
         hint="The organization's permanent identifier: give it to support when asking about this organization."
       />
       <OrganizationSettings key={organization.id} organization={organization} canEdit={canEdit} />
-      <InvoiceEmailSettings key={`${organization.id}-invoice-email`} organization={organization} canEdit={canEdit} />
       <LogoSettings key={`${organization.id}-logo`} logo={logo} canEdit={role === "owner"} />
       <EarlierTransactions status={status} canEdit={canEdit} />
       <DangerZone organizationName={organization.name} role={role} members={members} passwordChecked={authMode() === "session"} recentExport={organization.recent_export === true} />
