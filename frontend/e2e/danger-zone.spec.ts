@@ -38,7 +38,7 @@ test("the sole owner transfers ownership to a member and can then leave", async 
   await page.reload();
   await zone.getByRole("form", { name: "Leave organization" }).getByLabel("Your password").fill(E2E_PASSWORD);
   await zone.getByTestId("leave-organization").click();
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL(/\/organizations$/);
   expect(roleOf(world.email, world.orgId)).toBe("");
 });
 
@@ -74,7 +74,7 @@ test("an owner deletes the organization with an issued invoice in it; everything
   await form.getByLabel(/I understand/).check();
   await form.getByTestId("delete-organization").click();
 
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL(/\/organizations$/);
   expect(testRow(`select count(*) from organizations where id = ${sql(world.orgId)}`)).toBe("0");
   for (const table of ["invoices", "transactions", "customers", "organization_users", "audit_events"]) {
     expect(testRow(`select count(*) from ${table} where organization_id = ${sql(world.orgId)}`), table).toBe("0");

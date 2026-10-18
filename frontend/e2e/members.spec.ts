@@ -133,7 +133,7 @@ test("leaving returns to the organization selection; the person stays signed in 
   await page.getByTestId("danger-zone").getByLabel("Your password").fill(E2E_PASSWORD);
   await page.getByTestId("danger-zone").getByTestId("leave-organization").click();
 
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL(/\/organizations$/);
   await expect(page.getByTestId("no-organizations")).toBeVisible();
   await expect(page.getByTestId("user-email")).toHaveText(me); // still signed in
   await expect(page.getByTestId("create-organization-link")).toHaveCount(0); // a member may create no organization of their own
