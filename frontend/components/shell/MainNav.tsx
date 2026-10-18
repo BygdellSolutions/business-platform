@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import type { NavItem } from "@/components/shell/nav";
 
 // Simple outline icons (24×24, stroked) keyed by path; decoration only, the label carries the meaning.
-const ICONS: Record<string, string> = {
+export const ICONS: Record<string, string> = {
   "": "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z",
   "/transactions": "M9 3h6v3H9zM7 4.5H5V21h14V4.5h-2M8 11h8M8 15h5",
   "/invoices": "M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5",
@@ -35,7 +35,7 @@ export function MainNav({ orgId, items }: { orgId: string; items: NavItem[] }) {
   }
 
   return (
-    <nav aria-label="Main" className="flex gap-4 overflow-x-auto text-sm md:flex-col md:gap-5 md:overflow-visible">
+    <nav aria-label="Main" className="hidden gap-4 text-sm md:flex md:flex-col md:gap-5">
       {sections.map((section) => (
         <div key={section.title ?? "home"} className="flex shrink-0 flex-col gap-1">
           {section.title && <span className="hidden px-3 pb-1 text-[11px] font-semibold tracking-wider text-muted uppercase md:block">{section.title}</span>}

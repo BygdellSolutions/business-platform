@@ -9,6 +9,7 @@ import { OrgScope } from "@/components/shell/org-context";
 import { OrgMenu } from "@/components/shell/OrgMenu";
 import { QuickSearch } from "@/components/shell/QuickSearch";
 import { UserMenu } from "@/components/shell/UserMenu";
+import { MobileTabs } from "@/components/shell/MobileTabs";
 import { MainNav } from "@/components/shell/MainNav";
 import { NAV } from "@/components/shell/nav";
 
@@ -72,10 +73,11 @@ export default async function OrgLayout({
             <UserMenu name={current.user.name} email={current.user.email} mode={mode === "dev" || mode === "session" ? mode : null} />
           </div>
         </header>
-        <main className="flex-1 p-4 md:p-6">
+        <main className="flex-1 p-4 pb-24 md:p-6">
           <OrgScope orgId={orgId}>{children}</OrgScope>
         </main>
       </div>
+      <MobileTabs orgId={orgId} items={NAV.filter((item) => item.roles === undefined || item.roles.includes(organization.role))} />
     </div>
   );
 }

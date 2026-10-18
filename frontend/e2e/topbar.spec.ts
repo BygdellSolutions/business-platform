@@ -107,3 +107,21 @@ test("on a phone the top bar fits and nothing scrolls sideways", async ({ page, 
   const [b, view] = [await page.getByTestId("user-menu-toggle").boundingBox(), page.viewportSize()!];
   expect(b!.x + b!.width).toBeLessThanOrEqual(view.width);
 });
+
+test("on a phone the menu is a bottom bar, with the other pages under More", async ({ page, context }) => {
+  world = createWorld({ label: "TopBarTabs" });
+  await signIn(context, world.email);
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.goto(`/o/${world.orgId}`);
+  const bar = page.getByTestId("mobile-tabs");
+  await expect(bar).toBeVisible();
+  expect(((await bar.boundingBox())!.y + (await bar.boundingBox())!.height)).toBeGreaterThan(780); // at the bottom edge, within thumb's reach
+  await bar.getByRole("button", { name: "More" }).click();
+  await bar.getByRole("link", { name: "Invoices" }).click();
+  await expect(page).toHaveURL(new RegExp(`/o/${world.orgId}/invoices`));
+  await expect(bar.getByRole("link", { name: "Invoices" })).toHaveCount(0); // going to a page closed the sheet
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(bar).toBeHidden(); // the sidebar takes over
+  await expect(page.getByRole("navigation", { name: "Main", exact: true })).toBeVisible();
+});
