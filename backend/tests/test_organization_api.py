@@ -58,6 +58,7 @@ def test_the_response_has_no_secrets_or_foreign_ids(client, db_session):
         # When the owner last downloaded a copy of the data, and whether that is recent enough to delete without saying "no copy".
         "last_export_at", "recent_export",
         "has_logo",  # whether there is a logo; the picture itself is a separate endpoint
+        "invoice_email_subject", "invoice_email_message",  # the pre-made text of an invoice email: the organization's own wording, no secret
     }
 
 
