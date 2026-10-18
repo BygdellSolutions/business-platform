@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
+import { SECONDARY_LINK } from "@/components/ui/Button";
 import { LoginForm } from "@/features/auth/LoginForm";
 import { authMode } from "@/lib/auth/config";
 import { getCredential } from "@/lib/auth/credential";
@@ -24,7 +25,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
     <main className="mx-auto flex max-w-sm flex-col gap-4 p-8">
       <h1 className="text-[28px] leading-tight font-semibold tracking-tight">Sign in</h1>
       <LoginForm next={destination} notice={typeof notice === "string" ? notice : undefined} />
-      <Link href="/" className="text-sm text-secondary underline hover:text-foreground">
+      <Link href="/" className={SECONDARY_LINK}>
         Go to homepage
       </Link>
     </main>

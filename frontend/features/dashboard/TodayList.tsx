@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { SECONDARY_LINK } from "@/components/ui/Button";
+
 import { localParts, timeText } from "@/lib/calendar";
 import type { Appointment } from "@/lib/api/types";
 
@@ -8,9 +10,9 @@ export function TodayList({ orgId, appointments, zone }: { orgId: string; appoin
   const live = appointments.filter((appointment) => appointment.status === "scheduled");
   return (
     <section aria-label="Today" className="flex flex-col gap-2" data-testid="today">
-      <div className="flex items-baseline justify-between gap-3">
+      <div className="flex items-center justify-between gap-3">
         <h2 className="text-lg font-semibold">Today</h2>
-        <Link href={`/o/${orgId}/calendar`} className="text-sm text-secondary underline hover:text-foreground">
+        <Link href={`/o/${orgId}/calendar`} className={SECONDARY_LINK}>
           Open scheduling
         </Link>
       </div>
