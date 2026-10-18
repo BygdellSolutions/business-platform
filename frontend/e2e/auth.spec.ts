@@ -103,7 +103,7 @@ test.describe("the public homepage", () => {
     await page.goto("/");
     await expect(page).toHaveURL(/\/$/);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-    await page.getByRole("link", { name: "Sign in", exact: true }).click();
+    await page.getByRole("link", { name: "Sign in", exact: true }).first().click();
     await expect(page).toHaveURL(/\/dev-login$/);
 
     await signInViaUi(page, FREDRIK);

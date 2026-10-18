@@ -5,6 +5,7 @@ All notable changes to `business-platform` will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- The sidebar menu uses client-side links: moving between pages no longer reloads the whole shell (every page is still read fresh on the server).
 - The dashboard opens with a "Needs attention" line (past due, ready to invoice, refunds due, returns to follow up, stock problems; "All clear" when empty) and a "Today" list of the day's bookings; cards that need no action show their explanation as a tooltip instead of a line of text.
 - Empty lists (customers, suppliers, horses, items, orders, invoices) explain what the list is for and offer the action to start it, and pages show a skeleton of the page while loading instead of the word "Loading…".
 - The organization picker (`/organizations`) is laid out in three separate sections: your organizations as full-width buttons with the role beside them (and "Create organization" below), a "Website" section with the "Go to homepage" button, and sign out.

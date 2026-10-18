@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import type { NavItem } from "@/components/shell/nav";
@@ -20,8 +21,8 @@ const ICONS: Record<string, string> = {
 };
 
 /**
- * The sidebar menu, grouped under section headings, with the current page highlighted. Entries stay plain anchors
- * (as before): a menu click is a full page load.
+ * The sidebar menu, grouped under section headings, with the current page highlighted. Entries are client-side links, so a
+ * menu click swaps the page without reloading the shell (every page is still read fresh on the server).
  */
 export function MainNav({ orgId, items }: { orgId: string; items: NavItem[] }) {
   const pathname = usePathname();
@@ -45,7 +46,7 @@ export function MainNav({ orgId, items }: { orgId: string; items: NavItem[] }) {
               return (
                 <li key={item.label}>
                   {item.enabled ? (
-                    <a
+                    <Link
                       href={href}
                       aria-current={current ? "page" : undefined}
                       className={`group flex h-10 items-center gap-3 rounded-lg px-3 whitespace-nowrap transition-colors ${
@@ -56,7 +57,7 @@ export function MainNav({ orgId, items }: { orgId: string; items: NavItem[] }) {
                         <path d={ICONS[item.path] ?? ICONS[""]} />
                       </svg>
                       {item.label}
-                    </a>
+                    </Link>
                   ) : (
                     <span aria-disabled="true" className="flex px-3 py-2 whitespace-nowrap text-zinc-400">
                       {item.label} (coming soon)
