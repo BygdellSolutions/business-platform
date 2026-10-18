@@ -5,6 +5,7 @@ All notable changes to `business-platform` will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Dashboard cards that need action carry a warning mark besides the tint, and a zero is shown muted. The homepage calls the calendar area "Scheduling", like the menu.
 - Scheduling: the day and week views draw a red line at the current time in today's column, and a phone that opens the calendar without choosing a view gets the day view (a week of columns does not fit it).
 - Customers, Suppliers, Horses, Catalog, Orders and Invoices open with a shared page header: the title, one line saying what the page is for, and the main action.
 - The app is set in Inter, bundled with it (SIL OFL, 48 KB), so it looks the same on every computer instead of depending on the fonts installed; Noto Sans stays as the fallback.

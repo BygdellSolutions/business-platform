@@ -30,8 +30,16 @@ export function SummaryCard({
         tone === "attention" && count > 0 ? "tint tone-warning" : "border-border bg-panel shadow-xs"
       }`}
     >
-      <span className="text-sm text-zinc-600 dark:text-zinc-400">{title}</span>
-      <span className="text-2xl font-semibold tabular-nums" data-testid={`${testId}-count`}>
+      <span className="flex items-center gap-1.5 text-sm text-zinc-600 dark:text-zinc-400">
+        {/* Colour alone must not carry "this needs you": the mark is there for those who cannot tell the tint. */}
+        {tone === "attention" && count > 0 && (
+          <svg aria-hidden="true" viewBox="0 0 24 24" className="size-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--warning-text)" }}>
+            <path d="M12 3 2 21h20zM12 10v5M12 18h.01" />
+          </svg>
+        )}
+        {title}
+      </span>
+      <span className={`text-2xl font-semibold tabular-nums ${count === 0 ? "text-muted" : ""}`} data-testid={`${testId}-count`}>
         {count}
       </span>
       {amounts.map((entry) => (
