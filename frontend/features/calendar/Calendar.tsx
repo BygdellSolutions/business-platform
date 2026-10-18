@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { BUTTON_VARIANTS, PRIMARY_LINK } from "@/components/ui/Button";
 import { CalendarDnD } from "@/features/calendar/CalendarDnD";
+import { TimeGridScroller } from "@/features/calendar/TimeGridScroller";
 import type { Appointment, Colleague } from "@/lib/api/types";
 import { addDays } from "@/lib/dates";
 import {
@@ -9,7 +10,6 @@ import {
   clashing,
   dayOfMonth,
   daysOf,
-  hourRange,
   localParts,
   place,
   step,
@@ -26,6 +26,8 @@ const TONES = ["tone-primary", "tone-success", "tone-warning", "tone-purple", "t
 const UNASSIGNED_TONE = "tone-neutral";
 const HOUR_PX = 48;
 const SLOT_MINUTES = 30;
+/** Where the day starts when it is first shown: the working day, not the small hours. */
+const OPENING_MINUTES = 7 * 60;
 
 export interface CalendarProps {
   orgId: string;
@@ -207,7 +209,10 @@ interface Column {
 function TimeGrid(props: CalendarProps & { columns: Column[]; clashes: Set<string>; showPerson: boolean; assign: boolean }) {
   const { orgId, zone, columns, canWrite, clashes, showPerson, assign } = props;
   const placed = columns.map((column) => ({ column, blocks: place(column.items, column.day, zone) }));
-  const { first, last } = hourRange(placed.flatMap((entry) => entry.blocks));
+  // The whole day, from midnight, so any hour can be booked; the grid scrolls and opens at the morning (or an earlier booking).
+  const [first, last] = [0, 24];
+  const earliest = Math.min(...placed.flatMap((entry) => entry.blocks.map((block) => block.top)), OPENING_MINUTES + 30);
+  const openAt = (Math.max(0, Math.min(OPENING_MINUTES, earliest - 30)) / 60) * HOUR_PX;
   const hours = Array.from({ length: last - first }, (_, index) => first + index);
   const slots = Array.from({ length: ((last - first) * 60) / SLOT_MINUTES }, (_, index) => first * 60 + index * SLOT_MINUTES);
   const px = (minutes: number) => ((minutes - first * 60) / 60) * HOUR_PX;
@@ -219,11 +224,11 @@ function TimeGrid(props: CalendarProps & { columns: Column[]; clashes: Set<strin
 
   return (
     <CalendarDnD orgId={orgId} zone={zone} mode="time" firstHour={first} hourPx={HOUR_PX} enabled={canWrite}>
-    <div className="overflow-x-auto rounded-lg border border-border-strong">
+    <TimeGridScroller offset={openAt}>
       <div className="grid min-w-[44rem]" style={{ gridTemplateColumns: `3.5rem repeat(${columns.length}, minmax(0, 1fr))` }}>
-        <div className="border-b border-border-strong" />
+        <div className="sticky top-0 z-20 border-b border-border-strong bg-panel" />
         {placed.map(({ column }) => (
-          <div key={column.key} className="border-b border-l border-border-strong px-2 py-1.5 text-center text-sm" data-testid="column-heading">
+          <div key={column.key} className="sticky top-0 z-20 border-b border-l border-border-strong bg-panel px-2 py-1.5 text-center text-sm" data-testid="column-heading">
             {column.heading}
           </div>
         ))}
@@ -262,7 +267,7 @@ function TimeGrid(props: CalendarProps & { columns: Column[]; clashes: Set<strin
           </div>
         ))}
       </div>
-    </div>
+    </TimeGridScroller>
     </CalendarDnD>
   );
 }

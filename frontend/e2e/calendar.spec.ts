@@ -240,3 +240,31 @@ test("the week number is shown in the day, week and month views", async ({ page,
   await expect(week).toHaveText("Weeks 40–44");
   await expect(page.getByTestId("month-week-number").first()).toHaveText("W40"); // the first row starts Monday 30 September
 });
+
+test("the whole day can be reached by scrolling, and the grid opens at the morning or at an earlier booking", async ({ page, context }) => {
+  world = createWorld({ label: "CalendarHours" });
+  await signIn(context, world.email);
+  const scroller = page.getByTestId("time-scroller");
+
+  // An ordinary day opens at 07:00 (48 px an hour), and every half hour from midnight to the end of the day can be booked.
+  await page.goto(`/o/${world.orgId}/calendar?view=day&date=2030-10-21`);
+  await expect(scroller).toBeVisible();
+  await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBe(7 * 48);
+  await expect(page.locator('[data-testid="slot"]')).not.toHaveCount(0);
+  await expect(page.getByLabel("New appointment 2030-10-21 00:00").first()).toBeAttached();
+  await expect(page.getByLabel("New appointment 2030-10-21 23:30").first()).toBeAttached();
+
+  // Scrolled to the evening, a late slot is clicked and the form starts at that time.
+  await scroller.evaluate((el) => el.scrollTo({ top: el.scrollHeight }));
+  await page.getByLabel("New appointment 2030-10-21 22:00").first().click();
+  await expect(page).toHaveURL(/start=22%3A00|start=22:00/);
+
+  // A booking before seven opens the grid at that booking instead.
+  const response = await context.request.post(bffUrl(world.orgId, "/appointments"), {
+    data: { title: "Early walk", starts_at: "2030-10-22T04:00:00Z", ends_at: "2030-10-22T05:00:00Z", practitioner_user_id: await currentUserId(context, world.orgId) },
+  });
+  expect(response.status()).toBe(201);
+  await page.goto(`/o/${world.orgId}/calendar?view=day&date=2030-10-22`);
+  await expect(page.getByTestId("appointment")).toBeInViewport();
+  await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBe(3.5 * 48); // half an hour above the booking
+});

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isoWeek, weekLabel, clashing, dayDifference, daysOf, hourRange, isRealDay, localParts, minutesOf, mondayOf, movedTo, place, resizedTo, shiftedByDays, snapMinutes, step, titleOf, windowOf, zonedInstant, type Booking } from "@/lib/calendar";
+import { isoWeek, weekLabel, clashing, dayDifference, daysOf, isRealDay, localParts, minutesOf, mondayOf, movedTo, place, resizedTo, shiftedByDays, snapMinutes, step, titleOf, windowOf, zonedInstant, type Booking } from "@/lib/calendar";
 
 const STOCKHOLM = "Europe/Stockholm";
 
@@ -104,10 +104,6 @@ describe("place", () => {
     expect(place([night], "2026-10-20", "UTC")).toEqual([]);
   });
 
-  it("widens the hour range to include early and late bookings", () => {
-    expect(hourRange([])).toEqual({ first: 7, last: 19 });
-    expect(hourRange([{ top: 5 * 60, height: 60 }, { top: 20 * 60, height: 90 }])).toEqual({ first: 5, last: 22 });
-  });
 });
 
 describe("moving and resizing a booking", () => {

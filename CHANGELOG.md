@@ -5,6 +5,7 @@ All notable changes to `business-platform` will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Scheduling: the day and week views cover the whole day, from 00:00 to 24:00, so any hour can be booked by clicking its slot (before, only 07:00–19:00 was shown, wider only to fit existing bookings). The grid scrolls, keeps the day's headings in view, and opens at 07:00 or half an hour above the day's earliest booking.
 - The server refuses to cancel or delete an appointment that is done (its end has passed): 409 `appointment_done`. Its details can still be corrected, and an appointment that was already cancelled can still be deleted. The calendar form already hid those buttons.
 - Scheduling: a booking whose end has passed is marked done (a check mark, dimmed). Dragging or stretching it asks first ("This appointment is already finished. Do you want to move it?" Yes / No), so a finished visit is not moved by accident but can be moved when plans change. A done booking cannot be cancelled or deleted (its details can still be corrected).
 - Dashboard cards that need action carry a warning mark besides the tint, and a zero is shown muted. The homepage calls the calendar area "Scheduling", like the menu.

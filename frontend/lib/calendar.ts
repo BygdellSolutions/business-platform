@@ -204,17 +204,6 @@ export function place<T extends Booking>(items: readonly T[], day: string, zone:
   return result;
 }
 
-/** The hours a time grid covers: the working day by default, widened to include every booking. */
-export function hourRange(placed: readonly { top: number; height: number }[], early = 7, late = 19): { first: number; last: number } {
-  let first = early;
-  let last = late;
-  for (const entry of placed) {
-    first = Math.min(first, Math.floor(entry.top / 60));
-    last = Math.max(last, Math.ceil((entry.top + entry.height) / 60));
-  }
-  return { first: Math.max(0, first), last: Math.min(24, last) };
-}
-
 /** Dragging snaps to this many minutes. */
 export const SNAP_MINUTES = 15;
 
