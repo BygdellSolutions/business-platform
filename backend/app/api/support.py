@@ -10,7 +10,6 @@
   * The ticket is stored and committed BEFORE any email is tried; a failed email never fails the request.
 """
 
-import re
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -18,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, StringConstraints, field_validator
 from sqlalchemy.orm import Session
 
 from app.core import clock, rate_limit, support
+from app.core import email as mail
 from app.core.auth import get_current_user
 from app.core.config import settings
 from app.core.db import get_db
@@ -26,10 +26,6 @@ from app.models import User
 from app.models.support_ticket import MAX_MESSAGE
 
 router = APIRouter(prefix="/api/support", tags=["support"])
-
-# Deliberately plain: one "@", no spaces, a dot in the domain. Whether the address works is for the confirmation email to show.
-EMAIL = re.compile(r"^[^@\s<>\",;]+@[^@\s<>\",;]+\.[^@\s<>\",;]{2,}$")
-
 
 class SupportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -42,7 +38,7 @@ class SupportRequest(BaseModel):
     @field_validator("email")
     @classmethod
     def looks_like_an_address(cls, value: str) -> str:
-        if EMAIL.fullmatch(value) is None:
+        if not mail.looks_like_address(value):
             raise ValueError("Enter an email address we can answer, like name@example.com.")
         return value
 

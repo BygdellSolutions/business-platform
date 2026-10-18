@@ -339,6 +339,40 @@ def _frozen_artifact(mapper, connection, target) -> None:
     raise ValueError("an invoice PDF is a frozen artifact and cannot be changed or deleted")
 
 
+class InvoiceEmail(TenantOwned, Authored, Base):
+    """One attempt to email an issued invoice to a customer: to whom, when, by whom, and what came of it.
+
+    A log, never an input: it holds no document text and no copy of the PDF, only the SHA-256 of the exact bytes that were attached,
+    so it can be checked against the stored invoice. `status` is what the mail provider said (`sent` delivered, `queued` it will
+    deliver, `failed` it did not; `error` is a short safe word, never the provider's text). A failed attempt is kept too: it counts
+    against the organization's daily limit and shows the person why nothing arrived.
+    """
+
+    __tablename__ = "invoice_emails"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "invoice_id"],
+            ["invoices.organization_id", "invoices.id"],
+            ondelete="RESTRICT",
+            name="fk_invoice_emails_invoice_same_organization",
+        ),
+        CheckConstraint("status IN ('sent', 'queued', 'failed')", name="ck_invoice_emails_status"),
+        CheckConstraint("pdf_sha256 ~ '^[0-9a-f]{64}$'", name="ck_invoice_emails_hash_shape"),
+        Index("ix_invoice_emails_invoice", "organization_id", "invoice_id", "created_at"),
+        Index("ix_invoice_emails_organization_created", "organization_id", "created_at"),
+    )
+
+    invoice_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    to_email: Mapped[str] = mapped_column(String(254))
+    reply_to: Mapped[str | None] = mapped_column(String(254))
+    sender_address: Mapped[str] = mapped_column(String(254))
+    subject: Mapped[str] = mapped_column(String(200))
+    note: Mapped[str | None] = mapped_column(String(1000))
+    pdf_sha256: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(10))
+    error: Mapped[str | None] = mapped_column(String(32))
+
+
 PAYMENT_METHODS = ("bankgiro", "plusgiro", "bank_transfer", "swish", "card", "cash", "other")
 
 

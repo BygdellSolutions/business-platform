@@ -128,6 +128,9 @@ class Settings(BaseSettings):
     email_from: str = "no-reply@noreply.bygdell.solutions"  # a sending subdomain already onboarded in Cloudflare (DNS ready)
     # Where support requests are mailed (the person's own address is the Reply-To).
     support_inbox: str = "support@bygdell.solutions"
+    # Invoices sent to customers by email: from "<organization>@<domain>" (a sending subdomain onboarded in Cloudflare), Reply-To the organization.
+    invoice_email_domain: str = "invoices.bygdell.solutions"
+    invoice_emails_per_day: int = 100  # per organization, failed attempts included (the platform's own daily sending quota is shared)
     support_tickets_per_hour: int = 5  # per source and per email address
     support_tickets_global_per_hour: int = 300  # safety valve: beyond it the form answers "busy" instead of filling the table
 

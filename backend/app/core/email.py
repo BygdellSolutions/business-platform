@@ -11,8 +11,10 @@ token and the message body are never put in the result or in a log line. A calle
 FIRST and sends afterwards (see app/api/support.py).
 """
 
+import base64
 import json
 import logging
+import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
@@ -25,12 +27,32 @@ API = "https://api.cloudflare.com/client/v4/accounts/{account}/email/sending/sen
 
 
 @dataclass(frozen=True)
+class Attachment:
+    filename: str
+    content: bytes
+    type: str  # the media type, e.g. application/pdf
+
+
+@dataclass(frozen=True)
 class EmailMessage:
     to: list[str]
     subject: str
     text: str
     reply_to: str | None = None
     headers: dict[str, str] = field(default_factory=dict)
+    attachments: list[Attachment] = field(default_factory=list)
+    # The sender when it is not the platform's default: an address on a domain onboarded for sending, and the name people see.
+    from_address: str | None = None
+    from_name: str | None = None
+
+
+# Deliberately plain: one "@", no spaces or quotes, a dot in the domain. Whether the address works is for the provider to say.
+ADDRESS = re.compile(r"^[^@\s<>\",;]+@[^@\s<>\",;]+\.[^@\s<>\",;]{2,}$")
+MAX_MESSAGE_BYTES = 5 * 1024 * 1024  # the provider's limit for a whole message; a bigger attachment is refused before it is sent
+
+
+def looks_like_address(value: str) -> bool:
+    return len(value) <= 254 and ADDRESS.fullmatch(value) is not None
 
 
 @dataclass(frozen=True)
@@ -45,14 +67,20 @@ def _clean_header(value: str) -> str:
 
 
 def _payload(message: EmailMessage) -> dict:
+    sender = _clean_header(message.from_address or settings.email_from)
     body: dict = {
-        "from": _clean_header(settings.email_from),
+        "from": {"address": sender, "name": _clean_header(message.from_name)[:100]} if message.from_name else sender,
         "to": [_clean_header(address) for address in message.to],
         "subject": _clean_header(message.subject)[:200],
         "text": message.text,
     }
     if message.reply_to:
         body["reply_to"] = _clean_header(message.reply_to)
+    if message.attachments:
+        body["attachments"] = [
+            {"content": base64.b64encode(item.content).decode("ascii"), "filename": _clean_header(item.filename)[:150], "type": item.type, "disposition": "attachment"}
+            for item in message.attachments
+        ]
     if message.headers:
         body["headers"] = {_clean_header(name): _clean_header(value) for name, value in message.headers.items()}
     return body
