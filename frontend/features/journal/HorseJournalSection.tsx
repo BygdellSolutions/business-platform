@@ -19,16 +19,19 @@ export function HorseJournalSection({
   entries,
   hasMore,
   timeZone,
+  bare = false,
 }: {
   orgId: string;
   horseId: string;
   entries: JournalSummary[];
   hasMore: boolean;
   timeZone: string | null;
+  /** Shown inside a pop-up window, which has the title and the frame already. */
+  bare?: boolean;
 }) {
   const base = `/o/${orgId}/horses/${horseId}/journal`;
-  return (
-    <CollapsibleSection title="Journal of visits and treatments" count={entries.length} testId="journal-section" toggleTestId="journal-toggle">
+  const body = (
+    <>
       {/* The two things to do here, as the same kind of button: start a new entry, or open the whole journal. */}
       <NewJournalEntry horseId={horseId}>
         <Link href={base} className={PRIMARY_LINK} data-testid="journal-all">
@@ -43,6 +46,13 @@ export function HorseJournalSection({
         <JournalTable orgId={orgId} horseId={horseId} entries={entries} timeZone={timeZone} />
       )}
       {hasMore && <p className="text-sm text-zinc-500">Showing the latest {entries.length} entries; the journal has more.</p>}
+    </>
+  );
+  // In a pop-up window the window has the title and the frame already.
+  if (bare) return <div data-testid="journal-section" className="flex flex-col gap-2">{body}</div>;
+  return (
+    <CollapsibleSection title="Journal of visits and treatments" count={entries.length} testId="journal-section" toggleTestId="journal-toggle">
+      {body}
     </CollapsibleSection>
   );
 }

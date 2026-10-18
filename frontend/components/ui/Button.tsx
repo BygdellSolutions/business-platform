@@ -37,6 +37,10 @@ export const ICONS = {
   stock: "M3 8l9-5 9 5v9l-9 5-9-5zM3 8l9 5 9-5M12 13v9",
   incoming: "M2 6h12v10H2zM14 10h4l4 3v3h-8M6 19a2 2 0 1 0 0-.01M18 19a2 2 0 1 0 0-.01",
   discount: "M3 12V4h8l10 10-8 8zM7.5 8.5h.01",
+  journal: "M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3zM9 8h6M9 12h6",
+  document: "M7 3h8l4 4v14H7zM15 3v5h4M10 13h6M10 17h6",
+  note: "M4 20h4L19 9l-4-4L4 16zM13 7l4 4",
+  service: "M14 6a4 4 0 0 0 5 5l-9 9a2 2 0 0 1-3-3l9-9a4 4 0 0 1-2-2zM15 3l3 3",
   reopen: "M4 12a8 8 0 1 0 3-6.2M4 4v5h5",
 } as const;
 

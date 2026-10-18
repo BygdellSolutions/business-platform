@@ -14,6 +14,7 @@ test("notes are taken on a horse, edited and deleted, and the history keeps ever
   const horse = await createHorse(context, world.orgId, { name: "Kalle", owner_customer_id: anna.id });
 
   await page.goto(`/o/${world.orgId}/horses/${horse.id}`);
+  await page.getByTestId("open-notes").click();
   const notes = page.getByTestId("horse-notes");
   await expect(notes.getByTestId("no-notes")).toBeVisible();
 
@@ -37,6 +38,7 @@ test("notes are taken on a horse, edited and deleted, and the history keeps ever
   await page.getByRole("button", { name: "Yes, delete" }).click();
   await expect(notes.getByTestId("horse-note")).toHaveCount(1);
 
+  await page.keyboard.press("Escape");
   await page.getByTestId("history-toggle").getByRole("heading", { name: /History/ }).click();
   await expect(page.getByTestId("history-event").filter({ hasText: "Note" })).toHaveCount(4); // added twice, changed, deleted
 });

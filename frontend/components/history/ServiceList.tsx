@@ -25,10 +25,10 @@ const SORT_COLUMNS: Record<string, (r: ServiceRecord) => SortValue> = {
  * Services performed (newest first), as FastAPI lists them for one record: what, when, for whom, by whom, the amount
  * and a link to the transaction. Amounts are the backend's strings; times are shown in the organization's zone.
  */
-export function ServiceList({ orgId, services, timeZone, title }: { orgId: string; services: ServiceRecord[]; timeZone: string | null; title: string }) {
+export function ServiceList({ orgId, services, timeZone, title, bare = false }: { orgId: string; services: ServiceRecord[]; timeZone: string | null; title: string; bare?: boolean }) {
   const sorted = useSortedRows(services, SORT_COLUMNS);
-  return (
-    <CollapsibleSection title={title} count={services.length} testId="service-list" toggleTestId="services-toggle">
+  const body = (
+    <>
       {services.length === 0 ? (
         <p className="text-sm text-zinc-500" data-testid="no-services">
           No services yet.
@@ -64,6 +64,13 @@ export function ServiceList({ orgId, services, timeZone, title }: { orgId: strin
           </table>
         </div>
       )}
+    </>
+  );
+  // In a pop-up window the window has the title and the frame already.
+  if (bare) return <div data-testid="service-list" className="flex flex-col gap-2">{body}</div>;
+  return (
+    <CollapsibleSection title={title} count={services.length} testId="service-list" toggleTestId="services-toggle">
+      {body}
     </CollapsibleSection>
   );
 }

@@ -12,7 +12,7 @@ test.afterEach(() => world?.cleanup());
 
 async function startEntry(page: Page, orgId: string, horseId: string) {
   await page.goto(`/o/${orgId}/horses/${horseId}`);
-  await page.getByTestId("journal-toggle").getByRole("heading", { name: /Journal of visits and treatments/ }).click(); // a section like the services
+  await page.getByTestId("open-journal").click();
   await page.getByTestId("new-journal-entry").click();
   await expect(page.getByTestId("journal-editor")).toBeVisible();
 }
@@ -84,8 +84,8 @@ test("an entry is drawn, written, saved, reloaded, finalized and corrected", asy
 
   // and the entry is listed in the journal section of the horse's own page
   await page.goto(`/o/${world.orgId}/horses/${horse.id}`);
-  await expect(page.getByTestId("journal-section")).toContainText("(1)");
-  await page.getByTestId("journal-toggle").getByRole("heading", { name: /Journal of visits and treatments/ }).click();
+  await expect(page.getByTestId("open-journal")).toContainText("(1)");
+  await page.getByTestId("open-journal").click();
   await expect(page.getByTestId("journal-section").getByTestId("journal-row")).toHaveCount(1);
   await expect(page.getByTestId("journal-section").getByTestId("entry-status")).toHaveText("Finalized");
   await expect(page.getByTestId("journal-section").getByTestId("entry-follow-up")).toHaveText("2026-11-12"); // and in the quick view on the horse page

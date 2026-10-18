@@ -14,12 +14,15 @@ export function Modal({
   title,
   children,
   testId,
+  wide = false,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: ReactNode;
   testId?: string;
+  /** For tables: a wider window. */
+  wide?: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -54,7 +57,7 @@ export function Modal({
       onClick={(event) => {
         if (event.target === dialog.current) onClose();
       }}
-      className="m-auto max-h-[90vh] w-[min(48rem,calc(100vw-2rem))] rounded-xl border border-border bg-panel p-0 text-foreground shadow-xl backdrop:bg-black/50"
+      className={`m-auto max-h-[90vh] ${wide ? "w-[min(72rem,calc(100vw-2rem))]" : "w-[min(48rem,calc(100vw-2rem))]"} rounded-xl border border-border bg-panel p-0 text-foreground shadow-xl backdrop:bg-black/50`}
     >
       <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-3">
         <h2 id={titleId} className="text-lg font-semibold">

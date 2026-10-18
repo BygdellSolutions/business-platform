@@ -19,7 +19,7 @@ const CONTROLS = ["body"] as const;
  * Notes on a horse, newest first: what was seen, done or agreed, with who wrote it and when. Members who may change
  * records add, edit and delete notes (each step is in the horse's history); everyone else reads them.
  */
-export function HorseNotes({ horseId, notes, canWrite, timeZone }: { horseId: string; notes: HorseNote[]; canWrite: boolean; timeZone: string | null }) {
+export function HorseNotes({ horseId, notes, canWrite, timeZone, bare = false }: { horseId: string; notes: HorseNote[]; canWrite: boolean; timeZone: string | null; bare?: boolean }) {
   const orgId = useOrgId();
   const router = useRouter();
   const { pending, error, run } = useMutation();
@@ -50,8 +50,8 @@ export function HorseNotes({ horseId, notes, canWrite, timeZone }: { horseId: st
   }
 
   return (
-    <section aria-label="Notes" data-testid="horse-notes" className="panel flex max-w-3xl flex-col gap-3">
-      <h2 className="text-lg font-semibold">Notes</h2>
+    <section aria-label="Notes" data-testid="horse-notes" className={bare ? "flex flex-col gap-3" : "panel flex max-w-3xl flex-col gap-3"}>
+      {!bare && <h2 className="text-lg font-semibold">Notes</h2>}
       {canWrite && (
         <form onSubmit={add} noValidate aria-label="Add note" className="flex flex-col gap-2">
           <TextAreaField label="New note" name="body" value={draft} onChange={setDraft} error={editing === null ? problems.byField.body : undefined} />

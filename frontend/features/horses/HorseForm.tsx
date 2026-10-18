@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 
 import { useOrgId } from "@/components/shell/org-context";
 import { ActiveToggle } from "@/components/ui/ActiveToggle";
@@ -68,7 +68,7 @@ function wholeNumber(text: string): number | null | "invalid" {
  * inactive customer may not be NEWLY assigned, but one already assigned stays valid, so an
  * edit never sends a reference that did not change).
  */
-export function HorseForm({ horse, initialOwner }: { horse?: Horse; initialOwner?: PickerEntity }) {
+export function HorseForm({ horse, initialOwner, actions }: { horse?: Horse; initialOwner?: PickerEntity; /** Buttons shown beside "Deactivate horse" (an existing horse only). */ actions?: ReactNode }) {
   const orgId = useOrgId();
   const router = useRouter();
   const { pending, error, run } = useMutation();
@@ -148,7 +148,9 @@ export function HorseForm({ horse, initialOwner }: { horse?: Horse; initialOwner
           active={record.active}
           noun="horse"
           onChanged={(updated) => setRecord((current) => (current ? { ...current, active: updated.active, updated_at: updated.updated_at } : updated))}
-        />
+        >
+          {actions}
+        </ActiveToggle>
       )}
       <form onSubmit={onSubmit} noValidate className="panel flex max-w-3xl flex-col gap-4" aria-label={record ? "Edit horse" : "New horse"}>
         <TextField label="Name" name="name" value={state.name} onChange={(value) => set("name", value)} error={errorsFor("name")} autoComplete="off" />

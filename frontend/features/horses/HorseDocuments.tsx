@@ -38,7 +38,7 @@ export function sizeText(bytes: number): string {
  * small previews, a PDF as a file name; either opens in a new tab. Whoever may change records adds and deletes them (each step is in the
  * horse's history); everyone else can open them.
  */
-export function HorseDocuments({ horseId, documents, canWrite, timeZone }: { horseId: string; documents: HorseDocument[]; canWrite: boolean; timeZone: string | null }) {
+export function HorseDocuments({ horseId, documents, canWrite, timeZone, bare = false }: { horseId: string; documents: HorseDocument[]; canWrite: boolean; timeZone: string | null; bare?: boolean }) {
   const orgId = useOrgId();
   const router = useRouter();
   const { pending, error, run } = useMutation();
@@ -76,8 +76,8 @@ export function HorseDocuments({ horseId, documents, canWrite, timeZone }: { hor
   }
 
   return (
-    <section aria-label="Documents" data-testid="horse-documents" className="panel flex max-w-3xl flex-col gap-3">
-      <h2 className="text-lg font-semibold">Documents</h2>
+    <section aria-label="Documents" data-testid="horse-documents" className={bare ? "flex flex-col gap-3" : "panel flex max-w-3xl flex-col gap-3"}>
+      {!bare && <h2 className="text-lg font-semibold">Documents</h2>}
       {canWrite && (
         <form onSubmit={upload} noValidate aria-label="Add document" className="flex flex-wrap items-center gap-3">
           <input ref={input} type="file" accept={ACCEPT} onChange={onChoose} className="sr-only" id="document-file" data-testid="document-input" disabled={pending} />

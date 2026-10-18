@@ -1,11 +1,9 @@
 import { RecordHistory } from "@/components/history/RecordHistory";
 import { RecordMeta } from "@/components/history/RecordMeta";
-import { ServiceList } from "@/components/history/ServiceList";
 import { HorseDetails } from "@/features/horses/HorseDetails";
 import { HorseForm } from "@/features/horses/HorseForm";
-import { HorseDocuments } from "@/features/horses/HorseDocuments";
-import { HorseNotes } from "@/features/horses/HorseNotes";
-import { HorseJournalSection, SHOWN_ON_HORSE_PAGE } from "@/features/journal/HorseJournalSection";
+import { HorseDialogs } from "@/features/horses/HorseDialogs";
+import { SHOWN_ON_HORSE_PAGE } from "@/features/journal/HorseJournalSection";
 import { Notice } from "@/components/ui/Notice";
 import { readActiveRole } from "@/lib/active-role";
 import type { Horse, HorseDocument, HorseNote, JournalSummary, Organization, ServiceRecord } from "@/lib/api/types";
@@ -36,6 +34,20 @@ export default async function HorsePage({
     canUseJournal(role) ? serverRead<JournalSummary[]>(orgId, `/api/horses/${recordId}/journal`, `?limit=${SHOWN_ON_HORSE_PAGE + 1}`) : Promise.resolve(null),
   ]);
 
+  const dialogs = (
+    <HorseDialogs
+      orgId={orgId}
+      horseId={horse.id}
+      journal={journal === null ? null : journal.slice(0, SHOWN_ON_HORSE_PAGE)}
+      journalHasMore={journal !== null && journal.length > SHOWN_ON_HORSE_PAGE}
+      documents={documents}
+      notes={notes}
+      services={services}
+      canWrite={canWriteRecords(role)}
+      timeZone={organization.timezone}
+    />
+  );
+
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-[28px] leading-tight font-semibold tracking-tight" data-testid="record-name">
@@ -46,13 +58,14 @@ export default async function HorsePage({
       </p>
       {created === "1" && <Notice testId="created">Horse created.</Notice>}
       <RecordMeta record={horse} people={history.history.people} timeZone={organization.timezone} />
-      {canWriteRecords(role) ? <HorseForm key={horse.id} horse={horse} /> : <HorseDetails orgId={orgId} horse={horse} />}
-      {journal !== null && (
-        <HorseJournalSection orgId={orgId} horseId={horse.id} entries={journal.slice(0, SHOWN_ON_HORSE_PAGE)} hasMore={journal.length > SHOWN_ON_HORSE_PAGE} timeZone={organization.timezone} />
+      {canWriteRecords(role) ? (
+        <HorseForm key={horse.id} horse={horse} actions={dialogs} />
+      ) : (
+        <>
+          <div className="flex flex-wrap gap-2">{dialogs}</div>
+          <HorseDetails orgId={orgId} horse={horse} />
+        </>
       )}
-      <HorseDocuments horseId={horse.id} documents={documents} canWrite={canWriteRecords(role)} timeZone={organization.timezone} />
-      <HorseNotes horseId={horse.id} notes={notes} canWrite={canWriteRecords(role)} timeZone={organization.timezone} />
-      <ServiceList orgId={orgId} services={services} timeZone={organization.timezone} title="Services performed on this horse" />
       <RecordHistory data={history} entityType="horse" timeZone={organization.timezone} />
     </div>
   );

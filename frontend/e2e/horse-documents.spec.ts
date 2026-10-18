@@ -29,6 +29,7 @@ test("a PDF and a picture are added, shown, opened and deleted, and the history 
   const horse = await horseOf(context, world.orgId);
 
   await page.goto(`/o/${world.orgId}/horses/${horse.id}`);
+  await page.getByTestId("open-documents").click();
   const docs = page.getByTestId("horse-documents");
   await expect(docs.getByTestId("no-documents")).toBeVisible();
   await expect(docs.getByTestId("add-document")).toBeDisabled(); // nothing chosen yet
@@ -61,12 +62,14 @@ test("a PDF and a picture are added, shown, opened and deleted, and the history 
 
   // it is still there after a reload
   await page.reload();
+  await page.getByTestId("open-documents").click();
   await expect(docs.getByTestId("horse-document")).toHaveCount(2);
 
   await docs.getByTestId("horse-document").filter({ hasText: "Vet report.pdf" }).getByTestId("delete-document").click();
   await page.getByRole("button", { name: "Yes, delete" }).click();
   await expect(docs.getByTestId("horse-document")).toHaveCount(1);
 
+  await page.keyboard.press("Escape");
   await page.getByTestId("history-toggle").getByRole("heading", { name: /History/ }).click();
   const events = page.getByTestId("history-event").filter({ hasText: "Document" });
   await expect(events).toHaveCount(3); // two added, one deleted
@@ -79,6 +82,7 @@ test("a file that is not a PDF or a picture, or is too big, is stopped in the fo
   const horse = await horseOf(context, world.orgId);
 
   await page.goto(`/o/${world.orgId}/horses/${horse.id}`);
+  await page.getByTestId("open-documents").click();
   const docs = page.getByTestId("horse-documents");
   await docs.getByTestId("document-input").setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("hello") });
   await expect(docs.getByTestId("document-problem")).toHaveText("Choose a PDF, JPEG, PNG or WebP file.");
@@ -103,6 +107,7 @@ test("a file of just under 10 MB goes through the whole chain", async ({ page, c
   const big = Buffer.concat([Buffer.from("%PDF-1.4\n"), Buffer.alloc(9 * 1024 * 1024, 0x41)]);
 
   await page.goto(`/o/${world.orgId}/horses/${horse.id}`);
+  await page.getByTestId("open-documents").click();
   const docs = page.getByTestId("horse-documents");
   await docs.getByTestId("document-input").setInputFiles({ name: "Scan.pdf", mimeType: "application/pdf", buffer: big });
   await docs.getByTestId("add-document").click();
@@ -127,6 +132,7 @@ test("a viewer can open a horse's documents but cannot add or delete them", asyn
 
   await signIn(context, world.addMember("viewer"));
   await page.goto(`/o/${world.orgId}/horses/${horse.id}`);
+  await page.getByTestId("open-documents").click();
   const docs = page.getByTestId("horse-documents");
   await expect(docs.getByTestId("horse-document")).toHaveCount(1);
   await expect(docs.getByTestId("document-input")).toHaveCount(0);
