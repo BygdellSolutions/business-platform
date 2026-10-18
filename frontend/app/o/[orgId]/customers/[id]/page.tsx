@@ -64,7 +64,7 @@ export default async function CustomerPage({
   );
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex max-w-5xl flex-col gap-4">
       <h1 className="text-[28px] leading-tight font-semibold tracking-tight" data-testid="record-name">
         {customer.name}
       </h1>
@@ -73,7 +73,7 @@ export default async function CustomerPage({
       </p>
       {created === "1" && <Notice testId="created">Customer created.</Notice>}
       <RecordMeta record={customer} people={history.history.people} timeZone={organization.timezone} />
-      <section aria-label="Customer information" data-testid="customer-info" className="flex max-w-3xl flex-col gap-2">
+      <section aria-label="Customer information" data-testid="customer-info" className="flex flex-col gap-2">
         <h2 className="text-lg font-semibold">Customer information</h2>
         {canWriteRecords(role) ? (
           <CustomerForm key={customer.id} customer={customer} canSetDiscount={role === "owner" || role === "admin"} actions={dialogs} />

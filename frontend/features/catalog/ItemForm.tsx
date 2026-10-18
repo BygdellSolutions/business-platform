@@ -222,7 +222,7 @@ export function ItemForm({ item, actions }: { item?: Item; /** Buttons shown bes
   }
 
   return (
-    <div className="flex max-w-xl flex-col gap-4">
+    <div className="flex flex-col gap-4">
       {record && (
         <ActiveToggle<Item>
           path={`/items/${record.id}`}
@@ -248,7 +248,7 @@ export function ItemForm({ item, actions }: { item?: Item; /** Buttons shown bes
       <form
         onSubmit={onSubmit}
         noValidate
-        className="panel flex max-w-3xl flex-col gap-4"
+        className="panel flex flex-col gap-4"
         aria-label={record ? "Edit item" : "New item"}
       >
         <SelectField

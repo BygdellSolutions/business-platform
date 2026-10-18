@@ -106,7 +106,7 @@ export function SupplierForm({ supplier, actions }: { supplier?: Supplier; /** B
   );
 
   return (
-    <div className="flex max-w-xl flex-col gap-4">
+    <div className="flex flex-col gap-4">
       {record && (
         <ActiveToggle<Supplier>
           path={`/suppliers/${record.id}`}
@@ -117,7 +117,7 @@ export function SupplierForm({ supplier, actions }: { supplier?: Supplier; /** B
           {actions}
         </ActiveToggle>
       )}
-      <form onSubmit={onSubmit} noValidate className="panel flex max-w-3xl flex-col gap-4" aria-label={record ? "Edit supplier" : "New supplier"}>
+      <form onSubmit={onSubmit} noValidate className="panel flex flex-col gap-4" aria-label={record ? "Edit supplier" : "New supplier"}>
         <TextField label="Name" name="name" value={state.name} onChange={(value) => set("name", value)} error={problems.byField.name} autoComplete="off" />
         {text("contact_person", "Contact person")}
         {text("email", "Email", { inputMode: "email" })}

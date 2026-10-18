@@ -41,7 +41,7 @@ export default async function SupplierPage({
   const dialogs = <SupplierDialogs orgId={orgId} deliveries={deliveries} timeZone={organization.timezone} />;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex max-w-5xl flex-col gap-4">
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-[28px] leading-tight font-semibold tracking-tight" data-testid="record-name">
           {supplier.name}

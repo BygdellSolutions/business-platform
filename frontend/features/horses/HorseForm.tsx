@@ -141,7 +141,7 @@ export function HorseForm({ horse, initialOwner, actions }: { horse?: Horse; ini
   }
 
   return (
-    <div className="flex max-w-xl flex-col gap-4">
+    <div className="flex flex-col gap-4">
       {record && (
         <ActiveToggle<Horse>
           path={`/horses/${record.id}`}
@@ -152,7 +152,7 @@ export function HorseForm({ horse, initialOwner, actions }: { horse?: Horse; ini
           {actions}
         </ActiveToggle>
       )}
-      <form onSubmit={onSubmit} noValidate className="panel flex max-w-3xl flex-col gap-4" aria-label={record ? "Edit horse" : "New horse"}>
+      <form onSubmit={onSubmit} noValidate className="panel flex flex-col gap-4" aria-label={record ? "Edit horse" : "New horse"}>
         <TextField label="Name" name="name" value={state.name} onChange={(value) => set("name", value)} error={errorsFor("name")} autoComplete="off" />
         <EntityPicker label="Owner" name="owner_customer_id" value={state.owner} onChange={(owner) => set("owner", owner)} search={search} error={errorsFor("owner_customer_id")} />
         <EntityPicker

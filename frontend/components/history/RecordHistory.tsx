@@ -50,7 +50,7 @@ function Entry({ event, ownType, timeZone, names }: { event: HistoryEvent; ownTy
  * opened, so a long history never pushes the record itself out of view. */
 export function RecordHistory({ data, entityType, timeZone }: { data: RecordHistoryData; entityType: string; timeZone: string | null }) {
   return (
-    <CollapsibleSection title="History" count={data.history.events.length} testId="history" toggleTestId="history-toggle" className="max-w-3xl">
+    <CollapsibleSection title="History" count={data.history.events.length} testId="history" toggleTestId="history-toggle" className="w-full">
       {data.history.events.length === 0 ? (
         <p className="text-sm text-zinc-500" data-testid="history-empty">
           No changes recorded yet. (Changes made before history was kept are not listed.)

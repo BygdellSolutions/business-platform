@@ -49,7 +49,7 @@ export default async function HorsePage({
   );
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex max-w-5xl flex-col gap-4">
       <h1 className="text-[28px] leading-tight font-semibold tracking-tight" data-testid="record-name">
         {horse.name}
       </h1>

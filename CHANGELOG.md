@@ -5,6 +5,7 @@ All notable changes to `business-platform` will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Boxes on a record page are the same width: customer, horse, catalog item and supplier pages use one width for the form and History, and History fills the width of the order and invoice pages. The row of buttons beside "Deactivate ..." now stays on one line instead of wrapping.
 - On a supplier, the deliveries are now a tinted "Deliveries (n)" button beside "Deactivate supplier" that opens a pop-up window (as on invoices, catalog items, horses and customers) instead of a section down the page.
 - On a customer, Horses, Orders, Products bought and Services billed are now tinted buttons with icons and counts, beside "Deactivate customer", that open pop-up windows (as on invoices, catalog items and horses). "Customer information" is always shown and can no longer be collapsed.
 - On a horse, Journal, Documents, Notes and Services performed are now tinted buttons with icons and counts, beside "Deactivate horse", that open pop-up windows (as on invoices and catalog items) instead of four sections stacked down the page. An accountant or viewer still gets no Journal button.
