@@ -7,6 +7,9 @@ export const BUTTON_VARIANTS = {
   primary: `${BASE} bg-accent text-white shadow-xs hover:bg-accent-hover`,
   secondary: `${BASE} border border-border-strong bg-panel text-foreground hover:bg-surface-hover`,
   danger: `${BASE} bg-red-700 text-white shadow-xs hover:bg-red-800`,
+  // Between primary and secondary: a soft accent tint and a thin accent edge, so a button among plain content (the invoice's action row)
+  // is seen as something to press without competing with the page's one main action.
+  tonal: `${BASE} border border-accent/35 bg-accent-soft text-foreground shadow-xs hover:border-accent/60 hover:bg-accent/20`,
 } as const;
 
 /** The same look for a link that starts the main action of a page ("New customer"). */
@@ -14,6 +17,23 @@ export const PRIMARY_LINK = BUTTON_VARIANTS.primary;
 
 /** The same look for a link that leaves the page ("Back to orders", "Cancel"): a button, never bare underlined text. */
 export const SECONDARY_LINK = BUTTON_VARIANTS.secondary;
+
+/** A small drawn symbol for a button (decoration: the words carry the meaning). `path` is the stroke of a 24 × 24 outline icon. */
+export function ButtonIcon({ path }: { path: string }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="size-4 shrink-0 text-accent-icon" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <path d={path} />
+    </svg>
+  );
+}
+
+export const ICONS = {
+  download: "M12 4v11M7 11l5 5 5-5M5 20h14",
+  mail: "M3 6h18v12H3zM3 7l9 6 9-6",
+  payment: "M3 7h18v10H3zM3 11h18M7 15h3",
+  returns: "M9 7H5v4M5 7l3-3M5 11a7 7 0 1 1 2 5",
+  credit: "M7 3h8l4 4v14H7zM15 3v5h4M10 13h6M10 17h4",
+} as const;
 
 export function Button({
   className = "",

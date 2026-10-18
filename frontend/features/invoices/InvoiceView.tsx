@@ -207,7 +207,7 @@ export function InvoiceView({ invoice, canMutate, timeZone = null, actions = nul
         )}
         {/* The buttons that open pop-up windows (email, payments) sit beside "Download PDF". */}
         <div className="flex flex-wrap items-start gap-3">
-          <DownloadPdf invoice={invoice} />
+          <DownloadPdf invoice={invoice} tonal />
           {actions}
         </div>
         <InvoiceActions />

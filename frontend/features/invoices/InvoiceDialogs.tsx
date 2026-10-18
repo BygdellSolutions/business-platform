@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { Modal } from "@/components/ui/Modal";
-import { Button } from "@/components/ui/Button";
+import { Button, ButtonIcon, ICONS } from "@/components/ui/Button";
 import { CreditNotesPanel } from "@/features/invoices/CreditNotesPanel";
 import { EmailInvoicePanel } from "@/features/invoices/EmailInvoicePanel";
 import { PaymentsPanel } from "@/features/invoices/PaymentsPanel";
@@ -57,19 +57,23 @@ export function InvoiceDialogs({
 
   return (
     <>
-      <Button type="button" onClick={() => setOpen("email")} data-testid="open-email">
+      <Button type="button" variant="tonal" onClick={() => setOpen("email")} data-testid="open-email">
+        <ButtonIcon path={ICONS.mail} />
         {emailLabel}
       </Button>
-      <Button type="button" onClick={() => setOpen("payment")} data-testid="open-payments">
+      <Button type="button" variant="tonal" onClick={() => setOpen("payment")} data-testid="open-payments">
+        <ButtonIcon path={ICONS.payment} />
         {paymentLabel}
       </Button>
       {showReturns && (
-        <Button type="button" onClick={() => setOpen("returns")} data-testid="open-returns">
+        <Button type="button" variant="tonal" onClick={() => setOpen("returns")} data-testid="open-returns">
+          <ButtonIcon path={ICONS.returns} />
           {openReturns > 0 ? `Returns (${openReturns} open)` : "Returns"}
         </Button>
       )}
       {showCredits && (
-        <Button type="button" onClick={() => setOpen("credits")} data-testid="open-credits">
+        <Button type="button" variant="tonal" onClick={() => setOpen("credits")} data-testid="open-credits">
+          <ButtonIcon path={ICONS.credit} />
           {invoice.credit_notes.length > 0 ? `Credit notes (${invoice.credit_notes.length})` : "Credit notes"}
         </Button>
       )}
