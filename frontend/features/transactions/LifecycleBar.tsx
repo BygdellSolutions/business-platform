@@ -11,9 +11,10 @@ import { Notice } from "@/components/ui/Notice";
 import { useEditor } from "@/features/transactions/editor-context";
 import { classify } from "@/features/transactions/failures";
 import { DownloadPdf } from "@/features/invoices/DownloadPdf";
+import { EmailInvoicePanel } from "@/features/invoices/EmailInvoicePanel";
 import { apiFetch } from "@/lib/api/client";
 import type { DeliveryLine } from "@/lib/api/errors";
-import type { Invoice, InvoiceStateOfOrder, PaymentMethod, Transaction } from "@/lib/api/types";
+import type { Invoice, InvoiceEmailDraft, InvoiceEmailLog, InvoiceStateOfOrder, PaymentMethod, Transaction } from "@/lib/api/types";
 import { trimQuantity } from "@/lib/decimal";
 
 type Action = "invoice" | "pay" | "reopen" | "cancel" | "wait";
@@ -35,11 +36,28 @@ export const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
  * explained and followed by a refresh. Each step carries the transaction's `version`, so a step decided on a stale
  * screen is refused instead of applied. The buttons wait while any editor is open.
  */
-export function LifecycleBar({ canInvoice = true, invoiceState = "none" }: { canInvoice?: boolean; invoiceState?: InvoiceStateOfOrder["state"] }) {
+export interface ReceiptEmail {
+  draft: InvoiceEmailDraft;
+  emails: InvoiceEmailLog[];
+  canSend: boolean;
+  timeZone: string | null;
+}
+
+export function LifecycleBar({
+  canInvoice = true,
+  invoiceState = "none",
+  receiptEmail = null,
+}: {
+  canInvoice?: boolean;
+  invoiceState?: InvoiceStateOfOrder["state"];
+  /** What the "Send receipt by email" window needs for an order paid at the counter (read on the server). */
+  receiptEmail?: ReceiptEmail | null;
+}) {
   const orgId = useOrgId();
   const { transaction, stock, busy, editorsOpen, mutate, report, announce } = useEditor();
   const [running, setRunning] = useState<Action | null>(null);
   const [choosingMethod, setChoosingMethod] = useState(false);
+  const [emailingReceipt, setEmailingReceipt] = useState(false);
   const [invoiced, setInvoiced] = useState<{ id: string } | "later" | "waiting" | null>(null);
   // Invoicing by delivery (owner, 2026-10-11): not everything is delivered and nobody has chosen yet.
   const [choice, setChoice] = useState<DeliveryLine[] | null>(null);
@@ -161,6 +179,12 @@ export function LifecycleBar({ canInvoice = true, invoiceState = "none" }: { can
             Paid by {PAYMENT_METHODS.find((method) => method.value === transaction.payment_method)?.label ?? transaction.payment_method} · Receipt{" "}
             {transaction.receipt_number_text}
             <DownloadPdf invoice={{ id: transaction.id, status: "issued" }} path={`/invoices/receipts/${transaction.id}/pdf`} label="Download receipt" tonal />
+            {receiptEmail !== null && (
+              <Button type="button" variant="tonal" onClick={() => setEmailingReceipt(true)} data-testid="open-receipt-email">
+                <ButtonIcon path={ICONS.mail} />
+                {receiptEmail.canSend ? "Send receipt by email" : "Emails sent"}
+              </Button>
+            )}
           </span>
         )}
         {status === "cancelled" && <span className="text-sm text-zinc-500">No further actions.</span>}
@@ -195,6 +219,20 @@ export function LifecycleBar({ canInvoice = true, invoiceState = "none" }: { can
               )}
             </div>
           )}
+        </Modal>
+      )}
+      {paid && receiptEmail !== null && (
+        <Modal open={emailingReceipt} onClose={() => setEmailingReceipt(false)} title="Send receipt by email" testId="receipt-email-dialog">
+          <EmailInvoicePanel
+            key={`receipt-${transaction.id}`}
+            kind="receipt"
+            invoiceId={transaction.id}
+            draft={receiptEmail.draft}
+            canSend={receiptEmail.canSend}
+            emails={receiptEmail.emails}
+            timeZone={receiptEmail.timeZone}
+            bare
+          />
         </Modal>
       )}
       {status === "draft" && walkIn && (

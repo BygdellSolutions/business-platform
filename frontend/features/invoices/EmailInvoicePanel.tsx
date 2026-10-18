@@ -38,13 +38,16 @@ const STATUS_TEXT: Record<string, string> = { sent: "Sent", queued: "On its way"
  */
 export function EmailInvoicePanel({
   invoiceId,
+  kind = "invoice",
   draft,
   canSend,
   emails,
   timeZone,
   bare = false,
 }: {
+  /** The invoice's id, or (for a receipt) the id of the order that was paid at the counter. */
   invoiceId: string;
+  kind?: "invoice" | "receipt";
   draft: InvoiceEmailDraft;
   canSend: boolean;
   emails: InvoiceEmailLog[];
@@ -54,6 +57,8 @@ export function EmailInvoicePanel({
 }) {
   const orgId = useOrgId();
   const router = useRouter();
+  const receipt = kind === "receipt";
+  const noun = receipt ? "receipt" : "invoice";
   const { pending, error, run } = useMutation();
   const [to, setTo] = useState(draft.to);
   const [subject, setSubject] = useState(draft.subject);
@@ -66,7 +71,7 @@ export function EmailInvoicePanel({
   async function submit(event: FormEvent) {
     event.preventDefault();
     setResult(null);
-    const sent = await run(() => apiFetch<InvoiceEmailLog>(orgId, `/invoices/${invoiceId}/email`, { method: "POST", body: { to, subject: subject.trim() === "" ? null : subject, note: note.trim() === "" ? null : note } }));
+    const sent = await run(() => apiFetch<InvoiceEmailLog>(orgId, receipt ? `/invoices/receipts/${invoiceId}/email` : `/invoices/${invoiceId}/email`, { method: "POST", body: { to, subject: subject.trim() === "" ? null : subject, note: note.trim() === "" ? null : note } }));
     if (sent === null) return;
     setResult(sent);
     if (sent.status !== "failed") setNote(draft.message); // ready for the next one: the pre-made text again
@@ -74,10 +79,10 @@ export function EmailInvoicePanel({
   }
 
   return (
-    <section aria-label="Email the invoice" data-testid="email-invoice" className={bare ? "flex flex-col gap-3" : "panel flex max-w-3xl flex-col gap-3"}>
+    <section aria-label={`Email the ${noun}`} data-testid={`email-${noun}`} className={bare ? "flex flex-col gap-3" : "panel flex max-w-3xl flex-col gap-3"}>
       {!bare && <h2 className="text-lg font-semibold">Email the invoice</h2>}
       {canSend ? (
-        <form onSubmit={submit} noValidate aria-label="Send invoice by email" className="flex flex-col gap-3">
+        <form onSubmit={submit} noValidate aria-label={`Send ${noun} by email`} className="flex flex-col gap-3">
           <TextField label="Send to" name="to" value={to} onChange={setTo} inputMode="email" autoComplete="off" error={problems.byField.to} />
           {draft.to === "" && (
             <p className="text-xs text-secondary" data-testid="no-customer-email">
@@ -86,7 +91,12 @@ export function EmailInvoicePanel({
           )}
           <TextField label="Subject" name="subject" value={subject} onChange={setSubject} autoComplete="off" error={problems.byField.subject} />
           <TextAreaField label="Message (optional)" name="note" value={note} onChange={setNote} rows={6} error={problems.byField.note} />
-          <p className="text-xs text-secondary">The invoice is attached as a PDF, after the invoice number, amount, due date and payment details. The email comes from your organization&apos;s name and replies go to your organization. The pre-made text is set in Settings.</p>
+          <p className="text-xs text-secondary">
+            {receipt
+              ? "The receipt is attached as a PDF, after what was paid and how. "
+              : "The invoice is attached as a PDF, after the invoice number, amount, due date and payment details. "}
+            The email comes from your organization&apos;s name and replies go to your organization.
+          </p>
           <ErrorSummary messages={general} />
           {result !== null &&
             (result.status === "failed" ? (
@@ -94,16 +104,16 @@ export function EmailInvoicePanel({
                 {failureText(result.error)}
               </Notice>
             ) : (
-              <Notice testId="email-sent">Invoice sent to {result.to_email}.</Notice>
+              <Notice testId="email-sent">{receipt ? "Receipt" : "Invoice"} sent to {result.to_email}.</Notice>
             ))}
           <div>
             <Button type="submit" disabled={pending || to.trim() === ""} data-testid="send-invoice-email">
-              {pending ? "Sending…" : "Send invoice by email"}
+              {pending ? "Sending…" : `Send ${noun} by email`}
             </Button>
           </div>
         </form>
       ) : (
-        <p className="text-sm text-secondary">Only owners, admins and accountants can email invoices.</p>
+        <p className="text-sm text-secondary">{receipt ? "Only people who can change records can email receipts." : "Only owners, admins and accountants can email invoices."}</p>
       )}
       {emails.length === 0 ? (
         <p className="text-sm text-secondary" data-testid="no-invoice-emails">

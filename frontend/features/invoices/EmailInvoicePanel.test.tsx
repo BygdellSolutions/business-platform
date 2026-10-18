@@ -63,6 +63,25 @@ describe("EmailInvoicePanel", () => {
     expect(box).toHaveValue("Hej Anna, tack!");
   });
 
+  it("serves a receipt too: its own address to send to, its own words, and no mention of an invoice", async () => {
+    const fetchMock = answer(201, log({ status: "sent" }));
+    render(<EmailInvoicePanel invoiceId="order1" kind="receipt" draft={draft({ subject: "Kvitto 1001" })} canSend emails={[]} timeZone={null} />);
+
+    expect(screen.getByTestId("email-receipt")).toBeInTheDocument();
+    expect(screen.getByTestId("send-invoice-email")).toHaveTextContent("Send receipt by email");
+    expect(screen.getByText(/The receipt is attached as a PDF/)).toBeInTheDocument();
+    expect(screen.queryByText(/invoice number/)).toBeNull();
+    await userEvent.click(screen.getByTestId("send-invoice-email"));
+
+    await waitFor(() => expect(screen.getByTestId("email-sent")).toHaveTextContent("Receipt sent to kund@example.test."));
+    expect((fetchMock.mock.calls[0] as [string, RequestInit])[0]).toBe("/api/o/00000000-0000-4000-8000-0000000000a1/invoices/receipts/order1/email");
+  });
+
+  it("tells a reader who cannot send a receipt who can", () => {
+    render(<EmailInvoicePanel invoiceId="order1" kind="receipt" draft={draft()} canSend={false} emails={[]} timeZone={null} />);
+    expect(screen.getByText("Only people who can change records can email receipts.")).toBeInTheDocument();
+  });
+
   it("shows the list to a reader but no form", () => {
     render(<EmailInvoicePanel invoiceId="inv1" draft={draft()} canSend={false} emails={[log(), log({ id: "e2", status: "failed", error: "rejected" })]} timeZone={null} />);
     expect(screen.queryByTestId("send-invoice-email")).toBeNull();

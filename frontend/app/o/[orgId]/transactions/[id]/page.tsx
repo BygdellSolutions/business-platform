@@ -6,7 +6,7 @@ import { Notice } from "@/components/ui/Notice";
 import { TransactionEditor } from "@/features/transactions/TransactionEditor";
 import { readActiveRole } from "@/lib/active-role";
 import { readEntityFields } from "@/lib/custom-fields/server";
-import type { InvoiceStateOfOrder, LineFulfillment, Organization, StockDemand, Transaction } from "@/lib/api/types";
+import type { InvoiceEmailDraft, InvoiceEmailLog, InvoiceStateOfOrder, LineFulfillment, Organization, StockDemand, Transaction } from "@/lib/api/types";
 import { readRecordHistory } from "@/lib/history-server";
 import { canMutateInvoices, canWriteRecords } from "@/lib/roles";
 import { requireUuid, serverRead } from "@/lib/server-api";
@@ -48,6 +48,17 @@ export default async function TransactionPage({
     ),
   ]);
 
+  // An order paid at the counter has a receipt to email: its address, subject and the earlier sends are read here.
+  const receiptEmail =
+    transaction.paid_at !== null
+      ? {
+          draft: await serverRead<InvoiceEmailDraft>(orgId, `/api/invoices/receipts/${recordId}/email-draft`),
+          emails: await serverRead<InvoiceEmailLog[]>(orgId, `/api/invoices/receipts/${recordId}/emails`),
+          canSend: canWriteRecords(role),
+          timeZone: organization.timezone,
+        }
+      : null;
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-4">
@@ -79,6 +90,7 @@ export default async function TransactionPage({
         canEdit={canWriteRecords(role)}
         canInvoice={canMutateInvoices(role)}
         invoiceState={invoice?.state ?? "none"}
+        receiptEmail={receiptEmail}
         timeZone={organization.timezone}
         stock={stock}
         fulfillment={fulfillment}

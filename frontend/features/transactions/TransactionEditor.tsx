@@ -9,7 +9,7 @@ import { EditorContext, type EditorApi, type EditorNotice, type TransactionField
 import { describeProblem, TEXT, type Failure } from "@/features/transactions/failures";
 import { HeaderEditor } from "@/features/transactions/HeaderEditor";
 import { TransactionFields } from "@/features/transactions/TransactionFields";
-import { LifecycleBar } from "@/features/transactions/LifecycleBar";
+import { LifecycleBar, type ReceiptEmail } from "@/features/transactions/LifecycleBar";
 import { LinesTable } from "@/features/transactions/LinesTable";
 import { TotalsPanel } from "@/features/transactions/TotalsPanel";
 import { TransactionStatusBadge } from "@/features/transactions/TransactionStatusBadge";
@@ -45,6 +45,7 @@ export function TransactionEditor({
   canEdit,
   canInvoice = true,
   invoiceState = "none",
+  receiptEmail = null,
   timeZone = null,
   stock = NO_STOCK,
   fulfillment = NO_FULFILLMENT,
@@ -56,6 +57,8 @@ export function TransactionEditor({
   canInvoice?: boolean;
   /** Where the order stands with invoicing (from Invoicing); decides whether a completed order offers "Invoice". */
   invoiceState?: InvoiceStateOfOrder["state"];
+  /** For an order paid at the counter: the data of the "Send receipt by email" window. */
+  receiptEmail?: ReceiptEmail | null;
   timeZone?: string | null;
   stock?: StockDemand[];
   fulfillment?: LineFulfillment[];
@@ -230,7 +233,7 @@ export function TransactionEditor({
           </Notice>
         )}
 
-        {canEdit && <LifecycleBar canInvoice={canInvoice} invoiceState={invoiceState} />}
+        {canEdit && <LifecycleBar canInvoice={canInvoice} invoiceState={invoiceState} receiptEmail={receiptEmail} />}
         <HeaderEditor />
         <TransactionFields />
         <LinesTable />

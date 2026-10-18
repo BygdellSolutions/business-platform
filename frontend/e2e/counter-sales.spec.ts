@@ -1,6 +1,6 @@
 import { expect, test } from "./fixtures";
 
-import { createCustomer, createTransaction, createWorld, signIn, testRow, sql, type World } from "./support";
+import { bffUrl, createCustomer, createTransaction, createWorld, signIn, testRow, sql, type World } from "./support";
 
 /** A draft order is either paid now (completed + paid, with a receipt) or invoiced (onto a draft invoice). 2026-10-10. */
 let world: World;
@@ -63,4 +63,41 @@ test("a walk-in customer is chosen in one click and can only pay now", async ({ 
   await expect(page.getByTestId("walk-in-hint")).toBeVisible();
   await expect(page.getByTestId("invoice-order")).toHaveCount(0);
   await expect(page.getByTestId("pay-now")).toBeVisible();
+});
+
+// A real 1x1 PNG: enough for the receipt to carry a picture.
+const TINY_PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+test("a receipt is emailed from a pop-up window beside Download receipt, and it carries the organization's logo", async ({ page, context }) => {
+  world = createWorld({ label: "ReceiptEmail" });
+  await signIn(context, world.email);
+  const anna = await createCustomer(context, world.orgId, "Anna Andersson", { email: "anna@example.test" });
+  const order = await createTransaction(context, world.orgId, { billing_customer_id: anna.id, lines: [LINE] });
+  const saved = await context.request.post(bffUrl(world.orgId, "/organization/logo"), { data: { data_base64: TINY_PNG } });
+  expect(saved.status(), await saved.text()).toBe(200); // the logo really is kept
+
+  await page.goto(`/o/${world.orgId}/transactions/${order.id}`);
+  await page.getByTestId("pay-now").click();
+  await page.getByTestId("pay-card").click();
+  await expect(page.getByTestId("paid-at-counter")).toContainText("Receipt 1001");
+
+  // the button sits beside Download receipt, and the window holds the form
+  const [download, email] = await Promise.all(["download-pdf", "open-receipt-email"].map(async (id) => (await page.getByTestId(id).boundingBox())!));
+  expect(Math.abs(download.y - email.y)).toBeLessThan(20);
+  expect(download.x).toBeLessThan(email.x);
+  await expect(page.getByTestId("email-receipt")).toBeHidden();
+  await page.getByTestId("open-receipt-email").click();
+  const dialog = page.getByRole("dialog", { name: "Send receipt by email" });
+  await expect(dialog.getByLabel("Send to")).toHaveValue("anna@example.test"); // the customer's address
+  await expect(dialog.getByLabel("Subject")).toHaveValue(/^(Kvitto|Receipt) 1001$/);
+  await dialog.getByTestId("send-invoice-email").click();
+  // no mail service is configured in the test setup: the person is told, and the attempt is kept
+  await expect(dialog.getByTestId("email-failed")).toBeVisible();
+  await expect(dialog.getByTestId("invoice-email")).toHaveCount(1);
+  expect(testRow(`select status || '|' || error || '|' || to_email from receipt_emails where transaction_id = ${sql(order.id)}`)).toBe("failed|not_configured|anna@example.test");
+
+  // the receipt itself, as the download makes it, has the logo
+  const pdf = await context.request.get(bffUrl(world.orgId, `/invoices/receipts/${order.id}/pdf`));
+  expect(pdf.status()).toBe(200);
+  expect((await pdf.body()).includes(Buffer.from("/Subtype /Image"))).toBe(true);
 });
