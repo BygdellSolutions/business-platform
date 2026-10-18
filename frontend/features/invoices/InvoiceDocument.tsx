@@ -76,7 +76,6 @@ export function InvoiceDocument({ invoice, timeZone = null }: { invoice: Invoice
                 <tr className="border-b border-zinc-300 dark:border-zinc-700">
                   <th className="py-1 pr-3">#</th>
                   <th className="py-1 pr-3">Description</th>
-                  <th className="py-1 pr-3">Unit</th>
                   <th className="py-1 pr-3 text-right">Quantity</th>
                   <th className="py-1 pr-3 text-right">Unit price</th>
                   <th className="py-1 pr-3 text-right">VAT %</th>
@@ -107,7 +106,6 @@ export function InvoiceDocument({ invoice, timeZone = null }: { invoice: Invoice
                       )}
                       <FieldSnapshots fields={line.fields} label={`Fields of line ${line.position}`} testId="line-fields" />
                     </td>
-                    <td className="py-1 pr-3">{line.unit}</td>
                     <td className="py-1 pr-3 text-right" data-testid="line-quantity">
                       <DecimalText value={line.quantity} />
                     </td>

@@ -268,7 +268,7 @@ test("invoicing an order not delivered in full asks first, then invoices only wh
   await page.getByTestId("invoice-order").click();
 
   const choice = page.getByTestId("partial-delivery-choice");
-  await expect(choice).toContainText("Saddle pad: 2 of 7 delivered, 5 backordered (unit: pcs)");
+  await expect(choice).toContainText("Saddle pad: 2 of 7 delivered, 5 backordered");
   await choice.getByTestId("invoice-delivered-now").click();
   await page.getByTestId("open-draft-invoice").click();
 

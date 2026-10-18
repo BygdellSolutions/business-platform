@@ -63,7 +63,6 @@ test("a discount typed on an ad-hoc line applies to that line only and shows as 
   await openAddLine(page);
   await page.getByLabel("Ad-hoc line").check();
   await page.getByLabel("Description").fill("Special treatment");
-  await page.getByLabel("Unit", { exact: true }).fill("st");
   await page.getByLabel("Quantity").fill("1");
   await page.getByLabel("Unit price excluding VAT").fill("500");
   await page.getByLabel("VAT rate (%)").fill("25");

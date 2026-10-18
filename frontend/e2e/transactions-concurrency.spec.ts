@@ -91,7 +91,6 @@ test.describe("a stale tab cannot overwrite a newer edit", () => {
     await openAddLine(b);
     await b.getByLabel("Ad-hoc line").check();
     await b.getByTestId("add-line-form").getByLabel("Description", { exact: true }).fill("Added in B");
-    await b.getByTestId("add-line-form").getByLabel("Unit", { exact: true }).fill("u");
     await b.getByTestId("add-line-form").getByLabel("Quantity", { exact: true }).fill("1");
     await b.getByTestId("add-line-form").getByLabel("Unit price excluding VAT", { exact: true }).fill("5.00");
     await b.getByTestId("add-line-form").getByLabel("VAT rate (%)", { exact: true }).fill("25");

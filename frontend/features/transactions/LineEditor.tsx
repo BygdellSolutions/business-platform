@@ -225,7 +225,6 @@ export function LineEditor({ line, ordinal, onClose }: { line: TransactionLine; 
       {kind === "adhoc" ? (
         <div className="grid gap-3 sm:grid-cols-2">
           <TextField label="Description" name="description" value={draft.description} onChange={set("description")} error={errorsFor("description")} autoComplete="off" />
-          <TextField label="Unit" name="unit" value={draft.unit} onChange={set("unit")} error={errorsFor("unit")} autoComplete="off" />
           <DecimalField label="Quantity" name="quantity" value={draft.quantity} onChange={set("quantity")} error={errorsFor("quantity")} />
           <DecimalField
             label={line.line_discount_percent ? "Unit price excluding VAT (before the line discount)" : "Unit price excluding VAT"}

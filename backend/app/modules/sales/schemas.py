@@ -28,7 +28,7 @@ MAX_LINES_PER_REQUEST = 200
 
 class LineCreate(BaseModel):
     """A line. With `item_id`, description/unit/price/VAT default from the Item (a copy)
-    and any of them may be overridden. Without `item_id` (ad-hoc line) all four are required."""
+    and any of them may be overridden. Without `item_id` (ad-hoc line) description, price and VAT are required; the unit is optional (pcs)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -66,7 +66,7 @@ class LineCreate(BaseModel):
         if self.item_id is None:
             missing = [
                 name
-                for name in ("description", "unit", "unit_price_ex_vat", "vat_rate")
+                for name in ("description", "unit_price_ex_vat", "vat_rate")
                 if getattr(self, name) is None
             ]
             if missing:

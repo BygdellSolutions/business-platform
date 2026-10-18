@@ -23,7 +23,6 @@ export function LinesTable() {
               <tr className="border-b border-zinc-300 dark:border-zinc-700">
                 <th className="py-1 pr-3">#</th>
                 <th className="py-1 pr-3">Description</th>
-                <th className="py-1 pr-3">Unit</th>
                 <th className="py-1 pr-3 text-right">Quantity</th>
                 <th className="py-1 pr-3 text-right">Unit price excl. VAT</th>
                 <th className="py-1 pr-3 text-right">VAT %</th>

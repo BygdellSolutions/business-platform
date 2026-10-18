@@ -195,7 +195,6 @@ describe("adding an ad-hoc line", () => {
   async function fillAdHoc(values: { description?: string; unit?: string; quantity?: string; price?: string; vat?: string }) {
     await openAdd("Ad-hoc line");
     if (values.description) await userEvent.type(screen.getByLabelText("Description"), values.description);
-    if (values.unit) await userEvent.type(screen.getByLabelText("Unit"), values.unit);
     if (values.quantity) await userEvent.type(screen.getByLabelText("Quantity"), values.quantity);
     if (values.price) await userEvent.type(screen.getByLabelText("Unit price excluding VAT"), values.price);
     if (values.vat) await userEvent.type(screen.getByLabelText("VAT rate (%)"), values.vat);
@@ -207,12 +206,12 @@ describe("adding an ad-hoc line", () => {
     ["850", "25.00", "2"],
   ])("sends price %s, VAT %s and quantity %s as the strings typed, with no item and no number", async (price, vat, quantity) => {
     render(<Harness initial={tx()} />);
-    await fillAdHoc({ description: "Travel", unit: "km", quantity, price, vat });
+    await fillAdHoc({ description: "Travel", quantity, price, vat });
 
     await userEvent.click(screen.getByTestId("submit-line"));
 
     const body = writes()[0].body as Record<string, unknown>;
-    expect(body).toEqual({ description: "Travel", unit: "km", quantity, unit_price_ex_vat: price, vat_rate: vat });
+    expect(body).toEqual({ description: "Travel", quantity, unit_price_ex_vat: price, vat_rate: vat });
     expect("item_id" in body).toBe(false);
     expect(Object.values(body).every((value) => typeof value === "string")).toBe(true);
     expect(JSON.stringify(body)).toContain(`"unit_price_ex_vat":"${price}"`);
@@ -221,7 +220,7 @@ describe("adding an ad-hoc line", () => {
 
   it.each([["unit_price_ex_vat", "Unit price excluding VAT"], ["vat_rate", "VAT rate (%)"]])("a %s that is not a decimal is stopped locally", async (key, label) => {
     render(<Harness initial={tx()} />);
-    await fillAdHoc({ description: "Travel", unit: "km", quantity: "1", price: key === "unit_price_ex_vat" ? "1,5" : "10", vat: key === "vat_rate" ? "abc" : "25" });
+    await fillAdHoc({ description: "Travel", quantity: "1", price: key === "unit_price_ex_vat" ? "1,5" : "10", vat: key === "vat_rate" ? "abc" : "25" });
     await userEvent.click(screen.getByTestId("submit-line"));
     expect(screen.getByTestId(`error-${key}`)).toHaveTextContent("Enter a number such as 850.00");
     expect(screen.getByLabelText(label)).toHaveAttribute("aria-invalid", "true");
@@ -266,7 +265,6 @@ describe("editing a line", () => {
     await openEditor();
 
     expect(screen.getByLabelText("Description")).toHaveValue("Old name");
-    expect(screen.getByLabelText("Unit")).toHaveValue("visit");
     expect(screen.getByLabelText("Unit price excluding VAT")).toHaveValue("0.10");
     expect(screen.getByLabelText("Quantity")).toHaveValue("1.000");
     expect(vi.mocked(apiFetch).mock.calls.filter(([, path]) => path.startsWith("/items"))).toHaveLength(0); // no item was fetched

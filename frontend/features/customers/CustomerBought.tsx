@@ -18,7 +18,6 @@ const SORT_COLUMNS: Record<string, (r: BoughtLine) => SortValue> = {
   status: (r) => ({ text: r.status }),
   description: (r) => ({ text: r.description }),
   quantity: (r) => ({ decimal: r.quantity }),
-  unit: (r) => ({ text: r.unit }),
   unit_price: (r) => ({ decimal: r.unit_price_ex_vat }),
   amount: (r) => ({ decimal: r.gross_amount }),
 };
@@ -43,7 +42,6 @@ export function CustomerBought({ orgId, lines }: { orgId: string; lines: BoughtL
                 <OrderHeaders header={sorted.header} />
                 <SortHeader label="Description" {...sorted.header("description")} />
                 <SortHeader label="Qty" {...sorted.header("quantity")} align="right" />
-                <SortHeader label="Unit" {...sorted.header("unit")} />
                 <SortHeader label="Unit price" {...sorted.header("unit_price")} align="right" />
                 <SortHeader label="Amount" {...sorted.header("amount")} align="right" last />
               </tr>
@@ -62,7 +60,6 @@ export function CustomerBought({ orgId, lines }: { orgId: string; lines: BoughtL
                     )}
                   </td>
                   <td className="py-1 pr-4 text-right">{trimQuantity(line.quantity)}</td>
-                  <td className="py-1 pr-4">{line.unit}</td>
                   <td className="py-1 pr-4 text-right">
                     <DecimalText value={line.unit_price_ex_vat} />
                   </td>

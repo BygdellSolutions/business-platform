@@ -22,7 +22,6 @@ const SORT_COLUMNS: Record<string, (r: Backorder) => SortValue> = {
   number: (r) => ({ number: r.transaction_number }),
   date: (r) => ({ text: r.transaction_date }),
   customer: (r) => ({ text: r.customer_name }),
-  unit: (r) => ({ text: r.item_unit }),
   waiting: (r) => ({ decimal: r.remaining }),
   state: (r) => ({ text: r.state }),
 };

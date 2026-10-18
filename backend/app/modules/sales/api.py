@@ -313,7 +313,7 @@ def _new_line_values(
         return requested if requested is not None else from_item
 
     description = pick(line.description, item.name if item else None)
-    unit = pick(line.unit, item.unit if item else None)
+    unit = pick(line.unit, item.unit if item else "pcs")
     if item is not None and line.unit_price_ex_vat is None:
         pricing_values = _catalog_price(db, ctx, item, customer_id, on_date, line.line_discount_percent)
     else:

@@ -28,7 +28,6 @@ const DELIVERY_STATES: Record<Incoming["state"], string> = {
 const DELIVERY_SORTS: Record<string, (r: Incoming) => SortValue> = {
   ordered: (r) => ({ text: r.created_at }),
   product: (r) => ({ text: r.item_name }),
-  unit: (r) => ({ text: r.item_unit }),
   quantity: (r) => ({ decimal: r.quantity }),
   received: (r) => ({ decimal: r.received }),
   expected: (r) => ({ text: r.expected_on }),
@@ -110,7 +109,6 @@ export default async function SupplierPage({
                 <tr className="border-b border-zinc-300 dark:border-zinc-700">
                   <SortHeader label="Order date" sortKey="ordered" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.ordered} />
                   <SortHeader label="Product" sortKey="product" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.product} />
-                  <SortHeader label="Unit" sortKey="unit" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.unit} />
                   <SortHeader label="Ordered" sortKey="quantity" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.quantity} align="right" />
                   <SortHeader label="Received" sortKey="received" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.received} align="right" />
                   <SortHeader label="Expected" sortKey="expected" current={deliverySort.sort} dir={deliverySort.dir} href={deliverySort.hrefs.expected} />
@@ -137,7 +135,6 @@ export default async function SupplierPage({
                         {row.item_name}
                       </Link>
                     </td>
-                    <td className="py-1 pr-4">{row.item_unit}</td>
                     <td className="py-1 pr-4 text-right">
                       {trimQuantity(row.quantity)}
                     </td>

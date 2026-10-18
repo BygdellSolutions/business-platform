@@ -8,6 +8,7 @@ import { BackordersPanel } from "@/features/catalog/BackordersPanel";
 import { IncomingPanel } from "@/features/catalog/IncomingPanel";
 import { ItemDiscounts } from "@/features/catalog/ItemDiscounts";
 import { StockPanel } from "@/features/catalog/StockPanel";
+import { trimQuantity } from "@/lib/decimal";
 import type { Backorder, Incoming, ItemAvailability, ItemDiscount, Stock } from "@/lib/api/types";
 
 type Window = "stock" | "backorders" | "incoming" | "discounts";
@@ -52,7 +53,7 @@ export function ItemDialogs({
         {tracksStock && (
           <Button type="button" variant="tonal" onClick={() => setOpen("stock")} data-testid="open-stock">
             <ButtonIcon path={ICONS.stock} />
-            Stock
+            {`Stock (${trimQuantity(stock.on_hand)})`}
           </Button>
         )}
         {tracksStock && backorders.length > 0 && (

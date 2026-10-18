@@ -128,7 +128,7 @@ function AddLinePanel({ onClose }: { onClose: () => void }) {
     if (price === null) errors.unit_price_ex_vat = [NOT_A_DECIMAL];
     if (vat === null) errors.vat_rate = [NOT_A_DECIMAL];
     if (Object.keys(errors).length > 0 || quantity === null || price === null || vat === null) return { errors };
-    return { body: { description: fields.description, unit: fields.unit, quantity, unit_price_ex_vat: price, vat_rate: vat, ...withDiscount } };
+    return { body: { description: fields.description, quantity, unit_price_ex_vat: price, vat_rate: vat, ...withDiscount } };
   }
 
   async function submit() {
@@ -250,7 +250,6 @@ function AddLinePanel({ onClose }: { onClose: () => void }) {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           <TextField label="Description" name="description" value={fields.description} onChange={set("description")} error={errorsFor("description")} autoComplete="off" />
-          <TextField label="Unit" name="unit" value={fields.unit} onChange={set("unit")} error={errorsFor("unit")} autoComplete="off" />
           <DecimalField label="Quantity" name="quantity" value={fields.quantity} onChange={set("quantity")} error={errorsFor("quantity")} />
           <DecimalField label="Unit price excluding VAT" name="unit_price_ex_vat" value={fields.unit_price_ex_vat} onChange={set("unit_price_ex_vat")} error={errorsFor("unit_price_ex_vat")} />
           <DecimalField label="VAT rate (%)" name="vat_rate" value={fields.vat_rate} onChange={set("vat_rate")} error={errorsFor("vat_rate")} />

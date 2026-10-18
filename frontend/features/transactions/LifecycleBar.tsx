@@ -209,7 +209,7 @@ export function LifecycleBar({
                     const line = transaction.lines.find((entry) => entry.item_id === demand.item_id);
                     return (
                       <p key={demand.item_id}>
-                        {line?.description}: {trimQuantity(demand.available)} of {trimQuantity(demand.requested)} in stock (unit: {line?.unit}). The customer
+                        {line?.description}: {trimQuantity(demand.available)} of {trimQuantity(demand.requested)} in stock. The customer
                         pays for all {trimQuantity(demand.requested)} now, takes {trimQuantity(demand.available)} today and gets {trimQuantity(demand.shortage)}{" "}
                         when they arrive.
                       </p>
@@ -246,7 +246,7 @@ export function LifecycleBar({
           <ul className="my-1 list-disc pl-5">
             {choice.map((line, index) => (
               <li key={index}>
-                {line.description}: {trimQuantity(line.delivered)} of {trimQuantity(line.ordered)} delivered, {trimQuantity(line.backordered)} backordered (unit: {line.unit})
+                {line.description}: {trimQuantity(line.delivered)} of {trimQuantity(line.ordered)} delivered, {trimQuantity(line.backordered)} backordered
               </li>
             ))}
           </ul>

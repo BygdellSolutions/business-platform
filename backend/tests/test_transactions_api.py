@@ -215,9 +215,11 @@ def test_ad_hoc_lines_have_no_item_and_need_every_value(client: TestClient, sale
     assert ok["item_id"] is None
     assert (ok["net_amount"], ok["vat_amount"]) == ("5.00", "1.25")
 
-    for missing in ("description", "unit", "unit_price_ex_vat", "vat_rate"):
+    for missing in ("description", "unit_price_ex_vat", "vat_rate"):
         line = {k: v for k, v in ad_hoc().items() if k != missing}
         assert create(client, sales, lines=[line]).status_code == 422, missing
+    no_unit = {k: v for k, v in ad_hoc().items() if k != "unit"}
+    assert create(client, sales, lines=[no_unit]).json()["lines"][0]["unit"] == "pcs"  # the unit is not asked for
 
 
 def test_an_inactive_item_cannot_be_added_to_a_new_line(client: TestClient, db_session: Session, sales):

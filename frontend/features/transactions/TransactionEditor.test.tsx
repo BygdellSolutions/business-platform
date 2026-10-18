@@ -63,7 +63,6 @@ describe("what the editor shows", () => {
     expect(within(rows[0]).getAllByRole("cell")[0]).toHaveTextContent("1");
     expect(within(rows[1]).getAllByRole("cell")[0]).toHaveTextContent("2");
     expect(within(rows[1]).getByTestId("line-description")).toHaveTextContent("Travel");
-    expect(within(rows[1]).getByTestId("line-unit")).toHaveTextContent("km");
   });
 
   it("prints decimals exactly as the server sent them: no rounding, no reformatting, no arithmetic", () => {
@@ -258,7 +257,7 @@ describe("lifecycle", () => {
     expect(screen.queryByTestId("pay-now-shortage")).toBeNull(); // only when paying
     await userEvent.click(screen.getByTestId("pay-now"));
     const warning = screen.getByTestId("pay-now-shortage");
-    expect(warning).toHaveTextContent("Saddle pad: 2 of 7 in stock (unit: pcs). The customer pays for all 7 now, takes 2 today and gets 5 when they arrive.");
+    expect(warning).toHaveTextContent("Saddle pad: 2 of 7 in stock. The customer pays for all 7 now, takes 2 today and gets 5 when they arrive.");
     expect(warning).not.toHaveTextContent("Hoof oil"); // enough of it
 
     await userEvent.click(screen.getByTestId("pay-card"));
@@ -297,7 +296,7 @@ describe("lifecycle", () => {
     await userEvent.click(screen.getByTestId("invoice-order"));
 
     const choice = await screen.findByTestId("partial-delivery-choice");
-    expect(choice).toHaveTextContent("Saddle pad: 2 of 7 delivered, 5 backordered (unit: pcs)");
+    expect(choice).toHaveTextContent("Saddle pad: 2 of 7 delivered, 5 backordered");
     expect(screen.queryByTestId("open-draft-invoice")).toBeNull(); // nothing invoiced until the person chooses
     await userEvent.click(screen.getByTestId("invoice-delivered-now"));
 

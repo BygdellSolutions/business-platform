@@ -26,7 +26,6 @@ import { useSortedRows } from "@/lib/use-sorted-rows";
 const SORT_COLUMNS: Record<string, (r: Incoming) => SortValue> = {
   ordered: (r) => ({ text: r.created_at }),
   expected: (r) => ({ text: r.expected_on }),
-  unit: (r) => ({ text: r.item_unit }),
   quantity: (r) => ({ decimal: r.quantity }),
   received: (r) => ({ decimal: r.received }),
   remaining: (r) => ({ decimal: r.remaining }),

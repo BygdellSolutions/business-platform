@@ -19,7 +19,7 @@ const STEPS = [
 
 const AREAS = [
   { title: "Customers and suppliers", text: "People and companies in one list, with their orders, invoices and (for horse owners and stables) their horses on the same page." },
-  { title: "Catalog and stock", text: "Products and services with unit, price and VAT. Stock levels follow every delivery and sale, so you can see what is left." },
+  { title: "Catalog and stock", text: "Products and services with price and VAT. Stock levels follow every delivery and sale, so you can see what is left." },
   { title: "Scheduling", text: "Week, day and month views, a column for each person, and bookings for several horses in one session." },
   { title: "Horse journal", text: "A record for every horse with its owner and stable, and a treatment journal with marks on a body diagram. Drafts save themselves; you finalize when the visit is done." },
   { title: "Invoices and credit notes", text: "Sequential numbers, payment reference, VAT per line and PDF copies. Invoices in another currency also show the VAT in SEK." },

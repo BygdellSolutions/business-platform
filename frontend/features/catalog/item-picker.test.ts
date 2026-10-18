@@ -74,7 +74,7 @@ describe("itemSearch", () => {
     expect(url.searchParams.get("active")).toBe("true");
   });
 
-  it("identifies each choice by the item's id; the unit and price are only a hint, as strings", async () => {
+  it("identifies each choice by the item's id; the price is only a hint, as strings", async () => {
     mocked.mockResolvedValue({
       ok: true,
       status: 200,
@@ -97,7 +97,7 @@ describe("itemSearch", () => {
         {
           id: "abc",
           label: "Saddle fitting",
-          detail: "hour · 0.10",
+          detail: "0.10",
           inactive: false,
         },
       ],

@@ -102,7 +102,6 @@ export function ReturnsPanel({
               <thead>
                 <tr className="border-b border-zinc-300 dark:border-zinc-700">
                   <th className="py-1 pr-4">Line</th>
-                  <th className="py-1 pr-4">Unit</th>
                   <th className="py-1 pr-4 text-right">Not credited</th>
                   <th className="py-1 pr-4 text-right">To return</th>
                 </tr>
@@ -111,7 +110,6 @@ export function ReturnsPanel({
                 {returnable.map((line) => (
                   <tr key={line.id} className="border-b border-zinc-200 dark:border-zinc-800">
                     <td className="py-1 pr-4">{line.description}</td>
-                    <td className="py-1 pr-4">{line.unit}</td>
                     <td className="py-1 pr-4 text-right">{trimQuantity(line.creditable_quantity ?? "")}</td>
                     <td className="py-1 pr-4 text-right">
                       <input
@@ -200,7 +198,6 @@ function ReturnCase({ invoice, item, canHandle, timeZone, today, onCredit }: { i
         {item.lines.map((line) => (
           <li key={line.invoice_line_id}>
             {line.description}: {trimQuantity(line.quantity)}
-            {line.unit ? ` (${line.unit})` : ""}
             {line.returned_to_stock && <span className="text-xs text-zinc-500"> · back in stock</span>}
             {canHandle && item.state === "requested" && stockable.has(line.invoice_line_id) && (
               <label className="ml-2 inline-flex items-center gap-1 text-xs">

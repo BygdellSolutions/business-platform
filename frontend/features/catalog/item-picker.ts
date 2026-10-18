@@ -34,7 +34,7 @@ export function itemSearch(
       data: result.data.map((item) => ({
         id: item.id,
         label: item.name,
-        detail: `${item.unit} · ${item.price_ex_vat}`,
+        detail: item.price_ex_vat,
         inactive: !item.active,
       })),
     };

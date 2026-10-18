@@ -98,7 +98,6 @@ export function LineRow({ line, ordinal }: { line: TransactionLine; ordinal: num
           </span>
         )}
       </td>
-      <td className="py-1 pr-3" data-testid="line-unit">{line.unit}</td>
       <td className="py-1 pr-3 text-right" data-testid="line-quantity"><DecimalText value={line.quantity} /></td>
       <td className="py-1 pr-3 text-right" data-testid="line-price">
         <DecimalText value={line.unit_price_ex_vat} />

@@ -199,7 +199,6 @@ export function CreditNotesPanel({
               <thead>
                 <tr className="border-b border-zinc-300 dark:border-zinc-700">
                   <th className="py-1 pr-4">Line</th>
-                  <th className="py-1 pr-4">Unit</th>
                   <th className="py-1 pr-4 text-right">Invoiced</th>
                   <th className="py-1 pr-4 text-right">Credited</th>
                   <th className="py-1 pr-4 text-right">Unit price</th>
@@ -214,7 +213,6 @@ export function CreditNotesPanel({
                   return (
                     <tr key={line.id} data-testid="credit-line" className="border-b border-zinc-200 align-top dark:border-zinc-800">
                       <td className="py-1 pr-4">{line.description}</td>
-                      <td className="py-1 pr-4">{line.unit}</td>
                       <td className="py-1 pr-4 text-right">{trimQuantity(line.quantity)}</td>
                       <td className="py-1 pr-4 text-right">{trimQuantity(line.credited_quantity)}</td>
                       <td className="py-1 pr-4 text-right">

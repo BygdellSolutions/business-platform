@@ -154,7 +154,7 @@ export default async function CatalogPage({
                       {item.current_price_inc_vat !== null && <DecimalText value={item.current_price_inc_vat} />}
                     </td>
                     <td className="py-1 pr-4" data-testid="item-tracks-stock">
-                      {item.track_stock ? "Yes" : "No"}
+                      {item.track_stock ? <span className="badge tone-info">Yes</span> : <span className="text-zinc-500">No</span>}
                     </td>
                     <td className="py-1">
                       <StatusBadge active={item.active} />

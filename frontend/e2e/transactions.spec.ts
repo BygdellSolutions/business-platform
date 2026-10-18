@@ -61,7 +61,6 @@ async function addAdHoc(page: Page, values: { description: string; unit: string;
   await openAddLine(page);
   await page.getByLabel("Ad-hoc line").check();
   await page.getByLabel("Description", { exact: true }).fill(values.description);
-  await page.getByLabel("Unit", { exact: true }).fill(values.unit);
   await quantity(page).fill(values.quantity);
   await page.getByLabel("Unit price excluding VAT", { exact: true }).fill(values.price);
   await page.getByLabel("VAT rate (%)", { exact: true }).fill(values.vat);
@@ -174,7 +173,6 @@ test.describe("lines from the catalog", () => {
     expect(JSON.parse((await request).postData() ?? "")).toEqual({ item_id: item.id, quantity: "2.5" }); // nothing else
     const row = rowFor(page, item.name);
     await expect(row).toHaveCount(1);
-    await expect(cell(row, "line-unit")).toHaveText("hour");
     await expect(cell(row, "line-quantity")).toHaveText("2.500");
     await expect(cell(row, "line-price")).toHaveText("100.00");
     await expect(cell(row, "line-vat-rate")).toHaveText("25.00");
@@ -203,7 +201,6 @@ test.describe("lines from the catalog", () => {
 
     const old = rows(page).first();
     await expect(cell(old, "line-description")).toHaveText(name); // not the new name
-    await expect(cell(old, "line-unit")).toHaveText("hour");
     await expect(cell(old, "line-price")).toHaveText("100.00");
     await expect(cell(old, "line-vat-rate")).toHaveText("25.00");
 
@@ -305,7 +302,6 @@ test.describe("ad-hoc lines and exact decimals", () => {
       await openAddLine(page);
       await page.getByLabel("Ad-hoc line").check();
       await page.getByLabel("Description", { exact: true }).fill("Exact");
-      await page.getByLabel("Unit", { exact: true }).fill("u");
       await quantity(page).fill(value.qty);
       await page.getByLabel("Unit price excluding VAT", { exact: true }).fill(value.price);
       await page.getByLabel("VAT rate (%)", { exact: true }).fill(value.vat);
@@ -356,13 +352,12 @@ test.describe("ad-hoc lines and exact decimals", () => {
     await page.getByLabel("Ad-hoc line").check();
     await quantity(page).fill("1");
     await page.getByLabel("Unit price excluding VAT", { exact: true }).fill("10");
-    await page.getByLabel("VAT rate (%)", { exact: true }).fill("101"); // above 100; description and unit left empty
+    await page.getByLabel("VAT rate (%)", { exact: true }).fill("101"); // above 100; description left empty
 
     await page.getByTestId("submit-line").click();
 
     await expect(page.getByTestId("error-vat_rate")).toBeVisible();
     await expect(page.getByTestId("error-description")).toBeVisible();
-    await expect(page.getByTestId("error-unit")).toBeVisible();
     await expect(page.getByLabel("VAT rate (%)", { exact: true })).toHaveValue("101");
     expect(testRow(`select count(*) from transaction_lines where transaction_id = ${sql(transaction.id)}`)).toBe("0");
   });
