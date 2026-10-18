@@ -18,6 +18,7 @@ test("an issued invoice is paid in two parts, a mistake is reversed, and the lis
   const invoice = await issueInvoiceApi(context, world.orgId, await createInvoiceApi(context, world.orgId, [tx.id]));
 
   await page.goto(`/o/${world.orgId}/invoices/${invoice.id}`);
+  await page.getByTestId("open-payments").click(); // Record payment is a pop-up window beside Download PDF
   const panel = page.getByTestId("payments-panel");
   await expect(panel.getByTestId("payment-status")).toHaveText("Unpaid");
   await expect(page.getByTestId("invoice-status")).toHaveText("Unpaid"); // the invoice's own status says how far it is paid
@@ -34,6 +35,7 @@ test("an issued invoice is paid in two parts, a mistake is reversed, and the lis
   await expect(page.getByTestId("invoice-status")).toHaveText("Partially paid");
 
   await page.goto(`/o/${world.orgId}/invoices/${invoice.id}`);
+  await page.getByTestId("open-payments").click();
   await panel.getByTestId("record-payment").click(); // the amount is prefilled with what is outstanding
   await expect(panel.getByTestId("payment-status")).toHaveText("Paid");
   await expect(page.getByTestId("invoice-status")).toHaveText("Paid");

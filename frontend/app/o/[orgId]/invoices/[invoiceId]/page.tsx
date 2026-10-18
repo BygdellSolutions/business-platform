@@ -3,10 +3,9 @@ import Link from "next/link";
 import { RecordHistory } from "@/components/history/RecordHistory";
 import { RecordMeta } from "@/components/history/RecordMeta";
 import { Notice } from "@/components/ui/Notice";
-import { EmailInvoicePanel } from "@/features/invoices/EmailInvoicePanel";
+import { InvoiceDialogs } from "@/features/invoices/InvoiceDialogs";
 import { InvoiceView } from "@/features/invoices/InvoiceView";
 import { CreditNotesPanel } from "@/features/invoices/CreditNotesPanel";
-import { PaymentsPanel } from "@/features/invoices/PaymentsPanel";
 import { ReturnsPanel } from "@/features/invoices/ReturnsPanel";
 import type { Invoice, InvoiceEmailDraft, InvoiceEmailLog, Organization } from "@/lib/api/types";
 import { requireCredential } from "@/lib/auth/credential";
@@ -81,23 +80,16 @@ export default async function InvoicePage({
           Issued {formatDay(invoice.issued_at, organization.timezone)} by <span data-testid="issued-by">{issuedBy}</span>
         </p>
       )}
-      <InvoiceView key={invoice.id} invoice={invoice} canMutate={canMutateInvoices(role)} timeZone={organization.timezone} />
-      {invoice.status === "issued" && emailDraft !== null && (
-        <EmailInvoicePanel
-          key={`email-${invoice.id}`} // not keyed by the list: the message about the attempt just made must survive the refresh
-          invoiceId={invoice.id}
-          draft={emailDraft}
-          canSend={canMutateInvoices(role)}
-          emails={emails}
-          timeZone={organization.timezone}
-        />
-      )}
-      <PaymentsPanel
-        key={`payments-${invoice.id}-${invoice.payments.length}-${invoice.credit_notes.length}`}
+      <InvoiceView
+        key={invoice.id}
         invoice={invoice}
-        canRecord={canMutateInvoices(role)}
-        today={organization.today}
+        canMutate={canMutateInvoices(role)}
         timeZone={organization.timezone}
+        actions={
+          emailDraft !== null ? (
+            <InvoiceDialogs invoice={invoice} canMutate={canMutateInvoices(role)} emailDraft={emailDraft} emails={emails} today={organization.today} timeZone={organization.timezone} />
+          ) : null
+        }
       />
       <ReturnsPanel key={`returns-${invoice.id}-${invoice.returns.length}`} invoice={invoice} canHandle={canMutateInvoices(role)} today={organization.today} timeZone={organization.timezone} />
       <CreditNotesPanel

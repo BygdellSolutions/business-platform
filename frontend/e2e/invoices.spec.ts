@@ -213,8 +213,8 @@ test.describe("issuing", () => {
     await expect(page.getByTestId("invoice-number")).toHaveText("1001");
     await expect(page.getByTestId("issued-note")).toContainText("cannot be edited or deleted");
     for (const control of ["issue", "delete-draft", "edit-details", "save-details"]) await expect(page.getByTestId(control)).toHaveCount(0);
-    // The only control left is the PDF download: nothing that changes the invoice.
-    await expect(page.getByTestId("invoice-view").getByRole("button")).toHaveCount(1);
+    // The controls left: the PDF download and the two buttons that open pop-up windows (email, payments); none of them changes the invoice.
+    await expect(page.getByTestId("invoice-view").getByRole("button")).toHaveCount(3);
     await expect(page.getByTestId("download-pdf")).toBeVisible();
 
     const stored = await getInvoiceApi(context, world.orgId, invoice.id);
@@ -223,8 +223,8 @@ test.describe("issuing", () => {
 
     // Reloading (and a direct request) show the same read-only document; the API refuses every change.
     await page.reload();
-    // The only control left is the PDF download: nothing that changes the invoice.
-    await expect(page.getByTestId("invoice-view").getByRole("button")).toHaveCount(1);
+    // The controls left: the PDF download and the two buttons that open pop-up windows (email, payments); none of them changes the invoice.
+    await expect(page.getByTestId("invoice-view").getByRole("button")).toHaveCount(3);
     await expect(page.getByTestId("download-pdf")).toBeVisible();
     const edit = await context.request.patch(bffUrl(world.orgId, `/invoices/${invoice.id}`), { data: { description: "x" }, headers: ifMatch(stored.version) });
     const remove = await context.request.delete(bffUrl(world.orgId, `/invoices/${invoice.id}`), { headers: ifMatch(stored.version) });

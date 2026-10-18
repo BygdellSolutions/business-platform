@@ -40,7 +40,7 @@ const ZERO = /^0*(?:\.0*)?$/;
  * when more was paid than is owed after a credit. A row recorded by mistake is reversed, never deleted. The backend
  * refuses more than is outstanding (or due back) and a date in the future.
  */
-export function PaymentsPanel({ invoice, canRecord, today, timeZone }: { invoice: Invoice; canRecord: boolean; today: string; timeZone: string | null }) {
+export function PaymentsPanel({ invoice, canRecord, today, timeZone, bare = false }: { invoice: Invoice; canRecord: boolean; today: string; timeZone: string | null; bare?: boolean }) {
   const orgId = useOrgId();
   const router = useRouter();
   const { pending, error, run } = useMutation();
@@ -69,8 +69,9 @@ export function PaymentsPanel({ invoice, canRecord, today, timeZone }: { invoice
   }
 
   return (
-    <section aria-label="Payments" data-testid="payments-panel" className="panel flex max-w-3xl flex-col gap-3">
-      <h2 className="text-lg font-semibold">Payments</h2>
+    // `bare`: shown inside a pop-up window, which has the title and the frame already.
+    <section aria-label="Payments" data-testid="payments-panel" className={bare ? "flex flex-col gap-3" : "panel flex max-w-3xl flex-col gap-3"}>
+      {!bare && <h2 className="text-lg font-semibold">Payments</h2>}
       <p className="text-sm">
         <span className="font-semibold" data-testid="payment-status">
           {PAYMENT_STATES[invoice.payment_status]}

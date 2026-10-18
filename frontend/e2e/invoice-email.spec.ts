@@ -28,6 +28,7 @@ test("an issued invoice has an email form with the customer's address; an attemp
   const { issued } = await issuedInvoice(context, world.orgId);
 
   await page.goto(`/o/${world.orgId}/invoices/${issued.id}`);
+  await page.getByTestId("open-email").click(); // Send invoice by email is a pop-up window beside Download PDF
   const panel = page.getByTestId("email-invoice");
   await expect(panel.getByLabel("Send to")).toHaveValue("anna@example.test");
   await expect(panel.getByTestId("no-invoice-emails")).toBeVisible();
@@ -42,6 +43,7 @@ test("an issued invoice has an email form with the customer's address; an attemp
 
   expect(testRow(`select status || '|' || error || '|' || to_email || '|' || note from invoice_emails where invoice_id = ${sql(issued.id)}`)).toBe("failed|not_configured|anna@example.test|Tack för senast!");
 
+  await page.keyboard.press("Escape"); // close the window to use the page behind it
   await page.getByTestId("history-toggle").getByRole("heading", { name: /History/ }).click();
   await expect(page.getByTestId("history-event").filter({ hasText: "Email not sent" })).toHaveCount(1);
 });
@@ -57,6 +59,7 @@ test("a bad address is explained and a draft invoice has no email form", async (
 
   const issued = await issueInvoiceApi(context, world.orgId, draft);
   await page.goto(`/o/${world.orgId}/invoices/${issued.id}`);
+  await page.getByTestId("open-email").click();
   await page.getByLabel("Send to").fill("not an address");
   await page.getByTestId("send-invoice-email").click();
   await expect(page.getByText("Enter an email address the invoice can be sent to")).toBeVisible();
@@ -72,6 +75,7 @@ test("an employee and a viewer see the list but no form; another organization ca
   for (const role of ["employee", "viewer"] as const) {
     await signIn(context, world.addMember(role));
     await page.goto(`/o/${world.orgId}/invoices/${issued.id}`);
+    await page.getByTestId("open-email").click();
     await expect(page.getByTestId("email-invoice")).toBeVisible();
     await expect(page.getByTestId("send-invoice-email")).toHaveCount(0);
   }
@@ -97,6 +101,7 @@ test("a pre-made text the organization holds is filled in on the invoice, can be
 
   const { issued } = await issuedInvoice(context, world.orgId);
   await page.goto(`/o/${world.orgId}/invoices/${issued.id}`);
+  await page.getByTestId("open-email").click(); // Send invoice by email is a pop-up window beside Download PDF
   const panel = page.getByTestId("email-invoice");
   const subject = panel.getByLabel("Subject");
   const message = panel.getByLabel("Message (optional)");
@@ -133,6 +138,7 @@ test("the list and the invoice say Draft, then Unpaid, then Unpaid with Sent onc
 
   // an attempt that did not go (no mail service in the test setup) does not make it "Sent"
   await page.goto(`/o/${world.orgId}/invoices/${issued.id}`);
+  await page.getByTestId("open-email").click();
   await page.getByTestId("send-invoice-email").click();
   await expect(page.getByTestId("email-failed")).toBeVisible();
   await page.goto(`/o/${world.orgId}/invoices`);
@@ -160,4 +166,54 @@ test("the list and the invoice say Draft, then Unpaid, then Unpaid with Sent onc
   await page.goto(`/o/${world.orgId}/invoices/${issued.id}`);
   await expect(page.getByTestId("invoice-status")).toHaveText("Paid");
   await expect(page.getByTestId("invoice-sent")).toHaveCount(0);
+});
+
+test("Send invoice by email and Record payment are buttons beside Download PDF that open pop-up windows", async ({ page, context }) => {
+  world = createWorld({ label: "InvoiceDialogs" });
+  await signIn(context, world.email);
+  const { issued } = await issuedInvoice(context, world.orgId);
+  await page.goto(`/o/${world.orgId}/invoices/${issued.id}`);
+
+  // one row: Download PDF, Send invoice by email, Record payment
+  const [pdf, email, payment] = await Promise.all(["download-pdf", "open-email", "open-payments"].map(async (id) => (await page.getByTestId(id).boundingBox())!));
+  expect(Math.abs(pdf.y - email.y)).toBeLessThan(20);
+  expect(Math.abs(pdf.y - payment.y)).toBeLessThan(20);
+  expect(pdf.x).toBeLessThan(email.x);
+  expect(email.x).toBeLessThan(payment.x);
+  await expect(page.getByTestId("open-email")).toHaveText("Send invoice by email");
+  await expect(page.getByTestId("open-payments")).toHaveText("Record payment");
+
+  // closed: the forms are not on the page
+  await expect(page.getByTestId("email-invoice")).toBeHidden();
+  await expect(page.getByTestId("payments-panel")).toBeHidden();
+
+  await page.getByTestId("open-email").click();
+  const dialog = page.getByRole("dialog", { name: "Send invoice by email" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByLabel("Send to")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+
+  await page.getByTestId("open-payments").click();
+  const payments = page.getByRole("dialog", { name: "Record payment" });
+  await expect(payments).toBeVisible();
+  await expect(payments.getByTestId("record-payment")).toBeVisible();
+  await payments.getByTestId("modal-close").click(); // the × closes it too
+  await expect(payments).toBeHidden();
+
+  await page.getByTestId("open-email").click();
+  await page.mouse.click(5, 5); // a press on the dimmed page behind closes it
+  await expect(dialog).toBeHidden();
+});
+
+test("what was typed in a window is still there when it is opened again", async ({ page, context }) => {
+  world = createWorld({ label: "InvoiceDialogsKeep" });
+  await signIn(context, world.email);
+  const { issued } = await issuedInvoice(context, world.orgId);
+  await page.goto(`/o/${world.orgId}/invoices/${issued.id}`);
+  await page.getByTestId("open-email").click();
+  await page.getByLabel("Message (optional)").fill("Ring mig i morgon");
+  await page.keyboard.press("Escape");
+  await page.getByTestId("open-email").click();
+  await expect(page.getByLabel("Message (optional)")).toHaveValue("Ring mig i morgon");
 });

@@ -42,12 +42,15 @@ export function EmailInvoicePanel({
   canSend,
   emails,
   timeZone,
+  bare = false,
 }: {
   invoiceId: string;
   draft: InvoiceEmailDraft;
   canSend: boolean;
   emails: InvoiceEmailLog[];
   timeZone: string | null;
+  /** Shown inside a pop-up window, which has the title and the frame already. */
+  bare?: boolean;
 }) {
   const orgId = useOrgId();
   const router = useRouter();
@@ -71,8 +74,8 @@ export function EmailInvoicePanel({
   }
 
   return (
-    <section aria-label="Email the invoice" data-testid="email-invoice" className="panel flex max-w-3xl flex-col gap-3">
-      <h2 className="text-lg font-semibold">Email the invoice</h2>
+    <section aria-label="Email the invoice" data-testid="email-invoice" className={bare ? "flex flex-col gap-3" : "panel flex max-w-3xl flex-col gap-3"}>
+      {!bare && <h2 className="text-lg font-semibold">Email the invoice</h2>}
       {canSend ? (
         <form onSubmit={submit} noValidate aria-label="Send invoice by email" className="flex flex-col gap-3">
           <TextField label="Send to" name="to" value={to} onChange={setTo} inputMode="email" autoComplete="off" error={problems.byField.to} />
