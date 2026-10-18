@@ -12,6 +12,9 @@ const sans = localFont({
   ],
 });
 
+// Inter (SIL OFL, variable weight, Latin) is the face people see; Noto Sans stays as the fallback for letters Inter's Latin file lacks.
+const inter = localFont({ variable: "--font-inter", display: "swap", src: "./fonts/Inter-latin-wght.woff2", weight: "100 900" });
+
 export const metadata: Metadata = {
   title: "business-platform",
   description: "Multi-tenant, modular business management platform",
@@ -21,7 +24,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${sans.variable} h-full antialiased`}
+      className={`${inter.variable} ${sans.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

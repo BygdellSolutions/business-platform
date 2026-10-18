@@ -105,9 +105,8 @@
   --color-accent-soft: var(--accent-soft);
   --color-accent-soft-foreground: var(--accent-soft-foreground);
   --color-accent-icon: var(--accent-icon);
-  /* No font is downloaded: Inter or Geist when the computer has them, else the system's UI font (Segoe UI, San
-     Francisco), else the bundled Noto Sans. */
-  --font-sans: Inter, Geist, system-ui, "Segoe UI", var(--font-sans-local), sans-serif;
+  /* No font is downloaded at run time: Inter and Noto Sans are bundled (app/fonts), so the app looks the same on every computer. */
+  --font-sans: var(--font-inter), var(--font-sans-local), system-ui, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 

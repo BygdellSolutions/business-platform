@@ -5,6 +5,7 @@ All notable changes to `business-platform` will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- The app is set in Inter, bundled with it (SIL OFL, 48 KB), so it looks the same on every computer instead of depending on the fonts installed; Noto Sans stays as the fallback.
 - On a phone the menu is a bar at the bottom of the screen (Dashboard, Scheduling, Orders, Customers and "More" for the rest) instead of a sideways-scrolling strip; from tablet width the sidebar is unchanged.
 - The sidebar menu uses client-side links: moving between pages no longer reloads the whole shell (every page is still read fresh on the server).
 - The dashboard opens with a "Needs attention" line (past due, ready to invoice, refunds due, returns to follow up, stock problems; "All clear" when empty) and a "Today" list of the day's bookings; cards that need no action show their explanation as a tooltip instead of a line of text.

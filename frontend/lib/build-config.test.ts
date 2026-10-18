@@ -64,6 +64,8 @@ describe("a production build is self-contained and reproducible", () => {
       expect(sums).toContain(`${digest} *${name}`);
     }
     expect(read("app/fonts/OFL-notosans.txt")).toMatch(/SIL OPEN FONT LICENSE/i);
+    expect(read("app/fonts/OFL-inter.txt")).toMatch(/SIL Open Font License/i);
+    expect(read("app/layout.tsx")).toMatch(/Inter-latin-wght\.woff2/);
   });
 
   it("no public (browser-visible) environment variable exists, and only lib/runtime-config.ts reads BACKEND_URL", () => {
