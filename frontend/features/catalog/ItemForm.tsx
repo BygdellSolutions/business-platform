@@ -351,7 +351,7 @@ export function ItemForm({ item }: { item?: Item }) {
             value={state.opening_stock}
             onChange={(value) => set("opening_stock", value)}
             error={errorsFor("opening_stock")}
-            hint="Recorded as the opening stock. Later changes are made in the item's Stock section."
+            hint="Recorded as the opening stock. Later changes are made with the item's Stock button."
           />
         )}
         {!record && (

@@ -16,6 +16,7 @@ test("the opening count and later changes are listed and explain the quantity on
   const item = await createItem(context, world.orgId, { name: "Liniment", type: "product", unit: "pcs", sku: "LIN-01", track_stock: true });
 
   await page.goto(`/o/${world.orgId}/catalog/${item.id}`);
+  await page.getByTestId("open-stock").click();
   const panel = page.getByTestId("stock-panel");
   await expect(panel.getByTestId("on-hand")).toHaveText("0");
   await panel.getByLabel(/Counted quantity/).fill("10");
@@ -96,6 +97,7 @@ test("a new product can be given an opening stock of zero", async ({ page, conte
   const item = await createItem(context, world.orgId, { name: "New brush", type: "product", unit: "pcs", track_stock: true });
 
   await page.goto(`/o/${world.orgId}/catalog/${item.id}`);
+  await page.getByTestId("open-stock").click();
   const panel = page.getByTestId("stock-panel");
   await panel.getByLabel(/Counted quantity/).fill("0");
   await panel.getByTestId("submit-stock").click();
@@ -114,6 +116,7 @@ test("a delivery on its way is recorded, received in part, and the rest cancelle
   const supplier = await createSupplier(context, world.orgId, "Horse Supplies AB");
 
   await page.goto(`/o/${world.orgId}/catalog/${item.id}`);
+  await page.getByTestId("open-incoming").click();
   const incoming = page.getByTestId("incoming-panel");
   await expect(incoming.getByTestId("no-incoming")).toBeVisible();
   await incoming.getByLabel(/^Quantity/).fill("10");
@@ -141,7 +144,10 @@ test("a delivery on its way is recorded, received in part, and the rest cancelle
   await expect(page.getByTestId("delivery-ordered-on")).toHaveText(/^\d{4}-\d{2}-\d{2}$/);
   await page.goto(`/o/${world.orgId}/catalog/${item.id}`);
   await expect(page.getByTestId("stock-figures")).toContainText("incoming 10");
+  await page.getByTestId("open-stock").click();
   await expect(page.getByTestId("on-hand")).toHaveText("0");
+  await page.keyboard.press("Escape");
+  await page.getByTestId("open-incoming").click();
 
   // every action of a row is the same kind of button, on one line
   const [edit1, receive1, cancel1] = [incoming.getByTestId("edit-incoming"), incoming.getByTestId("receive-incoming"), incoming.getByTestId("cancel-incoming")];
@@ -169,14 +175,19 @@ test("a delivery on its way is recorded, received in part, and the rest cancelle
   await expect(page.getByTestId("incoming-overview-received")).toHaveText("4");
   await expect(page.getByTestId("incoming-overview-remaining")).toHaveText("6");
   await page.goto(`/o/${world.orgId}/catalog/${item.id}`);
+  await page.getByTestId("open-stock").click();
   await expect(page.getByTestId("on-hand")).toHaveText("4");
   await expect(page.getByTestId("stock-movement").first()).toContainText("Goods received");
+  await page.keyboard.press("Escape");
+  await page.getByTestId("open-incoming").click();
 
   await incoming.getByTestId("cancel-incoming").click();
   await page.getByRole("button", { name: "Yes, cancel the rest" }).click();
   // It stays listed (what was paid is history), with no receive or cancel any more.
   await expect(incoming.getByTestId("incoming-row")).toContainText("Cancelled");
   await expect(incoming.getByTestId("receive-incoming")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await page.getByTestId("open-stock").click();
   await expect(page.getByTestId("on-hand")).toHaveText("4");
   await expect(page.getByTestId("stock-figures")).toContainText("incoming 0");
 });
@@ -242,6 +253,7 @@ test("a new product can be created with what is on hand, and a product without t
   await expect(page.getByTestId("stock-off")).toContainText("Track stock");
   await page.getByLabel("Track stock").check();
   await page.getByTestId("submit").click();
+  await page.getByTestId("open-stock").click();
   await expect(page.getByTestId("stock-panel")).toBeVisible();
 });
 

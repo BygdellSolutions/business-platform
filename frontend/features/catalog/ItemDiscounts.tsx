@@ -32,7 +32,7 @@ const DATE = "rounded border border-zinc-400 px-2 py-1 font-normal dark:bg-zinc-
  * of its period and stops afterwards; the item's own price never changes. Periods never overlap (the backend
  * refuses an overlap and says so next to the start date). Owners and admins manage them; everyone sees them.
  */
-export function ItemDiscounts({ itemId, discounts, canManage }: { itemId: string; discounts: ItemDiscount[]; canManage: boolean }) {
+export function ItemDiscounts({ itemId, discounts, canManage, bare = false }: { itemId: string; discounts: ItemDiscount[]; canManage: boolean; bare?: boolean }) {
   const orgId = useOrgId();
   const router = useRouter();
   const { pending, error, run } = useMutation();
@@ -61,8 +61,8 @@ export function ItemDiscounts({ itemId, discounts, canManage }: { itemId: string
 
   const sorted = useSortedRows(discounts, SORT_COLUMNS);
   return (
-    <section aria-label="Discounts" data-testid="item-discounts" className="panel flex max-w-5xl flex-col gap-3">
-      <h2 className="text-lg font-semibold">Campaign discounts</h2>
+    <section aria-label="Discounts" data-testid="item-discounts" className={bare ? "flex flex-col gap-3" : "panel flex max-w-5xl flex-col gap-3"}>
+      {!bare && <h2 className="text-lg font-semibold">Campaign discounts</h2>}
       {discounts.length === 0 ? (
         <p className="text-sm text-zinc-500" data-testid="no-discounts">
           No discounts.

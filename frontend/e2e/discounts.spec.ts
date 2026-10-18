@@ -17,6 +17,7 @@ test("an owner sets a campaign and a customer discount; a new line shows every s
   const customer = await createCustomer(context, world.orgId, "Customer A");
 
   await page.goto(`/o/${world.orgId}/catalog/${item.id}`);
+  await page.getByTestId("open-discounts").click();
   const form = page.getByRole("form", { name: "Add discount" });
   await form.getByLabel("Discount %").fill("20");
   await form.locator("input[name=starts_on]").fill("2026-10-01");

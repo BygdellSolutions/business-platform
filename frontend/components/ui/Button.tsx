@@ -34,6 +34,9 @@ export const ICONS = {
   returns: "M9 7H5v4M5 7l3-3M5 11a7 7 0 1 1 2 5",
   credit: "M7 3h8l4 4v14H7zM15 3v5h4M10 13h6M10 17h4",
   invoice: "M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6",
+  stock: "M3 8l9-5 9 5v9l-9 5-9-5zM3 8l9 5 9-5M12 13v9",
+  incoming: "M2 6h12v10H2zM14 10h4l4 3v3h-8M6 19a2 2 0 1 0 0-.01M18 19a2 2 0 1 0 0-.01",
+  discount: "M3 12V4h8l10 10-8 8zM7.5 8.5h.01",
   reopen: "M4 12a8 8 0 1 0 3-6.2M4 4v5h5",
 } as const;
 

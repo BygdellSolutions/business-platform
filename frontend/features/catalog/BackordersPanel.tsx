@@ -31,7 +31,7 @@ const SORT_COLUMNS: Record<string, (r: Backorder) => SortValue> = {
  * The open backorders of one product, oldest first. When stock is on hand, "Propose" asks the backend how it would be
  * shared (oldest first); the person may change the quantities and then confirms. Nothing is delivered until then.
  */
-export function BackordersPanel({ itemId, backorders, canAllocate }: { itemId: string; backorders: Backorder[]; canAllocate: boolean }) {
+export function BackordersPanel({ itemId, backorders, canAllocate, bare = false }: { itemId: string; backorders: Backorder[]; canAllocate: boolean; bare?: boolean }) {
   const orgId = useOrgId();
   const router = useRouter();
   const { pending, error, run } = useMutation();
@@ -70,8 +70,8 @@ export function BackordersPanel({ itemId, backorders, canAllocate }: { itemId: s
   );
   if (backorders.length === 0) return deliveredNotice || null;
   return (
-    <section id="backorders" aria-label="Backorders" data-testid="backorders-panel" className="panel scroll-mt-4 flex max-w-5xl flex-col gap-3">
-      <h2 className="text-lg font-semibold">Backorders</h2>
+    <section id="backorders" aria-label="Backorders" data-testid="backorders-panel" className={bare ? "flex flex-col gap-3" : "panel scroll-mt-4 flex max-w-5xl flex-col gap-3"}>
+      {!bare && <h2 className="text-lg font-semibold">Backorders</h2>}
       {deliveredNotice}
       <div className="overflow-x-auto">
         <table className="text-left text-sm">

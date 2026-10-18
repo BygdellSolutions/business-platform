@@ -67,11 +67,14 @@ export function IncomingPanel({
   incoming,
   canWrite,
   timeZone,
+  bare = false,
 }: {
   itemId: string;
   incoming: Incoming[];
   canWrite: boolean;
   timeZone: string | null;
+  /** Shown inside a pop-up window, which has the title and the frame already. */
+  bare?: boolean;
 }) {
   const orgId = useOrgId();
   const router = useRouter();
@@ -168,9 +171,9 @@ export function IncomingPanel({
     <section
       aria-label="Incoming stock"
       data-testid="incoming-panel"
-      className="panel flex max-w-5xl flex-col gap-3"
+      className={bare ? "flex flex-col gap-3" : "panel flex max-w-5xl flex-col gap-3"}
     >
-      <h2 className="text-lg font-semibold">Incoming</h2>
+      {!bare && <h2 className="text-lg font-semibold">Incoming</h2>}
       {incoming.length === 0 ? (
         <p className="text-sm text-zinc-500" data-testid="no-incoming">
           No deliveries yet.

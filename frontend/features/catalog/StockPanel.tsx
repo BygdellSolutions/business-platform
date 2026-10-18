@@ -55,6 +55,7 @@ export function StockPanel({
   figures,
   canAdjust,
   timeZone,
+  bare = false,
 }: {
   itemId: string;
   stock: Stock;
@@ -62,6 +63,8 @@ export function StockPanel({
   figures: ItemAvailability | null;
   canAdjust: boolean;
   timeZone: string | null;
+  /** Shown inside a pop-up window, which has the title and the frame already. */
+  bare?: boolean;
 }) {
   const orgId = useOrgId();
   const router = useRouter();
@@ -84,10 +87,14 @@ export function StockPanel({
 
   const sorted = useSortedRows(stock.movements, SORT_COLUMNS);
   return (
-    <section aria-label="Stock" data-testid="stock-panel" className="panel flex max-w-5xl flex-col gap-3">
-      <h2 className="flex items-center gap-2 text-lg font-semibold">
-        Stock {figures && <StockBadges states={figures.states} />}
-      </h2>
+    <section aria-label="Stock" data-testid="stock-panel" className={bare ? "flex flex-col gap-3" : "panel flex max-w-5xl flex-col gap-3"}>
+      {bare ? (
+        figures && <StockBadges states={figures.states} />
+      ) : (
+        <h2 className="flex items-center gap-2 text-lg font-semibold">
+          Stock {figures && <StockBadges states={figures.states} />}
+        </h2>
+      )}
       <p className="text-sm">
         On hand:{" "}
         <span className="font-semibold" data-testid="on-hand">

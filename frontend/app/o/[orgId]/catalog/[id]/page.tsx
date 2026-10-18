@@ -1,11 +1,8 @@
 import { RecordHistory } from "@/components/history/RecordHistory";
 import { RecordMeta } from "@/components/history/RecordMeta";
 import { ItemDetails } from "@/features/catalog/ItemDetails";
-import { ItemDiscounts } from "@/features/catalog/ItemDiscounts";
+import { ItemDialogs } from "@/features/catalog/ItemDialogs";
 import { ItemForm } from "@/features/catalog/ItemForm";
-import { BackordersPanel } from "@/features/catalog/BackordersPanel";
-import { IncomingPanel } from "@/features/catalog/IncomingPanel";
-import { StockPanel } from "@/features/catalog/StockPanel";
 import { Notice } from "@/components/ui/Notice";
 import { readActiveRole } from "@/lib/active-role";
 import type { Backorder, Incoming, Item, ItemAvailability, ItemDiscount, Organization, Stock } from "@/lib/api/types";
@@ -45,20 +42,24 @@ export default async function ItemPage({
         Item no. {item.number}
       </p>
       {created === "1" && <Notice testId="created">Item created.</Notice>}
-      {stockResult === "failed" && <Notice testId="stock-failed">The opening stock was not recorded. Record it in the Stock section below.</Notice>}
+      {stockResult === "failed" && <Notice testId="stock-failed">The opening stock was not recorded. Record it with the Stock button below.</Notice>}
       <RecordMeta record={item} people={history.history.people} timeZone={organization.timezone} />
       {canWriteRecords(role) ? <ItemForm key={item.id} item={item} /> : <ItemDetails item={item} />}
       {item.type === "product" && !item.track_stock && canWriteRecords(role) && (
         <Notice testId="stock-off">This product does not track stock. Tick “Track stock” above and save to record what is on hand.</Notice>
       )}
-      {item.track_stock && (
-        <>
-          <StockPanel itemId={item.id} stock={stock} figures={availability[0] ?? null} canAdjust={canWriteRecords(role)} timeZone={organization.timezone} />
-          <BackordersPanel itemId={item.id} backorders={backorders} canAllocate={canWriteRecords(role)} />
-          <IncomingPanel itemId={item.id} incoming={incoming} canWrite={canWriteRecords(role)} timeZone={organization.timezone} />
-        </>
-      )}
-      <ItemDiscounts itemId={item.id} discounts={discounts} canManage={role === "owner" || role === "admin"} />
+      <ItemDialogs
+        itemId={item.id}
+        tracksStock={item.track_stock}
+        stock={stock}
+        figures={availability[0] ?? null}
+        backorders={backorders}
+        incoming={incoming}
+        discounts={discounts}
+        canWriteRecords={canWriteRecords(role)}
+        canManageDiscounts={role === "owner" || role === "admin"}
+        timeZone={organization.timezone}
+      />
       <RecordHistory data={history} entityType="item" timeZone={organization.timezone} />
     </div>
   );
