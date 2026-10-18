@@ -38,3 +38,4 @@ backend/tools/
 
 # Output of local security scans (Strix): logs and viewer tokens, never committed
 strix_runs/
+strix_console*.log
