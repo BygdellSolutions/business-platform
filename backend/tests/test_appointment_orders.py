@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.models import ItemType, Role
 from tests.factories import add_member, make_customer, make_horse, make_item, make_org, make_user
 
-MORNING = {"starts_at": "2026-10-19T08:00:00+00:00", "ends_at": "2026-10-19T10:00:00+00:00"}
+MORNING = {"starts_at": "2030-10-21T08:00:00+00:00", "ends_at": "2030-10-21T10:00:00+00:00"}
 HORSE = lambda horse: {"subject_type": "horse", "subject_id": str(horse.id)}  # noqa: E731
 
 
@@ -127,14 +127,14 @@ def test_the_order_has_a_service_line_for_each_service_and_each_horse_priced_fro
     assert appointment["version"] == booked["version"] + 1
 
     order = client.get(f"/api/transactions/{appointment['order_id']}", headers=headers).json()
-    assert (order["status"], order["billing_customer_id"], order["transaction_date"]) == ("draft", str(umea.id), "2026-10-19")
+    assert (order["status"], order["billing_customer_id"], order["transaction_date"]) == ("draft", str(umea.id), "2030-10-21")
     lines = order["lines"]
     assert len(lines) == 4  # 2 services x 2 horses
     assert {(l["description"], l["subject_id"]) for l in lines} == {(d, str(h.id)) for d in ("Massage", "Stretching") for h in (kalle, storm)}
     assert {l["kind"] for l in lines} == {"service"} and {l["subject_type"] for l in lines} == {"horse"}
     assert {l["performed_by"] for l in lines} == {str(employee.id)} and {l["quantity"] for l in lines} == {"1.000"}
     assert sorted({l["unit_price_ex_vat"] for l in lines}) == ["400.00", "850.00"]  # the catalog's prices
-    assert all(l["performed_at"].startswith("2026-10-19T08:00:00") for l in lines)
+    assert all(l["performed_at"].startswith("2030-10-21T08:00:00") for l in lines)
 
 
 def test_an_appointment_about_no_horse_bills_the_service_for_the_customer(client: TestClient, world):

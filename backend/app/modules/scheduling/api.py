@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.core import audit, subjects
 from app.core.authz import record_writer
+from app.core.clock import utcnow
 from app.core.booking_orders import APPOINTMENT_SOURCE, BookingLine, BookingOrder
 from app.core.db import get_db
 from app.core.entity_registry import registry
@@ -40,6 +41,15 @@ AUDITED = ("title", "starts_at", "ends_at", "location", "status", "practitioner_
 Pair = tuple[str, uuid.UUID]
 # With no record named, the service is performed for the customer (a registered service subject too).
 CUSTOMER_SUBJECT = "customer"
+
+
+def _refuse_if_done(appointment: Appointment) -> None:
+    """A booked appointment whose end has passed is a record of what happened: it is not cancelled or deleted (its details can still be corrected)."""
+    if appointment.status != CANCELLED and appointment.ends_at <= utcnow():
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={"code": "appointment_done", "message": "This appointment is done, so it cannot be cancelled or deleted. You can still change its details."},
+        )
 
 
 def _practitioner(db: Session, ctx: TenantContext, user_id: uuid.UUID) -> User:
@@ -214,6 +224,8 @@ def update_appointment(
     appointment = get_scoped_or_404(db, ctx, Appointment, appointment_id, for_update=True)
     ensure_current(if_match, appointment.version, "appointment", appointment.id)
     values = {field: getattr(payload, field) for field in payload.model_fields_set if field not in ("subjects", "items", "cancel_order")}
+    if payload.status == CANCELLED:
+        _refuse_if_done(appointment)
     if payload.cancel_order:
         if payload.status != CANCELLED or appointment.status == CANCELLED:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="cancel_order only goes with cancelling an appointment that is booked")
@@ -369,6 +381,7 @@ def delete_appointment(
     unless `delete_order` is set, which deletes it in the same step (either both go or neither)."""
     appointment = get_scoped_or_404(db, ctx, Appointment, appointment_id, for_update=True)
     ensure_current(if_match, appointment.version, "appointment", appointment.id)
+    _refuse_if_done(appointment)
     order_status = _asked("order.statuses", db, ctx, {appointment.order_id}).get(appointment.order_id) if appointment.order_id else None
     if order_status == "completed":
         raise HTTPException(

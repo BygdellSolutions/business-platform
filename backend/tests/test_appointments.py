@@ -10,8 +10,8 @@ from app.models import Role
 from tests.factories import add_member, make_customer, make_horse, make_org, make_user
 
 HORSE = lambda horse: {"subject_type": "horse", "subject_id": str(horse.id)}  # noqa: E731
-MORNING = {"starts_at": "2026-10-19T09:00:00+02:00", "ends_at": "2026-10-19T10:00:00+02:00"}
-WINDOW = {"from": "2026-10-19T00:00:00+02:00", "to": "2026-10-26T00:00:00+02:00"}
+MORNING = {"starts_at": "2030-10-21T09:00:00+02:00", "ends_at": "2030-10-21T10:00:00+02:00"}
+WINDOW = {"from": "2030-10-21T00:00:00+02:00", "to": "2030-10-28T00:00:00+02:00"}
 
 
 IDS: dict[str, str] = {}  # the user id behind each set of headers, by email
@@ -54,6 +54,34 @@ def _etag(appointment: dict) -> dict:
     return {"If-Match": f'"{appointment["version"]}"'}
 
 
+def test_a_done_appointment_is_neither_cancelled_nor_deleted(client: TestClient, world):
+    _, _, _, people = world
+    _, headers = people["employee"]
+    old = _book(client, headers, starts_at="2020-10-19T09:00:00+02:00", ends_at="2020-10-19T10:00:00+02:00")
+
+    cancel = client.patch(f"/api/appointments/{old['id']}", json={"status": "cancelled"}, headers={**headers, **_etag(old)})
+    assert cancel.status_code == 409 and cancel.json()["detail"]["code"] == "appointment_done"
+    delete = client.delete(f"/api/appointments/{old['id']}", headers={**headers, **_etag(old)})
+    assert delete.status_code == 409 and delete.json()["detail"]["code"] == "appointment_done"
+    # its details can still be corrected, and nothing above changed it
+    fixed = client.patch(f"/api/appointments/{old['id']}", json={"location": "Stable 3"}, headers={**headers, **_etag(old)})
+    assert fixed.status_code == 200 and fixed.json()["status"] == "scheduled"
+
+
+def test_an_upcoming_appointment_and_a_cancelled_old_one_can_still_be_removed(client: TestClient, world):
+    _, _, _, people = world
+    _, headers = people["employee"]
+    coming = _book(client, headers)
+    assert client.patch(f"/api/appointments/{coming['id']}", json={"status": "cancelled"}, headers={**headers, **_etag(coming)}).status_code == 200
+    soon = _book(client, headers)
+    assert client.delete(f"/api/appointments/{soon['id']}", headers={**headers, **_etag(soon)}).status_code == 204
+    # a cancelled appointment is not "done" even when its time has passed: it never happened, so it can still be removed
+    never = _book(client, headers)
+    cancelled = client.patch(f"/api/appointments/{never['id']}", json={"status": "cancelled"}, headers={**headers, **_etag(never)}).json()
+    moved = client.patch(f"/api/appointments/{never['id']}", json={"starts_at": "2020-10-19T09:00:00+02:00", "ends_at": "2020-10-19T10:00:00+02:00"}, headers={**headers, **_etag(cancelled)}).json()
+    assert client.delete(f"/api/appointments/{never['id']}", headers={**headers, **_etag(moved)}).status_code == 204
+
+
 def test_book_read_change_and_remove(client: TestClient, world):
     _, anna, kalle, people = world
     employee, headers = people["employee"]
@@ -63,7 +91,7 @@ def test_book_read_change_and_remove(client: TestClient, world):
     assert _book(client, headers)["number"] == 2
 
     assert client.get(f"/api/appointments/{booked['id']}", headers=headers).json()["location"] == "Stable 3"
-    moved = client.patch(f"/api/appointments/{booked['id']}", json={"starts_at": "2026-10-19T11:00:00+02:00", "ends_at": "2026-10-19T12:00:00+02:00", "location": None}, headers={**headers, **_etag(booked)})
+    moved = client.patch(f"/api/appointments/{booked['id']}", json={"starts_at": "2030-10-21T11:00:00+02:00", "ends_at": "2030-10-21T12:00:00+02:00", "location": None}, headers={**headers, **_etag(booked)})
     assert moved.status_code == 200, moved.text
     assert (moved.json()["version"], moved.json()["location"]) == (2, None)
 
@@ -75,9 +103,9 @@ def test_the_list_shows_what_overlaps_the_window_and_hides_cancelled(client: Tes
     _, _, _, people = world
     _, headers = people["owner"]
     inside = _book(client, headers, title="Inside")
-    _book(client, headers, title="Before", starts_at="2026-10-18T09:00:00+02:00", ends_at="2026-10-18T10:00:00+02:00")
-    _book(client, headers, title="After", starts_at="2026-10-26T00:00:00+02:00", ends_at="2026-10-26T01:00:00+02:00")  # starts exactly when the window ends
-    _book(client, headers, title="Overlaps the start", starts_at="2026-10-18T23:00:00+02:00", ends_at="2026-10-19T01:00:00+02:00")
+    _book(client, headers, title="Before", starts_at="2030-10-20T09:00:00+02:00", ends_at="2030-10-20T10:00:00+02:00")
+    _book(client, headers, title="After", starts_at="2030-10-28T00:00:00+02:00", ends_at="2030-10-28T01:00:00+02:00")  # starts exactly when the window ends
+    _book(client, headers, title="Overlaps the start", starts_at="2030-10-20T23:00:00+02:00", ends_at="2030-10-21T01:00:00+02:00")
     cancelled = _book(client, headers, title="Cancelled")
     client.patch(f"/api/appointments/{cancelled['id']}", json={"status": "cancelled"}, headers={**headers, **_etag(cancelled)})
 
@@ -166,10 +194,10 @@ def test_only_those_who_do_the_work_can_be_the_practitioner(client: TestClient, 
 @pytest.mark.parametrize(
     "body",
     [
-        {"starts_at": "2026-10-19T09:00:00", "ends_at": "2026-10-19T10:00:00"},  # no time zone: which moment would that be?
-        {"starts_at": "2026-10-19T10:00:00+02:00", "ends_at": "2026-10-19T09:00:00+02:00"},
-        {"starts_at": "2026-10-19T09:00:00+02:00", "ends_at": "2026-10-19T09:00:00+02:00"},
-        {"starts_at": "2026-10-19T09:00:00+02:00", "ends_at": "2026-10-27T09:00:00+02:00"},  # longer than a week
+        {"starts_at": "2030-10-21T09:00:00", "ends_at": "2030-10-21T10:00:00"},  # no time zone: which moment would that be?
+        {"starts_at": "2030-10-21T10:00:00+02:00", "ends_at": "2030-10-21T09:00:00+02:00"},
+        {"starts_at": "2030-10-21T09:00:00+02:00", "ends_at": "2030-10-21T09:00:00+02:00"},
+        {"starts_at": "2030-10-21T09:00:00+02:00", "ends_at": "2030-10-29T09:00:00+02:00"},  # longer than a week
         {"title": "   "},
         {"subjects": [{"subject_type": "horse"}]},  # a subject is a type and an id together
         {"subjects": [{"subject_type": "horse", "subject_id": "00000000-0000-4000-8000-000000000001"}] * 2},  # the same horse twice
@@ -180,7 +208,7 @@ def test_bad_bookings_are_refused(client: TestClient, world, body):
     assert client.post("/api/appointments", json={"title": "x", **MORNING, **_prac(world[3]["owner"][1]), **body}, headers=world[3]["owner"][1]).status_code == 422
 
 
-@pytest.mark.parametrize("params", [{"from": WINDOW["from"]}, {"from": "2026-10-19T00:00:00", "to": "2026-10-20T00:00:00"}, {"from": WINDOW["to"], "to": WINDOW["from"]}, {"from": "2026-01-01T00:00:00+00:00", "to": "2026-12-31T00:00:00+00:00"}])
+@pytest.mark.parametrize("params", [{"from": WINDOW["from"]}, {"from": "2030-10-21T00:00:00", "to": "2030-10-22T00:00:00"}, {"from": WINDOW["to"], "to": WINDOW["from"]}, {"from": "2030-01-01T00:00:00+00:00", "to": "2030-12-31T00:00:00+00:00"}])
 def test_the_list_needs_a_sensible_window(client: TestClient, world, params):
     assert client.get("/api/appointments", params=params, headers=world[3]["owner"][1]).status_code == 422
 
@@ -188,7 +216,7 @@ def test_the_list_needs_a_sensible_window(client: TestClient, world, params):
 def test_changing_the_end_before_the_start_is_refused_and_leaves_the_booking(client: TestClient, world):
     headers = world[3]["owner"][1]
     booked = _book(client, headers)
-    response = client.patch(f"/api/appointments/{booked['id']}", json={"ends_at": "2026-10-19T08:00:00+02:00"}, headers={**headers, **_etag(booked)})
+    response = client.patch(f"/api/appointments/{booked['id']}", json={"ends_at": "2030-10-21T08:00:00+02:00"}, headers={**headers, **_etag(booked)})
     assert response.status_code == 422
     assert client.get(f"/api/appointments/{booked['id']}", headers=headers).json()["ends_at"] == booked["ends_at"]
 
