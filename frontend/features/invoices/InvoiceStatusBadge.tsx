@@ -11,7 +11,8 @@ const PAYMENT: Record<NonNullable<Invoice["payment_status"]>, { label: string; c
   paid: { label: "Paid", className: "tone-success" },
 };
 
-const SENT = { label: "Sent", className: "tone-neutral" };
+// Its own colour (teal) and a small envelope: no other badge on an invoice looks like it (grey is "Credited", orange "Return open").
+const SENT = { label: "Sent", className: "tone-teal" };
 const CREDITED = { label: "Credited", className: "tone-neutral" };
 const PARTLY_CREDITED = { label: "Partly credited", className: "tone-neutral" };
 
@@ -49,7 +50,10 @@ export function InvoiceStatusBadge({
         {look.label}
       </span>
       {status === "issued" && emailed && paymentStatus !== "paid" && creditStatus !== "credited" && (
-        <span data-testid="invoice-sent" className={`badge ${SENT.className}`}>
+        <span data-testid="invoice-sent" className={`badge ${SENT.className} gap-1`}>
+          <svg aria-hidden="true" viewBox="0 0 24 24" className="size-3.5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 6h18v12H3zM3 7l9 6 9-6" />
+          </svg>
           {SENT.label}
         </span>
       )}

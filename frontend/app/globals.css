@@ -44,6 +44,8 @@
   --primary-tone-text: #1d5fbf;
   --orange: #e8894b;
   --orange-text: #a3501a;
+  --teal: #14b8a6;
+  --teal-text: #0f766e;
   --neutral: #748094;
   --neutral-text: #4a5568;
 
@@ -84,6 +86,7 @@
     --info-text: #62bff0;
     --primary-tone-text: #8cb8f3;
     --orange-text: #f2a877;
+    --teal-text: #5eead4;
     --neutral-text: #a8b3c2;
   }
 }
@@ -174,6 +177,10 @@ body {
 @utility tone-orange {
   --tone: var(--orange);
   --tone-text: var(--orange-text);
+}
+@utility tone-teal {
+  --tone: var(--teal);
+  --tone-text: var(--teal-text);
 }
 @utility tone-neutral {
   --tone: var(--neutral);
