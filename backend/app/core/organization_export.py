@@ -47,6 +47,7 @@ COLUMNS_LEFT_OUT = {
     "organization_invitations": ("token_hash",),  # a hash of a credential
     "invoice_pdfs": ("content",),  # the bytes are in the archive as files
     "credit_note_pdfs": ("content",),
+    "horse_documents": ("content",),  # the bytes are in the archive as files
 }
 EXPORTED_TABLES = tuple(table for table in reversed(TABLES_IN_DELETE_ORDER) if table not in LEFT_OUT)
 
@@ -56,6 +57,7 @@ data/<table>.jsonl      one JSON object per line: every row of that table that b
 members.jsonl           who has access (name, email, role); never a password or any other credential
 invoices/*.pdf          the stored PDF of every issued invoice (file names: invoice number, template version, short id)
 credit-notes/*.pdf      the stored PDF of every credit note
+horse-documents/*       every file kept with a horse (data/horse_documents.jsonl says which horse and the original name)
 manifest.json           when the copy was taken, the format version and the number of rows of every file; the counts
                         ending in without_stored_pdf say how many documents have no PDF in this copy (their data is in the
                         JSON files; open them in the application and download the PDF)
@@ -189,6 +191,18 @@ def stream_export(*, organization_id: uuid.UUID, organization_name: str, now: da
                 counts[f"{folder}/pdf"] += 1
                 name = f"{folder}/{_safe(number)}-v{version}-{pdf_id[:8]}.pdf"
                 yield from write(name, iter([bytes(content)]), compress=False)
+
+        counts["horse-documents/files"] = 0
+        files = db.execute(
+            text(
+                "SELECT d.id::text, d.filename, d.content FROM horse_documents d "
+                "WHERE d.organization_id = :org ORDER BY d.created_at, d.id"
+            ).execution_options(stream_results=True, yield_per=5),
+            {"org": organization_id},
+        )
+        for document_id, filename, content in files:
+            counts["horse-documents/files"] += 1
+            yield from write(f"horse-documents/{document_id[:8]}-{_safe(filename)}", iter([bytes(content)]), compress=False)
 
         counts["invoices/without_stored_pdf"] = db.scalar(
             text(

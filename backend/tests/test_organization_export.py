@@ -133,6 +133,28 @@ def test_no_secret_leaves_in_any_file(team, db_session: Session):
 # --- whose data -----------------------------------------------------------------------------------------------------------------------
 
 
+def test_a_horses_documents_are_in_the_copy_as_files_and_never_as_text_in_the_data(team, db_session: Session):
+    from app.modules.equine.models import HorseDocument
+    from tests.factories import make_horse
+
+    pdf = b"%PDF-1.4 vet report only in the first organization"
+    horse = make_horse(db_session, team.org, "Kalle", owner=make_customer(db_session, team.org, "Anna Andersson"))
+    db_session.add(HorseDocument(organization_id=team.org.id, horse_id=horse.id, filename="Vet report.pdf", content_type="application/pdf", byte_size=len(pdf), sha256="x", content=pdf))
+    other = make_org(db_session, "Another Stable")
+    other_horse = make_horse(db_session, other, "Storm", owner=make_customer(db_session, other, "Bo Berg"))
+    db_session.add(HorseDocument(organization_id=other.id, horse_id=other_horse.id, filename="Secret.pdf", content_type="application/pdf", byte_size=3, sha256="y", content=b"%PD"))
+    db_session.flush()
+
+    zf = archive(download(team))
+
+    files = [name for name in zf.namelist() if name.startswith("horse-documents/")]
+    assert len(files) == 1 and files[0].endswith("-Vet-report.pdf") and zf.read(files[0]) == pdf
+    listed = rows(zf, "data/horse_documents.jsonl")
+    assert [row["filename"] for row in listed] == ["Vet report.pdf"] and all("content" not in row for row in listed)
+    assert json.loads(zf.read("manifest.json"))["rows"]["horse-documents/files"] == 1
+    assert b"Secret.pdf" not in b"".join(zf.read(name) for name in zf.namelist())  # nothing of the other organization
+
+
 def test_another_organizations_data_never_appears_even_with_the_same_names(team, db_session: Session):
     other = make_org(db_session, NAME)  # the very same organization name, and a customer with the very same name
     _fill(db_session, team.org)

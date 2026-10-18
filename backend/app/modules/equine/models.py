@@ -11,6 +11,7 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     Integer,
+    LargeBinary,
     SmallInteger,
     String,
     Text,
@@ -100,6 +101,40 @@ class HorseNote(TenantOwned, Authored, Base):
 
     horse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
     body: Mapped[str] = mapped_column(Text)
+
+
+DOCUMENT_MAX_BYTES = 10 * 1024 * 1024
+DOCUMENT_MAX_PER_HORSE = 100
+DOCUMENT_TYPES = ("application/pdf", "image/jpeg", "image/png", "image/webp")
+
+
+class HorseDocument(TenantOwned, Authored, Base):
+    """A file kept with a horse (a vet report, an x-ray photo, a passport scan): a PDF or a picture of at most 10 MB.
+
+    Stored in PostgreSQL like the organization logo, so it is tenant-scoped, backed up with the database and leaves with the
+    organization's export. The bytes are `deferred`: listing a horse's documents never loads them. It belongs to a horse of
+    the same organization (composite foreign key) and goes with it; a document is deleted for good on request (the history
+    keeps who deleted which file name, never the content).
+    """
+
+    __tablename__ = "horse_documents"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "horse_id"], ["horses.organization_id", "horses.id"], ondelete="CASCADE", name="fk_horse_documents_horse"
+        ),
+        CheckConstraint("length(btrim(filename)) > 0", name="ck_horse_documents_filename_not_blank"),
+        CheckConstraint("content_type IN ('" + "', '".join(DOCUMENT_TYPES) + "')", name="ck_horse_documents_content_type"),
+        CheckConstraint(f"byte_size BETWEEN 1 AND {DOCUMENT_MAX_BYTES}", name="ck_horse_documents_byte_size"),
+        CheckConstraint("octet_length(content) = byte_size", name="ck_horse_documents_size_matches_content"),
+        Index("ix_horse_documents_horse", "organization_id", "horse_id", "created_at"),
+    )
+
+    horse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    filename: Mapped[str] = mapped_column(String(200))
+    content_type: Mapped[str] = mapped_column(String(100))
+    byte_size: Mapped[int] = mapped_column(Integer)
+    sha256: Mapped[str] = mapped_column(String(64))
+    content: Mapped[bytes] = mapped_column(LargeBinary, deferred=True)
 
 
 JOURNAL_DRAFT, JOURNAL_FINAL = "draft", "final"
