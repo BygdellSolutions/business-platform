@@ -125,7 +125,7 @@ class Settings(BaseSettings):
     email_provider: Literal["log", "cloudflare"] = "log"
     cloudflare_account_id: str | None = None
     email_api_token: SecretStr | None = None
-    email_from: str = "no-reply@mail.bygdell.solutions"
+    email_from: str = "no-reply@noreply.bygdell.solutions"  # a sending subdomain already onboarded in Cloudflare (DNS ready)
     # Where support requests are mailed (the person's own address is the Reply-To).
     support_inbox: str = "support@bygdell.solutions"
     support_tickets_per_hour: int = 5  # per source and per email address

@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { PRIMARY_LINK, SECONDARY_LINK } from "@/components/ui/Button";
+import { SECONDARY_LINK } from "@/components/ui/Button";
 import { CopyableValue } from "@/components/ui/CopyableValue";
+import { SupportForm } from "@/features/support/SupportForm";
 import { getCredential, loginPath } from "@/lib/auth/credential";
 import { getCurrentUser } from "@/lib/orgs";
 import { SUPPORT_EMAIL, supportMailto } from "@/lib/support";
@@ -29,25 +30,22 @@ export default async function SupportPage() {
     <main className="mx-auto flex max-w-xl flex-col gap-6 p-8">
       <div>
         <h1 className="text-[28px] leading-tight font-semibold tracking-tight">Support</h1>
-        <p className="mt-1 text-secondary">Something not working, or not sure how to do something? Write to us and we will reply by email.</p>
+        <p className="mt-1 text-secondary">Something not working, or not sure how to do something? Write to us here and we will reply by email.</p>
       </div>
 
-      <section className="panel flex flex-col gap-4" aria-label="Contact support">
+      <section className="panel flex flex-col gap-3" aria-label="Write to support">
+        <SupportForm signedInAs={who} />
+      </section>
+
+      <section className="panel flex flex-col gap-3" aria-label="Contact support by email">
+        <h2 className="text-lg font-semibold">Prefer your own email?</h2>
+        <p className="text-sm text-secondary">You can also write to us from your email program. Mention what you were doing and, if you have one, your ticket number.</p>
         <div className="flex flex-wrap gap-3">
-          <a href={supportMailto(who)} className={PRIMARY_LINK} data-testid="email-support">
-            Email support
+          <a href={supportMailto(who)} className={SECONDARY_LINK} data-testid="email-support">
+            Open in my email program
           </a>
         </div>
-        <p className="text-sm text-secondary">
-          This opens your email program with the subject and a few questions filled in. If nothing opens, write to the address below from any email
-          account.
-        </p>
         <CopyableValue label="Support email" value={SUPPORT_EMAIL} testId="support-address" />
-        {who !== null && (
-          <p className="text-sm text-secondary" data-testid="support-account">
-            The email will mention your account ({who.email}) so we know who is asking.
-          </p>
-        )}
       </section>
 
       <section className="panel flex flex-col gap-2" aria-label="What to include">

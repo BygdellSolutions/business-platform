@@ -68,6 +68,11 @@ export async function apiFetch<T>(orgId: string, path: string, request: ApiReque
   return send<T>(bffPath(orgId, path), request);
 }
 
+/** The support page's message box: public, so it belongs to no organization and works signed out. Same CSRF echo and result shape. */
+export async function apiFetchSupport<T>(request: ApiRequest): Promise<ApiResult<T>> {
+  return send<T>("/api/support", request);
+}
+
 /**
  * A request that belongs to no organization (creating one): same-origin to the BFF's `/api/organizations`, with
  * the same CSRF echo, the same session-loss handling and the same result shape. There is no organization

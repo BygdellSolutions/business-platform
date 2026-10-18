@@ -179,7 +179,7 @@ export function normalizeError(status: number, body: unknown): ApiError {
   if (status >= 500) {
     return { kind: "server", status, message: "The server could not complete the request. Try again." };
   }
-  return { kind: "client", status, message: text ?? `The request was rejected (${status}).` };
+  return { kind: "client", status, message: text ?? structured ?? `The request was rejected (${status}).` };
 }
 
 export function networkError(): ApiError {

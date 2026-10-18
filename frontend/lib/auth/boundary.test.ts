@@ -109,6 +109,7 @@ describe("the authentication mode is decided in one place", () => {
       "app/api/dev-session/route.ts",
       "app/api/o/[orgId]/[...path]/route.ts",
       "app/api/organizations/route.ts",
+      "app/api/support/route.ts", // the public support box: same-origin in either mode, a signed-in visitor is recognised
       "app/dev-login/page.tsx",
       "app/invite/page.tsx",
       "app/login/page.tsx",
