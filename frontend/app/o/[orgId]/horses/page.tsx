@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { PRIMARY_LINK } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { ListFilters } from "@/components/ui/ListFilters";
 import { Pagination } from "@/components/ui/Pagination";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -72,7 +73,11 @@ export default async function HorsesPage({
         </ListFilters>
 
         {horses.length === 0 ? (
-          <p data-testid="empty">{filtered ? "No horses match." : "No horses yet."}</p>
+          <EmptyState
+            title={filtered ? "No horses match." : "No horses yet."}
+            hint={filtered ? "Try a different search or clear the filters." : "Add a horse with its owner to book it and keep its journal."}
+            action={!filtered && canWrite ? <Link href={`${base}/new`} className={PRIMARY_LINK}>Add your first horse</Link> : undefined}
+          />
         ) : (
           <div className="overflow-x-auto">
             <table data-testid="horses-table" className="w-full max-w-5xl text-left text-sm whitespace-nowrap">

@@ -5,6 +5,7 @@ All notable changes to `business-platform` will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Empty lists (customers, suppliers, horses, items, orders, invoices) explain what the list is for and offer the action to start it, and pages show a skeleton of the page while loading instead of the word "Loading…".
 - The organization picker (`/organizations`) is laid out in three separate sections: your organizations as full-width buttons with the role beside them (and "Create organization" below), a "Website" section with the "Go to homepage" button, and sign out.
 
 ### Added

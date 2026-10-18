@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { CONTROL, FILTER_LABEL } from "@/components/ui/controls";
 import { DecimalText } from "@/components/ui/DecimalText";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { ListFilters } from "@/components/ui/ListFilters";
 import { Notice } from "@/components/ui/Notice";
 import { Pagination } from "@/components/ui/Pagination";
@@ -120,7 +121,10 @@ export default async function InvoicesPage({
         </ListFilters>
 
         {invoices.length === 0 ? (
-          <p data-testid="empty">{filtered ? "No invoices match." : "No invoices yet."}</p>
+          <EmptyState
+            title={filtered ? "No invoices match." : "No invoices yet."}
+            hint={filtered ? "Try a different search or clear the filters." : "Invoices are created from completed orders."}
+          />
         ) : (
           <div className="overflow-x-auto">
             <table data-testid="invoices-table" className="w-full max-w-6xl text-left text-sm whitespace-nowrap">

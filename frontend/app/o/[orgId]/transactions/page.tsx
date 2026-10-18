@@ -3,6 +3,7 @@ import Link from "next/link";
 import { CONTROL, FILTER_LABEL } from "@/components/ui/controls";
 import { PRIMARY_LINK } from "@/components/ui/Button";
 import { DecimalText } from "@/components/ui/DecimalText";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { ListFilters } from "@/components/ui/ListFilters";
 import { Pagination } from "@/components/ui/Pagination";
 import { SortHeader } from "@/components/ui/SortHeader";
@@ -84,14 +85,11 @@ export default async function TransactionsPage({
         </ListFilters>
 
         {transactions.length === 0 ? (
-          <p data-testid="empty">
-            {filtered ? "No orders match." : "No orders yet."}{" "}
-            {!filtered && canWrite && (
-              <Link href={`${base}/new`} className="underline">
-                Create the first one.
-              </Link>
-            )}
-          </p>
+          <EmptyState
+            title={filtered ? "No orders match." : "No orders yet."}
+            hint={filtered ? "Try a different search or clear the filters." : "An order lists what a customer buys. Invoices are made from completed orders."}
+            action={!filtered && canWrite ? <Link href={`${base}/new`} className={PRIMARY_LINK}>Create your first order</Link> : undefined}
+          />
         ) : (
           <div className="overflow-x-auto">
             <table data-testid="transactions-table" className="w-full max-w-5xl text-left text-sm whitespace-nowrap">

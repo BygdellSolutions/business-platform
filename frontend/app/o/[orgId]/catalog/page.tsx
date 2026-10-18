@@ -3,6 +3,7 @@ import Link from "next/link";
 import { PRIMARY_LINK } from "@/components/ui/Button";
 import { DecimalText } from "@/components/ui/DecimalText";
 import { FILTER_LABEL } from "@/components/ui/controls";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { ListFilters } from "@/components/ui/ListFilters";
 import { Pagination } from "@/components/ui/Pagination";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -114,9 +115,11 @@ export default async function CatalogPage({
         </ListFilters>
 
         {items.length === 0 ? (
-          <p data-testid="empty">
-            {filtered ? "No items match." : "No items yet."}
-          </p>
+          <EmptyState
+            title={filtered ? "No items match." : "No items yet."}
+            hint={filtered ? "Try a different search or clear the filters." : "Items are the products and services you sell, with price and VAT."}
+            action={!filtered && canWrite ? <Link href={`${base}/new`} className={PRIMARY_LINK}>Add your first item</Link> : undefined}
+          />
         ) : (
           // Wide on purpose (prices and stock side by side): the table scrolls sideways instead of squeezing cells.
           <div className="overflow-x-auto">

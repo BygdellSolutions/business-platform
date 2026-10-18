@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { PRIMARY_LINK } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { ListFilters } from "@/components/ui/ListFilters";
 import { Pagination } from "@/components/ui/Pagination";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -43,7 +44,11 @@ export default async function SuppliersPage({
         <ListFilters action={base} params={list} />
 
         {suppliers.length === 0 ? (
-          <p data-testid="empty">{filtered ? "No suppliers match." : "No suppliers yet."}</p>
+          <EmptyState
+            title={filtered ? "No suppliers match." : "No suppliers yet."}
+            hint={filtered ? "Try a different search or clear the filters." : "Suppliers are the companies you buy stock from."}
+            action={!filtered && canWrite ? <Link href={`${base}/new`} className={PRIMARY_LINK}>Add your first supplier</Link> : undefined}
+          />
         ) : (
           <div className="overflow-x-auto">
             <table data-testid="suppliers-table" className="w-full max-w-4xl text-left text-sm whitespace-nowrap">

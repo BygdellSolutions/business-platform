@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { PRIMARY_LINK } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { ListFilters } from "@/components/ui/ListFilters";
 import { Pagination } from "@/components/ui/Pagination";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -46,7 +47,11 @@ export default async function CustomersPage({
         <ListFilters action={base} params={list} />
 
         {customers.length === 0 ? (
-          <p data-testid="empty">{filtered ? "No customers match." : "No customers yet."}</p>
+          <EmptyState
+            title={filtered ? "No customers match." : "No customers yet."}
+            hint={filtered ? "Try a different search or clear the filters." : "Customers are the people and companies you sell to. Add one to start creating orders."}
+            action={!filtered && canWrite ? <Link href={`${base}/new`} className={PRIMARY_LINK}>Add your first customer</Link> : undefined}
+          />
         ) : (
           <div className="overflow-x-auto">
             <table data-testid="customers-table" className="w-full max-w-4xl text-left text-sm whitespace-nowrap">
