@@ -68,6 +68,13 @@ function dragData(appointment: Appointment) {
   };
 }
 
+/** A scheduled booking whose end has passed counts as done: it is not moved by dragging any more, only by opening it. */
+export function isDone(appointment: Pick<Appointment, "status" | "ends_at">): boolean {
+  return appointment.status === "scheduled" && new Date(appointment.ends_at).getTime() < Date.now();
+}
+
+const DONE_HINT = "Done. Open it to change it.";
+
 /** The names of the horses an appointment is about, "Kalle, Storm" (empty when none). */
 export function horsesOf(appointment: Appointment): string {
   return appointment.subjects.map((subject) => subject.label ?? "a horse").join(", ");
@@ -275,20 +282,22 @@ function Block({
   const who = showPerson && appointment.practitioner_name ? ` · ${appointment.practitioner_name}` : "";
   const horses = horsesOf(appointment);
   // A booking can be moved from the day it starts on, and its end dragged when it also ends on that day (a clipped one is changed in the form).
-  const movable = canWrite && start.day === day;
+  const done = isDone(appointment);
+  const movable = canWrite && !done && start.day === day;
   const resizable = movable && end.day === day;
   return (
     <Link
       href={`/o/${orgId}/calendar/${appointment.id}`}
-      className={`${toneOf({ people }, appointment.practitioner_user_id)} tint absolute overflow-hidden rounded px-1.5 py-0.5 text-xs leading-tight hover:brightness-95 ${clash ? "ring-2 ring-red-600" : ""}`}
+      className={`${toneOf({ people }, appointment.practitioner_user_id)} tint absolute overflow-hidden rounded px-1.5 py-0.5 text-xs leading-tight hover:brightness-95 ${clash ? "ring-2 ring-red-600" : ""} ${done ? "opacity-60" : ""}`}
       style={{ top, height, left: `calc(${(lane / lanes) * 100}% + 2px)`, width: `calc(${100 / lanes}% - 4px)`, color: "var(--tone-text)", touchAction: movable ? "none" : undefined }}
-      title={clash ? "Overlaps another booking of the same person" : undefined}
+      title={clash ? "Overlaps another booking of the same person" : done ? DONE_HINT : undefined}
       draggable={false}
       data-testid="appointment"
       data-clash={clash ? "true" : undefined}
+      data-done={done ? "true" : undefined}
       {...(movable ? dragData(appointment) : {})}
     >
-      <span className="font-semibold">{clash ? "⚠ " : ""}{appointment.title}</span>
+      <span className="font-semibold">{clash ? "⚠ " : ""}{done ? "✓ " : ""}{appointment.title}</span>
       <br />
       <span>
         {range}
@@ -348,22 +357,26 @@ function MonthGrid(props: CalendarProps & { link: (view: CalendarView, day: stri
                 {dayOfMonth(cell)}
               </Link>
               <ul className="mt-1 flex flex-col gap-0.5">
-                {items.slice(0, 3).map((appointment) => (
+                {items.slice(0, 3).map((appointment) => {
+                  const done = isDone(appointment);
+                  return (
                   <li key={appointment.id}>
                     <Link
                       href={`/o/${orgId}/calendar/${appointment.id}`}
-                      className={`${toneOf({ people }, appointment.practitioner_user_id)} tint relative block truncate rounded px-1 text-xs ${clashes.has(appointment.id) ? "ring-1 ring-red-600" : ""}`}
-                      style={{ color: "var(--tone-text)", touchAction: props.canWrite ? "none" : undefined }}
-                      title={[appointment.title, horsesOf(appointment)].filter(Boolean).join(" · ")}
+                      className={`${toneOf({ people }, appointment.practitioner_user_id)} tint relative block truncate rounded px-1 text-xs ${clashes.has(appointment.id) ? "ring-1 ring-red-600" : ""} ${done ? "opacity-60" : ""}`}
+                      style={{ color: "var(--tone-text)", touchAction: props.canWrite && !done ? "none" : undefined }}
+                      title={[appointment.title, horsesOf(appointment), done ? DONE_HINT : ""].filter(Boolean).join(" · ")}
                       draggable={false}
                       data-testid="appointment"
-                      {...(props.canWrite ? dragData(appointment) : {})}
+                      data-done={done ? "true" : undefined}
+                      {...(props.canWrite && !done ? dragData(appointment) : {})}
                     >
-                      {timeText(localParts(appointment.starts_at, zone).minutes)} {appointment.title}
+                      {done ? "✓ " : ""}{timeText(localParts(appointment.starts_at, zone).minutes)} {appointment.title}
                       {horsesOf(appointment) && <span className="opacity-75"> · {horsesOf(appointment)}</span>}
                     </Link>
                   </li>
-                ))}
+                  );
+                })}
                 {items.length > 3 && (
                   <li>
                     <Link href={link("day", cell)} className="text-xs text-secondary underline">

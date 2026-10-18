@@ -11,7 +11,7 @@ import { bffUrl, createWorld, currentUserId, signIn, sql, testRow, type World } 
 let world: World;
 test.afterEach(() => world?.cleanup());
 
-const WEEK = "view=week&date=2026-10-19"; // Monday 19 October 2026 (the organization has no time zone set, so times are UTC)
+const WEEK = "view=week&date=2030-10-21"; // Monday 21 October 2030 (the organization has no time zone set, so times are UTC)
 
 async function book(context: BrowserContext, orgId: string, body: Record<string, unknown>) {
   const response = await context.request.post(bffUrl(orgId, "/appointments"), { data: { practitioner_user_id: await currentUserId(context, orgId), ...body } });
@@ -52,7 +52,7 @@ async function dragBy(page: Page, target: Locator, dx: number, dy: number, at = 
 test("a booking is dragged to another time and day in the week view, keeping its length", async ({ page, context }) => {
   world = createWorld({ label: "Drag week" });
   await signIn(context, world.email);
-  const booked = await book(context, world.orgId, { title: "Massage", starts_at: "2026-10-19T08:00:00Z", ends_at: "2026-10-19T09:30:00Z" });
+  const booked = await book(context, world.orgId, { title: "Massage", starts_at: "2030-10-21T08:00:00Z", ends_at: "2030-10-21T09:30:00Z" });
 
   await page.goto(`/o/${world.orgId}/calendar?${WEEK}`);
   await expect(page.getByTestId("appointment")).toBeVisible();
@@ -63,7 +63,7 @@ test("a booking is dragged to another time and day in the week view, keeping its
   await expect(page.getByTestId("calendar-message")).toHaveText("Saved.");
 
   const moved = await appointmentOf(context, world.orgId, booked.id);
-  expect([instant(moved.starts_at), instant(moved.ends_at)]).toEqual(["2026-10-20T10:00:00.000Z", "2026-10-20T11:30:00.000Z"]);
+  expect([instant(moved.starts_at), instant(moved.ends_at)]).toEqual(["2030-10-22T10:00:00.000Z", "2030-10-22T11:30:00.000Z"]);
   await expect(page.getByTestId("column").nth(1).getByTestId("appointment")).toHaveCount(1); // the page shows it in its new place
   await expect(page.getByTestId("column").nth(0).getByTestId("appointment")).toHaveCount(0);
   await expect(page.getByTestId("appointment")).toContainText("10:00–11:30");
@@ -74,9 +74,9 @@ test("a booking dragged to another person's column in the day view changes its p
   world.addMember("employee");
   await signIn(context, world.email);
   const [colleague, owner] = await people(context, world.orgId); // by name: employee, owner
-  const booked = await book(context, world.orgId, { title: "Visit", starts_at: "2026-10-19T08:00:00Z", ends_at: "2026-10-19T09:00:00Z", practitioner_user_id: owner.user_id });
+  const booked = await book(context, world.orgId, { title: "Visit", starts_at: "2030-10-21T08:00:00Z", ends_at: "2030-10-21T09:00:00Z", practitioner_user_id: owner.user_id });
 
-  await page.goto(`/o/${world.orgId}/calendar?view=day&date=2026-10-19`);
+  await page.goto(`/o/${world.orgId}/calendar?view=day&date=2030-10-21`);
   await expect(page.getByTestId("appointment")).toBeVisible();
   const first = (await page.getByTestId("column").nth(0).boundingBox())!;
   const second = (await page.getByTestId("column").nth(1).boundingBox())!;
@@ -85,48 +85,48 @@ test("a booking dragged to another person's column in the day view changes its p
 
   const moved = await appointmentOf(context, world.orgId, booked.id);
   expect(moved.practitioner_user_id).toBe(colleague.user_id);
-  expect(instant(moved.starts_at)).toBe("2026-10-19T08:00:00.000Z"); // the time did not change
+  expect(instant(moved.starts_at)).toBe("2030-10-21T08:00:00.000Z"); // the time did not change
   await expect(page.getByTestId("column").nth(0).getByTestId("appointment")).toHaveCount(1);
 });
 
 test("the bottom edge of a booking is dragged to change when it ends", async ({ page, context }) => {
   world = createWorld({ label: "Drag resize" });
   await signIn(context, world.email);
-  const booked = await book(context, world.orgId, { title: "Session", starts_at: "2026-10-19T09:00:00Z", ends_at: "2026-10-19T10:00:00Z" });
+  const booked = await book(context, world.orgId, { title: "Session", starts_at: "2030-10-21T09:00:00Z", ends_at: "2030-10-21T10:00:00Z" });
 
   await page.goto(`/o/${world.orgId}/calendar?${WEEK}`);
   await dragBy(page, page.getByTestId("appointment"), 0, 72, 1); // the bottom edge, an hour and a half down
   await expect(page.getByTestId("calendar-message")).toHaveText("Saved.");
   const longer = await appointmentOf(context, world.orgId, booked.id);
-  expect([instant(longer.starts_at), instant(longer.ends_at)]).toEqual(["2026-10-19T09:00:00.000Z", "2026-10-19T11:30:00.000Z"]);
+  expect([instant(longer.starts_at), instant(longer.ends_at)]).toEqual(["2030-10-21T09:00:00.000Z", "2030-10-21T11:30:00.000Z"]);
 
   await dragBy(page, page.getByTestId("appointment"), 0, -300, 1); // far above the start: not after it, so nothing changes
   await expect(page.getByTestId("appointment")).toBeVisible();
   const same = await appointmentOf(context, world.orgId, booked.id);
-  expect(instant(same.ends_at)).toBe("2026-10-19T11:30:00.000Z");
+  expect(instant(same.ends_at)).toBe("2030-10-21T11:30:00.000Z");
   expect(same.version).toBe(longer.version);
 });
 
 test("a booking is dropped on another day in the month view, keeping its time", async ({ page, context }) => {
   world = createWorld({ label: "Drag month" });
   await signIn(context, world.email);
-  const booked = await book(context, world.orgId, { title: "Clinic", starts_at: "2026-10-19T08:30:00Z", ends_at: "2026-10-19T10:00:00Z" });
+  const booked = await book(context, world.orgId, { title: "Clinic", starts_at: "2030-10-21T08:30:00Z", ends_at: "2030-10-21T10:00:00Z" });
 
-  await page.goto(`/o/${world.orgId}/calendar?view=month&date=2026-10-19`);
+  await page.goto(`/o/${world.orgId}/calendar?view=month&date=2030-10-21`);
   await expect(page.getByTestId("appointment")).toBeVisible();
-  const target = (await page.locator('[data-month-day][data-day="2026-10-22"]').boundingBox())!;
+  const target = (await page.locator('[data-month-day][data-day="2030-10-24"]').boundingBox())!;
   const chip = (await page.getByTestId("appointment").boundingBox())!;
   await dragBy(page, page.getByTestId("appointment"), target.x + target.width / 2 - (chip.x + chip.width / 2), target.y + 60 - (chip.y + chip.height / 2));
   await expect(page.getByTestId("calendar-message")).toHaveText("Saved.");
   const moved = await appointmentOf(context, world.orgId, booked.id);
-  expect([instant(moved.starts_at), instant(moved.ends_at)]).toEqual(["2026-10-22T08:30:00.000Z", "2026-10-22T10:00:00.000Z"]);
-  await expect(page.locator('[data-month-day][data-day="2026-10-22"]').getByTestId("appointment")).toHaveCount(1);
+  expect([instant(moved.starts_at), instant(moved.ends_at)]).toEqual(["2030-10-24T08:30:00.000Z", "2030-10-24T10:00:00.000Z"]);
+  await expect(page.locator('[data-month-day][data-day="2030-10-24"]').getByTestId("appointment")).toHaveCount(1);
 });
 
 test("a small movement is still a click that opens the booking, and dropping outside the grid changes nothing", async ({ page, context }) => {
   world = createWorld({ label: "Drag click" });
   await signIn(context, world.email);
-  const booked = await book(context, world.orgId, { title: "Quick look", starts_at: "2026-10-19T08:00:00Z", ends_at: "2026-10-19T09:00:00Z" });
+  const booked = await book(context, world.orgId, { title: "Quick look", starts_at: "2030-10-21T08:00:00Z", ends_at: "2030-10-21T09:00:00Z" });
 
   await page.goto(`/o/${world.orgId}/calendar?${WEEK}`);
   await dragBy(page, page.getByTestId("appointment"), 2, 2);
@@ -136,14 +136,14 @@ test("a small movement is still a click that opens the booking, and dropping out
   await dragBy(page, page.getByTestId("appointment"), 0, -400); // up above the grid
   await expect(page.getByTestId("calendar")).toBeVisible();
   const same = await appointmentOf(context, world.orgId, booked.id);
-  expect(instant(same.starts_at)).toBe("2026-10-19T08:00:00.000Z");
+  expect(instant(same.starts_at)).toBe("2030-10-21T08:00:00.000Z");
   expect(same.version).toBe(1);
 });
 
 test("a booking someone else changed meanwhile snaps back with a message and nothing is overwritten", async ({ page, context }) => {
   world = createWorld({ label: "Drag stale" });
   await signIn(context, world.email);
-  const booked = await book(context, world.orgId, { title: "Original", starts_at: "2026-10-19T08:00:00Z", ends_at: "2026-10-19T09:00:00Z" });
+  const booked = await book(context, world.orgId, { title: "Original", starts_at: "2030-10-21T08:00:00Z", ends_at: "2030-10-21T09:00:00Z" });
 
   await page.goto(`/o/${world.orgId}/calendar?${WEEK}`);
   const changed = await context.request.patch(bffUrl(world.orgId, `/appointments/${booked.id}`), { data: { title: "Changed elsewhere" }, headers: { "if-match": `"${booked.version}"` } });
@@ -152,14 +152,14 @@ test("a booking someone else changed meanwhile snaps back with a message and not
   await expect(page.getByTestId("calendar-message")).toContainText("changed by someone else");
 
   const after = await appointmentOf(context, world.orgId, booked.id);
-  expect([after.title, instant(after.starts_at)]).toEqual(["Changed elsewhere", "2026-10-19T08:00:00.000Z"]); // not moved, their change kept
+  expect([after.title, instant(after.starts_at)]).toEqual(["Changed elsewhere", "2030-10-21T08:00:00.000Z"]); // not moved, their change kept
   await expect(page.getByTestId("appointment")).toContainText("Changed elsewhere"); // the page was reloaded
 });
 
 test("a viewer cannot drag a booking", async ({ page, context }) => {
   world = createWorld({ label: "Drag viewer" });
   await signIn(context, world.email);
-  const booked = await book(context, world.orgId, { title: "Fixed", starts_at: "2026-10-19T08:00:00Z", ends_at: "2026-10-19T09:00:00Z" });
+  const booked = await book(context, world.orgId, { title: "Fixed", starts_at: "2030-10-21T08:00:00Z", ends_at: "2030-10-21T09:00:00Z" });
   await signIn(context, world.addMember("viewer"));
 
   await page.goto(`/o/${world.orgId}/calendar?${WEEK}`);
@@ -168,7 +168,7 @@ test("a viewer cannot drag a booking", async ({ page, context }) => {
   await expect(page.locator("[data-resize]")).toHaveCount(0);
   await dragBy(page, page.getByTestId("appointment"), 0, 96);
   const same = await appointmentOf(context, world.orgId, booked.id);
-  expect(instant(same.starts_at)).toBe("2026-10-19T08:00:00.000Z");
+  expect(instant(same.starts_at)).toBe("2030-10-21T08:00:00.000Z");
 });
 
 test("a booking cannot be dropped in the column of nobody (only an older booking without a person can be there)", async ({ page, context }) => {
@@ -176,11 +176,11 @@ test("a booking cannot be dropped in the column of nobody (only an older booking
   world.addMember("employee");
   await signIn(context, world.email);
   const [colleague, owner] = await people(context, world.orgId); // by name: employee, owner
-  const booked = await book(context, world.orgId, { title: "Mine", starts_at: "2026-10-19T08:00:00Z", ends_at: "2026-10-19T09:00:00Z", practitioner_user_id: owner.user_id });
+  const booked = await book(context, world.orgId, { title: "Mine", starts_at: "2030-10-21T08:00:00Z", ends_at: "2030-10-21T09:00:00Z", practitioner_user_id: owner.user_id });
   // a booking from before every booking had a person (the API no longer makes one)
-  testRow(`insert into appointments (organization_id, title, starts_at, ends_at) values (${sql(world.orgId)}, 'Older', '2026-10-19T12:00:00Z', '2026-10-19T13:00:00Z')`);
+  testRow(`insert into appointments (organization_id, title, starts_at, ends_at) values (${sql(world.orgId)}, 'Older', '2030-10-21T12:00:00Z', '2030-10-21T13:00:00Z')`);
 
-  await page.goto(`/o/${world.orgId}/calendar?view=day&date=2026-10-19`);
+  await page.goto(`/o/${world.orgId}/calendar?view=day&date=2030-10-21`);
   await expect(page.getByTestId("column-heading")).toHaveText([colleague.name, owner.name, "Nobody in particular"]);
   const mine = page.getByTestId("appointment").filter({ hasText: "Mine" });
   await expect(mine).toBeVisible();
@@ -198,4 +198,36 @@ test("a booking cannot be dropped in the column of nobody (only an older booking
   const same = await appointmentOf(context, world.orgId, booked.id);
   expect(same.practitioner_user_id).toBe(owner.user_id);
   expect(same.version).toBe(booked.version);
+});
+
+test("a booking that has ended is marked done and cannot be dragged, only changed by opening it", async ({ page, context }) => {
+  world = createWorld({ label: "Drag done" });
+  await signIn(context, world.email);
+  const booked = await book(context, world.orgId, { title: "Old visit", starts_at: "2020-10-19T08:00:00Z", ends_at: "2020-10-19T09:00:00Z" });
+
+  await page.goto(`/o/${world.orgId}/calendar?view=week&date=2020-10-19`);
+  const block = page.getByTestId("appointment");
+  await expect(block).toHaveAttribute("data-done", "true");
+  await expect(block).toContainText("✓ Old visit");
+  await expect(block).not.toHaveAttribute("data-movable", "true");
+  await expect(block.locator("[data-resize]")).toHaveCount(0);
+
+  const columns = page.getByTestId("column");
+  const monday = (await columns.nth(0).boundingBox())!;
+  const tuesday = (await columns.nth(1).boundingBox())!;
+  await dragBy(page, block, tuesday.x - monday.x, 96);
+  const same = await appointmentOf(context, world.orgId, booked.id);
+  expect([instant(same.starts_at), instant(same.ends_at)]).toEqual(["2020-10-19T08:00:00.000Z", "2020-10-19T09:00:00.000Z"]); // nothing moved
+
+  await block.click(); // opening it is the deliberate way to change it
+  await expect(page).toHaveURL(new RegExp(`/calendar/${booked.id}`));
+});
+
+test("a booking that has not ended yet stays draggable", async ({ page, context }) => {
+  world = createWorld({ label: "Drag not done" });
+  await signIn(context, world.email);
+  await book(context, world.orgId, { title: "Coming visit", starts_at: "2030-10-21T08:00:00Z", ends_at: "2030-10-21T09:00:00Z" });
+  await page.goto(`/o/${world.orgId}/calendar?${WEEK}`);
+  await expect(page.getByTestId("appointment")).not.toHaveAttribute("data-done", "true");
+  await expect(page.getByTestId("appointment")).toHaveAttribute("data-movable", "true");
 });

@@ -128,6 +128,8 @@ export function CalendarDnD({
       const target = event.target as HTMLElement;
       const element = target.closest<HTMLElement>("[data-movable]");
       if (!element || !container?.contains(element)) return;
+      // A page left open past a booking's end must not let it be dragged: a finished booking is changed by opening it.
+      if (new Date(element.dataset.end ?? "").getTime() < Date.now()) return;
       const press: Press = {
         element,
         kind: target.closest("[data-resize]") ? "resize" : "move",

@@ -5,6 +5,7 @@ All notable changes to `business-platform` will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Scheduling: a booking whose end has passed is marked done (a check mark, dimmed) and can no longer be dragged or stretched, so a finished visit is not moved by accident; it is changed by opening it. A page left open past a booking's end refuses the drag too.
 - Dashboard cards that need action carry a warning mark besides the tint, and a zero is shown muted. The homepage calls the calendar area "Scheduling", like the menu.
 - Scheduling: the day and week views draw a red line at the current time in today's column, and a phone that opens the calendar without choosing a view gets the day view (a week of columns does not fit it).
 - Customers, Suppliers, Horses, Catalog, Orders and Invoices open with a shared page header: the title, one line saying what the page is for, and the main action.
