@@ -47,7 +47,7 @@ test("invoice: the order goes onto the customer's draft invoice, and the next on
     await expect(page.getByTestId("order-invoice")).toHaveText("Draft invoice"); // the link stays at the top of the order
   }
   await page.getByTestId("open-draft-invoice").click();
-  await expect(page.getByTestId("source")).toHaveCount(2); // both orders, one draft
+  await expect(page.getByTestId("invoice-order-link")).toHaveCount(2); // both orders, one draft
   await expect(page.getByTestId("invoice-order-link")).toHaveText(["Order 1001", "Order 1002"]);
   await page.getByTestId("invoice-order-link").first().click();
   await expect(page.getByTestId("record-name")).toContainText("Order 1001");

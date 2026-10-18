@@ -110,7 +110,7 @@ test.describe("draft invoices", () => {
     await expect(page.getByTestId("total-gross")).toHaveText(stored.gross_amount);
     expect(await page.getByTestId("line-gross").allTextContents()).toEqual(stored.lines.map((line) => line.gross_amount));
     expect(await page.getByTestId("vat-row").count()).toBe(stored.vat_breakdown.length);
-    await expect(page.getByTestId("source")).toHaveCount(2);
+    await expect(page.getByTestId("invoice-order-link")).toHaveCount(2);
     expect(stored.status).toBe("draft");
     expect(s.t1.id).toBeTruthy();
   });

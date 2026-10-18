@@ -1264,6 +1264,10 @@ export interface InvoiceSummary {
 
   open_returns: number;
 
+  /** An email with this invoice has been sent to the customer (or the mail service has taken it); a failed attempt does not count. */
+
+  emailed?: boolean;
+
   /** The earliest follow-up date of its open return cases, and whether that day has come (organization time zone). */
 
   return_follow_up_on: string | null;

@@ -40,7 +40,7 @@ from app.core.tenant_scope import create_scoped, get_scoped, get_scoped_or_404, 
 from app.models import Customer, Organization, User
 from app.modules.custom_fields import service as custom_fields
 from app.modules.invoicing import delivery, numbering, snapshots
-from app.modules.invoicing import credits, payments, returns
+from app.modules.invoicing import credits, payments, returns, sent
 from app.modules.invoicing.models import (
     Invoice,
     InvoiceHold,
@@ -530,6 +530,7 @@ def read_invoice(db: Session, ctx: TenantContext, invoice_id: uuid.UUID) -> Invo
         credit_notes=credits.credit_note_summaries(db, ctx, invoice.id),
         returns=(cases := returns.list_returns(db, ctx, invoice.id)),
         open_returns=sum(1 for case in cases if case.state in ("requested", "goods_received", "approved")),
+        emailed=invoice.id in sent.emailed_invoice_ids(db, ctx.organization_id, [invoice.id]),
         issued_by=invoice.issued_by,
         created_by=invoice.created_by,
         updated_by=invoice.updated_by,

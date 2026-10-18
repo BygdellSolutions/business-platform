@@ -209,7 +209,7 @@ export function InvoiceView({ invoice, canMutate, timeZone = null }: { invoice: 
         <InvoiceActions />
         <DraftHeader />
         <div className={refreshing ? "opacity-50" : ""} aria-busy={refreshing} data-updating={refreshing || undefined}>
-          <InvoiceDocument invoice={invoice} orgId={orgId} timeZone={timeZone} />
+          <InvoiceDocument invoice={invoice} timeZone={timeZone} />
         </div>
       </div>
     </InvoiceContext.Provider>

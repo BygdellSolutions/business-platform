@@ -18,7 +18,7 @@ from app.core.query import contains_pattern, in_chunks
 from app.core.tenant import TenantContext, get_tenant_context
 from app.core.tenant_scope import scoped_select
 from app.models import Customer, Role
-from app.modules.invoicing import credits, delivery, emailing, payments, receipts, returns, service
+from app.modules.invoicing import credits, delivery, emailing, payments, receipts, returns, sent, service
 from app.modules.invoicing.pdf import service as pdf_service
 from app.modules.invoicing.pdf.document import DocumentTooLarge
 from app.modules.invoicing.pdf.fonts import UnsupportedCharacters
@@ -550,6 +550,7 @@ def list_invoices(
     refunded = payments.refunded_amounts(db, ctx.organization_id, [invoice.id for invoice in invoices])
     open_returns = returns.open_counts(db, ctx.organization_id, [invoice.id for invoice in invoices])
     follow_ups = returns.next_follow_ups(db, ctx.organization_id, [invoice.id for invoice in invoices])
+    emailed = sent.emailed_invoice_ids(db, ctx.organization_id, [invoice.id for invoice in invoices])
     # "Due today?" is a reminder about a return case, not part of any invoice document; the organization's day (its
     # time zone, a live record) is read only when a listed invoice has an open return, so reading invoices without
     # one touches no live table (tests/test_invoices_historical.py).
@@ -560,6 +561,7 @@ def list_invoices(
                 invoice, counts.get(invoice.id, 0), paid.get(invoice.id, ZERO), credited.get(invoice.id, ZERO), refunded.get(invoice.id, ZERO)
             ),
             open_returns=open_returns.get(invoice.id, 0),
+            emailed=invoice.id in emailed,
             return_follow_up_on=follow_ups.get(invoice.id),
             return_follow_up_due=today is not None and invoice.id in follow_ups and follow_ups[invoice.id] <= today,
         )

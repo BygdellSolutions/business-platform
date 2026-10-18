@@ -11,6 +11,7 @@ const PAYMENT: Record<NonNullable<Invoice["payment_status"]>, { label: string; c
   paid: { label: "Paid", className: "tone-success" },
 };
 
+const SENT = { label: "Sent", className: "tone-neutral" };
 const CREDITED = { label: "Credited", className: "tone-neutral" };
 const PARTLY_CREDITED = { label: "Partly credited", className: "tone-neutral" };
 
@@ -18,17 +19,22 @@ const PARTLY_CREDITED = { label: "Partly credited", className: "tone-neutral" };
  * Where an invoice stands, as the server reports it: a draft is "Draft"; an issued invoice says how far it is paid
  * (Unpaid, Partially paid, Paid), or "Credited" when credit notes cancel all of it. A partly credited invoice shows its
  * payment state and a second "Partly credited" badge. Without a payment state (an older answer) it is "Issued".
+ *
+ * An invoice that has been emailed to the customer also gets a small "Sent" badge, but only while it is still waiting to be settled:
+ * once it is paid or fully credited the "Sent" is dropped and the invoice says just "Paid" (or "Credited"). A draft is never "Sent".
  */
 export function InvoiceStatusBadge({
   status,
   paymentStatus = null,
   creditStatus = null,
   openReturns = 0,
+  emailed = false,
 }: {
   status: InvoiceStatus;
   paymentStatus?: Invoice["payment_status"];
   creditStatus?: Invoice["credit_status"];
   openReturns?: number;
+  emailed?: boolean;
 }) {
   const look = status === "draft" ? DRAFT : creditStatus === "credited" ? CREDITED : paymentStatus ? PAYMENT[paymentStatus] : ISSUED;
   return (
@@ -42,6 +48,11 @@ export function InvoiceStatusBadge({
       >
         {look.label}
       </span>
+      {status === "issued" && emailed && paymentStatus !== "paid" && creditStatus !== "credited" && (
+        <span data-testid="invoice-sent" className={`badge ${SENT.className}`}>
+          {SENT.label}
+        </span>
+      )}
       {status === "issued" && creditStatus === "partly_credited" && (
         <span data-testid="credit-status" className={`badge ${PARTLY_CREDITED.className}`}>
           {PARTLY_CREDITED.label}

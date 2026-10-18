@@ -1,6 +1,6 @@
 import { expect, test } from "./fixtures";
 
-import { bffUrl, createCompletedTransaction, createCustomer, createInvoiceApi, createWorld, issueInvoiceApi, signIn, sql, testRow, type World } from "./support";
+import { bffUrl, createCompletedTransaction, createCustomer, createInvoiceApi, createWorld, issueInvoiceApi, psql, signIn, sql, testRow, type World } from "./support";
 
 /**
  * Emailing an issued invoice: the form is on the invoice page (not on a draft), the customer's address is filled in, an attempt is listed
@@ -111,4 +111,53 @@ test("a pre-made text the organization holds is filled in on the invoice, can be
   expect(sent).toContain("Faktura ");
   expect(sent).toContain("PS. Ring om något är oklart.");
   await expect(message).toHaveValue(/PS\. Ring om något är oklart\./); // nothing was sent (no mail service here), so what was written is kept for another try
+});
+
+test("the list and the invoice say Draft, then Unpaid, then Unpaid with Sent once emailed, and only Paid when paid", async ({ page, context }) => {
+  world = createWorld({ label: "InvoiceSent" });
+  await signIn(context, world.email);
+  const customer = await createCustomer(context, world.orgId, "Anna Andersson", { email: "anna@example.test" });
+  const tx = await createCompletedTransaction(context, world.orgId, customer.id);
+  const draft = await createInvoiceApi(context, world.orgId, [tx.id]);
+  const status = (id: string) => page.locator(`tr:has(a[href$="/${id}"])`).getByTestId("invoice-status");
+  const sent = (id: string) => page.locator(`tr:has(a[href$="/${id}"])`).getByTestId("invoice-sent");
+
+  await page.goto(`/o/${world.orgId}/invoices`);
+  await expect(status(draft.id)).toHaveText("Draft");
+  await expect(sent(draft.id)).toHaveCount(0);
+
+  const issued = await issueInvoiceApi(context, world.orgId, draft);
+  await page.goto(`/o/${world.orgId}/invoices`);
+  await expect(status(issued.id)).toHaveText("Unpaid");
+  await expect(sent(issued.id)).toHaveCount(0);
+
+  // an attempt that did not go (no mail service in the test setup) does not make it "Sent"
+  await page.goto(`/o/${world.orgId}/invoices/${issued.id}`);
+  await page.getByTestId("send-invoice-email").click();
+  await expect(page.getByTestId("email-failed")).toBeVisible();
+  await page.goto(`/o/${world.orgId}/invoices`);
+  await expect(sent(issued.id)).toHaveCount(0);
+
+  // one that did go: record it as the mail service would have (the log row of a sent email)
+  psql(
+    "postgres-test",
+    `insert into invoice_emails (organization_id, invoice_id, to_email, sender_address, subject, pdf_sha256, status) values (${sql(world.orgId)}, ${sql(issued.id)}, 'anna@example.test', 'org@invoices.bygdell.solutions', 's', '${"0".repeat(64)}', 'sent')`,
+  );
+  await page.goto(`/o/${world.orgId}/invoices`);
+  await expect(status(issued.id)).toHaveText("Unpaid");
+  await expect(sent(issued.id)).toHaveText("Sent");
+  await page.goto(`/o/${world.orgId}/invoices/${issued.id}`);
+  await expect(page.getByTestId("invoice-sent")).toBeVisible();
+
+  // paid: only "Paid"
+  const paid = await context.request.post(bffUrl(world.orgId, `/invoices/${issued.id}/payments`), {
+    data: { amount: issued.gross_amount, paid_on: new Date().toISOString().slice(0, 10), method: "bank_transfer" },
+  });
+  expect(paid.status(), await paid.text()).toBe(201);
+  await page.goto(`/o/${world.orgId}/invoices`);
+  await expect(status(issued.id)).toHaveText("Paid");
+  await expect(sent(issued.id)).toHaveCount(0);
+  await page.goto(`/o/${world.orgId}/invoices/${issued.id}`);
+  await expect(page.getByTestId("invoice-status")).toHaveText("Paid");
+  await expect(page.getByTestId("invoice-sent")).toHaveCount(0);
 });

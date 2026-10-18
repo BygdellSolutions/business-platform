@@ -163,7 +163,7 @@ export default async function InvoicesPage({
                       {invoice.due_date ?? "—"}
                     </td>
                     <td className="py-1 pr-4">
-                      <InvoiceStatusBadge status={invoice.status} paymentStatus={invoice.payment_status} creditStatus={invoice.credit_status} />
+                      <InvoiceStatusBadge status={invoice.status} paymentStatus={invoice.payment_status} creditStatus={invoice.credit_status} emailed={invoice.emailed} />
                       {invoice.refund_due_amount && invoice.refund_due_amount !== "0.00" && (
                         <span className="ml-2 text-xs text-amber-700 dark:text-amber-300" data-testid="refund-due">
                           Refund due <DecimalText value={invoice.refund_due_amount} />

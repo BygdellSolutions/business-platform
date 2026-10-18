@@ -259,3 +259,45 @@ def test_a_line_break_in_the_note_cannot_inject_a_header(client: TestClient, db_
     send(client, two.a, invoice, {"to": "kund@example.test", "note": "Hej\r\nBcc: victim@example.test"})
     body = provider.sent[0][2]
     assert "bcc" not in body and "\n" not in body["subject"]  # the note is text in the body, never a header
+
+
+# --- "sent" on the invoice itself: shown on the list and the invoice, only for an email that really went ---------------------------
+
+
+def _list(client: TestClient, headers) -> dict:
+    return {row["id"]: row for row in client.get(INVOICES, headers=headers).json()}
+
+
+def test_an_invoice_says_it_was_emailed_only_after_an_email_really_went(client: TestClient, db_session: Session, monkeypatch):
+    two = Two(db_session)
+    invoice = issued(db_session, client, two.a, two.a_org, customer=two.a_customer)
+    assert _list(client, two.a)[invoice["id"]]["emailed"] is False
+    assert client.get(f"{INVOICES}/{invoice['id']}", headers=two.a).json()["emailed"] is False
+
+    send(client, two.a, invoice)  # no provider: the attempt failed, so the customer got nothing
+    assert _list(client, two.a)[invoice["id"]]["emailed"] is False
+
+    FakeProvider(monkeypatch)
+    send(client, two.a, invoice)
+    assert _list(client, two.a)[invoice["id"]]["emailed"] is True
+    assert client.get(f"{INVOICES}/{invoice['id']}", headers=two.a).json()["emailed"] is True
+
+
+def test_a_queued_email_counts_as_sent_and_a_draft_never_does(client: TestClient, db_session: Session, monkeypatch):
+    two = Two(db_session)
+    invoice = issued(db_session, client, two.a, two.a_org, customer=two.a_customer)
+    FakeProvider(monkeypatch, {"success": True, "result": {"delivered": [], "queued": ["x"], "permanent_bounces": []}})
+    send(client, two.a, invoice)
+    draft = draft_invoice(client, two.a, completed(db_session, two.a_org, two.a_customer))
+    rows = _list(client, two.a)
+    assert rows[invoice["id"]]["emailed"] is True and rows[draft["id"]]["emailed"] is False
+
+
+def test_another_organizations_email_never_marks_my_invoice(client: TestClient, db_session: Session, monkeypatch):
+    two = Two(db_session)
+    mine = issued(db_session, client, two.a, two.a_org, customer=two.a_customer)
+    theirs = issued(db_session, client, two.b, two.b_org, customer=two.b_customer)
+    FakeProvider(monkeypatch)
+    send(client, two.b, theirs)
+    assert _list(client, two.a)[mine["id"]]["emailed"] is False
+    assert _list(client, two.b)[theirs["id"]]["emailed"] is True

@@ -178,6 +178,8 @@ class InvoiceSummary(BaseModel):
     open_returns: int = 0
     return_follow_up_on: date | None = None
     return_follow_up_due: bool = False
+    # An email with this invoice has been sent to the customer (or the mail service has taken it and will deliver it); a failed attempt does not count.
+    emailed: bool = False
 
 
 class InvoicePaymentRead(BaseModel):

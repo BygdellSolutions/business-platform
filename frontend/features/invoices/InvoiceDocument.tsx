@@ -1,5 +1,3 @@
-import Link from "next/link";
-
 import { DecimalText } from "@/components/ui/DecimalText";
 import { DiscountSteps } from "@/components/ui/DiscountSteps";
 import { ServiceSummary } from "@/components/ui/ServiceSummary";
@@ -13,11 +11,10 @@ import { formatDay } from "@/lib/timestamps";
  * content. Nothing here fetches or looks anything up, and nothing is calculated: amounts, totals
  * and the VAT breakdown are the strings the server stored.
  *
- * The one place a live record is mentioned is the "Source orders" section: links for
- * navigation and audit, visibly secondary, labelled with the date the invoice itself recorded.
- * Following one shows the live record, which may by now differ from what this invoice says.
+ * It mentions no live record at all. Which orders the invoice is for, with links to them, is said ONCE, on the page above the
+ * document ("This invoice is for"); the document itself only shows what the invoice recorded of each order, its custom fields.
  */
-export function InvoiceDocument({ invoice, orgId, timeZone = null }: { invoice: Invoice; orgId: string; timeZone?: string | null }) {
+export function InvoiceDocument({ invoice, timeZone = null }: { invoice: Invoice; timeZone?: string | null }) {
   const heading = invoice.number_text !== null ? `Invoice ${invoice.number_text}` : "Draft invoice (no number yet)";
   return (
     <article aria-label="Invoice" data-testid="invoice-document" data-status={invoice.status} className="panel flex flex-col gap-5">
@@ -30,7 +27,7 @@ export function InvoiceDocument({ invoice, orgId, timeZone = null }: { invoice: 
             {invoice.number_text}
           </span>
         )}
-        <InvoiceStatusBadge status={invoice.status} paymentStatus={invoice.payment_status} creditStatus={invoice.credit_status} openReturns={invoice.open_returns} />
+        <InvoiceStatusBadge status={invoice.status} paymentStatus={invoice.payment_status} creditStatus={invoice.credit_status} openReturns={invoice.open_returns} emailed={invoice.emailed} />
         <span data-testid="invoice-currency" className="text-sm text-zinc-600 dark:text-zinc-400">
           {invoice.currency}
         </span>
@@ -189,20 +186,16 @@ export function InvoiceDocument({ invoice, orgId, timeZone = null }: { invoice: 
         )}
       </section>
 
-      <section aria-label="Source orders" data-testid="sources" className="flex flex-col gap-2 border-t border-zinc-300 pt-3 text-sm text-zinc-600 dark:border-zinc-700 dark:text-zinc-400">
-        <h3 className="text-sm font-medium">Source orders (navigation and audit only)</h3>
-        <p>These links open the live records, which may have changed since this invoice recorded them. The invoice above is not affected by them.</p>
-        <ul className="flex flex-col gap-2">
-          {invoice.transactions.map((source) => (
-            <li key={source.transaction_id} data-testid="source">
-              <Link href={`/o/${orgId}/transactions/${source.transaction_id}`} data-testid="source-link" className="underline">
-                {source.transaction_number !== null ? `Order ${source.transaction_number} of ${source.transaction_date}` : `Order of ${source.transaction_date}`}
-              </Link>
-              <FieldSnapshots fields={source.fields} label={`Fields of the order of ${source.transaction_date}`} testId="transaction-fields" />
-            </li>
-          ))}
-        </ul>
-      </section>
+      {invoice.transactions
+        .filter((source) => source.fields.length > 0)
+        .map((source) => (
+          <FieldSnapshots
+            key={source.transaction_id}
+            fields={source.fields}
+            label={source.transaction_number !== null ? `Fields of order ${source.transaction_number}` : `Fields of the order of ${source.transaction_date}`}
+            testId="transaction-fields"
+          />
+        ))}
     </article>
   );
 }
