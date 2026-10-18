@@ -191,6 +191,23 @@ describe("custom-field snapshots in the document", () => {
   });
 });
 
+describe("the invoice number", () => {
+  it("is said once, in the heading, not again in a box beside it", () => {
+    render(<InvoiceDocument invoice={issued({ number: 1011, number_text: "1011" })} />);
+    expect(screen.getByTestId("invoice-heading")).toHaveTextContent("Invoice 1011");
+    expect(screen.getAllByTestId("invoice-number")).toHaveLength(1);
+    expect(within(screen.getByTestId("invoice-heading")).getByTestId("invoice-number")).toHaveTextContent("1011");
+    const header = screen.getByTestId("invoice-heading").parentElement!;
+    expect((header.textContent ?? "").match(/1011/g)).toHaveLength(1);
+  });
+
+  it("a draft has no number to say", () => {
+    render(<InvoiceDocument invoice={invoice()} />);
+    expect(screen.queryByTestId("invoice-number")).toBeNull();
+    expect(screen.getByTestId("invoice-heading")).toHaveTextContent("Draft invoice (no number yet)");
+  });
+});
+
 describe("shape of the page", () => {
   it("an invoice with no lines says so", () => {
     render(<InvoiceDocument invoice={invoice({ lines: [], vat_breakdown: [] })} />);

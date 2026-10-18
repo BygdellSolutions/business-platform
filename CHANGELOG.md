@@ -5,6 +5,7 @@ All notable changes to `business-platform` will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- The invoice number is said once on the invoice, in the heading ("Invoice 1011"); the boxed copy of the number beside it is gone.
 - The buttons on an invoice (Download PDF, Send invoice by email, Record payment, Returns, Credit notes) have a soft accent tint, a thin accent edge and a small icon, so they read as things to press instead of looking like plain content; light and dark checked on screen.
 - The invoice email's subject is just "Faktura 1001" / "Invoice 1001": the organization is already the sender's name at the top of the mail, so "från Org" is no longer repeated in the subject.
 - "Returns" and "Credit notes" are pop-up windows on the invoice too, with buttons beside "Download PDF" ("Returns (1 open)", "Credit notes (2)"); they are offered when there is something to see or the person can start one. Approving a return, or "Create the credit note" on an approved one, closes the Returns window and opens the Credit notes window with that return's lines and reason filled in. A pop-up window closed by the page itself (because another one opened) no longer closes the new one.

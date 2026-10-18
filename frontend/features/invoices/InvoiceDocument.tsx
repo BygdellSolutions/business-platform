@@ -15,18 +15,14 @@ import { formatDay } from "@/lib/timestamps";
  * document ("This invoice is for"); the document itself only shows what the invoice recorded of each order, its custom fields.
  */
 export function InvoiceDocument({ invoice, timeZone = null }: { invoice: Invoice; timeZone?: string | null }) {
-  const heading = invoice.number_text !== null ? `Invoice ${invoice.number_text}` : "Draft invoice (no number yet)";
+  // The number is said once, in the heading (it used to be said again in a box beside it).
+  const heading = invoice.number_text !== null ? <>Invoice <span data-testid="invoice-number">{invoice.number_text}</span></> : "Draft invoice (no number yet)";
   return (
     <article aria-label="Invoice" data-testid="invoice-document" data-status={invoice.status} className="panel flex flex-col gap-5">
       <header className="flex flex-wrap items-center gap-3">
         <h2 data-testid="invoice-heading" className="text-xl font-semibold">
           {heading}
         </h2>
-        {invoice.number_text !== null && (
-          <span data-testid="invoice-number" className="rounded border border-zinc-400 px-2 py-0.5 text-sm font-medium">
-            {invoice.number_text}
-          </span>
-        )}
         <InvoiceStatusBadge status={invoice.status} paymentStatus={invoice.payment_status} creditStatus={invoice.credit_status} openReturns={invoice.open_returns} emailed={invoice.emailed} />
         <span data-testid="invoice-currency" className="text-sm text-zinc-600 dark:text-zinc-400">
           {invoice.currency}

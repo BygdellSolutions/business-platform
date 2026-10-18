@@ -118,8 +118,8 @@ test.describe("issuing from another tab", () => {
 
     await becomeVisible(b);
     await expect(status(b)).toHaveAttribute("data-status", "issued");
-    // The only control left is the PDF download: nothing that changes the invoice.
-    await expect(b.getByTestId("invoice-view").getByRole("button")).toHaveCount(1);
+    // The controls left: the PDF download and the four buttons that open pop-up windows; none of them changes the invoice itself.
+    await expect(b.getByTestId("invoice-view").getByRole("button")).toHaveCount(5);
     await expect(b.getByTestId("download-pdf")).toBeVisible();
   });
 
