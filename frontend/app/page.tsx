@@ -172,8 +172,8 @@ export default async function Home() {
       <footer className="border-t border-border">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-6 text-sm text-muted sm:px-6">
           <span>Business Platform</span>
-          <a href="mailto:support@bygdell.solutions" className="hover:text-foreground">
-            support@bygdell.solutions
+          <a href="/support" className="hover:text-foreground" data-testid="footer-support">
+            Support: support@bygdell.solutions
           </a>
         </div>
       </footer>

@@ -50,6 +50,9 @@ export function UserMenu({ name, email, mode }: { name: string; email: string; m
         <a role="menuitem" href="/account" className="flex rounded-lg px-3 py-2 text-sm text-secondary hover:bg-surface-hover hover:text-foreground" data-testid="account-link">
           Account
         </a>
+        <Link role="menuitem" href="/support" prefetch={false} className="flex rounded-lg px-3 py-2 text-sm text-secondary hover:bg-surface-hover hover:text-foreground" data-testid="support-link">
+          Help and support
+        </Link>
         <Link role="menuitem" href="/?home" prefetch={false} className="flex rounded-lg px-3 py-2 text-sm text-secondary hover:bg-surface-hover hover:text-foreground" data-testid="homepage-link">
           Go to homepage
         </Link>

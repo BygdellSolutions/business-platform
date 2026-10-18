@@ -25,6 +25,9 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
     <main className="mx-auto flex max-w-sm flex-col gap-4 p-8">
       <h1 className="text-[28px] leading-tight font-semibold tracking-tight">Sign in</h1>
       <LoginForm next={destination} notice={typeof notice === "string" ? notice : undefined} />
+      <p className="text-sm text-secondary">
+        Cannot sign in? <Link href="/support" className="underline hover:text-foreground" data-testid="login-support">Get help</Link>.
+      </p>
       <Link href="/" className={SECONDARY_LINK}>
         Go to homepage
       </Link>
