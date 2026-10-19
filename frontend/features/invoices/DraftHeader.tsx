@@ -15,7 +15,7 @@ import type { Invoice, InvoiceUpdate } from "@/lib/api/types";
 import { isDateShape } from "@/lib/dates";
 import { blankToNull, NO_PROBLEMS, problemsFrom, type Problems } from "@/lib/forms";
 
-const CONTROLS = ["invoice_date", "due_date", "description"] as const;
+const CONTROLS = ["invoice_date", "due_date", "description", "vat_exemption_reason", "vat_exchange_rate"] as const;
 const NOT_A_DATE = "Enter a date such as 2026-10-03.";
 const INPUT = "rounded border border-zinc-400 px-2 py-1 font-normal dark:bg-zinc-900 aria-[invalid=true]:border-red-600";
 
@@ -39,7 +39,7 @@ export function DraftHeader() {
 
   if (!editable) return null;
   return (
-    <section aria-label="Edit details" data-testid="draft-header" className="flex flex-col gap-3">
+    <section aria-label="Edit details" data-testid="draft-header" className="panel flex flex-col gap-3">
       {editing ? (
         <HeaderForm key={invoice.id} onClose={() => setEditing(false)} />
       ) : (
@@ -65,10 +65,14 @@ function HeaderForm({ onClose }: { onClose: () => void }) {
     invoiceDate: invoice.invoice_date,
     dueDate: invoice.due_date ?? "",
     description: invoice.description ?? "",
+    vatExemptionReason: invoice.vat_exemption_reason ?? "",
+    vatExchangeRate: invoice.vat_exchange_rate ?? "",
   }));
   const [invoiceDate, setInvoiceDate] = useState(base.invoiceDate);
   const [dueDate, setDueDate] = useState(base.dueDate);
   const [description, setDescription] = useState(base.description);
+  const [vatExemptionReason, setVatExemptionReason] = useState(base.vatExemptionReason);
+  const [vatExchangeRate, setVatExchangeRate] = useState(base.vatExchangeRate);
   const [local, setLocal] = useState<FieldErrors>({});
   const [problems, setProblems] = useState<Problems>(NO_PROBLEMS);
   const [refused, setRefused] = useState(false);
@@ -92,6 +96,8 @@ function HeaderForm({ onClose }: { onClose: () => void }) {
       else errors.due_date = [NOT_A_DATE];
     }
     if (blankToNull(description) !== blankToNull(base.description)) body.description = blankToNull(description);
+    if (blankToNull(vatExemptionReason) !== blankToNull(base.vatExemptionReason)) body.vat_exemption_reason = blankToNull(vatExemptionReason);
+    if (blankToNull(vatExchangeRate) !== blankToNull(base.vatExchangeRate)) body.vat_exchange_rate = blankToNull(vatExchangeRate);
     if (Object.keys(errors).length > 0) {
       setLocal(errors);
       return;
@@ -156,6 +162,14 @@ function HeaderForm({ onClose }: { onClose: () => void }) {
       <FieldShell label="Description" name="description" error={errorsFor("description")}>
         {(control) => <textarea rows={3} {...control} value={description} onChange={(event) => setDescription(event.target.value)} className={INPUT} />}
       </FieldShell>
+      <FieldShell label="Why no VAT is charged" name="vat_exemption_reason" error={errorsFor("vat_exemption_reason")}>
+        {(control) => <input type="text" {...control} value={vatExemptionReason} onChange={(event) => setVatExemptionReason(event.target.value)} placeholder="Needed when a line has 0 % VAT, e.g. reverse charge or export" className={INPUT} />}
+      </FieldShell>
+      {invoice.currency !== "SEK" && (
+        <FieldShell label={`Exchange rate for the VAT in SEK (SEK per 1 ${invoice.currency})`} name="vat_exchange_rate" error={errorsFor("vat_exchange_rate")}>
+          {(control) => <input type="text" inputMode="decimal" {...control} value={vatExchangeRate} onChange={(event) => setVatExchangeRate(event.target.value)} placeholder="e.g. 11.2345 (needed to issue an invoice with VAT)" className={INPUT} />}
+        </FieldShell>
+      )}
       <ErrorSummary messages={problems.general} />
       <div className="flex items-center gap-3">
         <Button type="submit" disabled={busy || changedElsewhere} data-testid="save-details">

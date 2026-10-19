@@ -1,33 +1,29 @@
-import Link from "next/link";
-
 import { DecimalText } from "@/components/ui/DecimalText";
+import { DiscountSteps } from "@/components/ui/DiscountSteps";
+import { ServiceSummary } from "@/components/ui/ServiceSummary";
 import { FieldSnapshots } from "@/components/snapshots/FieldSnapshots";
 import { InvoiceStatusBadge } from "@/features/invoices/InvoiceStatusBadge";
 import type { Invoice, PartySnapshot } from "@/lib/api/types";
+import { formatDay } from "@/lib/timestamps";
 
 /**
  * The invoice as a DOCUMENT: every word and every amount on it is the invoice's own stored
  * content. Nothing here fetches or looks anything up, and nothing is calculated: amounts, totals
  * and the VAT breakdown are the strings the server stored.
  *
- * The one place a live record is mentioned is the "Source transactions" section: links for
- * navigation and audit, visibly secondary, labelled with the date the invoice itself recorded.
- * Following one shows the live record, which may by now differ from what this invoice says.
+ * It mentions no live record at all. Which orders the invoice is for, with links to them, is said ONCE, on the page above the
+ * document ("This invoice is for"); the document itself only shows what the invoice recorded of each order, its custom fields.
  */
-export function InvoiceDocument({ invoice, orgId }: { invoice: Invoice; orgId: string }) {
-  const heading = invoice.number_text !== null ? `Invoice ${invoice.number_text}` : "Draft invoice (no number yet)";
+export function InvoiceDocument({ invoice, timeZone = null }: { invoice: Invoice; timeZone?: string | null }) {
+  // The number is said once, in the heading (it used to be said again in a box beside it).
+  const heading = invoice.number_text !== null ? <>Invoice <span data-testid="invoice-number">{invoice.number_text}</span></> : "Draft invoice (no number yet)";
   return (
-    <article aria-label="Invoice" data-testid="invoice-document" data-status={invoice.status} className="flex flex-col gap-5">
+    <article aria-label="Invoice" data-testid="invoice-document" data-status={invoice.status} className="panel flex flex-col gap-5">
       <header className="flex flex-wrap items-center gap-3">
         <h2 data-testid="invoice-heading" className="text-xl font-semibold">
           {heading}
         </h2>
-        {invoice.number_text !== null && (
-          <span data-testid="invoice-number" className="rounded border border-zinc-400 px-2 py-0.5 text-sm font-medium">
-            {invoice.number_text}
-          </span>
-        )}
-        <InvoiceStatusBadge status={invoice.status} />
+        <InvoiceStatusBadge status={invoice.status} paymentStatus={invoice.payment_status} creditStatus={invoice.credit_status} openReturns={invoice.open_returns} emailed={invoice.emailed} />
         <span data-testid="invoice-currency" className="text-sm text-zinc-600 dark:text-zinc-400">
           {invoice.currency}
         </span>
@@ -40,10 +36,24 @@ export function InvoiceDocument({ invoice, orgId }: { invoice: Invoice; orgId: s
         <dd data-testid="invoice-due-date">{invoice.due_date ?? "—"}</dd>
         <dt>Description</dt>
         <dd data-testid="invoice-description">{invoice.description ?? "—"}</dd>
+        {invoice.vat_exemption_reason !== null && (
+          <>
+            <dt>No VAT because</dt>
+            <dd data-testid="invoice-vat-exemption">{invoice.vat_exemption_reason}</dd>
+          </>
+        )}
+        {invoice.vat_amount_sek !== null && (
+          <>
+            <dt>VAT in SEK</dt>
+            <dd data-testid="invoice-vat-sek">
+              {invoice.vat_amount_sek} (rate {invoice.vat_exchange_rate} SEK per {invoice.currency})
+            </dd>
+          </>
+        )}
         {invoice.issued_at !== null && (
           <>
             <dt>Issued</dt>
-            <dd data-testid="invoice-issued-at">{invoice.issued_at}</dd>
+            <dd data-testid="invoice-issued-at">{formatDay(invoice.issued_at, timeZone)}</dd>
           </>
         )}
         <dt>Version</dt>
@@ -66,7 +76,6 @@ export function InvoiceDocument({ invoice, orgId }: { invoice: Invoice; orgId: s
                 <tr className="border-b border-zinc-300 dark:border-zinc-700">
                   <th className="py-1 pr-3">#</th>
                   <th className="py-1 pr-3">Description</th>
-                  <th className="py-1 pr-3">Unit</th>
                   <th className="py-1 pr-3 text-right">Quantity</th>
                   <th className="py-1 pr-3 text-right">Unit price</th>
                   <th className="py-1 pr-3 text-right">VAT %</th>
@@ -81,14 +90,28 @@ export function InvoiceDocument({ invoice, orgId }: { invoice: Invoice; orgId: s
                     <td className="py-1 pr-3">{line.position}</td>
                     <td className="py-1 pr-3">
                       <div data-testid="line-description">{line.description}</div>
+                      {/* Invoicing by delivery: a part of an order line says so, from the stored snapshot (nothing computed). */}
+                      {line.ordered_quantity && line.ordered_quantity !== line.quantity && (
+                        <div className="text-xs text-secondary" data-testid="line-delivery">
+                          Ordered <DecimalText value={line.ordered_quantity} />
+                          {line.backordered_quantity && line.backordered_quantity !== "0.000" && (
+                            <>
+                              {" "}· Backordered <DecimalText value={line.backordered_quantity} />
+                            </>
+                          )}
+                        </div>
+                      )}
+                      {line.service && (
+                        <ServiceSummary subject={line.service.subject_label} when={line.service.performed_at_local.slice(0, 10)} by={line.service.performed_by} notes={line.service.notes} />
+                      )}
                       <FieldSnapshots fields={line.fields} label={`Fields of line ${line.position}`} testId="line-fields" />
                     </td>
-                    <td className="py-1 pr-3">{line.unit}</td>
                     <td className="py-1 pr-3 text-right" data-testid="line-quantity">
                       <DecimalText value={line.quantity} />
                     </td>
                     <td className="py-1 pr-3 text-right" data-testid="line-unit-price">
                       <DecimalText value={line.unit_price_ex_vat} />
+                      <DiscountSteps list={line.list_unit_price} catalog={line.catalog_discount_percent} customer={line.customer_discount_percent} line={line.line_discount_percent} />
                     </td>
                     <td className="py-1 pr-3 text-right" data-testid="line-vat-rate">
                       <DecimalText value={line.vat_rate} />
@@ -127,48 +150,46 @@ export function InvoiceDocument({ invoice, orgId }: { invoice: Invoice; orgId: s
           </dd>
         </dl>
         {invoice.vat_breakdown.length > 0 && (
-          <table data-testid="vat-breakdown" className="max-w-md text-left text-sm">
-            <caption className="pb-1 text-left text-zinc-500">VAT breakdown</caption>
-            <thead>
-              <tr className="border-b border-zinc-300 dark:border-zinc-700">
-                <th className="py-1 pr-4">VAT rate (%)</th>
-                <th className="py-1 pr-4 text-right">Net</th>
-                <th className="py-1 text-right">VAT</th>
-              </tr>
-            </thead>
-            <tbody>
-              {invoice.vat_breakdown.map((row) => (
-                <tr key={row.vat_rate} data-testid="vat-row">
-                  <td className="py-1 pr-4">
-                    <DecimalText value={row.vat_rate} />
-                  </td>
-                  <td className="py-1 pr-4 text-right">
-                    <DecimalText value={row.net_amount} />
-                  </td>
-                  <td className="py-1 text-right">
-                    <DecimalText value={row.vat_amount} />
-                  </td>
+          <div className="overflow-x-auto">
+            <table data-testid="vat-breakdown" className="max-w-md text-left text-sm">
+              <caption className="pb-1 text-left text-zinc-500">VAT breakdown</caption>
+              <thead>
+                <tr className="border-b border-zinc-300 dark:border-zinc-700">
+                  <th className="py-1 pr-4">VAT rate (%)</th>
+                  <th className="py-1 pr-4 text-right">Net</th>
+                  <th className="py-1 text-right">VAT</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {invoice.vat_breakdown.map((row) => (
+                  <tr key={row.vat_rate} data-testid="vat-row">
+                    <td className="py-1 pr-4">
+                      <DecimalText value={row.vat_rate} />
+                    </td>
+                    <td className="py-1 pr-4 text-right">
+                      <DecimalText value={row.net_amount} />
+                    </td>
+                    <td className="py-1 text-right">
+                      <DecimalText value={row.vat_amount} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
 
-      <section aria-label="Source transactions" data-testid="sources" className="flex flex-col gap-2 border-t border-zinc-300 pt-3 text-sm text-zinc-600 dark:border-zinc-700 dark:text-zinc-400">
-        <h3 className="text-sm font-medium">Source transactions (navigation and audit only)</h3>
-        <p>These links open the live records, which may have changed since this invoice recorded them. The invoice above is not affected by them.</p>
-        <ul className="flex flex-col gap-2">
-          {invoice.transactions.map((source) => (
-            <li key={source.transaction_id} data-testid="source">
-              <Link href={`/o/${orgId}/transactions/${source.transaction_id}`} data-testid="source-link" className="underline">
-                Transaction of {source.transaction_date}
-              </Link>
-              <FieldSnapshots fields={source.fields} label={`Fields of the transaction of ${source.transaction_date}`} testId="transaction-fields" />
-            </li>
-          ))}
-        </ul>
-      </section>
+      {invoice.transactions
+        .filter((source) => source.fields.length > 0)
+        .map((source) => (
+          <FieldSnapshots
+            key={source.transaction_id}
+            fields={source.fields}
+            label={source.transaction_number !== null ? `Fields of order ${source.transaction_number}` : `Fields of the order of ${source.transaction_date}`}
+            testId="transaction-fields"
+          />
+        ))}
     </article>
   );
 }
@@ -183,6 +204,7 @@ function Party({ title, testId, party }: { title: string; testId: string; party:
       <div data-testid={`party-${testId}-name`} className="font-medium">
         {name}
       </div>
+      {party.our_reference && <div data-testid={`party-${testId}-reference`}>Our reference: {party.our_reference}</div>}
       {lines.map((line) => (
         <div key={line}>{line}</div>
       ))}

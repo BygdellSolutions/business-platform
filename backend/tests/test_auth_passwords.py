@@ -62,12 +62,12 @@ def test_rehash_is_needed_exactly_when_parameters_are_outdated(monkeypatch):
     "password, ok",
     [
         ("a" * 11, False),
-        ("a" * 12, True),
-        ("a" * 128, True),
-        ("a" * 129, False),
+        ("ab" * 6, True),
+        ("ab" * 64, True),
+        ("ab" * 64 + "c", False),
         ("password with spaces only ok", True),  # no composition rules
         ("alllowercasebutlongenough", True),
-        ("12345678901234567890", True),
+        ("86420246801357913579", True),
         ("ünïcödé pässwörd ✓ 日本語パスワード", True),
         ("has\x00nul in the middle ok?", False),
     ],

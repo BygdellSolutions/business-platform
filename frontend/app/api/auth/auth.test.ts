@@ -309,6 +309,20 @@ describe("POST /api/auth/setup", () => {
     expect(await failed.text()).not.toContain("secret");
   });
 
+  it("passes the person's own name through, and refuses a malformed one before FastAPI", async () => {
+    await setup.POST(setupRequest({ token: LINK, password: "a brand new long passphrase", name: "Ada" }));
+    expect(JSON.parse((fetchMock.mock.calls[0] as [string, { body: string }])[1].body)).toEqual({ token: LINK, password: "a brand new long passphrase", name: "Ada" });
+
+    fetchMock.mockClear();
+    for (const name of [42, "x".repeat(256)]) {
+      expect((await setup.POST(setupRequest({ token: LINK, password: "a brand new long passphrase", name }))).status).toBe(400);
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fetchMock.mockResolvedValue(jsonResponse(422, { detail: { code: "name_required", message: "Enter your name." } }));
+    expect(await (await setup.POST(setupRequest())).json()).toEqual({ detail: { code: "name_required", message: "Enter your name." } });
+  });
+
   it("does not exist outside session mode", async () => {
     vi.stubEnv("AUTH_MODE", "dev");
     expect((await setup.POST(setupRequest())).status).toBe(404);

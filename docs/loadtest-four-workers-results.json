@@ -1,0 +1,836 @@
+{
+  "date": "2026-10-13",
+  "environment": "Local Docker Desktop Linux; PostgreSQL 17 dedicated test server on tmpfs; no container CPU/RAM limits",
+  "generator": "Linux Docker",
+  "api_workers": 4,
+  "experimental_admission": true,
+  "docker_resources": "16 CPUs 16726769664 bytes RAM",
+  "dataset": {
+    "users": 1000,
+    "organizations": 20,
+    "customers": 5000,
+    "items": 2000,
+    "orders": 5000,
+    "lines": 15000
+  },
+  "duration_s": 15,
+  "results": [
+    {
+      "name": "bff_business_mixed",
+      "concurrency": 50,
+      "requested_duration_s": 15,
+      "elapsed_s": 15.24,
+      "interval_s": 0,
+      "requests": 3357,
+      "success_rps": 220.2,
+      "statuses": {
+        "200": 2704,
+        "201": 653
+      },
+      "p50_ms": 161.0,
+      "p95_ms": 479.0,
+      "p99_ms": 537.3,
+      "successful_p95_ms": 479.0,
+      "generator_cpu_percent": 60.8,
+      "endpoints": {
+        "/customers": {
+          "requests": 1348,
+          "p95_ms": 485.1
+        },
+        "/items": {
+          "requests": 683,
+          "p95_ms": 480.8
+        },
+        "/transactions": {
+          "requests": 667,
+          "p95_ms": 482.8
+        },
+        "/invoices": {
+          "requests": 659,
+          "p95_ms": 450.7
+        }
+      },
+      "cpu_samples": {
+        "backend": {
+          "mean_percent": 342.9,
+          "max_percent": 357.2,
+          "samples": 4
+        },
+        "frontend": {
+          "mean_percent": 106.3,
+          "max_percent": 137.61,
+          "samples": 4
+        },
+        "postgres": {
+          "mean_percent": 74.9,
+          "max_percent": 81.9,
+          "samples": 4
+        }
+      },
+      "memory_samples": {
+        "backend": [
+          "404.9MiB",
+          "410.6MiB",
+          "412.6MiB",
+          "413.5MiB"
+        ],
+        "frontend": [
+          "85.21MiB",
+          "160.8MiB",
+          "235MiB",
+          "302.5MiB"
+        ],
+        "postgres": [
+          "282.2MiB",
+          "289.2MiB",
+          "294.3MiB",
+          "295.1MiB"
+        ]
+      }
+    },
+    {
+      "name": "bff_business_mixed",
+      "concurrency": 100,
+      "requested_duration_s": 15,
+      "elapsed_s": 15.48,
+      "interval_s": 0,
+      "requests": 1684,
+      "success_rps": 108.8,
+      "statuses": {
+        "200": 1388,
+        "201": 296
+      },
+      "p50_ms": 658.1,
+      "p95_ms": 2731.1,
+      "p99_ms": 4078.1,
+      "successful_p95_ms": 2731.1,
+      "generator_cpu_percent": 96.8,
+      "endpoints": {
+        "/customers": {
+          "requests": 668,
+          "p95_ms": 2559.5
+        },
+        "/items": {
+          "requests": 359,
+          "p95_ms": 2833.1
+        },
+        "/transactions": {
+          "requests": 340,
+          "p95_ms": 3113.8
+        },
+        "/invoices": {
+          "requests": 317,
+          "p95_ms": 2785.9
+        }
+      },
+      "cpu_samples": {
+        "backend": {
+          "mean_percent": 105.4,
+          "max_percent": 233.03,
+          "samples": 5
+        },
+        "frontend": {
+          "mean_percent": 44.2,
+          "max_percent": 81.63,
+          "samples": 5
+        },
+        "postgres": {
+          "mean_percent": 14.0,
+          "max_percent": 36.98,
+          "samples": 5
+        }
+      },
+      "memory_samples": {
+        "backend": [
+          "395.3MiB",
+          "396.6MiB",
+          "412.2MiB",
+          "413MiB",
+          "413MiB"
+        ],
+        "frontend": [
+          "95.22MiB",
+          "102MiB",
+          "128.5MiB",
+          "139.7MiB",
+          "153.2MiB"
+        ],
+        "postgres": [
+          "243.3MiB",
+          "254.2MiB",
+          "264.4MiB",
+          "270MiB",
+          "268.7MiB"
+        ]
+      }
+    },
+    {
+      "name": "bff_business_mixed",
+      "concurrency": 200,
+      "requested_duration_s": 15,
+      "elapsed_s": 17.47,
+      "interval_s": 0,
+      "requests": 1337,
+      "success_rps": 73.6,
+      "statuses": {
+        "200": 1097,
+        "503": 51,
+        "201": 188,
+        "ReadError": 1
+      },
+      "p50_ms": 1727.4,
+      "p95_ms": 6597.8,
+      "p99_ms": 9029.0,
+      "successful_p95_ms": 6605.1,
+      "generator_cpu_percent": 97.4,
+      "endpoints": {
+        "/customers": {
+          "requests": 536,
+          "p95_ms": 4574.8
+        },
+        "/items": {
+          "requests": 310,
+          "p95_ms": 7667.5
+        },
+        "/transactions": {
+          "requests": 265,
+          "p95_ms": 6531.8
+        },
+        "/invoices": {
+          "requests": 226,
+          "p95_ms": 6602.6
+        }
+      },
+      "cpu_samples": {
+        "backend": {
+          "mean_percent": 48.4,
+          "max_percent": 106.13,
+          "samples": 5
+        },
+        "frontend": {
+          "mean_percent": 47.8,
+          "max_percent": 104.62,
+          "samples": 5
+        },
+        "postgres": {
+          "mean_percent": 33.6,
+          "max_percent": 81.52,
+          "samples": 5
+        }
+      },
+      "memory_samples": {
+        "backend": [
+          "374.4MiB",
+          "399.1MiB",
+          "412.1MiB",
+          "413.3MiB",
+          "414.2MiB"
+        ],
+        "frontend": [
+          "111.2MiB",
+          "111.6MiB",
+          "129MiB",
+          "148.7MiB",
+          "182MiB"
+        ],
+        "postgres": [
+          "253.4MiB",
+          "254MiB",
+          "263.9MiB",
+          "268MiB",
+          "268.4MiB"
+        ]
+      }
+    },
+    {
+      "name": "bff_dashboard",
+      "concurrency": 10,
+      "requested_duration_s": 15,
+      "elapsed_s": 15.18,
+      "interval_s": 0,
+      "requests": 336,
+      "success_rps": 22.1,
+      "statuses": {
+        "200": 336
+      },
+      "p50_ms": 486.6,
+      "p95_ms": 715.0,
+      "p99_ms": 800.5,
+      "successful_p95_ms": 715.0,
+      "generator_cpu_percent": 4.3,
+      "endpoints": {
+        "/invoices/summary": {
+          "requests": 336,
+          "p95_ms": 715.0
+        }
+      },
+      "cpu_samples": {
+        "backend": {
+          "mean_percent": 193.4,
+          "max_percent": 197.04,
+          "samples": 4
+        },
+        "frontend": {
+          "mean_percent": 14.8,
+          "max_percent": 19.37,
+          "samples": 4
+        },
+        "postgres": {
+          "mean_percent": 40.8,
+          "max_percent": 48.34,
+          "samples": 4
+        }
+      },
+      "memory_samples": {
+        "backend": [
+          "450.1MiB",
+          "464.6MiB",
+          "470.9MiB",
+          "476.1MiB"
+        ],
+        "frontend": [
+          "70.56MiB",
+          "80.73MiB",
+          "69.38MiB",
+          "81.32MiB"
+        ],
+        "postgres": [
+          "242.9MiB",
+          "249.2MiB",
+          "249.2MiB",
+          "250.3MiB"
+        ]
+      }
+    },
+    {
+      "name": "bff_dashboard",
+      "concurrency": 50,
+      "requested_duration_s": 15,
+      "elapsed_s": 16.28,
+      "interval_s": 0,
+      "requests": 728,
+      "success_rps": 30.6,
+      "statuses": {
+        "200": 498,
+        "503": 230
+      },
+      "p50_ms": 1016.2,
+      "p95_ms": 2263.0,
+      "p99_ms": 2418.3,
+      "successful_p95_ms": 2304.6,
+      "generator_cpu_percent": 12.0,
+      "endpoints": {
+        "/invoices/summary": {
+          "requests": 728,
+          "p95_ms": 2263.0
+        }
+      },
+      "cpu_samples": {
+        "backend": {
+          "mean_percent": 339.3,
+          "max_percent": 426.08,
+          "samples": 5
+        },
+        "frontend": {
+          "mean_percent": 30.4,
+          "max_percent": 45.14,
+          "samples": 5
+        },
+        "postgres": {
+          "mean_percent": 63.9,
+          "max_percent": 101.07,
+          "samples": 5
+        }
+      },
+      "memory_samples": {
+        "backend": [
+          "548.7MiB",
+          "575.1MiB",
+          "585.3MiB",
+          "590.5MiB",
+          "588.8MiB"
+        ],
+        "frontend": [
+          "84.13MiB",
+          "101.4MiB",
+          "104.9MiB",
+          "110MiB",
+          "110.1MiB"
+        ],
+        "postgres": [
+          "279.2MiB",
+          "313.8MiB",
+          "315.6MiB",
+          "315.8MiB",
+          "269.7MiB"
+        ]
+      }
+    },
+    {
+      "name": "api_login",
+      "concurrency": 10,
+      "requested_duration_s": 15,
+      "elapsed_s": 15.31,
+      "interval_s": 0,
+      "requests": 423,
+      "success_rps": 27.6,
+      "statuses": {
+        "200": 423
+      },
+      "p50_ms": 369.2,
+      "p95_ms": 473.8,
+      "p99_ms": 495.0,
+      "successful_p95_ms": 473.8,
+      "generator_cpu_percent": 5.6,
+      "endpoints": {
+        "/api/auth/login": {
+          "requests": 423,
+          "p95_ms": 473.8
+        }
+      },
+      "cpu_samples": {
+        "backend": {
+          "mean_percent": 502.0,
+          "max_percent": 507.65,
+          "samples": 4
+        },
+        "frontend": {
+          "mean_percent": 1.1,
+          "max_percent": 4.32,
+          "samples": 4
+        },
+        "postgres": {
+          "mean_percent": 14.1,
+          "max_percent": 18.8,
+          "samples": 4
+        }
+      },
+      "memory_samples": {
+        "backend": [
+          "622.3MiB",
+          "688.5MiB",
+          "545.7MiB",
+          "655.2MiB"
+        ],
+        "frontend": [
+          "58.69MiB",
+          "46.23MiB",
+          "44.09MiB",
+          "43.5MiB"
+        ],
+        "postgres": [
+          "236MiB",
+          "238.9MiB",
+          "238.9MiB",
+          "240.1MiB"
+        ]
+      }
+    },
+    {
+      "name": "api_login",
+      "concurrency": 50,
+      "requested_duration_s": 15,
+      "elapsed_s": 16.41,
+      "interval_s": 0,
+      "requests": 838,
+      "success_rps": 35.9,
+      "statuses": {
+        "200": 589,
+        "503": 249
+      },
+      "p50_ms": 1003.7,
+      "p95_ms": 1774.9,
+      "p99_ms": 1808.4,
+      "successful_p95_ms": 1780.7,
+      "generator_cpu_percent": 15.8,
+      "endpoints": {
+        "/api/auth/login": {
+          "requests": 838,
+          "p95_ms": 1774.9
+        }
+      },
+      "cpu_samples": {
+        "backend": {
+          "mean_percent": 824.3,
+          "max_percent": 1040.1,
+          "samples": 5
+        },
+        "frontend": {
+          "mean_percent": 0.0,
+          "max_percent": 0.01,
+          "samples": 5
+        },
+        "postgres": {
+          "mean_percent": 19.9,
+          "max_percent": 24.53,
+          "samples": 5
+        }
+      },
+      "memory_samples": {
+        "backend": [
+          "591.9MiB",
+          "975.2MiB",
+          "835.4MiB",
+          "910MiB",
+          "388.8MiB"
+        ],
+        "frontend": [
+          "53.6MiB",
+          "54.67MiB",
+          "43.96MiB",
+          "43.18MiB",
+          "42.25MiB"
+        ],
+        "postgres": [
+          "252.4MiB",
+          "264MiB",
+          "266.4MiB",
+          "272.1MiB",
+          "250.6MiB"
+        ]
+      }
+    },
+    {
+      "name": "bff_1000_paced",
+      "concurrency": 1000,
+      "requested_duration_s": 30,
+      "elapsed_s": 30.03,
+      "interval_s": 10,
+      "requests": 2999,
+      "success_rps": 99.9,
+      "statuses": {
+        "200": 2999
+      },
+      "p50_ms": 18.8,
+      "p95_ms": 66.1,
+      "p99_ms": 71.8,
+      "successful_p95_ms": 66.1,
+      "generator_cpu_percent": 17.7,
+      "endpoints": {
+        "/customers": {
+          "requests": 1000,
+          "p95_ms": 18.6
+        },
+        "/items": {
+          "requests": 1000,
+          "p95_ms": 64.5
+        },
+        "/transactions": {
+          "requests": 999,
+          "p95_ms": 69.5
+        }
+      },
+      "cpu_samples": {
+        "backend": {
+          "mean_percent": 78.7,
+          "max_percent": 134.21,
+          "samples": 8
+        },
+        "frontend": {
+          "mean_percent": 35.8,
+          "max_percent": 45.92,
+          "samples": 8
+        },
+        "postgres": {
+          "mean_percent": 16.9,
+          "max_percent": 28.43,
+          "samples": 8
+        }
+      },
+      "memory_samples": {
+        "backend": [
+          "377.8MiB",
+          "380.2MiB",
+          "380.5MiB",
+          "384.3MiB",
+          "384.4MiB",
+          "395.8MiB",
+          "400.2MiB",
+          "402.2MiB"
+        ],
+        "frontend": [
+          "82.05MiB",
+          "108.3MiB",
+          "132.9MiB",
+          "148.4MiB",
+          "147.9MiB",
+          "149.3MiB",
+          "147.9MiB",
+          "147.7MiB"
+        ],
+        "postgres": [
+          "226.6MiB",
+          "228.9MiB",
+          "228.5MiB",
+          "230.5MiB",
+          "230.6MiB",
+          "246.5MiB",
+          "246.5MiB",
+          "246.4MiB"
+        ]
+      }
+    },
+    {
+      "name": "ssr_dashboard",
+      "concurrency": 10,
+      "requested_duration_s": 15,
+      "elapsed_s": 15.25,
+      "interval_s": 0,
+      "requests": 309,
+      "success_rps": 20.3,
+      "statuses": {
+        "200": 309
+      },
+      "p50_ms": 452.2,
+      "p95_ms": 751.6,
+      "p99_ms": 1185.6,
+      "successful_p95_ms": 751.6,
+      "generator_cpu_percent": 8.8,
+      "endpoints": {
+        "/o/147d1abd-ec33-4ba6-bb58-f83e3b4d8c2e": {
+          "requests": 50,
+          "p95_ms": 1229.4
+        },
+        "/o/9709b639-2cfd-46eb-ad16-b2753b2f26d2": {
+          "requests": 50,
+          "p95_ms": 679.8
+        },
+        "/o/ff086429-a602-46b7-af2b-fd55ba4d892f": {
+          "requests": 50,
+          "p95_ms": 643.5
+        },
+        "/o/c49a1078-1207-47c8-935e-445a83390ab0": {
+          "requests": 50,
+          "p95_ms": 707.9
+        },
+        "/o/9ec92527-9d42-4633-aeb8-f000f46cbe58": {
+          "requests": 50,
+          "p95_ms": 742.4
+        },
+        "/o/eaea3fc1-b46c-4b6e-8cbc-9e86fce01f57": {
+          "requests": 48,
+          "p95_ms": 728.6
+        },
+        "/o/d95a5fb6-deaa-4a14-858f-5f6154a026fb": {
+          "requests": 11,
+          "p95_ms": 502.4
+        }
+      },
+      "cpu_samples": {
+        "backend": {
+          "mean_percent": 236.7,
+          "max_percent": 336.74,
+          "samples": 5
+        },
+        "frontend": {
+          "mean_percent": 40.6,
+          "max_percent": 56.57,
+          "samples": 5
+        },
+        "postgres": {
+          "mean_percent": 56.5,
+          "max_percent": 86.09,
+          "samples": 5
+        }
+      },
+      "memory_samples": {
+        "backend": [
+          "416.9MiB",
+          "501.5MiB",
+          "516.6MiB",
+          "524.9MiB",
+          "526.6MiB"
+        ],
+        "frontend": [
+          "79.04MiB",
+          "119.4MiB",
+          "129MiB",
+          "140MiB",
+          "146MiB"
+        ],
+        "postgres": [
+          "272MiB",
+          "277.4MiB",
+          "276.2MiB",
+          "285.3MiB",
+          "268.3MiB"
+        ]
+      }
+    },
+    {
+      "name": "ssr_1000_paced",
+      "concurrency": 1000,
+      "requested_duration_s": 60,
+      "elapsed_s": 62.45,
+      "interval_s": 30,
+      "requests": 2000,
+      "success_rps": 10.8,
+      "statuses": {
+        "200": 675,
+        "render_error_200": 795,
+        "500": 530
+      },
+      "p50_ms": 2113.9,
+      "p95_ms": 3262.1,
+      "p99_ms": 3405.5,
+      "successful_p95_ms": 3355.4,
+      "generator_cpu_percent": 18.4,
+      "endpoints": {
+        "/o/147d1abd-ec33-4ba6-bb58-f83e3b4d8c2e": {
+          "requests": 100,
+          "p95_ms": 3114.6
+        },
+        "/o/9709b639-2cfd-46eb-ad16-b2753b2f26d2": {
+          "requests": 100,
+          "p95_ms": 3121.2
+        },
+        "/o/ff086429-a602-46b7-af2b-fd55ba4d892f": {
+          "requests": 100,
+          "p95_ms": 3197.9
+        },
+        "/o/c49a1078-1207-47c8-935e-445a83390ab0": {
+          "requests": 100,
+          "p95_ms": 3364.6
+        },
+        "/o/9ec92527-9d42-4633-aeb8-f000f46cbe58": {
+          "requests": 100,
+          "p95_ms": 3203.2
+        },
+        "/o/eaea3fc1-b46c-4b6e-8cbc-9e86fce01f57": {
+          "requests": 100,
+          "p95_ms": 3256.0
+        },
+        "/o/d95a5fb6-deaa-4a14-858f-5f6154a026fb": {
+          "requests": 100,
+          "p95_ms": 3239.0
+        },
+        "/o/98771988-6943-4990-9cb5-3f0f8576a8a6": {
+          "requests": 100,
+          "p95_ms": 3210.4
+        },
+        "/o/6f147741-d763-4bb6-a5f3-ce551ea422c2": {
+          "requests": 100,
+          "p95_ms": 3179.9
+        },
+        "/o/95541cc2-221a-4abb-9ff0-59ff56281767": {
+          "requests": 100,
+          "p95_ms": 3195.7
+        },
+        "/o/6bd96ab6-8634-4d3a-8ccc-3b48f7bf531f": {
+          "requests": 100,
+          "p95_ms": 3302.7
+        },
+        "/o/de225b77-0c85-42b0-bd36-ea0bc3db7925": {
+          "requests": 100,
+          "p95_ms": 3305.9
+        },
+        "/o/e71131e6-f55e-416f-8ec1-55eec09f3021": {
+          "requests": 100,
+          "p95_ms": 3144.0
+        },
+        "/o/a82c1219-aefa-49ec-b988-234d2acb55c5": {
+          "requests": 100,
+          "p95_ms": 3344.0
+        },
+        "/o/7c384c19-e9a8-466a-8295-c8ba7743965d": {
+          "requests": 100,
+          "p95_ms": 3236.2
+        },
+        "/o/f4a96766-5d28-4332-a939-1f5765a13eab": {
+          "requests": 100,
+          "p95_ms": 3187.7
+        },
+        "/o/be61d5a2-74d0-4dfa-8b99-01ed718f782f": {
+          "requests": 100,
+          "p95_ms": 3228.7
+        },
+        "/o/90344dc2-95a2-4494-b028-45732a8e2d62": {
+          "requests": 100,
+          "p95_ms": 3254.9
+        },
+        "/o/4d1bf4d9-8cb8-4e10-888c-c15128d3215a": {
+          "requests": 100,
+          "p95_ms": 3358.6
+        },
+        "/o/7827c0c2-674d-4fbf-bb98-c43eb957f3d2": {
+          "requests": 100,
+          "p95_ms": 3314.1
+        }
+      },
+      "cpu_samples": {
+        "backend": {
+          "mean_percent": 455.6,
+          "max_percent": 479.68,
+          "samples": 16
+        },
+        "frontend": {
+          "mean_percent": 77.2,
+          "max_percent": 119.8,
+          "samples": 16
+        },
+        "postgres": {
+          "mean_percent": 91.3,
+          "max_percent": 104.05,
+          "samples": 16
+        }
+      },
+      "memory_samples": {
+        "backend": [
+          "419.8MiB",
+          "590.5MiB",
+          "622.5MiB",
+          "627.9MiB",
+          "638.4MiB",
+          "647.1MiB",
+          "648.8MiB",
+          "650MiB",
+          "654.4MiB",
+          "657MiB",
+          "657.2MiB",
+          "659MiB",
+          "665.2MiB",
+          "668.6MiB",
+          "668.8MiB",
+          "670.4MiB"
+        ],
+        "frontend": [
+          "88.23MiB",
+          "169.2MiB",
+          "177.8MiB",
+          "263.9MiB",
+          "324.1MiB",
+          "324.2MiB",
+          "326.6MiB",
+          "371.6MiB",
+          "437.2MiB",
+          "442.1MiB",
+          "443.8MiB",
+          "444MiB",
+          "462.7MiB",
+          "506.7MiB",
+          "571.8MiB",
+          "575.5MiB"
+        ],
+        "postgres": [
+          "315.1MiB",
+          "380.2MiB",
+          "383.5MiB",
+          "382.3MiB",
+          "383.6MiB",
+          "387MiB",
+          "385.5MiB",
+          "390.4MiB",
+          "381.2MiB",
+          "386.9MiB",
+          "384.4MiB",
+          "385.9MiB",
+          "386.7MiB",
+          "387.3MiB",
+          "386MiB",
+          "385.4MiB"
+        ]
+      }
+    }
+  ],
+  "backend_error_counts": {}
+}

@@ -27,7 +27,12 @@ export interface ListParams {
   extra: Record<string, string>;
   /** 1-based. */
   page: number;
+  /** A column key the list offers for sorting, or "" for the list's own order; the backend sorts (every page). */
+  sort: string;
+  dir: SortDir;
 }
+
+export type SortDir = "asc" | "desc";
 
 type RawParams = Record<string, string | string[] | undefined>;
 
@@ -47,10 +52,12 @@ export function parseListParams(
   allowedTypes: readonly string[] = [],
   refKeys: readonly string[] = [],
   extras: Record<string, ExtraSpec> = {},
+  sortKeys: readonly string[] = [],
 ): ListParams {
   const active = first(raw.active);
   const type = first(raw.type);
   const page = first(raw.page);
+  const sort = first(raw.sort);
   const refs: Record<string, string> = {};
   for (const key of refKeys) {
     const value = first(raw[key]);
@@ -68,6 +75,8 @@ export function parseListParams(
     refs,
     extra,
     page: /^[1-9]\d{0,4}$/.test(page) ? Math.min(parseInt(page, 10), MAX_PAGE) : 1,
+    sort: sortKeys.includes(sort) ? sort : "",
+    dir: sortKeys.includes(sort) && first(raw.dir) === "desc" ? "desc" : "asc",
   };
 }
 
@@ -82,6 +91,10 @@ export function backendQuery(params: ListParams): string {
   if (params.type) query.set("type", params.type);
   for (const [key, value] of Object.entries(params.refs)) query.set(key, value);
   for (const [key, value] of Object.entries(params.extra)) query.set(key, value);
+  if (params.sort) {
+    query.set("sort", params.sort);
+    query.set("dir", params.dir);
+  }
   return `?${query.toString()}`;
 }
 
@@ -94,9 +107,20 @@ export function listHref(base: string, params: ListParams, change: Partial<ListP
   if (next.type) query.set("type", next.type);
   for (const [key, value] of Object.entries(next.refs)) query.set(key, value);
   for (const [key, value] of Object.entries(next.extra)) query.set(key, value);
+  if (next.sort) {
+    query.set("sort", next.sort);
+    if (next.dir === "desc") query.set("dir", "desc");
+  }
   if (next.page > 1) query.set("page", String(next.page));
   const text = query.toString();
   return text ? `${base}?${text}` : base;
+}
+
+/** The address that sorts the list by `key`: ascending first, a second click on the same column turns it around.
+ * A new order starts again at page 1. */
+export function sortHref(base: string, params: ListParams, key: string): string {
+  const dir: SortDir = params.sort === key && params.dir === "asc" ? "desc" : "asc";
+  return listHref(base, params, { sort: key, dir, page: 1 });
 }
 
 /** Splits the rows fetched with `backendQuery` into the visible page and "is there more". */

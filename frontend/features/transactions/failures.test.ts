@@ -56,7 +56,7 @@ describe("describeProblem", () => {
   });
 
   it("names the transaction itself", () => {
-    expect(describeProblem({ ...base, entity_type: "transaction", entity_id: "T1" }, lines)).toBe("Transaction · Owner: is required");
+    expect(describeProblem({ ...base, entity_type: "transaction", entity_id: "T1" }, lines)).toBe("Order · Owner: is required");
   });
 
   it("does not guess about a line it cannot find, or a record type it does not know", () => {

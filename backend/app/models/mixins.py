@@ -1,9 +1,20 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, event, func, inspect, text
+from sqlalchemy import BigInteger, CheckConstraint, DateTime, FetchedValue, ForeignKey, String, event, func, inspect, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
+
+
+class Numbered:
+    """A number per organization for people to refer to (order 1001, customer 7), handed out by the database.
+
+    The `assign_record_number` trigger (migration e4a6c8d0f235) takes it from `record_counters` on INSERT, whatever
+    path inserts, and refuses changing it. The application never sets it; it is read back after the insert.
+    Each table also declares `UniqueConstraint("organization_id", "number")`.
+    """
+
+    number: Mapped[int] = mapped_column(BigInteger, server_default=FetchedValue())
 
 
 class TenantOwned:
@@ -40,6 +51,17 @@ def _forbid_organization_change(mapper, connection, target) -> None:
     """
     if inspect(target).attrs.organization_id.history.has_changes():
         raise ValueError("organization_id of a tenant-owned record cannot be changed")
+
+
+class Authored:
+    """Who created a record and who changed it last (the user of the active membership at the time).
+
+    NULL for records that existed before authors were recorded: shown as "not recorded", never guessed. The full
+    history, with old and new values, is in `audit_events`.
+    """
+
+    created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
+    updated_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
 
 
 class BusinessProfile:

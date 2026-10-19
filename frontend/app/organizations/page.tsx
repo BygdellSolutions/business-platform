@@ -1,0 +1,83 @@
+import Link from "next/link";
+import { redirect } from "next/navigation";
+
+import { SignOut } from "@/components/shell/SignOut";
+import { PRIMARY_LINK, SECONDARY_LINK } from "@/components/ui/Button";
+import { Notice } from "@/components/ui/Notice";
+import { authMode } from "@/lib/auth/config";
+import { loginPath, requireCredential } from "@/lib/auth/credential";
+import { getCurrentUser, getMemberships, needsMfaSetup } from "@/lib/orgs";
+
+/** Entry point: pick the organization to work in. One organization is entered directly. */
+export default async function Home() {
+  const credential = await requireCredential();
+
+  const [result, current] = await Promise.all([getMemberships(credential), getCurrentUser(credential)]);
+  if (result.status === "unauthorized" || current.status === "unauthorized") redirect(loginPath());
+  if (result.status === "unavailable" || current.status === "unavailable") throw new Error("The backend is unavailable");
+  if (needsMfaSetup(current.user)) redirect("/account?mfa=required");
+
+  const { memberships } = result;
+  if (memberships.length === 1) redirect(`/o/${memberships[0].id}`);
+  const mode = authMode();
+  // Presentation only: FastAPI refuses creation for an account without the right, whatever this page shows.
+  const canCreate = current.user.can_create_organizations;
+
+  return (
+    <main className="mx-auto flex max-w-xl flex-col gap-8 p-8">
+      <header className="flex flex-col gap-1">
+        <h1 className="text-[28px] leading-tight font-semibold tracking-tight">Choose an organization</h1>
+        <p className="text-sm text-zinc-500">
+          Signed in as <span data-testid="user-email">{current.user.email}</span>
+        </p>
+      </header>
+
+      <section aria-labelledby="your-organizations" className="flex flex-col gap-3">
+        <h2 id="your-organizations" className="text-base font-semibold">
+          Your organizations
+        </h2>
+        {memberships.length === 0 ? (
+          <Notice testId="no-organizations">
+            {canCreate ? "You do not belong to any organization yet. Create one to get started." : "You do not belong to any organization yet."}
+          </Notice>
+        ) : (
+          <ul data-testid="organization-list" className="flex flex-col gap-2">
+            {memberships.map((organization) => (
+              <li key={organization.id} className="flex items-center gap-3">
+                <a href={`/o/${organization.id}`} className={`${SECONDARY_LINK} h-12 flex-1 justify-start text-base`}>
+                  {organization.name}
+                </a>
+                <span className="text-sm text-muted">({organization.role})</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {canCreate && (
+          <div>
+            <a href="/organizations/new" className={memberships.length === 0 ? PRIMARY_LINK : SECONDARY_LINK} data-testid="create-organization-link">
+              Create organization
+            </a>
+          </div>
+        )}
+      </section>
+
+      <section aria-labelledby="website" className="flex flex-col gap-3 border-t border-border pt-6">
+        <h2 id="website" className="text-base font-semibold">
+          Website
+        </h2>
+        <p className="text-sm text-zinc-500">Read about what the platform does.</p>
+        <div>
+          <Link href="/?home" prefetch={false} className={SECONDARY_LINK}>
+            Go to homepage
+          </Link>
+        </div>
+      </section>
+
+      {(mode === "dev" || mode === "session") && (
+        <section aria-label="Account" className="border-t border-border pt-6">
+          <SignOut mode={mode} />
+        </section>
+      )}
+    </main>
+  );
+}

@@ -44,6 +44,8 @@ export interface CustomFieldsPanelProps {
   /** Heading and the id other parts of the page can link to. */
   title?: string;
   anchorId?: string;
+  /** Extra classes for the section (a page draws it as its own box). */
+  className?: string;
 }
 
 /**
@@ -55,7 +57,7 @@ export interface CustomFieldsPanelProps {
  * beside the old child would be refused.
  */
 export function CustomFieldsPanel(props: CustomFieldsPanelProps) {
-  const { fields, readOnly, busy = false, externalErrors = {}, title = "Custom fields", anchorId } = props;
+  const { fields, readOnly, busy = false, externalErrors = {}, title = "Custom fields", anchorId, className = "" } = props;
   const [editing, setEditing] = useState(false);
 
   // If the record stops being editable while the form is open, the form goes away (and does not
@@ -72,7 +74,7 @@ export function CustomFieldsPanel(props: CustomFieldsPanelProps) {
   const saved = new Map(fields.values.map((value) => [value.key, value]));
 
   return (
-    <section id={anchorId} aria-label={title} data-testid="custom-fields" data-entity-type={fields.entityType} className="flex flex-col gap-2 scroll-mt-4">
+    <section id={anchorId} aria-label={title} data-testid="custom-fields" data-entity-type={fields.entityType} className={`flex flex-col gap-2 scroll-mt-4 ${className}`}>
       <h3 className="text-sm font-medium">{title}</h3>
       {editing && !readOnly ? (
         <FieldsForm {...props} onClose={() => setEditing(false)} />

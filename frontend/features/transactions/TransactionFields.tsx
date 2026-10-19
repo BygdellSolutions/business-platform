@@ -44,5 +44,5 @@ export function TransactionFields() {
     () => ({ entityType: "transaction", entityId: transaction.id, definitions: fields.transaction.definitions, values: fields.transaction.values }),
     [transaction.id, fields.transaction],
   );
-  return <CustomFieldsPanel fields={record} title="Custom fields" anchorId="transaction-fields" {...wiring} />;
+  return <CustomFieldsPanel fields={record} title="Custom fields" anchorId="transaction-fields" className="panel" {...wiring} />;
 }

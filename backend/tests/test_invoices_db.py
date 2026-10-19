@@ -184,7 +184,7 @@ def test_numbers_may_repeat_across_organizations(client, db_session):
     two = Two(db_session)
     a = issue(client, two.a, draft_invoice(client, two.a, two.a_tx))
     b = issue(client, two.b, draft_invoice(client, two.b, two.b_tx))
-    assert a["number"] == b["number"] == 1 and a["number_text"] == b["number_text"]
+    assert a["number"] == b["number"] == 1001 and a["number_text"] == b["number_text"]
 
 
 @pytest.mark.parametrize(
@@ -207,18 +207,48 @@ def test_invoice_lines_keep_the_same_consistency_rules_as_sales_lines(world, sta
 # --- references -------------------------------------------------------------------------------------------------------------------------------------
 
 
-def insert_link(db, org, invoice, tx_id, *, customer=None, currency=None, position=9):
-    return refused(
-        db,
+def insert_link_sql() -> str:
+    return (
         "insert into invoice_transactions (organization_id, invoice_id, transaction_id, customer_id, currency, transaction_date, source_version, position) "
-        "select :o, :i, t.id, coalesce(:c, t.billing_customer_id), coalesce(:cur, t.currency, 'SEK'), t.transaction_date, t.version, :p from transactions t where t.id = :t",
-        o=org, i=invoice, t=tx_id, c=customer, cur=currency, p=position,
+        "select :o, :i, t.id, coalesce(:c, t.billing_customer_id), coalesce(:cur, t.currency, 'SEK'), t.transaction_date, t.version, :p from transactions t where t.id = :t"
     )
 
 
-def test_a_transaction_can_be_on_one_invoice_only(world):
-    message = insert_link(world.db, world.org.id, world.d, world.issued_tx.id)
-    assert "uq_invoice_transactions_source_once" in message
+def insert_link(db, org, invoice, tx_id, *, customer=None, currency=None, position=9):
+    return refused(db, insert_link_sql(), o=org, i=invoice, t=tx_id, c=customer, cur=currency, p=position)
+
+
+# Invoicing by delivery (2026-10-11): an order may be on several invoices (one per delivery); an order LINE never on
+# invoices for more, in total, than its quantity.
+COPY_FIRST_ISSUED_LINE = (
+    "insert into invoice_lines (organization_id, invoice_id, source_transaction_id, source_line_id, position, description, unit, quantity,"
+    " unit_price_ex_vat, vat_rate, net_amount, vat_amount, gross_amount) "
+    "select organization_id, :d, source_transaction_id, source_line_id, 99, description, unit, :q, unit_price_ex_vat, vat_rate,"
+    " round(:q * unit_price_ex_vat, 2), round(round(:q * unit_price_ex_vat, 2) * vat_rate / 100, 2),"
+    " round(:q * unit_price_ex_vat, 2) + round(round(:q * unit_price_ex_vat, 2) * vat_rate / 100, 2)"
+    " from invoice_lines where invoice_id = :i and position = 1"
+)
+
+
+def test_an_order_can_be_on_several_invoices_but_a_line_never_beyond_its_quantity(world):
+    db = world.db
+    allowed(db, insert_link_sql(), o=world.org.id, i=world.d, t=world.issued_tx.id, c=None, cur=None, p=9)  # a second invoice of the order
+    # Its first line is already invoiced in full (quantity 1) on the issued invoice: not even a part more.
+    refused(db, COPY_FIRST_ISSUED_LINE, "an order line cannot be invoiced for more than was ordered", d=world.d, i=world.i, q="0.5")
+
+
+def test_the_line_backstop_counts_every_invoice_and_allows_what_is_left(world):
+    db = world.db
+    db.execute(text("alter table invoice_lines disable trigger trg_invoice_lines_immutability"))
+    db.execute(text("update invoice_lines set quantity = 0.5, net_amount = round(0.5 * unit_price_ex_vat, 2),"
+                    " vat_amount = round(round(0.5 * unit_price_ex_vat, 2) * vat_rate / 100, 2),"
+                    " gross_amount = round(0.5 * unit_price_ex_vat, 2) + round(round(0.5 * unit_price_ex_vat, 2) * vat_rate / 100, 2)"
+                    " where invoice_id = :i and position = 1"), {"i": world.i})
+    db.execute(text("alter table invoice_lines enable trigger trg_invoice_lines_immutability"))
+    allowed(db, insert_link_sql(), o=world.org.id, i=world.d, t=world.issued_tx.id, c=None, cur=None, p=9)
+    # Half is invoiced: the other half fits, a hair more does not.
+    refused(db, COPY_FIRST_ISSUED_LINE, "an order line cannot be invoiced for more than was ordered", d=world.d, i=world.i, q="0.501")
+    assert allowed(db, COPY_FIRST_ISSUED_LINE, d=world.d, i=world.i, q="0.5") == 1
 
 
 def test_a_link_must_agree_with_the_transaction_on_customer_and_currency(world):
@@ -256,11 +286,12 @@ def test_an_invoice_line_must_come_from_a_line_of_its_own_source_transaction(wor
     assert "fk_invoice_lines_source_line" in message or "uq_invoice_lines_source_line_once" in message
 
 
-def test_a_source_line_can_be_copied_once(world):
+def test_moving_a_line_onto_another_source_line_is_held_to_its_quantity(world):
     db = world.db
-    db.execute(text("alter table invoice_lines disable trigger user"))
+    db.execute(text("alter table invoice_lines disable trigger trg_invoice_lines_immutability"))
+    # Line 1 of the draft would become a second copy of line 2's source line, which is invoiced in full already.
     refused(db, "update invoice_lines set source_line_id = (select source_line_id from invoice_lines where invoice_id = :i and position = 2) where invoice_id = :i and position = 1",
-            "uq_invoice_lines_source_line_once", i=world.d)
+            "an order line cannot be invoiced for more than was ordered", i=world.d)
 
 
 def test_customers_transactions_and_lines_cannot_be_deleted_while_an_invoice_refers_to_them(world):
@@ -283,7 +314,10 @@ def test_invoicing_needs_no_item_horse_or_custom_field_records_to_exist(world):
         )
     ).all()
     referenced = {target for _, target in rows}
-    assert referenced <= {"organizations", "customers", "transactions", "transaction_lines", "users", "invoices", "invoice_transactions"}
+    assert referenced <= {
+        "organizations", "customers", "transactions", "transaction_lines", "users", "invoices", "invoice_transactions", "invoice_payments",
+        "invoice_lines", "invoice_returns", "credit_notes",
+    }
     assert not referenced & {"items", "horses", "custom_field_definitions", "custom_field_options", "custom_field_values"}
 
 
@@ -308,7 +342,13 @@ def test_no_trigger_on_a_sales_table_involves_invoicing(world):
             "join pg_proc p on p.oid = t.tgfoid where not t.tgisinternal and c.relname in ('transactions', 'transaction_lines', 'customers', 'items')"
         )
     ).all()
-    assert {(r[0], r[1]) for r in triggers} == {("transactions", "trg_transactions_currency_immutable")}
+    assert {(r[0], r[1]) for r in triggers} == {
+        ("transactions", "trg_transactions_currency_immutable"),
+        # Record numbers (core): handed out on insert, never changed; nothing to do with invoicing.
+        ("transactions", "transactions_record_number"),
+        ("customers", "customers_record_number"),
+        ("items", "items_record_number"),
+    }
     assert all("invoice" not in r[2] for r in triggers)
 
 
@@ -317,7 +357,7 @@ def test_only_invoice_tables_have_invoice_triggers_and_the_functions_know_only_i
     on = db.execute(
         text("select distinct c.relname from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_proc p on p.oid = t.tgfoid where p.proname like 'invoice%' and not t.tgisinternal")
     ).scalars().all()
-    assert sorted(on) == ["invoice_lines", "invoice_pdfs", "invoice_transactions", "invoice_vat_rows", "invoices"]
+    assert sorted(on) == ["invoice_lines", "invoice_payments", "invoice_pdfs", "invoice_transactions", "invoice_vat_rows", "invoices"]
     bodies = db.execute(text("select proname, prosrc from pg_proc where proname in ('invoices_immutability', 'invoice_children_immutability', 'invoice_pdfs_guard')")).all()
     assert len(bodies) == 3
     for name, source in bodies:

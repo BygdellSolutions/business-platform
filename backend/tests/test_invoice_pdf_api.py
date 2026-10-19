@@ -98,13 +98,27 @@ def test_later_downloads_return_exactly_the_stored_bytes_and_never_render_again(
     assert len(stored(world.db, world.document)) == 1
 
 
-def test_a_new_template_or_renderer_never_changes_an_artifact_that_exists(client, world, monkeypatch):
+def test_a_new_renderer_alone_never_changes_the_stored_artifact(client, world, monkeypatch):
     first = client.get(pdf_url(world.document), headers=world.headers).content
-    monkeypatch.setattr(render, "TEMPLATE_VERSION", 2)
     monkeypatch.setattr(render, "renderer_identity", lambda: "reportlab 99; other fonts")
     assert client.get(pdf_url(world.document), headers=world.headers).content == first
     (row,) = stored(world.db, world.document)
-    assert row.template_version == 1 and row.renderer.startswith("reportlab 5")  # provenance of what was served
+    assert row.renderer.startswith("reportlab 5")  # provenance of what was served
+
+
+def test_a_new_template_is_used_at_once_and_the_older_artifact_stays_unchanged(client, world, monkeypatch):
+    first = client.get(pdf_url(world.document), headers=world.headers).content
+    made_with = render.TEMPLATE_VERSION
+    monkeypatch.setattr(render, "TEMPLATE_VERSION", made_with + 1)
+
+    second = client.get(pdf_url(world.document), headers=world.headers).content
+    again = client.get(pdf_url(world.document), headers=world.headers).content
+
+    assert second == again  # the new artifact is frozen in its turn
+    rows = sorted(stored(world.db, world.document), key=lambda row: row.template_version)
+    assert [row.template_version for row in rows] == [made_with, made_with + 1]
+    assert rows[0].content == first  # the older PDF is kept exactly as it was
+    assert rows[1].content == second and rows[0].source_sha256 == rows[1].source_sha256  # same invoice content
 
 
 def test_the_download_reads_no_live_table_neither_the_first_time_nor_later(client, world):

@@ -30,6 +30,37 @@ const settings = (orgId: string) => `/o/${orgId}/settings`;
 const orgRow = (orgId: string, columns: string) => testRow(`select ${columns} from organizations where id = ${sql(orgId)}`);
 
 test.describe("owner and admin", () => {
+  test("set the time zone; it persists, and new transactions start on the organization's date", async ({ page, context }) => {
+    world = createWorld({ label: "TimeZone" });
+    await signIn(context, world.email);
+
+    await page.goto(settings(world.orgId));
+    await expect(page.getByText(/Not set: new dates default to today in UTC/)).toBeVisible();
+    await page.getByLabel("Time zone", { exact: true }).fill("Pacific/Kiritimati");
+    await page.getByTestId("submit").click();
+    await expect(page.getByTestId("saved")).toBeVisible();
+    expect(orgRow(world.orgId, "timezone")).toBe("Pacific/Kiritimati");
+
+    await page.reload();
+    await expect(page.getByLabel("Time zone", { exact: true })).toHaveValue("Pacific/Kiritimati");
+
+    // The form's date is the organization's today as FastAPI computes it in that zone (UTC+14), not the browser's.
+    const today = ((await (await context.request.get(bffUrl(world.orgId, "/organization"))).json()) as { today: string }).today;
+    await page.goto(`/o/${world.orgId}/transactions/new`);
+    await expect(page.getByLabel("Date")).toHaveValue(today);
+  });
+
+  test("an unknown time zone is refused next to the box and nothing is stored", async ({ page, context }) => {
+    world = createWorld({ label: "BadZone" });
+    await signIn(context, world.email);
+
+    await page.goto(settings(world.orgId));
+    await page.getByLabel("Time zone", { exact: true }).fill("Mars/Olympus");
+    await page.getByTestId("submit").click();
+    await expect(page.getByText(/must be an IANA time zone name/)).toBeVisible();
+    expect(orgRow(world.orgId, "coalesce(timezone, '-')")).toBe("-");
+  });
+
   test("edit the business profile; it persists in PostgreSQL and survives a reload", async ({ page, context }) => {
     world = createWorld({ label: "Profile" });
     await signIn(context, world.email);
@@ -119,7 +150,11 @@ test.describe("every other role", () => {
       await expect(page.getByTestId("setting-legal_name")).toHaveText("Seen AB");
       await expect(page.getByTestId("setting-default_currency")).toHaveText("SEK");
       await expect(page.getByTestId("submit")).toHaveCount(0);
-      await expect(page.getByRole("textbox")).toHaveCount(0);
+      // No settings control at all; the danger zone (below) offers every member only "Leave", with its password.
+      await expect(page.getByRole("textbox").and(page.locator(":not([data-testid='danger-zone'] *)"))).toHaveCount(0);
+      await expect(page.getByTestId("danger-zone").getByTestId("leave-organization")).toBeVisible();
+      await expect(page.getByTestId("transfer-ownership")).toHaveCount(0);
+      await expect(page.getByTestId("delete-organization")).toHaveCount(0);
 
       // Hiding the form is a convenience; the server decides.
       const attempt = await context.request.patch(bffUrl(world.orgId, "/organization"), { data: { city: "Hacked" } });
@@ -159,6 +194,7 @@ test.describe("tenant isolation", () => {
       const response = await page.goto(settings(other.orgId));
       expect(response?.status()).toBe(404);
       await page.goto(settings(world.orgId));
+      await expect(page.getByTestId("organization-id")).toHaveText(world.orgId); // its own id, never the other's
       await expect(page.getByLabel("Legal name", { exact: true })).toHaveValue("");
       await expect(page.getByLabel("VAT number", { exact: true })).toHaveValue("");
       expect(orgRow(other.orgId, "legal_name || '|' || vat_number")).toBe("Secret Theirs AB|SE-THEIRS");
@@ -218,7 +254,7 @@ test.describe("the default currency", () => {
 
     // Set the currency in the settings (typed in lower case; stored upper case).
     await page.goto(settings(world.orgId));
-    await expect(page.getByText(/Transactions cannot be created until a currency is set/)).toBeVisible();
+    await expect(page.getByText(/Orders cannot be created until a currency is set/)).toBeVisible();
     await page.getByLabel("Default currency", { exact: true }).fill("eur");
     await page.getByTestId("submit").click();
     await expect(page.getByTestId("saved")).toBeVisible();
@@ -274,7 +310,7 @@ test.describe("transactions that predate currencies", () => {
 
     // The settings explain it and ask for the organization's currency first.
     await page.goto(settings(world.orgId));
-    await expect(page.getByTestId("earlier-count")).toContainText("2 transactions were created before currencies existed");
+    await expect(page.getByTestId("earlier-count")).toContainText("2 orders were created before currencies existed");
     await expect(page.getByTestId("assign-currency")).toHaveCount(0);
 
     // Setting the organization's currency does NOT touch them either.
@@ -286,13 +322,13 @@ test.describe("transactions that predate currencies", () => {
     // Only the explicit, confirmed action assigns it.
     await expect(page.getByTestId("assign-currency")).toBeVisible();
     await page.getByTestId("assign-currency").click();
-    await expect(page.getByText(/Assign SEK to 2 transactions\? This cannot be undone\./)).toBeVisible();
+    await expect(page.getByText(/Assign SEK to 2 orders\? This cannot be undone\./)).toBeVisible();
     await page.getByTestId("assign-currency-keep").click();
     expect(testRow(`select count(*) from transactions where organization_id = ${sql(world.orgId)} and currency is not null`)).toBe("0"); // declining changes nothing
 
     await page.getByTestId("assign-currency").click();
     await page.getByTestId("assign-currency-confirm").click();
-    await expect(page.getByTestId("assigned")).toHaveText(/2 transactions now have the currency SEK/);
+    await expect(page.getByTestId("assigned")).toHaveText(/2 orders now have the currency SEK/);
 
     expect(testRow(`select string_agg(currency, ',') from transactions where organization_id = ${sql(world.orgId)}`)).toBe("SEK,SEK");
     await page.goto(`/o/${world.orgId}/transactions/${second}`);
@@ -308,7 +344,7 @@ test.describe("transactions that predate currencies", () => {
     await signIn(context, world.addMember("employee"));
 
     await page.goto(settings(world.orgId));
-    await expect(page.getByTestId("earlier-count")).toContainText("1 transaction was created");
+    await expect(page.getByTestId("earlier-count")).toContainText("1 order was created");
     await expect(page.getByTestId("assign-currency")).toHaveCount(0);
     const attempt = await context.request.post(bffUrl(world.orgId, "/transactions/assign-currency"), { data: { currency: "SEK" } });
     expect(attempt.status()).toBe(403);

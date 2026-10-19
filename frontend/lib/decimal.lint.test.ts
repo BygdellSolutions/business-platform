@@ -67,7 +67,7 @@ describe("decimal-critical folders may not convert decimals to numbers", () => {
 });
 
 describe("the rule is scoped, not a global ban", () => {
-  it.each(["lib/api/client.ts", "components/shell/OrgSwitcher.tsx", "features/dashboard/CustomerPreview.tsx", "app/page.tsx"])("%s may use Number, parseInt and Math", async (file) => {
+  it.each(["lib/api/client.ts", "components/shell/OrgSwitcher.tsx", "app/page.tsx"])("%s may use Number, parseInt and Math", async (file) => {
     for (const code of CONVERSIONS) {
       expect(await restricted(`export function f(value: string) { ${code} return n; }`, file)).toEqual([]);
     }

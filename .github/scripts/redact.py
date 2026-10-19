@@ -22,7 +22,7 @@ PATTERNS = [
     # JSON/query fields that carry a secret
     (re.compile(r"(?i)(['\"]?(?:token|csrf_token|password|secret|security_key|bff_internal_secret|api_key)['\"]?\s*[:=]\s*['\"]?)[^\s'\",&}]{4,}"), r"\1[redacted]"),
     # one-time links: /setup#<token>, /invite#<token>
-    (re.compile(r"(/(?:setup|invite)#)[A-Za-z0-9_-]{16,}"), r"\1[redacted]"),
+    (re.compile(r"(/(?:setup|invite)(?:\?[^#\s]*)?#)[A-Za-z0-9_-]{16,}"), r"\1[redacted]"),
     # any remaining bare 256-bit token (43 URL-safe base64 characters) or long hex secret
     (re.compile(r"(?<![A-Za-z0-9_-])[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])"), "[redacted]"),
     (re.compile(r"(?<![0-9A-Fa-f])[0-9A-Fa-f]{32,}(?![0-9A-Fa-f])"), "[redacted]"),

@@ -117,3 +117,72 @@ Rules learned from corrections by the project owner. Review at session start; ad
 - **A verifier's own lists must be tied to the schema by a test.** The list of required triggers and functions is compared with a freshly migrated database, so a new guarantee cannot be added without teaching the verifier. And check what the database already enforces before claiming a verifier check is the only barrier: the PDF CHECK constraints refuse a bad row, so the verifier tests drop them first.
 - **Scrub the whole URL, not just its credentials.** A client that quotes `postgresql://user:pw@host/db` leaks the host and database name too; a scrubber that keeps them found only because the test asserted the host was absent.
 - **A guard that exists to stop the drill from becoming a merge gate is also a test.** A static test asserts the restore drill is not in `deploy/tests` (the merge-gating container job) and not in `ci-gate`.
+- **A route inventory needs a control that it sees routes.** FastAPI 0.142 keeps each included router as one wrapper route (`original_router`), so a walk over `app.routes` looking for `APIRoute` found nothing and "every write is guarded" passed on an empty list; only the control ("the inventory contains POST /api/customers") failed. Walk into included routers, and keep the control.
+- **A server component must not import a module that imports React hooks, even for a constant.** `lib/profile.ts` (labels) imports `lib/forms.ts` (hooks), so a server-rendered details view that only wanted the labels broke the dev server and the build; `tsc` and lint were green. Run the build (or a Playwright spec) after adding a server component.
+- **A limit on an entitlement must close every path to it, not only the one being discussed.** I recommended letting a transfer exceed the owned-organization limit; the owner refused, because transfer would then be a loophole. The same holds for promotion to owner and for owner invitations. List every way to gain the counted thing before designing the check.
+- **A new database invariant breaks every test that builds data around it, not only the tests of the feature.** The owned-organization trigger made five e2e specs fail that insert a second owner by SQL, and a session-run test pinned the old event names; my targeted runs of the "related" specs missed them and hosted CI caught them. After adding a trigger or CHECK, grep the tests (all suites, all modes) for raw writes to that table, and run both full Playwright suites before pushing.
+
+## A server page reads only components from a "use client" module (2026-10-08)
+
+The Inventory page imported a label table (`BACKORDER_STATES`) from a client component file. In a server component that
+import is a client reference, not the object, so every lookup was `undefined` and the State column rendered empty; no
+type check or unit test noticed. Rule: values shared by server and client code (labels, option lists) live in plain
+modules; a server file imports only components and types from a client module. `lib/server-client-imports.test.ts`
+enforces it.
+
+## A change to the printed invoice needs a new template version (2026-10-08)
+
+Downloads serve the stored PDF of the current template version. A layout change shipped without bumping
+`TEMPLATE_VERSION` leaves every PDF downloaded since the last bump looking old, with no error anywhere (it happened once
+between two deploys). `tests/test_pdf_render.py` pins the layout code's hash next to the version, so such a change fails
+until the version is bumped.
+
+## Units are free text: never print one right after a number (2026-10-08)
+
+The owner found "10 1", "0 of 1 1" and "1 1" in four places one after another: a unit typed as "1" reads as part of the
+quantity. Fixing them one by one missed the rest. Rule: a unit gets its own column or is named ("unit: pcs");
+`lib/no-unit-after-quantity.test.ts` scans the UI for the adjacent form. When the owner reports one instance of a
+display problem, search for every instance before answering.
+
+## The test database has one user at a time (2026-10-10)
+
+Running the backend suite while the e2e suites ran wiped the e2e seed data (both use the TEST database) and failed 60
+unrelated browser tests. Rule: run pytest, the dev e2e suite and the session e2e suite one after another, never
+together; while e2e runs, do only work that needs no database.
+
+## One value per column (2026-10-10)
+
+I showed new order numbers as "Order 1001 · 2026-10-10" inside the existing date column of five tables; the owner
+asked for separate columns everywhere. Rule: a new field in a table gets its own column (sortable, scannable, and
+tests read cells, not substrings), never a prefix to an existing cell. `lib/order-number-columns.test.ts` guards the
+order case.
+
+## A table row is one line, on every list (2026-10-10)
+
+Wrapping rows came back on the invoice list after the catalog fix, because the rule was fixed in one component
+(stock badges) instead of on the tables. Rule: every main list table is `whitespace-nowrap` inside `overflow-x-auto`,
+and badge groups never `flex-wrap`; `lib/list-rows-one-line.test.ts` checks the lists.
+- **A box must hold what is put in it, with real data.** Boxing the page sections looked fine on empty sections, but a product's Incoming table (supplier, reference, cost) stuck out past its box. Screenshots of empty pages prove nothing about width: every table inside a box sits in a sideways scroller, and `e2e/boxes-fit.spec.ts` fills the pages with long data and fails when anything sticks out of a `.panel`, at laptop and phone width (with a control that shows the check can see a spill).
+- **Ask what a limit is FOR before deciding what it counts.** The owned-organization limit counted every owner role, so the default of 1 let every invited member create an organization, and a cap of 0 would have blocked promotions and transfers. The owner meant a right to CREATE organizations, given only by the operator; owning an existing organization was never the concern. Name the action being rationed, count only that, and check what every kind of account (bootstrapped, invited, seeded) gets by default.
+
+## A browser robot is not a user (2026-10-15)
+
+Per-user and per-organization request budgets passed every backend test and then failed two or three browser specs per full run:
+the end-to-end suites drive one account at robot speed, far past any person, so a shared budget ran out partway through a
+suite and the page under test showed an error for a reason that was not its own. The cause was found by running the same full
+suite with the budgets effectively off (404 and 291 passed) and with the defaults (2 and 1 failures), not by guessing. Rule: a
+new global guard (rate limit, admission, timeout) gets its own tests, and the browser suites switch its numbers up in their
+configuration with a comment saying why; check the guard's effect with a full run both ways before blaming flakiness.
+
+## A new screen should look and work like the one that already does the same job (2026-10-15)
+
+The owner tested the horse journal on staging and corrected three things in a row. (1) The journal was a link on the horse page, while
+the same kind of content ("Services performed on this horse") is a collapsible section with a count and a table: a new list of
+records on a record's page copies that section (`CollapsibleSection`), it does not invent another way to open it. (2) The
+practitioner was a free-text box, while choosing who performed a service on an order is a drop-down of the organization's members
+(`/members/people`): a person is always chosen from the members and stored by id (validated as a member of the active organization,
+with the name kept as it was); a typed name is only for something that is not a member. (3) The order column of the services table
+showed the order's DATE under the heading "Order": a column shows what its heading says, and an order is named by its number.
+Rule: before building a screen, find the screen that already does a similar job and follow it; before calling a table done, read each
+heading against its cells; when a display bug is reported, search every screen for the same pattern and add a guard test
+(`features/order-links.test.ts` fails for any link to an order written as a date).

@@ -1,23 +1,6 @@
 import { expect, test, type BrowserContext, type Page } from "./fixtures";
 
-import {
-  addLine,
-  bffUrl,
-  createCustomer,
-  createTransaction,
-  editLine,
-  FREDRIK,
-  getTransaction,
-  ifMatch,
-  lifecycle,
-  openAddLine,
-  ORG_A,
-  ORG_B,
-  signIn,
-  sql,
-  testRow,
-  unique,
-} from "./support";
+import { addLine, bffUrl, createCustomer, createTransaction, editLine, FREDRIK, getTransaction, ifMatch, lifecycle, openAddLine, ORG_A, ORG_B, signIn, sql, testRow, unique, switchOrg } from "./support";
 
 /**
  * Optimistic concurrency as the BROWSER meets it: two tabs of one user (and API calls standing
@@ -108,7 +91,6 @@ test.describe("a stale tab cannot overwrite a newer edit", () => {
     await openAddLine(b);
     await b.getByLabel("Ad-hoc line").check();
     await b.getByTestId("add-line-form").getByLabel("Description", { exact: true }).fill("Added in B");
-    await b.getByTestId("add-line-form").getByLabel("Unit", { exact: true }).fill("u");
     await b.getByTestId("add-line-form").getByLabel("Quantity", { exact: true }).fill("1");
     await b.getByTestId("add-line-form").getByLabel("Unit price excluding VAT", { exact: true }).fill("5.00");
     await b.getByTestId("add-line-form").getByLabel("VAT rate (%)", { exact: true }).fill("25");
@@ -191,12 +173,12 @@ test.describe("stale lifecycle", () => {
     const { b, transaction } = await twoTabs(context);
     await addLine(context, ORG_A.id, transaction.id, { ...LINE, description: "Added elsewhere" });
 
-    await b.getByTestId("complete").click();
+    await b.getByTestId("invoice-order").click();
 
     await expect(b.getByTestId("editor-notice")).toContainText("changed elsewhere, so nothing was changed");
     expect(testRow(`select status from transactions where id = ${sql(transaction.id)}`)).toBe("draft");
     await expect(rows(b)).toHaveCount(3); // the screen now shows what FastAPI has
-    await b.getByTestId("complete").click();
+    await b.getByTestId("invoice-order").click();
     await expect(b.getByTestId("tx-status")).toHaveText("Completed");
   });
 
@@ -232,9 +214,9 @@ test.describe("stale lifecycle", () => {
     const { b, transaction } = await twoTabs(context);
     await lifecycle(context, ORG_A.id, transaction.id, "complete");
 
-    await b.getByTestId("complete").click();
+    await b.getByTestId("invoice-order").click();
 
-    await expect(b.getByTestId("editor-notice")).toContainText("completed transaction cannot be completed");
+    await expect(b.getByTestId("editor-notice")).toContainText("completed order cannot be completed");
     await expect(b.getByTestId("tx-status")).toHaveText("Completed");
   });
 
@@ -347,7 +329,7 @@ test.describe("a change that is still running when the user leaves", () => {
     await fieldOf(a, "Description").fill("Saved while leaving");
     await a.getByTestId("save-line").click();
 
-    await a.getByTestId("org-switcher").getByRole("link", { name: ORG_B.name }).click();
+    await switchOrg(a, ORG_B.name);
     await expect(a).toHaveURL(`/o/${ORG_B.id}`);
 
     await expect.poll(() => testRow(`select description from transaction_lines where id = ${sql(first.id)}`)).toBe("Saved while leaving");

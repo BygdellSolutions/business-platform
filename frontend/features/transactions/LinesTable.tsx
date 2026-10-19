@@ -12,7 +12,7 @@ export function LinesTable() {
   const { transaction, refreshing } = useEditor();
 
   return (
-    <section aria-label="Lines" aria-busy={refreshing} data-testid="lines" data-updating={refreshing || undefined} className={`flex flex-col gap-2 ${refreshing ? "opacity-50" : ""}`}>
+    <section aria-label="Lines" aria-busy={refreshing} data-testid="lines" data-updating={refreshing || undefined} className={`panel flex flex-col gap-2 ${refreshing ? "opacity-50" : ""}`}>
       <h2 className="text-lg font-medium">Lines</h2>
       {transaction.lines.length === 0 ? (
         <p data-testid="no-lines">No lines yet.</p>
@@ -23,7 +23,6 @@ export function LinesTable() {
               <tr className="border-b border-zinc-300 dark:border-zinc-700">
                 <th className="py-1 pr-3">#</th>
                 <th className="py-1 pr-3">Description</th>
-                <th className="py-1 pr-3">Unit</th>
                 <th className="py-1 pr-3 text-right">Quantity</th>
                 <th className="py-1 pr-3 text-right">Unit price excl. VAT</th>
                 <th className="py-1 pr-3 text-right">VAT %</th>

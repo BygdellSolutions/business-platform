@@ -266,8 +266,8 @@ def test_customer_can_be_deleted_once_no_longer_referenced(
     assert client.delete(f"/api/customers/{world.hk_a.id}", headers=headers).status_code == 204
 
     assert client.delete(f"/api/customers/{world.anna_a.id}", headers=headers).status_code == 409
-    client.delete(f"/api/horses/{horse.id}", headers=headers)
-    assert client.delete(f"/api/customers/{world.anna_a.id}", headers=headers).status_code == 204
+    client.patch(f"/api/horses/{horse.id}", json={"active": False}, headers=headers)
+    assert client.delete(f"/api/customers/{world.anna_a.id}", headers=headers).status_code == 409  # an inactive horse still has its owner
 
 
 def test_a_refused_delete_does_not_break_the_session(

@@ -71,6 +71,8 @@ IsEditable = Callable[[Session, TenantContext, uuid.UUID], bool]
 ReferenceGuard = Callable[[Session, str, uuid.UUID, uuid.UUID], bool]
 # (db, ctx, event, entity_key, entity_id) -> list of lifecycle Problems
 LifecycleValidator = Callable[[Session, TenantContext, str, str, uuid.UUID], list[Any]]
+# (db, ctx, event, entity_key, entity_id): acts after a lifecycle step, inside its database transaction; never commits.
+LifecycleEffect = Callable[[Session, TenantContext, str, str, uuid.UUID], None]
 # (db, organization_id) -> a human reason if stored prices make a currency change unsafe, else None
 CurrencyGuard = Callable[[Session, uuid.UUID], str | None]
 
@@ -84,6 +86,9 @@ class EntityType:
     reference: ReferenceSpec | None = None
     parent: ParentSpec | None = None
     is_editable: IsEditable | None = None
+    # A service can be performed FOR a record of this type (a person, an animal, a vehicle...). Needs `reference`
+    # (the label shown on lines and invoices comes from it).
+    service_subject: bool = False
 
 
 class Registry:
@@ -91,6 +96,8 @@ class Registry:
         self._entities: dict[str, EntityType] = {}
         self._reference_guards: list[ReferenceGuard] = []
         self._validators: list[LifecycleValidator] = []
+        self._effects: list[LifecycleEffect] = []
+        self._hooks: dict[str, list[Callable[..., Any]]] = {}
         self._currency_guards: list[CurrencyGuard] = []
 
     # --- entity types ---------------------------------------------------------------------
@@ -112,6 +119,8 @@ class Registry:
                 raise RegistryError(f"{entity.key}: a reference needs at least one search column")
         if entity.parent is not None:
             self._require_columns(entity, [entity.parent.column])
+        if entity.service_subject and entity.reference is None:
+            raise RegistryError(f"{entity.key}: a service subject must be referenceable")
         self._entities[entity.key] = entity
 
     @staticmethod
@@ -139,6 +148,9 @@ class Registry:
 
     def all(self) -> list[EntityType]:
         return list(self._entities.values())
+
+    def service_subjects(self) -> list[EntityType]:
+        return [e for e in self._entities.values() if e.service_subject]
 
     def custom_field_types(self) -> list[EntityType]:
         return [e for e in self._entities.values() if e.custom_fields]
@@ -172,6 +184,28 @@ class Registry:
     @property
     def validators(self) -> list[LifecycleValidator]:
         return list(self._validators)
+
+    # --- named hooks ------------------------------------------------------------------------------
+    #
+    # A capability one module offers to others by NAME, so the caller never imports the provider: Invoicing asks
+    # "stock.tracked_lines" and calls "stock.return" when a credit note says goods came back; Inventory answers.
+    # Without a provider the call does nothing (an organization without Inventory still credits).
+
+    def add_hook(self, name: str, handler: Callable[..., Any]) -> None:
+        self._hooks.setdefault(name, []).append(handler)
+
+    def call_hooks(self, name: str, *args: Any, **kwargs: Any) -> list[Any]:
+        """Every handler's answer, in registration order (an empty list when nobody provides the hook)."""
+        return [handler(*args, **kwargs) for handler in self._hooks.get(name, [])]
+
+    # --- lifecycle effects (see app.core.lifecycle.run_effects) ---------------------------------
+
+    def add_effect(self, effect: LifecycleEffect) -> None:
+        self._effects.append(effect)
+
+    @property
+    def effects(self) -> list[LifecycleEffect]:
+        return list(self._effects)
 
     # --- currency guards -----------------------------------------------------------------------
 

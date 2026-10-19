@@ -109,6 +109,17 @@ Umeå HK can pay even though Anna owns Kalle.
 
 Therefore billing relationships and domain relationships must remain separate.
 
+### Horse documents
+
+A horse can have files kept with it (a vet report, an x-ray photo, a passport scan): PDF, JPEG, PNG or WebP, at most 10 MB each and 100 per horse. Decided with the owner 2026-10-18:
+
+- **Storage:** in PostgreSQL, table `horse_documents` (migration `d4f6a8c0e2b3`), like the organization logo. The bytes are a `deferred` column, so listing never loads them. The foreign key is composite `(organization_id, horse_id)`, so the database refuses a document of another organization's horse; CHECKs hold the type, the size (1 byte to 10 MB) and that the stored size equals the length of the bytes. Move to object storage only when measured needs justify it.
+- **Access:** the same as the horse record: every member can list and open documents, whoever may change records (owner, admin, accountant, employee) uploads and deletes, a viewer only reads. Another organization's horse or document is a 404.
+- **Upload path:** JSON with the file as base64 (`POST /api/horses/{id}/documents`), so the BFF stays JSON-only on the way in. That one path may carry 14.2 MB instead of 1 MB (`MAX_DOCUMENT_UPLOAD_BODY_BYTES`) and a longer read deadline, and `experimental.proxyClientMaxBodySize` is 15 MB because Next.js buffers (and silently cuts) the body of a request that passes the proxy at 10 MB. The backend decodes strictly, caps the size, checks the declared type against the first bytes (so a program or an HTML page cannot pass as a PDF or a picture), refuses SVG and everything else, and cleans the file name (no folder, no control characters). Uploads are also rate-limited like other heavy endpoints.
+- **Open path:** `GET /api/horses/{id}/documents/{doc}/file` is the BFF's third binary pass-through (after the invoice PDF and the export ZIP): validated (type, signature, size, SHA-256 = ETag) with its headers rebuilt (`nosniff`, no store; a picture also gets `default-src 'none'; sandbox`). It is shown inline in a new tab; the app's `X-Frame-Options: DENY` means there is no in-page PDF viewer.
+- **History and deletion:** adding and deleting are recorded in the horse's history with the file name, type and size, never the content. Deleting removes the file for good (after a confirmation). A horse itself is never deleted, so its documents leave only with the whole organization. The organization export carries them as files under `horse-documents/`, and the deletion and restore-check table lists include `horse_documents`.
+- **Not done:** virus scanning, in-page PDF preview, renaming a document, and a per-organization storage quota.
+
 ---
 
 ## 9. Transactions / sales must remain generic
@@ -543,6 +554,26 @@ Each line is rounded on its own and the three amounts are **stored** on the line
 
 ---
 
+## Implementation notes: organization time zone
+
+`organizations.timezone` is an IANA name (e.g. `Europe/Stockholm`), nullable and never backfilled: nothing assumes a zone. `app/core/org_time.py` answers "what is today for this organization" (`today_in`, `organization_today`) from the clock seam (`app.core.clock.utcnow`), falling back to UTC when no zone is set (the behavior before zones existed). It is the ONLY source of server-side date defaults: a transaction or invoice created without a date gets it. Stored dates are plain calendar dates and never change when the zone changes; the zone only decides future defaults, so it may be changed or cleared at any time. Validation is the backend's (`zoneinfo` against the bundled `tzdata` package, an explicit dependency because slim images have no system zone database); the database CHECKs the shape only. `GET /api/organization` returns `timezone` and `today`, and the new-transaction page prefills its date with `today` from the server rather than the browser's date (the browser may be on another day). The Settings field offers the browser's zone names as suggestions only.
+
+---
+
+## Implementation notes: history (audit events)
+
+**What is recorded.** `audit_events` (tenant-owned, append-only) holds one row per change: organization, time, actor (the user of the active membership), `entity_type` / `entity_id` (registry keys such as `customer`, `transaction_line`), an optional `context_type` / `context_id` (the record it belongs to: a line's transaction), an `action` (`created`, `updated`, `deleted`, lifecycle verbs such as `completed`, `issued`, and `fields_updated` for custom-field values) and `changes` (`{field: {from, to}}`, JSON-safe; decimals as the stored strings, ids as strings; custom-field changes carry the field's `label` and the display text a person saw). Technical columns (ids, organization, timestamps, authors, versions, positions) are never part of a change. Invoices record only their header fields; the frozen snapshots are documents, not history.
+
+**How it is written.** Explicitly, by each write path, through `app/core/audit.py` (`created`, `apply_audited_update`, `updated`, `deletion`/`deleted`, `stamp`), in the SAME database transaction as the change. After-values are read back from the database after the flush, so `900` is recorded as the stored `900.00`. A write that changes nothing records nothing. A deletion that may be refused (`delete_or_409`) records its event only after the row is really gone (`after_delete=`). `created_by` / `updated_by` (the `Authored` mixin) are stamped at the same time; a change to a line or a custom-field value also stamps its transaction's `updated_by`.
+
+**Append-only.** A trigger refuses UPDATE and DELETE. The single exception is a DELETE of an organization's own events while `app.deleting_organization` is set to that organization's id in the deleting transaction (for the organization deletion slice).
+
+**Reading.** `GET /api/history?entity_type&entity_id` for any member: events of the record and of records whose context it is, newest first (at most 500), with the actor's name and the list of people named. A record of another organization simply has no history here. The frontend shows ids of customers and items as their names (looked up in the same organization; a deleted one says so) and timestamps in the organization's time zone.
+
+**Not recorded (yet).** Organization settings, memberships and invitations (security events cover those today), and changes made before this existed (`created_by` NULL = "not recorded").
+
+---
+
 ## Implementation notes: core registry and lifecycle seam
 
 Generic capabilities and modules never import each other. They meet in **core**:
@@ -558,6 +589,8 @@ customers, catalog, sales, domain modules ──► core registry ◄── cust
 **Currency guards.** `registry.add_currency_guard(guard)` lets a module say "my records make a currency change unsafe"; `registry.currency_lock_reason(db, organization_id)` asks them all. `isolated()` saves and restores them too.
 
 **Authorization (`app/core/authz.py`).** `require_role(ctx, allowed_roles)` and the dependency factory `roles_required(*roles)`. The role is always the one in the ACTIVE membership, so a user who is an owner in one organization and a viewer in another gets the right answer in each; selecting an organization you do not belong to is still a 404.
+
+**Viewers read, everyone else may write business records.** `RECORD_WRITERS` (owner, admin, accountant, employee) and its dependency `record_writer` guard every create, update, delete and lifecycle step on customers, items, horses, transactions and lines, and custom-field value writes. Narrower rules keep their own role sets (invoicing: owner/admin/accountant; settings and custom-field definitions: owner/admin). Membership administration and invitations decide authority inside the service from freshly locked rows, and leaving is open to every member. `roles_required` marks its dependency with `allowed_roles`, and `tests/test_viewer_read_only.py` walks every tenant-scoped write route: a write with no role dependency, or one that admits viewers, fails the suite unless it is on the short, reasoned exception list. The role is judged before any lookup, so a viewer gets the same 403 for its own record, a foreign one and a random id. The frontend mirrors the rule for presentation only (`lib/roles.ts` `canWriteRecords`, `lib/active-role.ts`): a viewer gets read-only detail views, no create links, a "not allowed" page instead of a create form, and a read-only transaction editor.
 
 **Polymorphic delete guard.** `delete_or_409` also asks registered reference guards, so a record pointed at from somewhere a foreign key cannot express (a custom-field reference) cannot be deleted.
 
@@ -665,7 +698,7 @@ Implemented in `app/modules/custom_fields/`. It depends on core only and never n
 
 **Delete protection.** The custom-fields reference guard is registered on core. It counts only values of records that still exist, in the record's own organization, so values orphaned by a deleted line never block anything and one organization's data never protects another's records. Raw SQL deletes bypass guards, which is why dangling references render safely.
 
-**Administration.** Creating or changing definitions and options is owner/admin only (via `roles_required`). Reading definitions, listing choices and writing values is open to every member.
+**Administration.** Creating or changing definitions and options is owner/admin only (via `roles_required`). Reading definitions and listing choices is open to every member; writing values is open to every member except a viewer (`record_writer`, see "Authorization" in the core registry notes).
 
 **Not in V1:** filtering lists by custom fields, text search indexes, money/percent types, multiple dependencies per field, operators other than equality, formulas, deleting definitions, and orphan clean-up.
 
@@ -770,7 +803,7 @@ The PDF of an issued invoice, made by the backend, stored once, and served from 
 | D11 | The operator bootstrap CLI is the only first-user and recovery path. |
 | D12 | The onboarding UI requires a currency; the organization API and model stay nullable. |
 | D13 | Production requires `AUTH_MODE=session` and fails closed at startup; the dev identity additionally requires `APP_ENV=development`; there is no fallback. |
-| D14 | Passwords are 12 to 128 characters with no composition rules. |
+| D14 | Passwords are 12 to 128 characters with no composition rules, and a NEW password may not be a common one (2026-10-15): it is checked, case-insensitively and trimmed, against the UK NCSC "100k most used passwords" (Open Government Licence v3.0, redistributed in danielmiessler/SecLists under MIT), shipped as `backend/app/core/data/common_passwords.txt` and held in memory, with NO network call; a password whose stem (trailing digits and symbols removed, at least four letters) is on the list is refused as well, because the 12-character minimum alone lets `Password123456` through. One fixed message ("This password is too common. Choose another."). Checked on setup links, invitation acceptance and password change; never on a login, so existing passwords keep working. |
 
 ### Review change 1: the CSRF and BFF trust boundary (the responsibility split)
 
@@ -840,6 +873,14 @@ A minimal append-only table, **not the business Audit module**. It exists becaus
 **Sessions.** A token is 256 random bits (`secrets.token_urlsafe(32)`), returned once and stored only as its SHA-256. A login always creates a fresh session and ends the one presented with the request (fixation); a password change and a link redemption end the user's other sessions; the cap revokes the oldest sessions under a per-user row lock, so simultaneous logins cannot exceed it. Ended and expired records are purged by `purge` and, in small batches, at every login.
 
 **Endpoints** (`/api/auth`, only in session mode; 404 otherwise; called by the BFF, never by a browser): `POST /login`, `POST /logout`, `POST /change-password`, `POST /setup`. `/api/me` and `/api/me/organizations` work unchanged over sessions.
+
+**A complete copy of an organization's data** (2026-10-15): `POST /api/organization/export` (owner only, password again, 5 per hour per organization) streams a ZIP: `data/<table>.jsonl` for every tenant table (the deletion list; a test fails when a table is neither exported nor deliberately left out), `members.jsonl` (name, email, role; never a credential), every stored invoice and credit-note PDF as a file, `manifest.json` (row counts, and how many documents have no PDF) and a README. Left out on purpose: password hashes, sessions, security events (the platform's own log), invitation token hashes and the retry records of organization creation. Before streaming, the invoicing module (through the registry hook `organization.prepare_export`) freezes the PDF of up to `EXPORT_RENDER_LIMIT` (100) issued invoices and credit notes that nobody had opened yet; the manifest reports any that remain. The archive is produced chunk by chunk from one read-only repeatable-read snapshot (nothing is built in memory; the BFF streams it on, with a 20-minute allowance instead of 15 seconds). Tenant safety: every statement filters on the organization id from the authenticated membership and joins on both ids. The organization counts as exported (`organizations.last_export_at`) only when the whole archive has been produced. **Deleting an organization** now needs a copy from the last 24 hours (`recent_export` in the organization read) or an explicit `without_copy` in the request; otherwise 409 `export_required`, and the settings page offers "Download a copy" and the explicit "I do not want a copy" choice.
+
+**Second factor** (2026-10-15): optional for everyone, required for owners and admins when `MFA_REQUIRED_FOR_ADMINS` is on (the default in production). Tables `user_mfa` (a random `seed` and the newest accepted time step), `user_recovery_codes` (SHA-256 hashes, single use) and `mfa_challenges` (hashed token, 5 minutes, 5 attempts). The authenticator key is NOT stored: it is `HMAC-SHA256(SECURITY_KEY, "totp-secret-v1|" + seed)` cut to 20 bytes, so a database copy produces no code and rotating `SECURITY_KEY` invalidates every enrolment (the operator resets people with `admin reset-mfa`). TOTP is RFC 6238 (SHA-1, 6 digits, 30 s, one step of drift), built from the standard library and checked against the RFC vectors and an independent implementation in the browser tests; a code works once (row lock plus the stored step). Sign-in: `POST /api/auth/login` answers `{mfa_required, challenge}` for such a person (no session, no `login_success`), then `POST /api/auth/login/mfa` with the challenge and a code or recovery code opens the session; every wrong way is the same 401 and wrong codes are throttled per person (`MFA_MAX_FAILURES` in the login window). Account endpoints (`/api/auth/mfa`, `/enroll` needs the password, `/confirm`, `/recovery-codes` and `/disable` need a current code); an owner or admin cannot disable it while the policy is on. Enforcement is in `get_tenant_context`: an owner or admin without a factor gets 403 `mfa_required` on every tenant request. Events: `mfa_enabled`, `mfa_disabled`, `mfa_failure`, `recovery_code_used`, `mfa_reset_by_operator`.
+
+**Request budgets** (2026-10-15): every authenticated tenant request counts against the person's budget (1,200 per minute) and the organization's (6,000 per minute); PDFs and the dashboard summary also against a tighter per-person budget (60 per minute). Sliding windows held in the API process (per process, bounded to 20,000 keys, emptied by a restart; `shortcut:` noted in `app/core/rate_limit.py`); a refused request is not recorded, so a block ends when the person's earlier requests leave the window; the answer is 429 with `Retry-After`, which the BFF keeps. Settings `RATE_LIMIT_USER_PER_MINUTE`, `RATE_LIMIT_ORG_PER_MINUTE`, `RATE_LIMIT_HEAVY_PER_MINUTE`. Security events are also counted in `GET /internal/metrics` (`security_event_<type>`) as the alert signal for bursts of failed logins.
+
+**Own sessions** (2026-10-15): `GET /api/auth/sessions` lists the caller's usable sessions (id, created, last used, user agent, `current`; never a token, hash or address); `DELETE /api/auth/sessions/{id}`, `POST /api/auth/sessions/end-others` and `POST /api/auth/sessions/end-all` end them (reason `logout`, one `logout` event with `one`, `others=N` or `all=N`). Every query is scoped to the authenticated user; another person's, an ended and an unknown id are the same 404. The BFF reduces the list to five fields, checks Origin and CSRF for every change, and clears this browser's cookies for end-all only after FastAPI confirmed.
 
 **Bootstrap and recovery** (`python -m app.scripts.admin`): `bootstrap-user` creates a user **without any credential** and prints a single-use link (`<PUBLIC_ORIGIN>/setup#<token>`, 24 hours); `reissue-setup-link` revokes earlier links and prints a new one (recovery); `disable-user` (also ends every session), `enable-user`, `purge`. There is no way to supply a password (no option, no prompt, no environment variable). The token is 256 random bits, shown once, stored only as its hash, redeemed by one conditional UPDATE (single use, race-safe), refused after expiry or revocation, and recorded nowhere. Redeeming sets the password, ends the user's other sessions and signs in. A weak password or a request that cannot use the link does not consume it, and a malformed or unknown link costs no Argon2 work. Running the CLI needs shell and database access, the same trust as the database; no endpoint creates a user without an invitation or a link.
 
@@ -1143,6 +1184,123 @@ The Members page (owner/admin) gains Invitations: a form (owners may pick any ro
 - Regeneration is one atomic endpoint instead of revoke-then-create from the browser.
 - Preview and account creation are limited to session mode (the dev identity has no sign-in page); the signed-in acceptance endpoint works in both modes at the backend.
 - An invitation's expiry is checked at use; there is no background job that revokes expired rows (they are superseded on the next create).
+
+---
+
+## Product changes from staging testing: approved decisions (NOT implemented)
+
+Decided by the owner on 2026-10-08. The slices are listed in `TODO.md`.
+
+### Lifecycle effects (core extension)
+
+The lifecycle seam (`app/core/lifecycle.py`) today lets a registered validator VETO a step. It gains **effects**: a module registers an action for an event (`COMPLETE`, `REOPEN`, `CANCEL`), and Sales runs the effects after the transition, under the same transaction row lock and inside the same database transaction. An effect that fails rolls the whole step back. Sales still imports nothing from the modules that react; Inventory is the first user. Validators still run first, so a vetoed step never reaches an effect.
+
+**As built (I1).** `registry.add_effect(effect)` and `app.core.lifecycle.run_effects(db, ctx, event, entity_key, entity_id)`; Sales' `_transition` calls it after writing the status, the version and the history event (flushed), and before its single commit. Effects receive no "from" state: an effect decides from its own records (Inventory will return whatever a transaction has delivered and not yet returned, which is nothing for a draft).
+
+### Inventory and backorders
+
+**As built (I1).** `items.sku` (optional, unique per organization through a partial unique index, refused with 422 `item.sku_taken` before the index is reached) and `items.track_stock` (`ck_items_track_stock_product`; the API checks the item as it will be, so a change of type alone is refused with `item.track_stock_service`). The module `app/modules/inventory` imports only core; nothing imports it except the wiring. `stock_movements` has no `updated_at` and no author of changes: rows never change. `sequence` (an identity) orders movements; on hand is the `quantity_after` of an item's highest sequence, zero without movements, so there is no second figure that could disagree with the ledger. `record_movement` requires the caller to hold the item's row lock (`lock_items` locks several in id order) and refuses a negative result with 422 `stock.negative`. Adjustments: `count` (sets the quantity; the first count of an item is reason `opening`), `add`, `remove`; after the opening, a note is required (also a CHECK on `adjustment`). The ledger's transaction ids are plain columns, not foreign keys: a delivery's record outlives a draft line deleted after a reopen. Deleting an item with movements is refused by the RESTRICT key (409). Organization deletion removes `stock_movements` before `items` through the trigger's escape.
+
+**As built (I2).** Inventory READS Sales' models (`app.modules.sales.models` only; a boundary test holds it to that, as for Invoicing) to sum what a transaction's lines ask of each item. Sales still imports nothing of Inventory, and the transaction page reads the demand next to the transaction (`GET /api/inventory/transactions/{id}`), so every refresh after a change brings both. Add line asks `GET /api/inventory/availability` for the chosen item. "Available" is on hand minus what is already promised; nothing is promised before I3.
+
+**As built (I3).** `app/modules/inventory/registration.py` registers one effect: `COMPLETE` runs `deliver_on_completion`, `REOPEN` and `CANCEL` run `return_on_undo`. Completion reads the transaction's lines with a catalog item (position order), keeps those whose item is a stock-tracking product NOW, locks those items in id order, and delivers `min(quantity, available)` per line from a running figure (so two lines of one item share it). `available = max(0, on hand - committed)`, where committed is the sum of `backordered - fulfilled_later` over active, open `line_fulfillments`. Undo locks the transaction's active fulfillments and their items, returns `delivered + fulfilled_later` per row with one return movement, and sets `cancelled_at/by` and `cancel_reason`; the partial unique index allows one active row per line, so a later completion writes a new one. States are computed when read: cancelled, fulfilled (nothing remaining), ready to fulfill (something remaining and stock on hand: a person allocates it, I5), partially fulfilled, waiting for stock. The draft-time warning (I2) and completion use the same `available`, so what the warning promised is what completion does, unless stock changed in between (completion decides under the locks).
+
+**As built (I4).** `incoming_stock` rows carry `quantity` and `received` (CHECK `received <= quantity`) and an optional cancellation; the open part is `quantity - received` while not cancelled. Receiving locks the incoming row, then the item, and appends a `receipt` movement with `incoming_stock_id`; a CHECK makes that column present exactly on receipts, so stock can only "arrive" through a recorded delivery (counts and adjustments remain the way to correct the shelf). Over-receiving is refused (422 `incoming.too_much`); a fully received or cancelled delivery is 409. Incoming never counts as available: it is shown separately so a person can promise it, but completion only delivers what is physically on hand.
+
+**Suppliers.** `suppliers` is a core, tenant-owned register (like `customers`: business profile, authors, active; registered as entity `supplier`, so history and custom reference fields can use it). `incoming_stock.supplier_id` is a composite foreign key to it (same organization, RESTRICT); creating a delivery checks that the supplier is the organization's own (else 422 `reference.not_found`, the same for another tenant's id) and active. The free-text `incoming_stock.supplier` column was migrated into supplier records (one per organization and case-insensitive trimmed name) and dropped.
+
+**Unit cost and editing a delivery (2026-10-10).** `incoming_stock.unit_cost` (NUMERIC(12,2), nullable, >= 0) is what the organization pays per unit excl. VAT in its currency; it is purchase information only (no stock valuation, no margin yet). `PATCH /api/inventory/incoming/{id}` (record writers, tenant-scoped, row-locked) changes `expected_on` only while the delivery is open (409 otherwise) and `unit_cost` at any time. The order date shown is `created_at` in the organization's time zone; there is no separate ordered-on field. Changes to a delivery are not written to the audit log (incoming rows were never audited).
+
+**Sorting (2026-10-10).** Paged lists take `?sort=<key>&dir=asc|desc` (`app.api.deps.sorting` / `sorted_by`): each endpoint names its own keys (a dict of SQL expressions; anything else is a 422), the value sorts with NULLs last, then the list's default order breaks ties so pages are stable. Core never imports a module for a sort: the catalog's stock keys come from the `item.sort` registry hook (Inventory's `sorting.item_sorts`, the per-item SQL form of `service.on_hand/allocated/committed/incoming/free`, held equal to them by a test). The Inventory product list (at most 500 rows, figures computed in Python) sorts its rows in Python. In the frontend, `lib/list-params.ts` carries `sort`/`dir` (headings via `SortHeader` + `sortHref`); tables whose rows are all on the page sort in place (`lib/use-sorted-rows.ts`) or, inside server pages, through the address (`lib/table-sort.ts`, one parameter pair per table). Decimal strings compare exactly (`compareDecimal`, digits as text, never a JavaScript number).
+
+**Counter sales (2026-10-10).** A draft order ends in one of two ways. "Paid now" (`POST /api/transactions/{id}/pay-now`, Sales) is the completion step plus `paid_at`, `payment_method` and a receipt number (`app.core.record_numbers.next_number`, series "receipts" from 1001), all in the step's transaction under its row lock; CHECKs keep the four fields together and only on a completed order, so a paid order can never be reopened or cancelled (Sales also answers 409 `paid_at_counter`). "Invoice" is the completion step followed by Invoicing's `POST /api/invoices/for-order`, which rebuilds the customer's open draft (same currency) with the order added, or starts one; a draft's sources are never edited in place. Invoicing refuses paid orders (`paid_at_counter`) and the organization's one walk-in customer (`customers.walk_in`, partial unique index; `walk_in_customer`) and leaves both out of "invoiceable" and "Ready to invoice". The receipt PDF is the invoice template's receipt variant (template 9), rendered on each download from the final order and the organization's current profile (not stored; a shortcut noted in `invoicing/receipts.py`). The dashboard's Paid adds counter sales by the day they were paid in the organization's time zone.
+
+**Invoice numbers from 1001 (2026-10-10).** `numbering.FIRST_NUMBER = 1001`: a new series starts there, and migration `f6b8d0e2a346` moved existing counters below 1001 up to 1001 (no production data existed; on real data that jump is a visible gap to document for the bookkeeping). Credit notes share the invoice series. The downgrade leaves the counters alone, since lowering one could hand a number out twice.
+
+**Record numbers (2026-10-10).** `transactions` (from 1001), `customers`, `suppliers`, `horses` and `items` (from 1) carry `number`, unique per organization (`uq_<table>_organization_number`). The database assigns it: the BEFORE INSERT trigger `<table>_record_number` runs `assign_record_number(<first>)`, which upserts the `record_counters` row (organization, table name) and returns the number, so the counter row is locked until commit and two inserts never share a number; a rolled-back insert leaves a gap (these are references for people, not a legal series like invoice numbers). The same trigger refuses an UPDATE that changes `number`; no schema accepts one. Models mark it `server_default=FetchedValue()` (`app.models.mixins.Numbered`). Search: `app.core.query.number_matches` adds "number equals the text" to list searches. Invoices snapshot the order number in `invoice_transactions.transaction_number` at creation; issued invoices from before the migration keep NULL (left out, never invented). `record_counters` is removed with the organization.
+
+**Charges.** `ItemType.CHARGE` ("charge") is a third catalog type for travel, mileage and fees: billed like any catalog item (price, VAT, discounts), never stock (`ck_items_track_stock_product`), refused on a Service line (`service.not_a_service`), and filtered apart in the catalog. Labels live in `frontend/features/catalog/item-types.ts`.
+
+**Catalog prices.** `app.core.prices` holds the shared pure rules: `discounted_unit_price` (the ordered layers, moved from Sales), `price_inc_vat` (price + round_half_up(price * rate / 100), the same as a line of quantity 1) and `price_ex_vat_from_inc` (nearest cent; not every amount incl. VAT is reachable, e.g. at 25 % one cent excl. is 1.25 cents incl., so the stored values are shown back). Items read with `price_inc_vat`, `promotion_price_ex_vat` and `promotion_price_inc_vat` (today's temporary discount only; a customer's discount depends on the sale).
+
+**As built (I5).** The proposal (`GET /api/inventory/items/{id}/allocation`) walks the item's open backorders by `created_at` (the completion time from the application clock, then id) and gives each `min(left, remaining)` of on hand; it writes nothing. Confirming (`POST`, record writers) locks the item, then the named fulfillments (id order), refuses the whole request if one is not an open backorder of this item (`backorder.not_open`), exceeds what it waits for (`backorder.too_much`), or the total exceeds on hand (`allocation.beyond_stock`), and only then appends one delivery movement per allocation and raises `fulfilled_later`. The person may deviate from the proposal (priorities are a human decision); the ledger records who confirmed what and when. A reopen or cancel of the sale later returns these deliveries too (I3).
+
+**Allocated (owner decision 2026-10-08, after I6).** Units on open DRAFT sales are shown as allocated (`service.allocated`, Inventory reading Sales' lines and statuses) and are subtracted from the available figure people see (`service.free` = on hand − committed − allocated). This refines "drafts only warn": a draft still reserves nothing and completion still delivers from on hand minus committed only, first come first served, so a slow draft can end up backordered; its warning then shows the shortage. A draft's own lines never count against it (`except_transaction`).
+
+**As built (I6).** `items.low_stock_threshold` (nullable, `>= 0`; only read while the item tracks stock). `service.stock_states` decides the badges in one place: `out_of_stock` when nothing is on hand, otherwise `low_stock` when on hand is below the threshold (the two exclude each other), then `backordered` when sales wait and `incoming` when a delivery is on its way. The catalog list asks `GET /api/inventory/availability` for the stock-tracking items of the page it shows (at most one page, within the endpoint's limit of 100), so the figures and the list come from the same request cycle. Dashboard figures arrive with slice 13.
+
+
+- **Scope.** Items get `sku` and `track_stock` (products only; a service never holds stock). Inventory is its own module and talks to Sales only through the registry and lifecycle effects.
+- **Physical stock is a ledger.** An append-only, tenant-owned `stock movements` table: item, quantity change, the before and after quantity, reason (opening count, adjustment, receipt, delivery, return), the related transaction line or goods receipt, who and when. On hand never goes below zero. Everything that changes an item's stock first locks that item's row; several items are locked in id order.
+- **Unmet demand is a backorder, not negative stock.** Per transaction line: ordered, delivered at completion, backordered, and later fulfillments (each with quantity, who and when). States: waiting for stock, partially fulfilled, ready to fulfill, fulfilled, cancelled.
+- **Drafts only warn.** Adding a catalog item shows on hand, available, incoming and the expected shortage; nothing is reserved, and the backend never refuses a line for stock.
+- **Completion decides.** Under the item locks, the available quantity is delivered at once (a delivery movement; this business hands products over at the visit) and the shortage becomes a backorder. Separate deliveries for all sales are not built, but the per-line quantities leave room for them.
+- **Reopen and cancel undo the effect.** Delivered units come back through a return movement, open backorders are cancelled, and a backorder already fulfilled later is returned too. The original movements are never changed or deleted: the history shows the delivery and the later return. Reopen and cancel of an invoiced transaction stay vetoed by Invoicing, so this applies only before invoicing.
+- **Invoicing is separate from fulfillment.** A completed transaction is invoiced in full, backordered units included; the invoice (and later its PDF) may say that units are still backordered. An "invoice only fulfilled items" mode may come later.
+- **Incoming stock and receipt.** Incoming stock is recorded separately: item, quantity, expected date, supplier, reference, who and when. A goods receipt is confirmed by a person and turns incoming into on hand through a receipt movement. A receipt never fulfills a backorder by itself: the backlog proposes an oldest-first allocation, and a person confirms it (who and when are recorded).
+- **Separate states.** Low stock (below a per-item threshold), out of stock, backordered and incoming are different states, and an item can be in several at once.
+
+### Discounts
+
+Discounts are ordered layers applied one after the other, never added together: base catalog price, then the temporary catalog discount, then the customer's permanent discount (a manual line discount, if added, is one more explicit layer). Each layer stays visible and auditable on the line and on the invoice. **Rounding (decided):** each percentage layer produces a unit price rounded half-up to the currency's two decimals (whole öre for SEK) BEFORE the next layer is applied, in exact `Decimal` arithmetic; the printed steps are the values actually used (100.00, -15% = 85.00, -10% = 76.50). The final unit price then goes through the existing line calculation unchanged: per-line half-up net and VAT, totals as sums of stored line amounts. VAT rounding is not changed by the discount work.
+
+**As built (slices 6-8).** `app/core/discounts.py` answers which percentages apply (the item's discount active on the transaction date, the billing customer's permanent one); `app/modules/sales/pricing.py` `discounted_unit_price` does the arithmetic, and `discount_constraints()` (sales models, reused by invoice lines) repeats it as a CHECK: a line has either no list price and no percentages, or `unit_price_ex_vat = round(round(list * (100 - catalog) / 100, 2) * (100 - customer) / 100, 2)`. Pricing happens when a catalog line is added without a typed price, when its item changes, and when the draft's billing customer or date changes (`_reprice_catalog_lines`, in the same database transaction as the header change, each changed line versioned and recorded). A typed price clears the layers. Invoice creation copies the three columns and issuing re-verifies them with the other copied values. Item discounts: owners/admins, the item row is locked while a period is checked for overlap, `ON DELETE CASCADE` with the item. The customer discount needs owner/admin only when it is set or changed (an employee may still edit the customer).
+
+### Service lines (as built, slice 9)
+
+A service line is a transaction line with `kind = 'service'`: a catalog item of type service, a subject, a performed time, an optional performer and notes. The subject is polymorphic (`subject_type`, `subject_id`) but never free: `subject_type` must be a registry key whose entity is flagged `service_subject` (customers in core, horses from the Equine module), and `app/core/subjects.py` resolves it with the organization id before saving (not found and inactive are 422, a foreign id behaves as not found). Sales therefore stores no `horse_id`; a new domain module becomes a subject by setting the flag and adding an entry to the frontend's `SUBJECT_KINDS`. Polymorphic references have no foreign key, so a reference guard registered by Sales refuses deleting a subject that a service line names. `performed_at` is an instant; the form sends local time without an offset and the backend interprets it in the organization's zone (`org_time.as_instant`). Pricing is the catalog path (layers included). Invoices snapshot the service in `invoice_lines.service` (schema 1: instant, local text, performer name, subject type and label, notes) so an issued invoice does not change when the horse is renamed. Reporting and the dashboard read the same columns later.
+
+**Line rules (owner decision 2026-10-09).** A line's kind is fixed when it is added. Catalog and service lines take description, unit, price and VAT from the item, when added and when changed (`_refuse_catalog_values`); the only way to change their price is the line discount. Ad-hoc lines are the only typed ones. `priced_by_hand` therefore now marks ad-hoc lines (and older catalog lines whose price was typed before this rule).
+
+**Line discount (as built, 2026-10-08).** The "manual line discount" layer: `line_discount_percent` (0 < x < 100) applied last, rounded, in `discounted_unit_price` and in the CHECK (`round(round(round(list * (100 - catalog) / 100, 2) * (100 - customer) / 100, 2) * (100 - line) / 100, 2)`). `priced_by_hand` marks a typed price (ad-hoc or overridden): it never carries catalog or customer layers (CHECK), the typed price becomes `list_unit_price` when a line discount is set, and header repricing skips it. Reads include `price_before_line_discount` so the editor never applies the discount twice.
+
+### Seller profile and document language (as built, slice 10)
+
+`organizations` gains nullable `phone`, `email`, `website`, `bankgiro`, `plusgiro`, `iban`, `bic`, `payment_terms_days` (0-365), `approved_for_f_tax` (NULL: not stated) and `document_language` ('sv' / 'en'; NULL: English). The platform rule for profiles holds: shapes of international standards only (IBAN, BIC), Swedish giro numbers as typed, nothing about whether a number is assigned. `ISSUER_SNAPSHOT_SCHEMA = 2` (the customer snapshot stays at 1): the issuer snapshot copies the profile, these fields and the document language, so the PDF of an issued invoice is decided by the invoice alone. Payment terms only fill in a missing due date at invoice creation; a draft's due date can still be changed by hand.
+
+### Invoice PDF template 2 (as built, slice 11)
+
+The PDF is still built from the stored invoice alone (`build.py` reads `InvoiceRead`), rendered outside any lock and frozen on first download; a stored artifact is never re-rendered, so every PDF that existed before slice 11 stays template 1 byte for byte. Template 2 reads the issuer snapshot's `document_language` (schema 2; absent means English) and picks the words from `pdf/labels.py` and the decimal separator (only the separator character changes; digits are the stored ones). `PdfDocument` gained `language`, `delivery_dates` (the distinct dates of the source transactions), `payment` (only when a way to pay is stored; reference = the invoice number), `approved_for_f_tax`, `issuer_footer`, and `PdfLine.notes` (discount steps and the service snapshot, already worded): all part of `source_sha256`. Swedish requirements check (ML 2023:200 ch. 17 § 24) against what is printed: date of issue, unique number, seller VAT number, seller and buyer names and addresses (and the buyer's VAT number when stored), quantity and nature, delivery date, unit price excl. VAT and discounts, VAT rate, taxable amount per rate, VAT amount; plus F-skatt and the registration number. Not yet: VAT in SEK for a foreign-currency invoice, exemption or reverse-charge wording for 0 %, the registered office of a limited company (TODO).
+
+### Dashboard (as built, slice 13)
+
+No core endpoint aggregates across modules (core may not import them). Each module answers for its own figures: Sales (`/api/transactions/summary`: drafts, completed this month with gross per currency, service lines this month), Invoicing (`/api/invoices/summary`: completed transactions on no invoice with their gross per currency, draft invoices, issued this month, issued past the due date) and Inventory (`/api/inventory/summary`: active stock-tracking products by state, open backorders, open incoming deliveries). The page reads the three in parallel. "This month" is from the first of the organization's current month to its today (`organization_today`). `CurrencyAmount` / `CountAndAmounts` (app/schemas/money.py) carry sums per currency.
+
+### Payments (as built, recorded by hand)
+
+`invoice_payments` belongs to Invoicing: amount (NUMERIC(12,2), the invoice's currency), `paid_on`, method, reference, note, `created_by`, and `reverses_payment_id` for a reversal (a CHECK ties the sign to it; a partial unique index lets a payment be reversed once). The table is append-only (trigger with the organization-deletion escape). Paid = the sum of an invoice's rows; payment state (unpaid / partially paid / paid) is computed when read, never stored, so it cannot disagree with the rows. Recording and reversing lock the invoice row (`FOR UPDATE`; the issued invoice itself is never updated) and refuse more than is outstanding, a future date, or a draft. Rows are stamped with the application clock so the list keeps the order they were recorded. The history records `payment_recorded` / `payment_reversed` on the invoice. Not built: bank file import, automatic matching, reminders.
+
+A **refund** (money paid back) is a row with a negative amount that reverses nothing; a reversal has the opposite sign of the row it cancels (the CHECK only says "not zero", since it cannot read the other row; the service sets the sign). A refund is never more than paid − owed, and a payment that was paid back cannot be reversed before its refund (paid would go below zero). The history records `refund_recorded`.
+
+### Credit notes (as built)
+
+Credit notes belong to Invoicing: `credit_notes` (the invoice, series and number from the invoice's own counter, credit date, reason, currency, the customer snapshot copied from the invoice, a fresh issuer snapshot with who credited it as "our reference", positive net / VAT / gross), `credit_note_lines` (an invoice line, a quantity, the line's own unit price and VAT rate, amounts, `returned_to_stock`) and `credit_note_vat_rows`. All three (and `credit_note_pdfs`) are append-only through one trigger function with the organization-deletion escape; a credit note is complete when created, so there is no draft state. Creating one locks the invoice row (`FOR UPDATE`), so two people can never together credit a line beyond its quantity; the last credit of a line takes exactly the rest of its net and VAT (so a line credited in parts sums to the line; that is why the line CHECK is "not negative" rather than `round(quantity * price)`).
+
+What the customer **owes** is gross − credited (`payments.owed_expression()`); paid, outstanding, the payment state, `refund_due_amount`, list filters and the dashboard use it. `credit_status` (partly_credited / credited) is computed when read, never stored. The issued invoice itself is never changed.
+
+**Returned to stock** goes through two named core hooks (`registry.add_hook` / `call_hooks`), so Invoicing never imports Inventory: `stock.returnable(db, organization_id, transaction_line_ids)` answers how much of each delivered stock-tracking line can still come back (delivered + fulfilled later − returned by credit notes since that delivery), and `stock.return(db, ctx, transaction_line_id=, quantity=, note=)` records a `return` movement. The quantities are checked before anything is written; a line without stock tracking ignores the tick (and stores `returned_to_stock = false`). Backorders of a credited line are left as they are (a person cancels or fulfils them).
+
+**Return cases** (`invoice_returns`, `invoice_return_lines`, `invoice_return_events`) are the work before a credit note, kept apart from it: a case has a state (requested → goods_received → approved → credited, or rejected with a reason; CHECKs tie `rejection_reason` and `credit_note_id` to their states), a reason, a follow-up date and a log. Every step locks the case row and checks the state it comes from. "Goods received" returns the ticked lines to stock through the same `stock.returnable` / `stock.return` hooks (checked before writing). A credit note with `return_id` locks the case, requires `approved`, and closes it as `credited` in its own database transaction, so a case can never be credited twice or credited while not approved. Cases are not append-only (their state moves); the log is never edited by the application.
+
+The credit note PDF is the invoice template with a `PdfCredit` block (template 7): "Kreditfaktura" / "Credit note", the credited invoice's number and date, the reason, negative figures (a minus sign added to the stored strings; no arithmetic), no payment section. Frozen per template version in `credit_note_pdfs`, exactly like invoice PDFs; the BFF passes `/api/invoices/credit-notes/{id}/pdf` through as a PDF and accepts the `credit-note-N.pdf` filename.
+
+### Invoice PDF: the current template at all times (owner decision 2026-10-08)
+
+This replaces "one frozen PDF per invoice, served forever". `invoice_pdfs` is unique per (organization, invoice, template version). A download looks for the artifact of the current `TEMPLATE_VERSION`; if there is none it renders one from the stored invoice (outside any lock, as before) and stores it with `ON CONFLICT DO NOTHING`, then serves the stored winner. Artifacts are still never changed or deleted (trigger), so every PDF ever served stays available as history, and all of them carry the same `source_sha256` when the invoice content is the same. Template 3 uses one layout for every language; missing information is left out.
+
+### Organization creation limit (owner decision 2026-10-12, replaces the ownership limit of 2026-10-08)
+
+`users.max_owned_organizations` (the column keeps its historical name) is how many organizations the account may **create**. Only the operator gives it: `bootstrap-user` sets 1 (0 with `--no-org-creation`), `set-owned-limit` any number, `grant-org-creation`/`revoke-org-creation` set it to one more than / exactly what the account has created. Every other account, in particular one made by an invitation, has 0 (the column default).
+
+It counts the organizations the account created that still exist: rows in `organization_creation_requests`, which `create_organization` now writes for every creation (a random key when the client sent no `Idempotency-Key`) and which are deleted with their organization. The check runs in `create_organization` under the user-row lock, after the idempotent-replay lookup (a retry of a committed creation still gets its organization even after the limit was lowered).
+
+Owning an organization that already exists is **not** limited and does not use the allowance: an owner invitation, a promotion to owner and an ownership transfer always work for an account that may create nothing. The former backend checks (`ensure_can_own_another`) and the database trigger `organization_users_owner_limit` were removed (migration `e1a3c5e7b902`, which also changed the default to 0, kept every existing limit and recorded earlier keyless creations from their `organization_created` security event). `GET /api/me/user` reports `created_organizations`, `max_owned_organizations` and `can_create_organizations`; the organization switcher shows "Created X / Y".
+
+### Recent authentication
+
+Leaving, transferring ownership and deleting an organization require recent authentication: a short-lived proof that the user re-authenticated (by password today). Destructive actions are not tied to passwords, so a future SSO or passkey user re-authenticates in their own way. Changing your password is an account (user) setting, not an organization setting.
+
+**As built (slice 4).** `app/core/reauth.py` `confirm_recent_authentication(db, user, password, source)` is the one check: in session mode the password is verified like a password change (throttled per user with `password_change_max_failures` over `reauth_failure` events, bounded by the Argon2 admission, every failure recorded and committed); the development identity is exempt. The proof travels with each request (`password` in the body), so nothing long-lived is created. The membership/organization endpoints check it first (after tenant resolution, so a non-member still gets 404), then decide authority from freshly locked memberships: `transfer_ownership` makes the target an owner and the actor an admin in one transaction (the owner count never drops); `delete_organization` (`app/core/organization_deletion.py`) locks the organization row and the memberships, requires an owner and the exact name, sets `app.deleting_organization` for the transaction and deletes every table in `TABLES_IN_DELETE_ORDER` (custom-field definitions dependents first), then the organization; security events are kept (the platform's log) and an `organization_deleted` event is written. The invoice, document, PDF and history triggers allow a DELETE only for rows of the organization named in that setting.
 
 ---
 
@@ -1644,3 +1802,129 @@ atomic publish alone survives); the verifier's real `CREATE TABLE` probe and its
 * There is no bulk session-revocation command; after a compromise (as opposed to a failure) a restore brings back the sessions of the backup moment.
 * The pre-migration backup is a documented contract, not code; D5 proves the orchestration.
 * One new static-test count changed: the CI test that pins the number of artifact uploads now expects five (the drill workflow's failure log, under the same rules).
+
+## Invoicing by delivery (approved and built 2026-10-11)
+
+Asked by the owner on 2026-10-11 ("implement this so we are following the standard"). It replaces the decision of
+2026-10-08 that a whole order, backordered units included, goes on one invoice.
+
+### The rule
+
+**Invoice what has been delivered.** An order line's *invoiceable quantity* is what was handed over to the customer and
+is not yet on an invoice:
+
+- a stock-tracking line: delivered at completion + delivered later (Inventory's `delivered + fulfilled_later`) minus
+  what is already on invoices;
+- every other line (a service, a charge, an ad-hoc line, an item that does not track stock): its whole quantity once the
+  order is completed (a service is "delivered" when it is performed).
+
+The rest is *backordered*: it is invoiced when it is delivered, on a later invoice. One order can therefore be on
+several invoices, one per delivery. Counter sales are unchanged: paid in full now (an advance payment), the receipt
+lists what is to be delivered later.
+
+### What the invoice says
+
+Each invoice line charges the delivered quantity, priced like the order line (same unit price and discount layers;
+net = round(quantity × unit price, 2), per line, half-up, as always). A line with units still to come also stores, as
+a snapshot taken when the draft is built, the ordered quantity and what is still backordered, and the PDF prints under
+it: "Ordered 7 · Delivered 2 · Backordered 5" / "Beställt 7 · Levererat 2 · Restnoterat 5" (template 11). Because each
+partial line is rounded on its own, the invoices of one order can differ from the order's own total by an öre; this is
+inherent to invoicing by delivery and is what other systems do.
+
+### Data model (Invoicing's own tables; one migration)
+
+- `invoice_transactions`: the unique "an order is on one invoice" key is dropped; an order may be on several invoices,
+  and at most one of them a draft (partial unique index on drafts, via a `status` copy kept in step by the existing
+  issue path).
+- `invoice_lines`: the unique "a line is invoiced once" key is dropped; new `ordered_quantity` and
+  `backordered_quantity` (snapshots, `backordered_quantity >= 0`, `quantity + backordered_quantity <= ordered_quantity`
+  allowing for earlier invoices).
+- Over-invoicing is refused under the order's row lock (as today) by comparing with Inventory's delivered figures
+  through a core hook (`stock.delivered`; Invoicing never imports Inventory). Database backstop: a trigger refusing an
+  invoice line whose source line's invoiced total would exceed the ordered quantity (both tables are Invoicing's and
+  Sales'; delivery figures stay Inventory's).
+
+### Flows
+
+- **Invoice** on an order: invoices the delivered part (onto the customer's open draft, as today). Nothing delivered
+  yet: the order is completed and waits; no empty draft is made.
+- **Deliver** (backorders, later): the delivered units become invoiceable. See decision 1.
+- **Ready to invoice** (dashboard card, New invoice page): every completed order with an invoiceable quantity.
+- **Orders list**: Not invoiced, Partly invoiced (something is invoiced, the rest waits for delivery), Invoice draft,
+  Invoiced.
+- **Reopen / cancel**: refused while the order is on any invoice (unchanged).
+- **Credit notes and returns**: per invoice line, unchanged; the stock that can go back is capped per order line across
+  all of its invoice lines.
+- **Existing data**: issued invoices stay exactly as they are (they charged backordered units in advance; those lines
+  count as fully invoiced, so a later delivery creates nothing new to invoice). A draft made before the change is
+  checked when it is issued and refused with a clear message if it charges more than was delivered (delete it and
+  invoice the order again).
+
+### Slices
+
+1. Invoicing reads delivered quantities (hook) and invoices them; data model + migration + backstop; tenant isolation,
+   concurrency (deliver vs invoice, two invoices at once) and over-invoicing tests.
+2. Later deliveries become invoiceable; Ready to invoice; orders list "Partly invoiced".
+3. PDF template 11 (ordered / delivered / backordered under a partial line); invoice page shows the same.
+4. Credit notes and returns across several invoice lines of one order line.
+
+### Decisions (owner, 2026-10-11)
+
+1. **Later deliveries go onto the customer's open draft invoice automatically** (or a new draft), exactly like Invoice
+   on an order. The draft is still reviewed and issued by a person.
+2. **No fixed rule for partial deliveries: the person chooses per order, when it happens.** When an order is invoiced
+   and something is not delivered, a warning asks:
+   - **Invoice what is delivered now** (2 now, the 5 when they are delivered), or
+   - **Wait until everything is delivered** (nothing is invoiced yet; when the last units are delivered, the whole
+     order goes onto the open draft).
+   The choice is kept per order by Invoicing (a hold on the order, never a Sales status) and can be changed while
+   nothing of the order is invoiced yet.
+
+### As built (slices 1 and 2)
+
+- `app/modules/invoicing/delivery.py` decides what may be invoiced now (`parts`): Inventory's delivered figure through
+  the core hook `stock.delivered` (untracked lines: their whole quantity), less what is on invoices, nothing for an
+  order with a hold until it is delivered in full. A whole line is copied verbatim; a part is priced with
+  `sales.pricing.calculate_line` (per line, half-up).
+- `invoice_transactions.completes_order` (taken when the draft is built) says whether the invoice completes its order,
+  so the order's state (none / waiting / draft / partly / invoiced) is read from Invoicing's own tables only.
+- Issuing re-checks each line against its order line (price columns, `ordered_quantity`, amounts for its quantity),
+  that it charges no more than was delivered (`more_than_delivered`), the hold, and `completes_order`.
+- `POST /api/invoices/for-order` answers `409 partial_delivery` (with the lines) the first time an order that is not
+  delivered in full is invoiced; `partial: true` invoices the delivered part (and ends a hold). `POST /api/invoices/holds`
+  and `DELETE /api/invoices/holds/{id}` set and end "wait until everything is delivered".
+- Deliver (`POST /api/inventory/items/{id}/allocation`) locks the sales concerned before the item (the order every
+  writer of a sale uses), commits, then calls the core hook `stock.delivered_later`; Invoicing puts the units onto the
+  customer's open draft for orders invoiced by delivery (already on an invoice) or waiting and now complete, when the
+  person may make invoices. Locking the sale makes Invoice and Deliver serialize: the draft always ends with every
+  delivered unit (natural race and gated twin in `test_invoices_concurrency.py`).
+- Ready to invoice (dashboard, New invoice page) lists completed orders on no draft with something delivered and not
+  invoiced, worth what would be invoiced now. shortcut: decided in Python over the candidates (orders not invoiced in
+  full) and paged after; move the delivered figures into SQL if the backlog grows to many thousands.
+- Database backstop: trigger `invoice_lines_within_order` (never more of an order line, over all invoices, than its
+  quantity; it locks the order line, so two invoicers serialize).
+
+### As built (slices 3 and 4)
+
+- PDF template 11: a line whose stored `ordered_quantity` differs from its quantity prints "Ordered 7 · Backordered 5"
+  ("Beställt 7 · Restnoterat 5") under its description, from the stored snapshot; nothing is computed.
+- Credit notes work per invoice line as before. Stock returns stay capped per ORDER line by Inventory (`stock.returnable`,
+  everything handed over less what came back), and an invoice line shows at most what is left to credit of it.
+
+
+## Background jobs (2026-10-15)
+
+PostgreSQL is the queue (Procrastinate 3.10.0, pinned; its schema is vendored in migration `a1c3e5f7b9d2` so the migration never changes when the library is upgraded; an upgrade is a new migration). Business code imports only `app.core.jobs`: `enqueue(db, task, queue=..., args=...)` calls the library's stored function `procrastinate_defer_jobs_v1` through the CALLER'S SQLAlchemy session, so a job exists exactly when the business change that asked for it was committed. The worker (`python -m app.worker`, same backend image, `deploy/coolify/worker.yml`) is the only importer of the library; it is stateless and any number can run. Queues: `maintenance`, `pdf`, `bulk`, `email`.
+
+- **Delivery is at-least-once.** A worker that dies after its effect but before the queue hears of it gets the job delivered again. An effect that must not repeat (money, stock, a sent message) is guarded by `jobs.once(db, key)`, a unique row in `job_effects` inserted in the SAME transaction as the effect.
+- **A dead worker's jobs are not recovered by the library by itself.** The periodic job `maintenance.recover_stalled_jobs` (every 5 minutes) gives the running jobs of a worker that stopped reporting (`WORKER_STALLED_SECONDS`, 60) back to the queue. Without a worker running, nothing recovers them.
+- Jobs carry ids only, never documents or secrets; a job queries through tenant-scoped statements with the organization id from its own arguments.
+- Periodic jobs: nightly `maintenance.purge` (what `admin purge` does by hand) and `maintenance.remove_old_jobs` (finished jobs older than a week).
+- Windows development note: the library's async driver needs the selector event loop; `app.worker.__main__` selects it. Production (Linux) is unaffected. Signal handling is skipped on Windows.
+- Proof (`backend/tests/test_job_queue.py`, real commits, real worker processes): commit gives change and job, rollback gives neither; a worker in another process runs a job; a worker killed after its effect, then recovery and redelivery, ends with one effect and a finished job; fault injection removed each guarantee in turn and the tests failed.
+
+## Implementation notes: scheduling (2026-10-16)
+
+`app/modules/scheduling` is a generic module (appointments), like Sales: it imports core only and meets other records through the registry. An appointment stores its customer with a composite foreign key (same organization, as horses do) and the records it is about as rows of `appointment_subjects` (any number, at most 50: a stable books one session for many horses), each a polymorphic (type, id) pair validated by `core.subjects` (a horse is just a registered service subject); a reference guard stops deleting a record an appointment is about. The practitioner is a member (owner, admin or employee) stored by user id. Times are `timestamptz` instants; the API requires an offset, and the frontend (`lib/calendar.ts`) turns the ORGANIZATION's wall clock (never the browser's) into instants and back, so everyone sees the same hours. A listing needs a window (at most 62 days: a month view with its leading and trailing weeks) and returns at most 1000 rows. Clashes are a presentation rule (same person, overlapping times); the server does not refuse a double booking.
+
+**The horse illustration of the journal (2026-10-15).** `frontend/public/diagrams/horse-v2.svg` is the drawing from the Wikimedia Commons file `Pferd Anatomie.svg` (https://commons.wikimedia.org/wiki/File:Pferd_Anatomie.svg): marked *Public domain* there and credited to "sora.chatgpt.com", i.e. made with an AI image tool, so its status rests on Commons' reading that such output has no copyright; the labels, leader lines and background of the original are removed. It is a stallion. Entries store the illustration version they were drawn on (`diagram_version`, 1 = the first simple line drawing in `HorseDiagram.tsx`, 2 = this engraving) and marks are fractions of the picture, so replacing the picture is a new version and never moves an existing mark. The right side is the same picture mirrored. The owner decides whether this provenance is acceptable for a commercial product or whether a licensed illustration is wanted (another artist's work, such as an anatomical painting found online, may not be copied without that artist's licence).

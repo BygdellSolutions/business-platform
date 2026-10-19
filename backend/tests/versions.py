@@ -1,4 +1,4 @@
-"""Test client helpers for Sales optimistic concurrency (see app/modules/sales/versioning.py).
+"""Test client helpers for Sales optimistic concurrency (see app/core/versioning.py).
 
 The Sales mutations now REQUIRE an `If-Match` version. Most older tests are about something
 else (amounts, snapshots, isolation, lifecycle rules) and must keep testing that, so
@@ -16,6 +16,8 @@ _MUTATION = re.compile(
     rf"^/api/transactions/(?P<tx>{_UUID})(?:/(?P<action>complete|reopen|cancel)|/lines/(?P<line>{_UUID}))?$"
 )
 
+_ITEM = re.compile(rf"^/api/items/(?P<item>{_UUID})$")
+
 
 class FreshVersionClient(TestClient):
     def request(self, method, url, **kwargs):  # type: ignore[override]
@@ -27,6 +29,12 @@ class FreshVersionClient(TestClient):
         return super().request(method, url, **kwargs)
 
     def _current_token(self, method: str, path: str, headers: dict) -> str | None:
+        item = _ITEM.match(path)
+        if item is not None:
+            if method != "PATCH":
+                return None
+            read = super().request("GET", path, headers=headers)
+            return f'"{read.json()["version"]}"' if read.status_code == 200 else '"1"'
         found = _MUTATION.match(path)
         if found is None:
             return None

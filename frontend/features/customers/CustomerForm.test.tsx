@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { OrgScope } from "@/components/shell/org-context";
 import { CustomerForm } from "@/features/customers/CustomerForm";
 import { networkError, normalizeError, type ApiResult } from "@/lib/api/errors";
+import type { PercentString } from "@/lib/decimal";
 import type { Customer } from "@/lib/api/types";
 
 const router = { push: vi.fn(), refresh: vi.fn() };
@@ -20,13 +21,17 @@ const mocked = vi.mocked(apiFetch);
 function customer(overrides: Partial<Customer> = {}): Customer {
   return {
     id: "11111111-1111-4111-8111-111111111111",
+    number: 1,
     customer_type: "person",
+    default_discount_percent: null,
     name: "Anna Andersson",
     email: "anna@example.test",
     phone: null,
     active: true,
     created_at: "2026-10-01T10:00:00Z",
     updated_at: "2026-10-01T10:00:00Z",
+    created_by: null,
+    updated_by: null,
     ...EMPTY_PROFILE,
     ...overrides,
   };
@@ -34,10 +39,10 @@ function customer(overrides: Partial<Customer> = {}): Customer {
 const ok = <T,>(data: T, status = 200): ApiResult<T> => ({ ok: true, status, data });
 const fail = <T,>(status: number, body: unknown): ApiResult<T> => ({ ok: false, error: normalizeError(status, body) });
 
-function mount(orgId: string, existing?: Customer) {
+function mount(orgId: string, existing?: Customer, canSetDiscount = false) {
   return render(
     <OrgScope orgId={orgId}>
-      <CustomerForm customer={existing} />
+      <CustomerForm customer={existing} canSetDiscount={canSetDiscount} />
     </OrgScope>,
   );
 }
@@ -361,5 +366,26 @@ describe("organization scope", () => {
     const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
     expect(() => render(<CustomerForm />)).toThrow("useOrgId must be used inside <OrgScope>");
     quiet.mockRestore();
+  });
+});
+
+describe("the permanent discount", () => {
+  it("an owner or admin sets it, and only a change is sent", async () => {
+    mocked.mockResolvedValue(ok(customer({ default_discount_percent: "10.00" as PercentString })));
+    mount(A, customer(), true);
+    await userEvent.type(screen.getByLabelText("Default discount %"), "10");
+    await userEvent.click(screen.getByTestId("submit"));
+    expect(mocked).toHaveBeenCalledWith(A, `/customers/${customer().id}`, { method: "PATCH", body: { default_discount_percent: "10" } });
+  });
+
+  it("is shown, but cannot be changed, by anyone else; their edits never send it", async () => {
+    mocked.mockResolvedValue(ok(customer({ name: "Renamed", default_discount_percent: "10.00" as PercentString })));
+    mount(A, customer({ default_discount_percent: "10.00" as PercentString }));
+    expect(screen.queryByLabelText("Default discount %")).toBeNull();
+    expect(screen.getByTestId("discount-read-only")).toHaveTextContent("Default discount: 10.00 %");
+    await userEvent.clear(screen.getByLabelText("Name"));
+    await userEvent.type(screen.getByLabelText("Name"), "Renamed");
+    await userEvent.click(screen.getByTestId("submit"));
+    expect(mocked.mock.calls[0][2]).toEqual({ method: "PATCH", body: { name: "Renamed" } });
   });
 });

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { useOrgId } from "@/components/shell/org-context";
-import { Button } from "@/components/ui/Button";
+import { Button, ButtonIcon, ICONS } from "@/components/ui/Button";
 import { Notice } from "@/components/ui/Notice";
 import { apiDownloadPdf, type DownloadedFile } from "@/lib/api/client";
 import type { ApiError } from "@/lib/api/errors";
@@ -68,7 +68,7 @@ function saveFile(file: DownloadedFile) {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
-export function DownloadPdf({ invoice }: { invoice: Pick<Invoice, "id" | "status"> }) {
+export function DownloadPdf({ invoice, path, label = "Download PDF", tonal = false }: { invoice: Pick<Invoice, "id" | "status">; path?: string; label?: string; /** The invoice's own action row: drawn like the buttons beside it. */ tonal?: boolean }) {
   const orgId = useOrgId();
   const [preparing, setPreparing] = useState(false);
   const [failure, setFailure] = useState<PdfFailureText | null>(null);
@@ -89,7 +89,7 @@ export function DownloadPdf({ invoice }: { invoice: Pick<Invoice, "id" | "status
     setFailure(null);
     setDone(null);
     try {
-      const result = await apiDownloadPdf(orgId, `/invoices/${invoice.id}/pdf`, controller.signal);
+      const result = await apiDownloadPdf(orgId, path ?? `/invoices/${invoice.id}/pdf`, controller.signal);
       if (controller.signal.aborted) return;
       if (result.ok) {
         saveFile(result.data);
@@ -108,8 +108,9 @@ export function DownloadPdf({ invoice }: { invoice: Pick<Invoice, "id" | "status
   return (
     <section aria-label="PDF" data-testid="pdf" className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="button" disabled={preparing} aria-busy={preparing} onClick={() => void download()} data-testid="download-pdf">
-          {preparing ? "Preparing PDF…" : failure ? "Try again" : "Download PDF"}
+        <Button type="button" variant={tonal ? "tonal" : undefined} disabled={preparing} aria-busy={preparing} onClick={() => void download()} data-testid="download-pdf">
+          {tonal && <ButtonIcon path={ICONS.download} />}
+          {preparing ? "Preparing PDF…" : failure ? "Try again" : label}
         </Button>
         {done && (
           <span role="status" data-testid="pdf-done" className="text-sm text-zinc-600 dark:text-zinc-400">

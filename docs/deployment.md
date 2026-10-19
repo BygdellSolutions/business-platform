@@ -122,7 +122,7 @@ one-shot job of the backend image, configured like the backend (the command load
 variables as the backend service, with `DATABASE_URL` the app role):
 
 ```text
-python -m app.scripts.admin bootstrap-user --email owner@example.com --name "Ada Owner"
+python -m app.scripts.admin bootstrap-user --email owner@example.com   # the person enters their own name and password
 ```
 
 * It creates the user **without a password** (and allowed to create organizations; `--no-org-creation` to disable) and prints a **single-use link**
@@ -134,7 +134,7 @@ python -m app.scripts.admin bootstrap-user --email owner@example.com --name "Ada
   terminal/exec session, not as a scheduled or logged job, and do not paste it into tickets or chat. Whether the platform's terminal or job
   runner persists a command's output is a **D5 item**.
 * Lost or expired: `python -m app.scripts.admin reissue-setup-link --email owner@example.com` (earlier links stop working).
-* Other operator commands: `disable-user`, `enable-user`, `grant-org-creation`, `revoke-org-creation`, and `purge` (expired sessions,
+* Other operator commands: `reset-mfa --email ...` (a person lost both their authenticator and their recovery codes: removes the second factor and ends their sessions; they sign in with the password and enrol again), `revoke-all-sessions --yes-end-all-sessions` (EMERGENCY, after a restore or an incident: ends every session of every user at once), `disable-user`, `enable-user`, `set-owned-limit`, `grant-org-creation`, `revoke-org-creation`, and `purge` (expired sessions,
   used or expired setup tokens, old security events; **scheduling it is a deployment task, not yet done**).
 * The first owner then creates the organization in the application.
 

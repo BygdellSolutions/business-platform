@@ -23,10 +23,10 @@ afterEach(() => {
 const picker = () => within(screen.getByTestId("picker-billing_customer_id"));
 const dateInput = () => screen.getByLabelText("Date") as HTMLInputElement;
 
-function mount(orgId = ORG_A) {
+function mount(orgId = ORG_A, today = "2026-10-03") {
   return render(
     <OrgScope orgId={orgId}>
-      <TransactionCreateForm />
+      <TransactionCreateForm today={today} />
     </OrgScope>,
   );
 }
@@ -37,9 +37,9 @@ async function chooseCustomer(name: RegExp) {
 }
 
 describe("creating a transaction", () => {
-  it("is prefilled with the browser's local calendar date, as a plain YYYY-MM-DD", () => {
-    mount();
-    expect(dateInput()).toHaveValue("2026-10-03");
+  it("is prefilled with the organization's date from the server, not the browser's", () => {
+    mount(ORG_A, "2026-10-04"); // the browser says 3 Oct 23:30; in the organization's zone it is already the 4th
+    expect(dateInput()).toHaveValue("2026-10-04");
   });
 
   it("creates the draft with the customer's id and the date only, then opens it and refreshes the router cache", async () => {
@@ -148,7 +148,7 @@ describe("creating a transaction", () => {
 
     rerender(
       <OrgScope orgId={ORG_B}>
-        <TransactionCreateForm />
+        <TransactionCreateForm today="2026-10-03" />
       </OrgScope>,
     );
 

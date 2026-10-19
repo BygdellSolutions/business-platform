@@ -30,6 +30,9 @@ const nextConfig: NextConfig = {
   output: "standalone",
   // No "X-Powered-By: Next.js" header.
   poweredByHeader: false,
+  // The proxy buffers a request body up to this size (10 MB by default, and the rest is silently cut). A horse's document is at most
+  // 10 MB, about 13.4 MB as base64 in JSON; the route handler enforces the real limit for each path (see the BFF).
+  experimental: { proxyClientMaxBodySize: "15mb" },
   async headers() {
     return [
       { source: "/:path*", headers: BASELINE_HEADERS },

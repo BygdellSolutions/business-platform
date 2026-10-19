@@ -58,5 +58,5 @@ export const TEXT = {
   unconfirmed: "We could not confirm whether that worked. The latest state is being checked; nothing is assumed.",
   verified: "Checked: the invoice is as shown below.",
   headerChanged: "The invoice was changed elsewhere. Your edits were not saved.",
-  sourceChanged: "A source transaction no longer matches this draft, so it cannot be issued. Delete the draft and create a new invoice.",
+  sourceChanged: "A source order no longer matches this draft, so it cannot be issued. Delete the draft and create a new invoice.",
 } as const;

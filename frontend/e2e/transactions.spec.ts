@@ -4,7 +4,6 @@ import { BACKEND_URL } from "./env";
 import {
   addLine,
   bffUrl,
-  browserToday,
   createCustomer,
   createItem,
   createTransaction,
@@ -14,6 +13,7 @@ import {
   lifecycle,
   openAddLine,
   ORG_A,
+  organizationToday,
   pick,
   picker,
   setActive,
@@ -22,6 +22,9 @@ import {
   testRow,
   unique,
   withRequiredTransactionField,
+  createCompletedTransaction,
+  createInvoiceApi,
+  issueInvoiceApi,
 } from "./support";
 
 /**
@@ -58,7 +61,6 @@ async function addAdHoc(page: Page, values: { description: string; unit: string;
   await openAddLine(page);
   await page.getByLabel("Ad-hoc line").check();
   await page.getByLabel("Description", { exact: true }).fill(values.description);
-  await page.getByLabel("Unit", { exact: true }).fill(values.unit);
   await quantity(page).fill(values.quantity);
   await page.getByLabel("Unit price excluding VAT", { exact: true }).fill(values.price);
   await page.getByLabel("VAT rate (%)", { exact: true }).fill(values.vat);
@@ -71,8 +73,8 @@ test.describe("creating a transaction", () => {
     const customer = await createCustomer(context, ORG_A.id, unique("Create Billing"));
 
     await page.goto(`${list}/new`);
-    const today = await browserToday(page);
-    await expect(page.getByLabel("Date")).toHaveValue(today); // the browser's local date, prefilled
+    const today = await organizationToday(context, ORG_A.id);
+    await expect(page.getByLabel("Date")).toHaveValue(today); // the organization's date, prefilled
     await pick(page, "billing_customer_id", customer.name);
     await page.getByTestId("submit").click();
 
@@ -171,7 +173,6 @@ test.describe("lines from the catalog", () => {
     expect(JSON.parse((await request).postData() ?? "")).toEqual({ item_id: item.id, quantity: "2.5" }); // nothing else
     const row = rowFor(page, item.name);
     await expect(row).toHaveCount(1);
-    await expect(cell(row, "line-unit")).toHaveText("hour");
     await expect(cell(row, "line-quantity")).toHaveText("2.500");
     await expect(cell(row, "line-price")).toHaveText("100.00");
     await expect(cell(row, "line-vat-rate")).toHaveText("25.00");
@@ -194,13 +195,12 @@ test.describe("lines from the catalog", () => {
 
     // The catalog changes afterwards.
     const renamed = `${name} renamed`;
-    const edit = await context.request.patch(bffUrl(ORG_A.id, `/items/${item.id}`), { data: { name: renamed, price_ex_vat: "200.00", vat_rate: "6", unit: "visit" } });
+    const edit = await context.request.patch(bffUrl(ORG_A.id, `/items/${item.id}`), { data: { name: renamed, price_ex_vat: "200.00", vat_rate: "6", unit: "visit" }, headers: { "if-match": '"1"' } });
     expect(edit.status()).toBe(200);
     await page.reload();
 
     const old = rows(page).first();
     await expect(cell(old, "line-description")).toHaveText(name); // not the new name
-    await expect(cell(old, "line-unit")).toHaveText("hour");
     await expect(cell(old, "line-price")).toHaveText("100.00");
     await expect(cell(old, "line-vat-rate")).toHaveText("25.00");
 
@@ -302,7 +302,6 @@ test.describe("ad-hoc lines and exact decimals", () => {
       await openAddLine(page);
       await page.getByLabel("Ad-hoc line").check();
       await page.getByLabel("Description", { exact: true }).fill("Exact");
-      await page.getByLabel("Unit", { exact: true }).fill("u");
       await quantity(page).fill(value.qty);
       await page.getByLabel("Unit price excluding VAT", { exact: true }).fill(value.price);
       await page.getByLabel("VAT rate (%)", { exact: true }).fill(value.vat);
@@ -353,13 +352,12 @@ test.describe("ad-hoc lines and exact decimals", () => {
     await page.getByLabel("Ad-hoc line").check();
     await quantity(page).fill("1");
     await page.getByLabel("Unit price excluding VAT", { exact: true }).fill("10");
-    await page.getByLabel("VAT rate (%)", { exact: true }).fill("101"); // above 100; description and unit left empty
+    await page.getByLabel("VAT rate (%)", { exact: true }).fill("101"); // above 100; description left empty
 
     await page.getByTestId("submit-line").click();
 
     await expect(page.getByTestId("error-vat_rate")).toBeVisible();
     await expect(page.getByTestId("error-description")).toBeVisible();
-    await expect(page.getByTestId("error-unit")).toBeVisible();
     await expect(page.getByLabel("VAT rate (%)", { exact: true })).toHaveValue("101");
     expect(testRow(`select count(*) from transaction_lines where transaction_id = ${sql(transaction.id)}`)).toBe("0");
   });
@@ -426,7 +424,7 @@ test.describe("totals belong to the server", () => {
 });
 
 test.describe("editing lines", () => {
-  test("an override changes the line only: the catalog item is untouched, and no item id is sent", async ({ page, context }) => {
+  test("a catalog line is edited like it is added: its catalog values stay, its discount changes, the item is untouched", async ({ page, context }) => {
     const { url } = await newDraft(context);
     const item = await createItem(context, ORG_A.id, { name: unique("Override Item"), unit: "hour", price_ex_vat: "100.00", vat_rate: "25", description: "Catalog text" });
     const itemBefore = testRow(`select name || '|' || unit || '|' || price_ex_vat::text || '|' || vat_rate::text || '|' || description || '|' || updated_at::text from items where id = ${sql(item.id)}`);
@@ -434,20 +432,18 @@ test.describe("editing lines", () => {
     await addCatalogLine(page, item.name, "1");
 
     await rows(page).first().getByTestId("edit-line").click();
-    await page.getByLabel("Description", { exact: true }).fill("Custom wording");
-    await page.getByLabel("Unit price excluding VAT", { exact: true }).fill("150.00");
-    await page.getByLabel("VAT rate (%)", { exact: true }).fill("6");
+    for (const label of ["Description", "Unit price excluding VAT", "VAT rate (%)"]) {
+      await expect(page.getByTestId("line-editor").getByLabel(label, { exact: true })).toHaveCount(0); // taken from the catalog
+    }
+    await page.getByLabel("Discount % (optional)").fill("10");
     const request = page.waitForRequest((r) => r.method() === "PATCH" && r.url().includes("/lines/"));
     await page.getByTestId("save-line").click();
 
     const sent = JSON.parse((await request).postData() ?? "");
-    expect(sent).toEqual({ description: "Custom wording", unit_price_ex_vat: "150.00", vat_rate: "6" });
-    expect("item_id" in sent).toBe(false);
+    expect(sent).toEqual({ line_discount_percent: "10" });
     const row = rows(page).first();
-    await expect(cell(row, "line-description")).toHaveText("Custom wording");
-    await expect(cell(row, "line-price")).toHaveText("150.00");
-    await expect(cell(row, "line-net")).toHaveText("150.00");
-    await expect(cell(row, "line-vat")).toHaveText("9.00");
+    await expect(cell(row, "line-price")).toContainText("90.00");
+    await expect(cell(row, "line-net")).toHaveText("90.00");
     expect(testRow(`select name || '|' || unit || '|' || price_ex_vat::text || '|' || vat_rate::text || '|' || description || '|' || updated_at::text from items where id = ${sql(item.id)}`)).toBe(itemBefore);
     await expect(row.getByRole("link", { name: "Catalog item" })).toBeVisible(); // still linked to its item
   });
@@ -540,7 +536,7 @@ test.describe("lifecycle", () => {
     const { transaction, url } = await newDraft(context);
     await page.goto(url);
 
-    await page.getByTestId("complete").click();
+    await page.getByTestId("invoice-order").click();
 
     await expect(page.getByTestId("editor-notice")).toContainText("at least one line");
     await expect(page.getByTestId("tx-status")).toHaveText("Draft");
@@ -550,12 +546,13 @@ test.describe("lifecycle", () => {
   test("complete → read-only → reopen → editable → cancel (after confirming) → final", async ({ page, context }) => {
     const { transaction, url } = await newDraft(context);
     await addLine(context, ORG_A.id, transaction.id, { description: "Billable", unit: "u", quantity: "1", unit_price_ex_vat: "10.00", vat_rate: "25" });
+    // Completed without an invoice (the API's own step): "Invoice" would put it on a draft invoice, which reserves it
+    // and so rightly refuses the reopen below.
+    await lifecycle(context, ORG_A.id, transaction.id, "complete");
     await page.goto(url);
-
-    await page.getByTestId("complete").click();
     await expect(page.getByTestId("tx-status")).toHaveText("Completed");
     expect(testRow(`select status from transactions where id = ${sql(transaction.id)}`)).toBe("completed");
-    for (const id of ["edit-header", "add-line", "edit-line", "delete-line", "complete"]) await expect(page.getByTestId(id)).toHaveCount(0);
+    for (const id of ["edit-header", "add-line", "edit-line", "delete-line", "invoice-order", "pay-now"]) await expect(page.getByTestId(id)).toHaveCount(0);
     await expect(page.getByRole("textbox")).toHaveCount(0);
     await expect(rows(page)).toHaveCount(1); // still shown in full, read-only
     await page.reload();
@@ -585,7 +582,7 @@ test.describe("lifecycle", () => {
     const edit = await context.request.patch(bffUrl(ORG_A.id, `/transactions/${transaction.id}/lines/${line.id}`), { data: { quantity: "9" }, headers: ifMatch(1) });
     const header = await context.request.patch(bffUrl(ORG_A.id, `/transactions/${transaction.id}`), { data: { transaction_date: "2030-01-01" }, headers: ifMatch(done.header_version) });
     expect([edit.status(), header.status()]).toEqual([409, 409]);
-    expect(await edit.text()).toContain("completed transaction cannot be");
+    expect(await edit.text()).toContain("completed order cannot be");
 
     const cancelled = await lifecycle(context, ORG_A.id, transaction.id, "cancel");
     const reopen = await context.request.post(bffUrl(ORG_A.id, `/transactions/${transaction.id}/reopen`), { headers: ifMatch(cancelled.version) });
@@ -599,18 +596,32 @@ test.describe("lifecycle", () => {
 
     await withRequiredTransactionField(context, ORG_A.id, async (label) => {
       await page.goto(url);
-      await page.getByTestId("complete").click();
+      await page.getByTestId("invoice-order").click();
 
       await expect(page.getByTestId("editor-notice")).toContainText("blocked");
-      await expect(page.getByTestId("editor-problems")).toContainText(`Transaction · ${label}`);
+      await expect(page.getByTestId("editor-problems")).toContainText(`Order · ${label}`);
       await expect(page.getByTestId("tx-status")).toHaveText("Draft");
       expect(testRow(`select status from transactions where id = ${sql(transaction.id)}`)).toBe("draft");
     });
 
     // With the field switched off again the same transaction completes.
     await page.reload();
-    await page.getByTestId("complete").click();
+    await page.getByTestId("invoice-order").click();
     await expect(page.getByTestId("tx-status")).toHaveText("Completed");
+  });
+
+  test("the list says where a completed order stands with invoicing: not invoiced, invoice draft, invoiced", async ({ page, context }) => {
+    const customer = await createCustomer(context, ORG_A.id, unique("Invoicing State"));
+    await createCompletedTransaction(context, ORG_A.id, customer.id, { date: "2026-10-01" });
+    const drafted = await createCompletedTransaction(context, ORG_A.id, customer.id, { date: "2026-10-02" });
+    const issued = await createCompletedTransaction(context, ORG_A.id, customer.id, { date: "2026-10-03" });
+    await createInvoiceApi(context, ORG_A.id, [drafted.id]);
+    await issueInvoiceApi(context, ORG_A.id, await createInvoiceApi(context, ORG_A.id, [issued.id]));
+
+    await page.goto(`${list}?billing_customer_id=${customer.id}&sort=date&dir=asc`);
+    await expect(page.getByTestId("tx-status")).toHaveText(["Not invoiced", "Invoice draft", "Invoiced"]);
+    // Only how it reads: the order's own status is still "completed".
+    for (const row of await page.getByTestId("tx-status").all()) await expect(row).toHaveAttribute("data-status", "completed");
   });
 
   test("the list shows status and totals, filters by status, customer and date, and pages", async ({ page, context }) => {
@@ -626,18 +637,18 @@ test.describe("lifecycle", () => {
     const base = `${list}?billing_customer_id=${customer.id}`;
     await page.goto(base);
     await expect(page.getByTestId("transaction-row")).toHaveCount(3);
-    expect(await page.getByTestId("transaction-link").allTextContents()).toEqual(["2026-10-15", "2026-06-15", "2026-01-15"]); // newest first
+    expect(await page.getByTestId("transaction-date").allTextContents()).toEqual(["2026-10-15", "2026-06-15", "2026-01-15"]); // newest first
     const middle = page.getByTestId("transaction-row").nth(1);
     await expect(middle.getByTestId("transaction-net")).toHaveText("20.00");
     await expect(middle.getByTestId("transaction-gross")).toHaveText("25.00");
-    await expect(middle.getByTestId("tx-status")).toHaveText("Completed");
+    await expect(middle.getByTestId("tx-status")).toHaveText("Not invoiced"); // completed, on no invoice yet
 
     await page.goto(`${base}&status=draft`);
     await expect(page.getByTestId("transaction-row")).toHaveCount(1);
-    await expect(page.getByTestId("transaction-link")).toHaveText(old.transaction_date);
+    await expect(page.getByTestId("transaction-date")).toHaveText(old.transaction_date);
     await page.goto(`${base}&date_from=2026-06-01&date_to=2026-07-01`);
     await expect(page.getByTestId("transaction-row")).toHaveCount(1);
-    await expect(page.getByTestId("transaction-link")).toHaveText("2026-06-15");
+    await expect(page.getByTestId("transaction-date")).toHaveText("2026-06-15");
     await page.goto(`${base}&status=cancelled&date_from=2026-06-01`);
     await expect(page.getByTestId("transaction-row")).toHaveCount(1);
     await expect(page.getByTestId("picker-billing_customer_id").getByRole("combobox")).toHaveValue(customer.name);
@@ -672,7 +683,7 @@ test.describe("lifecycle", () => {
 
   test("the main navigation reaches Transactions", async ({ page }) => {
     await page.goto(`/o/${ORG_A.id}`);
-    await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Transactions" }).click();
+    await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Orders" }).click();
     await expect(page).toHaveURL(list);
     await page.getByTestId("new-transaction").click();
     await expect(page).toHaveURL(`${list}/new`);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 
 import { useOrgId } from "@/components/shell/org-context";
 import { Notice } from "@/components/ui/Notice";
@@ -31,7 +31,7 @@ import type { Invoice } from "@/lib/api/types";
  * A tab that becomes visible again refreshes itself, but never while an editor is open or a change
  * is running, so it cannot overwrite what the user is typing.
  */
-export function InvoiceView({ invoice, canMutate }: { invoice: Invoice; canMutate: boolean }) {
+export function InvoiceView({ invoice, canMutate, timeZone = null, actions = null }: { invoice: Invoice; canMutate: boolean; timeZone?: string | null; actions?: ReactNode }) {
   const orgId = useOrgId();
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
@@ -205,11 +205,15 @@ export function InvoiceView({ invoice, canMutate }: { invoice: Invoice; canMutat
             <p>{notice.text}</p>
           </Notice>
         )}
-        <DownloadPdf invoice={invoice} />
+        {/* The buttons that open pop-up windows (email, payments) sit beside "Download PDF". */}
+        <div className="flex flex-wrap items-start gap-3">
+          <DownloadPdf invoice={invoice} tonal />
+          {actions}
+        </div>
         <InvoiceActions />
         <DraftHeader />
         <div className={refreshing ? "opacity-50" : ""} aria-busy={refreshing} data-updating={refreshing || undefined}>
-          <InvoiceDocument invoice={invoice} orgId={orgId} />
+          <InvoiceDocument invoice={invoice} timeZone={timeZone} />
         </div>
       </div>
     </InvoiceContext.Provider>

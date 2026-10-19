@@ -12,6 +12,8 @@ import time
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from app.core import metrics
+
 # The id is a correlation key, not a secret and not an authority. Its format is fixed and bounded so that nothing a
 # client sends can put control characters or a huge string into a log: anything else is replaced.
 REQUEST_ID_HEADER = "x-request-id"
@@ -65,6 +67,7 @@ class RequestContextMiddleware:
         try:
             await self.app(scope, receive, send_with_headers)
         finally:
+            metrics.observe_request(status, (time.perf_counter() - started) * 1000)
             _access.log(
                 logging.ERROR if status >= 500 else logging.INFO,
                 "request",

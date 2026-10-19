@@ -20,6 +20,8 @@ from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal, localcontext
 from typing import Protocol
 
+from app.core.prices import discounted_unit_price  # noqa: F401  (re-exported: the catalog shares the rule)
+
 CENT = Decimal("0.01")
 HUNDRED = Decimal(100)
 # Same maximum as a unit price; larger line amounts are rejected, never truncated.

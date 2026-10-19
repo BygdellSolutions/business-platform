@@ -126,97 +126,29 @@ def test_editing_a_line_never_edits_the_item(client: TestClient, sales):
     assert client.get(f"/api/items/{sales.item.id}", headers=sales.headers).json() == before
 
 
-def test_two_lines_using_the_same_item_may_carry_different_overrides(
-    client: TestClient, db_session: Session, sales
-):
-    item_url = f"/api/items/{sales.item.id}"
-    item_before = client.get(item_url, headers=sales.headers).json()
-    item_row_before = db_session.execute(
-        text("select name, unit, price_ex_vat::text, vat_rate::text, active, updated_at::text from items where id = :id"),
-        {"id": str(sales.item.id)},
-    ).one()
+def test_a_catalog_line_takes_every_value_from_its_item_and_refuses_typed_ones(client: TestClient, db_session: Session, sales):
     item_id = str(sales.item.id)
+    for override in ({"description": "Massage, injured horse"}, {"unit": "hour"}, {"unit_price_ex_vat": "1000.00"}, {"vat_rate": "12.00"}):
+        response = client.post("/api/transactions", json={"billing_customer_id": str(sales.billing.id), "lines": [{"item_id": item_id, "quantity": "1", **override}]}, headers=sales.headers)
+        assert response.status_code == 422, override
+        assert response.json()["detail"][0]["type"] == "line.catalog_value"
 
-    tx = create_tx(
-        client,
-        sales,
-        [
-            {"item_id": item_id, "quantity": "1"},  # pure defaults
-            {  # overrides description, price and VAT
-                "item_id": item_id,
-                "quantity": "2",
-                "description": "Massage, injured horse",
-                "unit_price_ex_vat": "1000.00",
-                "vat_rate": "12.00",
-            },
-            {  # overrides unit and price only
-                "item_id": item_id,
-                "quantity": "1.5",
-                "unit": "hour",
-                "unit_price_ex_vat": "600.00",
-            },
-            {  # overrides everything
-                "item_id": item_id,
-                "quantity": "1",
-                "description": "Goodwill",
-                "unit": "visit",
-                "unit_price_ex_vat": "0.00",
-                "vat_rate": "0.00",
-            },
-        ],
-    )
-
-    default, injured, hourly, goodwill = tx["lines"]
-    assert [l["item_id"] for l in tx["lines"]] == [item_id] * 4
-
-    assert (default["description"], default["unit"], default["unit_price_ex_vat"], default["vat_rate"]) == (
-        "Horse massage", "session", "850.00", "25.00")
-    assert (default["net_amount"], default["vat_amount"], default["gross_amount"]) == ("850.00", "212.50", "1062.50")
-
-    assert (injured["description"], injured["unit"], injured["unit_price_ex_vat"], injured["vat_rate"]) == (
-        "Massage, injured horse", "session", "1000.00", "12.00")
-    assert (injured["net_amount"], injured["vat_amount"], injured["gross_amount"]) == ("2000.00", "240.00", "2240.00")
-
-    assert (hourly["description"], hourly["unit"], hourly["unit_price_ex_vat"], hourly["vat_rate"]) == (
-        "Horse massage", "hour", "600.00", "25.00")
-    assert (hourly["net_amount"], hourly["vat_amount"], hourly["gross_amount"]) == ("900.00", "225.00", "1125.00")
-
-    assert (goodwill["description"], goodwill["unit"], goodwill["unit_price_ex_vat"], goodwill["vat_rate"]) == (
-        "Goodwill", "visit", "0.00", "0.00")
-    assert (goodwill["net_amount"], goodwill["vat_amount"], goodwill["gross_amount"]) == ("0.00", "0.00", "0.00")
-
-    # The Item is exactly as it was: through the API and in the database row (updated_at too).
-    assert client.get(item_url, headers=sales.headers).json() == item_before
-    db_session.expire_all()
-    assert db_session.execute(
-        text("select name, unit, price_ex_vat::text, vat_rate::text, active, updated_at::text from items where id = :id"),
-        {"id": item_id},
-    ).one() == item_row_before
-
-    # The totals are the sums of those four different lines.
-    assert tx["totals"]["net_amount"] == "3750.00"
-    assert tx["totals"]["vat_amount"] == "677.50"
-    assert tx["totals"]["vat_breakdown"] == [
-        {"vat_rate": "0.00", "net_amount": "0.00", "vat_amount": "0.00"},
-        {"vat_rate": "12.00", "net_amount": "2000.00", "vat_amount": "240.00"},
-        {"vat_rate": "25.00", "net_amount": "1750.00", "vat_amount": "437.50"},
-    ]
+    tx = create_tx(client, sales, [{"item_id": item_id, "quantity": "1"}, {"item_id": item_id, "quantity": "2", "line_discount_percent": "10"}])
+    first, second = tx["lines"]
+    assert (first["description"], first["unit"], first["unit_price_ex_vat"], first["vat_rate"]) == ("Horse massage", "session", "850.00", "25.00")
+    assert (second["unit_price_ex_vat"], second["line_discount_percent"]) == ("765.00", "10.00")  # two lines of one item, each its own discount
 
 
-def test_overriding_one_line_later_leaves_the_other_lines_and_the_item_alone(
-    client: TestClient, sales
-):
+def test_discounting_one_line_later_leaves_the_other_lines_and_the_item_alone(client: TestClient, sales):
     tx = create_tx(client, sales, [{"item_id": str(sales.item.id), "quantity": "1"}] * 2)
     item_before = client.get(f"/api/items/{sales.item.id}", headers=sales.headers).json()
     first, second = tx["lines"]
 
-    client.patch(
-        f"/api/transactions/{tx['id']}/lines/{first['id']}",
-        json={"unit_price_ex_vat": "1.00", "vat_rate": "6.00", "description": "Override"},
-        headers=sales.headers,
-    )
+    refused = client.patch(f"/api/transactions/{tx['id']}/lines/{first['id']}", json={"unit_price_ex_vat": "1.00"}, headers=sales.headers)
+    client.patch(f"/api/transactions/{tx['id']}/lines/{first['id']}", json={"line_discount_percent": "50"}, headers=sales.headers)
 
     lines = client.get(f"/api/transactions/{tx['id']}", headers=sales.headers).json()["lines"]
-    assert (lines[0]["description"], lines[0]["unit_price_ex_vat"], lines[0]["vat_rate"]) == ("Override", "1.00", "6.00")
+    assert refused.status_code == 422
+    assert (lines[0]["unit_price_ex_vat"], lines[0]["line_discount_percent"]) == ("425.00", "50.00")
     assert lines[1] == second
     assert client.get(f"/api/items/{sales.item.id}", headers=sales.headers).json() == item_before

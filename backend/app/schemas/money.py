@@ -17,10 +17,11 @@ import re
 from decimal import Decimal
 from typing import Annotated, Any
 
-from pydantic import BeforeValidator, Field, PlainSerializer
+from pydantic import BaseModel, BeforeValidator, Field, PlainSerializer
 
 _MONEY_RE = re.compile(r"\d{1,10}(\.\d{1,2})?")  # NUMERIC(12,2): up to 10 integer digits
 _PERCENT_RE = re.compile(r"\d{1,3}(\.\d{1,2})?")  # NUMERIC(5,2): up to 3 integer digits
+_RATE_RE = re.compile(r"\d{1,6}(\.\d{1,6})?")  # NUMERIC(12,6): an exchange rate
 _QUANTITY_RE = re.compile(r"\d{1,9}(\.\d{1,3})?")  # NUMERIC(12,3): up to 9 integer digits
 
 _HINT = 'send it as a decimal string such as "19.99", not as a JSON number with decimals'
@@ -61,6 +62,13 @@ PercentIn = Annotated[
     Field(ge=0, le=100, max_digits=5, decimal_places=2, allow_inf_nan=False),
 ]
 
+# A discount: NUMERIC(5,2), strictly between 0 and 100 (0 is "no discount", which is null; 100 would be free).
+DiscountPercentIn = Annotated[
+    Decimal,
+    BeforeValidator(_strict_decimal_input(_PERCENT_RE)),
+    Field(gt=0, lt=100, max_digits=5, decimal_places=2, allow_inf_nan=False),
+]
+
 # NUMERIC(12,3), strictly positive (quantities of units, hours, kilograms, ...).
 QuantityIn = Annotated[
     Decimal,
@@ -68,6 +76,34 @@ QuantityIn = Annotated[
     Field(gt=0, max_digits=12, decimal_places=3, allow_inf_nan=False),
 ]
 
+# NUMERIC(12,3), >= 0: a stock count may find nothing on the shelf.
+CountIn = Annotated[
+    Decimal,
+    BeforeValidator(_strict_decimal_input(_QUANTITY_RE)),
+    Field(ge=0, max_digits=12, decimal_places=3, allow_inf_nan=False),
+]
+
+# NUMERIC(12,6), strictly positive: an exchange rate (units of one currency per unit of another).
+RateIn = Annotated[
+    Decimal,
+    BeforeValidator(_strict_decimal_input(_RATE_RE)),
+    Field(gt=0, max_digits=12, decimal_places=6, allow_inf_nan=False),
+]
+
 MoneyOut = Annotated[Decimal, _two_decimals_out]
 PercentOut = Annotated[Decimal, _two_decimals_out]
 QuantityOut = Annotated[Decimal, _three_decimals_out]
+RateOut = Annotated[Decimal, PlainSerializer(lambda value: f"{value:.6f}", return_type=str, when_used="json")]
+
+
+
+class CurrencyAmount(BaseModel):
+    """A sum in ONE currency. Summaries list one per currency; amounts in different currencies are never added."""
+
+    currency: str
+    amount: MoneyOut
+
+
+class CountAndAmounts(BaseModel):
+    count: int
+    amounts: list[CurrencyAmount]

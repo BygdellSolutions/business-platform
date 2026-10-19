@@ -4,11 +4,12 @@ import { Notice } from "@/components/ui/Notice";
 import { CreateOrganizationForm } from "@/features/organizations/CreateOrganizationForm";
 import { loginPath, requireCredential } from "@/lib/auth/credential";
 import { getCurrentUser } from "@/lib/orgs";
+import { SECONDARY_LINK } from "@/components/ui/Button";
 
 /**
- * Create an organization. Not under `/o/{id}`: there is no organization yet. Authentication identifies the user;
- * `can_create_organizations` (an account property set by an operator) decides whether the form is shown. Hiding
- * the form is a convenience: FastAPI refuses the request for any other account.
+ * Create an organization. Not under `/o/{id}`: there is no organization yet. Authentication identifies the user; the
+ * account's creation limit ("Created 1 / 1") decides whether the form is shown. Hiding the form is a
+ * convenience: FastAPI refuses the request when the limit is reached.
  */
 export default async function NewOrganizationPage() {
   const credential = await requireCredential();
@@ -18,18 +19,21 @@ export default async function NewOrganizationPage() {
 
   return (
     <main className="mx-auto flex max-w-xl flex-col gap-4 p-8">
-      <h1 className="text-2xl font-semibold">Create an organization</h1>
+      <h1 className="text-[28px] leading-tight font-semibold tracking-tight">Create an organization</h1>
       {current.user.can_create_organizations ? (
         <>
           <p className="text-sm text-zinc-500">You will be its owner. You can complete the business profile later in Settings.</p>
           <CreateOrganizationForm />
         </>
       ) : (
-        <Notice testId="creation-not-allowed">This account is not allowed to create organizations. Ask the person who runs this service.</Notice>
+        <Notice testId="creation-not-allowed">
+          This account has created {current.user.created_organizations} of the {current.user.max_owned_organizations} organization(s) it may create. Creating
+          another one needs a larger allowance: ask the person who runs this service.
+        </Notice>
       )}
       {/* A plain anchor: leaving this page is a full navigation, like every organization switch. */}
       {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-      <a href="/" className="text-sm underline">Back to your organizations</a>
+      <a href="/" className={`${SECONDARY_LINK} self-start`}>Back to your organizations</a>
     </main>
   );
 }

@@ -18,6 +18,7 @@ from enum import StrEnum
 from typing import Any
 
 from sqlalchemy import (
+    Boolean,
     BigInteger,
     LargeBinary,
     CheckConstraint,
@@ -38,10 +39,12 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.base import Base
-from app.models.mixins import TenantOwned
+from app.models.mixins import Authored, TenantOwned
+from app.modules.sales.models import discount_constraints
 
 DEFAULT_SERIES = "default"
-SNAPSHOT_SCHEMA = 1  # version of the customer/issuer snapshot structure
+SNAPSHOT_SCHEMA = 1  # version of the customer snapshot structure
+ISSUER_SNAPSHOT_SCHEMA = 5  # version of the issuer snapshot: 2 added contact, payment, F-tax and document language; 3 our reference; 4 the registered office; 5 the logo (id and hash)
 
 
 class InvoiceStatus(StrEnum):
@@ -49,7 +52,7 @@ class InvoiceStatus(StrEnum):
     ISSUED = "issued"  # numbered and frozen
 
 
-class Invoice(TenantOwned, Base):
+class Invoice(TenantOwned, Authored, Base):
     __tablename__ = "invoices"
     __table_args__ = (
         UniqueConstraint("organization_id", "id", name="uq_invoices_organization_id_id"),
@@ -104,6 +107,12 @@ class Invoice(TenantOwned, Base):
     invoice_date: Mapped[date] = mapped_column(Date)
     due_date: Mapped[date | None] = mapped_column(Date)
     description: Mapped[str | None] = mapped_column(String(2000))
+    # Why no VAT is charged, as the invoice states it (required to issue an invoice that has a 0 % VAT row).
+    vat_exemption_reason: Mapped[str | None] = mapped_column(String(255))
+    # An invoice in another currency states its VAT in SEK: the rate the seller used (SEK per 1 unit of the invoice currency, typed
+    # on the draft) and the result, calculated once when the invoice is issued and never again.
+    vat_exchange_rate: Mapped[Decimal | None] = mapped_column(Numeric(12, 6))
+    vat_amount_sek: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
     series: Mapped[str] = mapped_column(String(32), default=DEFAULT_SERIES, server_default=text("'default'"))
     number: Mapped[int | None] = mapped_column(BigInteger)
     number_text: Mapped[str | None] = mapped_column(String(64))
@@ -116,13 +125,14 @@ class Invoice(TenantOwned, Base):
 
 
 class InvoiceTransaction(TenantOwned, Base):
-    """A source transaction of an invoice. A row here IS the fact that the transaction is
-    reserved (draft invoice) or invoiced (issued invoice); Sales stores nothing about it."""
+    """A source transaction of an invoice. A row here IS the fact that (part of) the transaction is
+    reserved (draft invoice) or invoiced (issued invoice); Sales stores nothing about it. Invoicing by
+    delivery (2026-10-11): an order can be on several invoices, one per delivery; at most one of them is a
+    draft (checked under the order's row lock)."""
 
     __tablename__ = "invoice_transactions"
     __table_args__ = (
-        # The final guard against invoicing a transaction twice, even for two simultaneous creators.
-        UniqueConstraint("organization_id", "transaction_id", name="uq_invoice_transactions_source_once"),
+        Index("ix_invoice_transactions_organization_transaction", "organization_id", "transaction_id"),
         UniqueConstraint(
             "organization_id", "invoice_id", "transaction_id", name="uq_invoice_transactions_org_invoice_transaction"
         ),
@@ -155,19 +165,29 @@ class InvoiceTransaction(TenantOwned, Base):
     customer_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
     currency: Mapped[str] = mapped_column(String(3))
     transaction_date: Mapped[date] = mapped_column(Date)
+    # The order's number when the invoice was created (null: issued before orders had numbers).
+    transaction_number: Mapped[int | None] = mapped_column(BigInteger)
     # The transaction's version when it was reserved: issuing re-checks it (defense in depth).
     source_version: Mapped[int] = mapped_column(Integer)
     position: Mapped[int] = mapped_column(Integer)
     # Custom fields flagged for invoices, as they were (generic list; see snapshots.py).
     fields: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list, server_default=text("'[]'::jsonb"))
+    # Invoicing by delivery: with this invoice, every line of the order is invoiced in full (taken when the draft is
+    # built). An invoice from before invoicing by delivery always took the whole order.
+    completes_order: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
 
 
 class InvoiceLine(TenantOwned, Base):
-    """A copy of one Sales line: the same inputs and the three stored amounts, verbatim."""
+    """One Sales line, or the delivered part of it (invoicing by delivery, 2026-10-11): the same prices and
+    discount layers, the invoiced quantity, and the three amounts for that quantity. A whole line is copied
+    verbatim; a part is priced with the same rule (per line, half-up). The trigger `invoice_lines_within_order`
+    refuses more of a source line, over all invoices, than was ordered."""
 
     __tablename__ = "invoice_lines"
     __table_args__ = (
-        UniqueConstraint("organization_id", "source_line_id", name="uq_invoice_lines_source_line_once"),
+        Index("ix_invoice_lines_organization_source_line", "organization_id", "source_line_id"),
+        # Target of composite foreign keys (a credit note line credits a line of an invoice of the same organization).
+        UniqueConstraint("organization_id", "id", name="uq_invoice_lines_organization_id_id"),
         UniqueConstraint("organization_id", "invoice_id", "position", name="uq_invoice_lines_position"),
         ForeignKeyConstraint(
             ["organization_id", "invoice_id", "source_transaction_id"],
@@ -198,6 +218,13 @@ class InvoiceLine(TenantOwned, Base):
         CheckConstraint("vat_amount = round(net_amount * vat_rate / 100, 2)", name="ck_invoice_lines_vat_amount"),
         CheckConstraint("gross_amount = net_amount + vat_amount", name="ck_invoice_lines_gross_amount"),
         CheckConstraint("jsonb_typeof(fields) = 'array'", name="ck_invoice_lines_fields_array"),
+        CheckConstraint("service IS NULL OR jsonb_typeof(service) = 'object'", name="ck_invoice_lines_service_object"),
+        CheckConstraint("backordered_quantity >= 0", name="ck_invoice_lines_backordered_nonnegative"),
+        CheckConstraint(
+            "ordered_quantity IS NULL OR ordered_quantity >= quantity + backordered_quantity",
+            name="ck_invoice_lines_within_ordered",
+        ),
+        *discount_constraints("invoice_lines"),
     )
 
     invoice_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
@@ -208,11 +235,23 @@ class InvoiceLine(TenantOwned, Base):
     unit: Mapped[str] = mapped_column(String(32))
     quantity: Mapped[Decimal] = mapped_column(Numeric(12, 3))
     unit_price_ex_vat: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    # Discount layers (see discount_constraints): the price before discounts and the two percentages, copied when the
+    # line is priced from the catalog. NULL for ad-hoc lines and manually set prices.
+    list_unit_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    catalog_discount_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    customer_discount_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    line_discount_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
     vat_rate: Mapped[Decimal] = mapped_column(Numeric(5, 2))
     net_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     vat_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     gross_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     fields: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list, server_default=text("'[]'::jsonb"))
+    # For a service line: when, by whom and for whom, as shown at invoicing (a snapshot, never resolved again).
+    service: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))  # None is SQL NULL, not JSON null
+    # Snapshots taken when the draft is built (invoicing by delivery): the order line's quantity, and what of it was
+    # still waiting for delivery. NULL ordered_quantity: a line invoiced whole, before invoicing by delivery.
+    ordered_quantity: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+    backordered_quantity: Mapped[Decimal] = mapped_column(Numeric(12, 3), default=Decimal("0"), server_default=text("0"))
 
 
 class InvoiceVatRow(TenantOwned, Base):
@@ -256,9 +295,11 @@ class InvoiceCounter(Base):
 
 
 class InvoicePdf(TenantOwned, Base):
-    """The frozen PDF of an issued invoice: the bytes first served, stored once and served forever.
+    """A frozen PDF of an issued invoice, per template version: rendered once and never changed.
 
-    One per invoice. Never updated or deleted (a trigger refuses both) and only an ISSUED invoice can
+    One per invoice AND template version (owner decision 2026-10-08: the current template is used at all times). A
+    download serves the artifact of the current template, creating it on first need; artifacts of older templates stay
+    stored, unchanged, as history. Never updated or deleted (a trigger refuses both) and only an ISSUED invoice can
     have one. `source_sha256` is the hash of the canonical document the PDF was rendered from, so the
     artifact can always be checked against the immutable invoice; `renderer` and `template_version`
     say what produced it. The bytes live here (not in a file store) so they are backed up, restored and
@@ -267,7 +308,7 @@ class InvoicePdf(TenantOwned, Base):
 
     __tablename__ = "invoice_pdfs"
     __table_args__ = (
-        UniqueConstraint("organization_id", "invoice_id", name="uq_invoice_pdfs_one_per_invoice"),
+        UniqueConstraint("organization_id", "invoice_id", "template_version", name="uq_invoice_pdfs_one_per_template"),
         ForeignKeyConstraint(
             ["organization_id", "invoice_id"],
             ["invoices.organization_id", "invoices.id"],
@@ -296,3 +337,335 @@ def _frozen_artifact(mapper, connection, target) -> None:
     """Application-level guard (the database trigger is the one that cannot be bypassed): the ORM
     never changes or removes a stored PDF, so no code path can do it by accident."""
     raise ValueError("an invoice PDF is a frozen artifact and cannot be changed or deleted")
+
+
+class InvoiceEmail(TenantOwned, Authored, Base):
+    """One attempt to email an issued invoice to a customer: to whom, when, by whom, and what came of it.
+
+    A log, never an input: it holds no document text and no copy of the PDF, only the SHA-256 of the exact bytes that were attached,
+    so it can be checked against the stored invoice. `status` is what the mail provider said (`sent` delivered, `queued` it will
+    deliver, `failed` it did not; `error` is a short safe word, never the provider's text). A failed attempt is kept too: it counts
+    against the organization's daily limit and shows the person why nothing arrived.
+    """
+
+    __tablename__ = "invoice_emails"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "invoice_id"],
+            ["invoices.organization_id", "invoices.id"],
+            ondelete="RESTRICT",
+            name="fk_invoice_emails_invoice_same_organization",
+        ),
+        CheckConstraint("status IN ('sent', 'queued', 'failed')", name="ck_invoice_emails_status"),
+        CheckConstraint("pdf_sha256 ~ '^[0-9a-f]{64}$'", name="ck_invoice_emails_hash_shape"),
+        Index("ix_invoice_emails_invoice", "organization_id", "invoice_id", "created_at"),
+        Index("ix_invoice_emails_organization_created", "organization_id", "created_at"),
+    )
+
+    invoice_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    to_email: Mapped[str] = mapped_column(String(254))
+    reply_to: Mapped[str | None] = mapped_column(String(254))
+    sender_address: Mapped[str] = mapped_column(String(254))
+    subject: Mapped[str] = mapped_column(String(200))
+    note: Mapped[str | None] = mapped_column(String(2000))
+    pdf_sha256: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(10))
+    error: Mapped[str | None] = mapped_column(String(32))
+
+
+class ReceiptEmail(TenantOwned, Authored, Base):
+    """One attempt to email the receipt of an order paid at the counter: the same log as `InvoiceEmail`, for a receipt (which belongs to its order)."""
+
+    __tablename__ = "receipt_emails"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "transaction_id"],
+            ["transactions.organization_id", "transactions.id"],
+            ondelete="RESTRICT",
+            name="fk_receipt_emails_transaction_same_organization",
+        ),
+        CheckConstraint("status IN ('sent', 'queued', 'failed')", name="ck_receipt_emails_status"),
+        CheckConstraint("pdf_sha256 ~ '^[0-9a-f]{64}$'", name="ck_receipt_emails_hash_shape"),
+        Index("ix_receipt_emails_transaction", "organization_id", "transaction_id", "created_at"),
+        Index("ix_receipt_emails_organization_created", "organization_id", "created_at"),
+    )
+
+    transaction_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    to_email: Mapped[str] = mapped_column(String(254))
+    reply_to: Mapped[str | None] = mapped_column(String(254))
+    sender_address: Mapped[str] = mapped_column(String(254))
+    subject: Mapped[str] = mapped_column(String(200))
+    note: Mapped[str | None] = mapped_column(String(2000))
+    pdf_sha256: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(10))
+    error: Mapped[str | None] = mapped_column(String(32))
+
+
+PAYMENT_METHODS = ("bankgiro", "plusgiro", "bank_transfer", "swish", "card", "cash", "other")
+
+
+class InvoicePayment(TenantOwned, Base):
+    """A payment received for an ISSUED invoice, recorded by a person (no bank import yet).
+
+    Append-only (a trigger refuses UPDATE and DELETE, except while the organization is being deleted): a payment
+    recorded by mistake is cancelled by a REVERSAL, a row with the negative amount that names the payment it reverses
+    (each payment can be reversed once). What is paid is the sum of an invoice's rows; it never exceeds the invoice's
+    gross amount (checked under the invoice's row lock). Amounts are in the invoice's currency.
+    """
+
+    __tablename__ = "invoice_payments"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "id", name="uq_invoice_payments_organization_id_id"),
+        ForeignKeyConstraint(
+            ["organization_id", "invoice_id"], ["invoices.organization_id", "invoices.id"], ondelete="RESTRICT", name="fk_invoice_payments_invoice"
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "reverses_payment_id"],
+            ["invoice_payments.organization_id", "invoice_payments.id"],
+            ondelete="RESTRICT",
+            name="fk_invoice_payments_reverses",
+        ),
+        # A payment is positive and a refund (money paid back) negative; a reversal has the opposite sign of the row it
+        # cancels (the service sets it, since a CHECK cannot read the other row).
+        CheckConstraint("amount <> 0", name="ck_invoice_payments_amount_sign"),
+        CheckConstraint("method IN ('" + "', '".join(PAYMENT_METHODS) + "')", name="ck_invoice_payments_method"),
+        Index("uq_invoice_payments_reversed_once", "organization_id", "reverses_payment_id", unique=True, postgresql_where=text("reverses_payment_id IS NOT NULL")),
+        Index("ix_invoice_payments_invoice", "organization_id", "invoice_id"),
+    )
+
+    invoice_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    paid_on: Mapped[date] = mapped_column(Date)
+    method: Mapped[str] = mapped_column(String(16))
+    reference: Mapped[str | None] = mapped_column(String(255))
+    note: Mapped[str | None] = mapped_column(String(500))
+    reverses_payment_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
+
+
+
+class CreditNote(TenantOwned, Base):
+    """A credit note (kreditfaktura): cancels all or part of an ISSUED invoice. Created issued, never changed.
+
+    Numbered from the invoice's own series (the same counter, so a credit note and an invoice never share a number).
+    Its figures are POSITIVE amounts that are credited; documents print them as negatives. The parties are copies: the
+    customer as on the invoice, the seller as it is now (with who credited it as "our reference"). Rows of this table and
+    its children are never updated or deleted (a trigger refuses), except while the organization itself is deleted.
+    """
+
+    __tablename__ = "credit_notes"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "id", name="uq_credit_notes_organization_id_id"),
+        UniqueConstraint("organization_id", "series", "number", name="uq_credit_notes_organization_series_number"),
+        ForeignKeyConstraint(
+            ["organization_id", "invoice_id"], ["invoices.organization_id", "invoices.id"], ondelete="RESTRICT", name="fk_credit_notes_invoice"
+        ),
+        CheckConstraint("number >= 1", name="ck_credit_notes_number_positive"),
+        CheckConstraint("vat_exchange_rate IS NULL OR vat_exchange_rate > 0", name="ck_credit_notes_vat_exchange_rate_positive"),
+        CheckConstraint("length(btrim(reason)) > 0", name="ck_credit_notes_reason"),
+        CheckConstraint(
+            "net_amount > 0 AND vat_amount >= 0 AND gross_amount = net_amount + vat_amount", name="ck_credit_notes_totals"
+        ),
+        CheckConstraint(
+            "jsonb_typeof(customer_snapshot) = 'object' AND jsonb_typeof(issuer_snapshot) = 'object'", name="ck_credit_notes_snapshots"
+        ),
+        Index("ix_credit_notes_invoice", "organization_id", "invoice_id"),
+    )
+
+    invoice_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    series: Mapped[str] = mapped_column(String(32))
+    number: Mapped[int] = mapped_column(Integer)
+    number_text: Mapped[str] = mapped_column(String(64))
+    credit_date: Mapped[date] = mapped_column(Date)
+    reason: Mapped[str] = mapped_column(String(500))
+    currency: Mapped[str] = mapped_column(String(3))
+    customer_snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    issuer_snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    net_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    vat_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    gross_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    # On an invoice in another currency: the invoice's exchange rate and the VAT credited in SEK at that rate (frozen when the note is made).
+    vat_exchange_rate: Mapped[Decimal | None] = mapped_column(Numeric(12, 6))
+    vat_amount_sek: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    issued_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
+
+
+class CreditNoteLine(TenantOwned, Base):
+    """What is credited of one invoice line: a quantity at the invoice line's own unit price and VAT rate."""
+
+    __tablename__ = "credit_note_lines"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "credit_note_id"], ["credit_notes.organization_id", "credit_notes.id"], ondelete="CASCADE", name="fk_credit_note_lines_note"
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "invoice_line_id"], ["invoice_lines.organization_id", "invoice_lines.id"], ondelete="RESTRICT", name="fk_credit_note_lines_invoice_line"
+        ),
+        UniqueConstraint("organization_id", "credit_note_id", "invoice_line_id", name="uq_credit_note_lines_once_per_note"),
+        CheckConstraint("quantity > 0", name="ck_credit_note_lines_quantity_positive"),
+        CheckConstraint("unit_price_ex_vat >= 0", name="ck_credit_note_lines_price_nonnegative"),
+        # Not round(quantity * price): the last credit of a line takes exactly what is left of the line's amounts.
+        CheckConstraint("net_amount >= 0 AND vat_amount >= 0", name="ck_credit_note_lines_amounts_nonnegative"),
+        CheckConstraint("gross_amount = net_amount + vat_amount", name="ck_credit_note_lines_gross_amount"),
+        Index("ix_credit_note_lines_invoice_line", "organization_id", "invoice_line_id"),
+    )
+
+    credit_note_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    invoice_line_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    position: Mapped[int] = mapped_column(Integer)
+    description: Mapped[str] = mapped_column(String(255))
+    unit: Mapped[str] = mapped_column(String(32))
+    quantity: Mapped[Decimal] = mapped_column(Numeric(12, 3))
+    unit_price_ex_vat: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    vat_rate: Mapped[Decimal] = mapped_column(Numeric(5, 2))
+    net_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    vat_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    gross_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    # The person said the goods came back into stock (Inventory recorded a return movement, if it tracks the item).
+    returned_to_stock: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+
+
+class CreditNoteVatRow(TenantOwned, Base):
+    __tablename__ = "credit_note_vat_rows"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "credit_note_id"], ["credit_notes.organization_id", "credit_notes.id"], ondelete="CASCADE", name="fk_credit_note_vat_rows_note"
+        ),
+        UniqueConstraint("organization_id", "credit_note_id", "vat_rate", name="uq_credit_note_vat_rows_rate"),
+    )
+
+    credit_note_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    vat_rate: Mapped[Decimal] = mapped_column(Numeric(5, 2))
+    net_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    vat_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+
+
+class CreditNotePdf(TenantOwned, Base):
+    """A frozen PDF of a credit note, per template version, exactly like `InvoicePdf` (rendered on first download of
+    the current template, never changed or deleted; a trigger refuses both except while the organization is deleted)."""
+
+    __tablename__ = "credit_note_pdfs"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "credit_note_id", "template_version", name="uq_credit_note_pdfs_one_per_template"),
+        ForeignKeyConstraint(
+            ["organization_id", "credit_note_id"], ["credit_notes.organization_id", "credit_notes.id"], ondelete="RESTRICT", name="fk_credit_note_pdfs_note"
+        ),
+        CheckConstraint("byte_size > 0 AND byte_size = octet_length(content)", name="ck_credit_note_pdfs_byte_size"),
+        CheckConstraint("sha256 ~ '^[0-9a-f]{64}$' AND source_sha256 ~ '^[0-9a-f]{64}$'", name="ck_credit_note_pdfs_hash_shape"),
+        CheckConstraint("sha256 = encode(sha256(content), 'hex')", name="ck_credit_note_pdfs_sha256_matches"),
+        CheckConstraint("substring(content from 1 for 5) = decode('255044462d', 'hex')", name="ck_credit_note_pdfs_is_pdf"),
+        CheckConstraint("template_version >= 1 AND renderer <> ''", name="ck_credit_note_pdfs_provenance"),
+    )
+
+    credit_note_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    content: Mapped[bytes] = mapped_column(LargeBinary)
+    byte_size: Mapped[int] = mapped_column(Integer)
+    sha256: Mapped[str] = mapped_column(String(64))
+    renderer: Mapped[str] = mapped_column(String(255))
+    template_version: Mapped[int] = mapped_column(Integer)
+    source_sha256: Mapped[str] = mapped_column(String(64))
+
+
+class ReturnState(StrEnum):
+    REQUESTED = "requested"  # the customer asked to return something; nothing has come back yet
+    GOODS_RECEIVED = "goods_received"  # the goods are here (and, where ticked, back in stock)
+    APPROVED = "approved"  # to be credited: the next credit note made from the case closes it
+    REJECTED = "rejected"  # closed without a credit (a reason is required)
+    CREDITED = "credited"  # closed by its credit note
+
+
+OPEN_RETURN_STATES = (ReturnState.REQUESTED, ReturnState.GOODS_RECEIVED, ReturnState.APPROVED)
+
+
+class InvoiceReturn(TenantOwned, Base):
+    """A return case on an issued invoice: what the customer wants to send back, why, and when to follow it up.
+
+    Separate from credit notes: a case tracks the work (requested, goods received, approved or rejected) so nothing is
+    forgotten; the credit note is the accounting document, made when the case is approved, and it closes the case.
+    """
+
+    __tablename__ = "invoice_returns"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "id", name="uq_invoice_returns_organization_id_id"),
+        ForeignKeyConstraint(
+            ["organization_id", "invoice_id"], ["invoices.organization_id", "invoices.id"], ondelete="RESTRICT", name="fk_invoice_returns_invoice"
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "credit_note_id"], ["credit_notes.organization_id", "credit_notes.id"], ondelete="RESTRICT", name="fk_invoice_returns_credit_note"
+        ),
+        CheckConstraint("state IN ('requested', 'goods_received', 'approved', 'rejected', 'credited')", name="ck_invoice_returns_state"),
+        CheckConstraint("length(btrim(reason)) > 0", name="ck_invoice_returns_reason"),
+        CheckConstraint("(state = 'rejected') = (rejection_reason IS NOT NULL)", name="ck_invoice_returns_rejection"),
+        CheckConstraint("(state = 'credited') = (credit_note_id IS NOT NULL)", name="ck_invoice_returns_credit_note"),
+        Index("ix_invoice_returns_invoice", "organization_id", "invoice_id"),
+        Index("ix_invoice_returns_open", "organization_id", "follow_up_on", postgresql_where=text("state IN ('requested', 'goods_received', 'approved')")),
+    )
+
+    invoice_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    state: Mapped[str] = mapped_column(String(16), default=ReturnState.REQUESTED)
+    reason: Mapped[str] = mapped_column(String(500))
+    follow_up_on: Mapped[date] = mapped_column(Date)
+    rejection_reason: Mapped[str | None] = mapped_column(String(500))
+    credit_note_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
+
+
+class InvoiceReturnLine(TenantOwned, Base):
+    """A quantity of one invoice line the customer wants to return; `returned_to_stock` once the goods came back into stock."""
+
+    __tablename__ = "invoice_return_lines"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "return_id"], ["invoice_returns.organization_id", "invoice_returns.id"], ondelete="CASCADE", name="fk_invoice_return_lines_return"
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "invoice_line_id"], ["invoice_lines.organization_id", "invoice_lines.id"], ondelete="RESTRICT", name="fk_invoice_return_lines_line"
+        ),
+        UniqueConstraint("organization_id", "return_id", "invoice_line_id", name="uq_invoice_return_lines_once"),
+        CheckConstraint("quantity > 0", name="ck_invoice_return_lines_quantity_positive"),
+    )
+
+    return_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    invoice_line_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    quantity: Mapped[Decimal] = mapped_column(Numeric(12, 3))
+    returned_to_stock: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+
+
+class InvoiceReturnEvent(TenantOwned, Base):
+    """The case's log: every step and every note, who and when. Never changed (the history of the case)."""
+
+    __tablename__ = "invoice_return_events"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "return_id"], ["invoice_returns.organization_id", "invoice_returns.id"], ondelete="CASCADE", name="fk_invoice_return_events_return"
+        ),
+        CheckConstraint(
+            "kind IN ('opened', 'note', 'goods_received', 'approved', 'rejected', 'credited', 'follow_up')", name="ck_invoice_return_events_kind"
+        ),
+        Index("ix_invoice_return_events_return", "organization_id", "return_id", "created_at"),
+    )
+
+    return_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    kind: Mapped[str] = mapped_column(String(16))
+    note: Mapped[str | None] = mapped_column(String(2000))
+    created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
+
+
+class InvoiceHold(TenantOwned, Authored, Base):
+    """"Wait until everything is delivered" (owner, 2026-10-11): an order that is not invoiced in parts. Nothing of it
+    is invoiceable until every line is delivered in full; then the whole order is. Invoicing's own record: Sales has
+    no invoicing state. Removed when the person chooses to invoice the delivered part after all."""
+
+    __tablename__ = "invoice_holds"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "transaction_id", name="uq_invoice_holds_transaction"),
+        ForeignKeyConstraint(
+            ["organization_id", "transaction_id"],
+            ["transactions.organization_id", "transactions.id"],
+            ondelete="CASCADE",
+            name="fk_invoice_holds_transaction",
+        ),
+    )
+
+    transaction_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))

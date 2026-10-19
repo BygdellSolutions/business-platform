@@ -195,7 +195,7 @@ The first restore drill (section 9) must happen **before** relying on any of thi
 Never a destructive in-place restore over the live database as the normal path. Recover into a **new, separate** database, prove it, then switch.
 
 1. **Decide and contain.** Name the incident. If the cause is a compromise rather than a failure, decide first what a restore brings back:
-   it restores the sessions and credentials of the backup moment. (There is no bulk session-revocation command yet: tracked in TODO.md.)
+   it restores the sessions and credentials of the backup moment. AFTER the restored database is in service and BEFORE people are told to use it, end every restored session: `python -m app.scripts.admin revoke-all-sessions --yes-end-all-sessions` (one atomic statement; nobody is disabled; people sign in again with their passwords; one `sessions_revoked_by_operator` event records the count only). If credentials themselves may be compromised, also reissue setup links (`reissue-setup-link`) for the affected accounts.
 2. **Choose the backup:** the newest whose manifest and `verify_restore` result you trust; fetch dump and manifest from the off-host store
    and confirm the SHA-256 (the restore tool refuses a mismatch anyway).
 3. **Provision** a new database (new server, or a new database on a healthy server) named `..._restore[_tag]`, with the recovery environment's owner and

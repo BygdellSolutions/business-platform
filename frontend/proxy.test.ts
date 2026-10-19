@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { config, proxy } from "./proxy";
@@ -8,7 +9,7 @@ afterEach(() => vi.unstubAllEnvs());
 function hsts(env: Record<string, string | undefined>): string | null {
   for (const name of ["APP_ENV", "AUTH_MODE", "PUBLIC_ORIGIN"]) vi.stubEnv(name, undefined as unknown as string);
   for (const [name, value] of Object.entries(env)) if (value !== undefined) vi.stubEnv(name, value);
-  return proxy().headers.get("strict-transport-security");
+  return proxy(new NextRequest("http://localhost/login")).headers.get("strict-transport-security");
 }
 
 describe("HSTS: production over https only", () => {
@@ -32,6 +33,37 @@ describe("HSTS: production over https only", () => {
   it("decides per request from the runtime environment (the image is built once)", () => {
     expect(hsts({ APP_ENV: "production", AUTH_MODE: "session", PUBLIC_ORIGIN: "https://a.example.com" })).not.toBeNull();
     expect(hsts({ APP_ENV: "development", AUTH_MODE: "session", PUBLIC_ORIGIN: "http://localhost:3000" })).toBeNull();
+  });
+});
+
+describe("the public homepage", () => {
+  const home = (cookie?: string) => proxy(new NextRequest("http://localhost/", { headers: cookie ? { cookie } : {} }));
+
+  const dev = () => {
+    vi.stubEnv("APP_ENV", "development");
+    vi.stubEnv("AUTH_MODE", "dev");
+  };
+
+  it("is served to a visitor without a credential", () => {
+    dev();
+    expect(home().headers.get("location")).toBeNull();
+  });
+
+  it("sends a visitor with a credential into the app", () => {
+    dev();
+    expect(new URL(home("bp_dev_user=anna%40dev.test").headers.get("location")!).pathname).toBe("/organizations");
+  });
+
+  it("is shown to a signed-in visitor who asks for it with /?home", () => {
+    dev();
+    const request = new NextRequest("http://localhost/?home", { headers: { cookie: "bp_dev_user=anna%40dev.test" } });
+    expect(proxy(request).headers.get("location")).toBeNull();
+  });
+
+  it("redirects only the root", () => {
+    dev();
+    const response = proxy(new NextRequest("http://localhost/login", { headers: { cookie: "bp_dev_user=anna%40dev.test" } }));
+    expect(response.headers.get("location")).toBeNull();
   });
 });
 

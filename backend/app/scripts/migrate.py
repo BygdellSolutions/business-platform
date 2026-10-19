@@ -12,7 +12,9 @@ The web process never migrates, and neither does a worker: this is the only plac
      migrated it) or several revisions (a branched or tampered history);
   4. `alembic upgrade head` on that same session (never a downgrade);
   5. make the runtime role (RUNTIME_DB_ROLE) able to use everything the migrations created;
-  6. confirm the lock was held throughout, and exit 0.
+  6. only on a TEST database whose operator set RENUMBER_INVOICES to the confirmation phrase: renumber its issued
+     invoices from 1001 (`app.scripts.renumber_invoices`);
+  7. confirm the lock was held throughout, and exit 0.
 
 Any failure exits non-zero and nothing is swallowed. Output is one JSON line per event; no credential, URL or bound
 parameter is ever printed.
@@ -34,6 +36,7 @@ from sqlalchemy.engine import make_url
 
 from app.core import migration
 from app.core.logging_config import configure_logging, log
+from app.scripts import renumber_invoices as renumber
 
 EXIT_OK, EXIT_FAILED, EXIT_CONFIG, EXIT_LOCK_TIMEOUT, EXIT_REFUSED = 0, 1, 2, 3, 4
 DEFAULT_LOCK_TIMEOUT_SECONDS = 600
@@ -107,6 +110,9 @@ def run(argv: list[str] | None = None) -> int:
     if not url:
         log(logging.ERROR, "configuration_error", detail="MIGRATION_DATABASE_URL is not set")
         return EXIT_CONFIG
+    if settings.renumber_invoices and settings.renumber_invoices != renumber.CONFIRMATION:
+        log(logging.ERROR, "configuration_error", detail="RENUMBER_INVOICES is set but is not the confirmation phrase")
+        return EXIT_CONFIG
     if settings.app_env == "production" and not settings.runtime_db_role:
         log(logging.ERROR, "configuration_error", detail="RUNTIME_DB_ROLE is required in production")
         return EXIT_CONFIG
@@ -131,6 +137,10 @@ def run(argv: list[str] | None = None) -> int:
             connection.commit()
             if settings.runtime_db_role:
                 migration.reconcile_runtime_grants(connection, settings.runtime_db_role)
+                connection.commit()
+            if settings.renumber_invoices == renumber.CONFIRMATION:
+                # An operator step for a TEST database (see the module); still under the migration lock.
+                log(logging.INFO, "invoices_renumbered", **renumber.renumber_invoices(connection))
                 connection.commit()
             if not migration.advisory_lock_is_held(connection):
                 raise RuntimeError("the migration lock was lost while migrating")

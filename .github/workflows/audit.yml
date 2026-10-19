@@ -72,8 +72,9 @@ jobs:
         run: |
           docker build -t bp-audit-backend backend
           docker build -t bp-audit-frontend frontend
-      # exit-code "0" until the BASELINE has been reviewed (the first run reports base-image findings: Debian packages and the
-      # npm CLI that node:22-slim bundles). The full table is in the log; flip to "1" once the policy in docs/architecture.md is accepted.
+      # exit-code "1" since 2026-10-15: the baseline was reviewed (backend 0 findings; the frontend's npm CLI was removed from the
+      # runtime image and its perl-base upgraded), so a HIGH or CRITICAL finding WITH a fix now fails this scheduled run, which is
+      # the alert. Unfixed findings stay ignored. The full table is in the log.
       - name: Trivy, backend image (HIGH and CRITICAL with a fix available)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -81,7 +82,7 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           vuln-type: os,library
-          exit-code: "0"
+          exit-code: "1"
       - name: Trivy, frontend image (HIGH and CRITICAL with a fix available)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -89,4 +90,4 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           vuln-type: os,library
-          exit-code: "0"
+          exit-code: "1"

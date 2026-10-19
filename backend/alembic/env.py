@@ -39,11 +39,18 @@ def load_target_metadata():
     from app.modules.sales import models as sales_models  # noqa: F401  (Sales models)
     from app.modules.custom_fields import models as custom_field_models  # noqa: F401  (custom fields)
     from app.modules.invoicing import models as invoicing_models  # noqa: F401  (Invoicing models)
+    from app.modules.inventory import models as inventory_models  # noqa: F401  (Inventory models)
+    from app.modules.scheduling import models as scheduling_models  # noqa: F401  (Scheduling models)
 
     return Base.metadata
 
 
 target_metadata = load_target_metadata()
+
+
+def include_object(obj, name, type_, reflected, compare_to) -> bool:
+    """The queue library's tables (`procrastinate_*`) belong to its vendored schema (migration a1c3e5f7b9d2), not to our models."""
+    return not (type_ == "table" and name is not None and name.startswith("procrastinate_"))
 
 
 def database_url() -> str:
@@ -62,7 +69,7 @@ def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode: emit SQL without a database connection."""
     context.configure(
         url=database_url(),
-        target_metadata=target_metadata,
+        target_metadata=target_metadata, include_object=include_object,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
     )
@@ -80,14 +87,14 @@ def run_migrations_online() -> None:
     """
     connection = config.attributes.get("connection")
     if connection is not None:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(connection=connection, target_metadata=target_metadata, include_object=include_object)
         with context.begin_transaction():
             context.run_migrations()
         return
 
     connectable = migration.migration_engine(database_url())
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(connection=connection, target_metadata=target_metadata, include_object=include_object)
 
         with context.begin_transaction():
             context.run_migrations()

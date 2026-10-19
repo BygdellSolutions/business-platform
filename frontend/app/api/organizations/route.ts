@@ -6,6 +6,7 @@ import { originProblem, validCsrf } from "@/lib/auth/request";
 import { backendFetch, isRequestKey } from "@/lib/backend";
 import { isSameOrigin } from "@/lib/origin";
 import { instrument } from "@/lib/observability";
+import { BODY_REFUSAL_MESSAGE, BODY_REFUSAL_STATUS, readBodyText } from "@/lib/request-body";
 import { infrastructureFailure, isInfrastructureFailure, upstreamUnavailable } from "@/lib/upstream";
 
 /**
@@ -24,6 +25,7 @@ import { infrastructureFailure, isInfrastructureFailure, upstreamUnavailable } f
  */
 
 const MAX_BODY_BYTES = 16_000;
+const BODY_DEADLINE_MS = 10_000;
 const NO_STORE = { "cache-control": "no-store" };
 
 function failure(status: number, detail: string): NextResponse {
@@ -50,8 +52,9 @@ export const POST = instrument(async function POST(request: NextRequest): Promis
 
   const declared = Number.parseInt(request.headers.get("content-length") ?? "0", 10);
   if (declared > MAX_BODY_BYTES) return failure(413, "Request body too large");
-  const body = await request.text();
-  if (body.length > MAX_BODY_BYTES) return failure(413, "Request body too large");
+  const read = await readBodyText(request, MAX_BODY_BYTES, BODY_DEADLINE_MS);
+  if (!read.ok) return failure(BODY_REFUSAL_STATUS[read.reason], BODY_REFUSAL_MESSAGE[read.reason]);
+  const body = read.text;
   if (!(request.headers.get("content-type")?.toLowerCase() ?? "").startsWith("application/json")) return failure(415, "Only JSON bodies are accepted");
 
   let upstream: Response;

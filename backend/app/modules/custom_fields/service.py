@@ -18,6 +18,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core import audit
 from app.core.entity_registry import EntityType, registry
 from app.core.lifecycle import COMPLETE, Problem
 from app.core.query import contains_pattern
@@ -618,7 +619,8 @@ def write_values(
     validation therefore sees committed state of whoever held the lock before us.
     """
     entity = custom_field_entity(entity_type)
-    if get_scoped(db, ctx, entity.model, entity_id) is None:
+    record = get_scoped(db, ctx, entity.model, entity_id)
+    if record is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Not found")
     if entity.is_editable is not None and not entity.is_editable(db, ctx, entity_id):
         raise HTTPException(
@@ -706,6 +708,7 @@ def write_values(
     if errors:
         raise unprocessable(errors)
 
+    shown_before = _shown(db, ctx, entity_type, entity_id)
     for definition_id, new in changed.items():
         row = rows.get(definition_id)
         definition = by_id[definition_id]
@@ -727,7 +730,31 @@ def write_values(
                 **{column: new},
             )
     _flush_or_409(db, "These custom fields were changed at the same time; try again")
+    _record_history(db, ctx, entity, record, shown_before, _shown(db, ctx, entity_type, entity_id))
     db.commit()
+
+
+def _shown(db: Session, ctx: TenantContext, entity_type: str, entity_id: uuid.UUID) -> dict[str, tuple[str, str | None]]:
+    """key -> (label, display text) of the record's values, as a person reads them."""
+    values = read_values(db, ctx, entity_type, [entity_id], include_disabled=True)[entity_id]
+    return {v.key: (v.label, v.display if v.display is not None else None if v.value is None else str(v.value)) for v in values}
+
+
+def _record_history(db: Session, ctx: TenantContext, entity, record, before, after) -> None:
+    """One history event on the record that owns the values, in the words a person saw (labels and display
+    text, not option or record ids). A record that belongs to a parent (a line of a transaction) names it as
+    context, so the parent's history shows it too."""
+    changes = {
+        key: {"label": (after.get(key) or before.get(key))[0], "from": before.get(key, (None, None))[1], "to": after.get(key, (None, None))[1]}
+        for key in sorted(set(before) | set(after))
+        if before.get(key, (None, None))[1] != after.get(key, (None, None))[1]
+    }
+    if not changes:
+        return
+    context = (entity.parent.entity, getattr(record, entity.parent.column)) if entity.parent is not None else None
+    if hasattr(record, "updated_by"):
+        audit.stamp(record, ctx)
+    audit.record(db, ctx, entity_type=entity.key, entity_id=record.id, action="fields_updated", changes=changes, context=context)
 
 
 def _check_target(db: Session, ctx: TenantContext, definition: CustomFieldDefinition, value: Any) -> tuple[str, str] | None:

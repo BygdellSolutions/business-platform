@@ -477,6 +477,7 @@ SECRETS = {
     "short session cookie": ("cookie: bp_session=shortvalue99; other=1", ["shortvalue99"]),
     "short csrf header": ("x-csrf-token: shortcsrf77", ["shortcsrf77"]),
     "short setup link": ("/setup#abcdefghij0123456789", ["abcdefghij0123456789"]),
+    "new-account setup link": ("/setup?new#abcdefghij0123456789", ["abcdefghij0123456789"]),
     "bff secret header": ("x-bff-secret: 9f3c1a7e5b2d8046c1e7a95b3d20f648a1c7e903d5b6f2a8", ["9f3c1a7e5b2d8046c1e7a95b3d20f648a1c7e903d5b6f2a8"]),
     "csrf header": ("'x-csrf-token': '" + "E" * 43 + "'", ["E" * 43]),
     "setup link": ("open http://127.0.0.1:3101/setup#" + "F" * 43, ["F" * 43]),

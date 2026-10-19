@@ -69,7 +69,7 @@ export function CreateOrganizationForm() {
   const refused = error?.kind === "forbidden";
 
   return (
-    <form onSubmit={(event) => void submit(event)} noValidate className="flex max-w-xl flex-col gap-4" data-testid="create-organization-form">
+    <form onSubmit={(event) => void submit(event)} noValidate className="panel flex max-w-xl flex-col gap-4" data-testid="create-organization-form">
       <TextField label="Organization name" name="name" value={name} onChange={setName} required error={local.name ?? problems.byField.name} autoComplete="organization" hint="Shown in the app. Other organizations may use the same name." />
       <TextField
         label="Currency"
@@ -79,7 +79,7 @@ export function CreateOrganizationForm() {
         required
         error={local.default_currency ?? problems.byField.default_currency}
         autoComplete="off"
-        hint="A three-letter code, for example EUR. It can be changed only until the first item or transaction exists."
+        hint="A three-letter code, for example EUR. It can be changed only until the first item or order exists."
       />
       {refused ? <Notice tone="error" testId="creation-refused">This account is not allowed to create organizations.</Notice> : <ErrorSummary messages={problems.general} />}
       {unknownOutcome && (

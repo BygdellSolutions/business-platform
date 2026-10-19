@@ -12,6 +12,24 @@ export const FREDRIK = "fredrik@dev.test"; // owner of A, admin of B
 export const MARIA = "maria@dev.test"; // employee of B only
 export const RANDOM_ORG = "00000000-0000-4000-8000-00000000dead";
 
+/** The organization drop-down of the top bar, opened (its entries are only in the page while it is open). */
+export async function openOrgMenu(page: Page): Promise<void> {
+  const toggle = page.getByTestId("org-switcher-toggle");
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+}
+
+/** Switch organization through the drop-down (a full page load into the other organization). */
+export async function switchOrg(page: Page, name: string): Promise<void> {
+  await openOrgMenu(page);
+  await page.getByTestId("org-switcher").getByRole("menuitem", { name }).click();
+}
+
+/** The avatar menu of the top bar (account, sign out), opened. */
+export async function openUserMenu(page: Page): Promise<void> {
+  const toggle = page.getByTestId("user-menu-toggle");
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+}
+
 export const bffUrl = (orgId: string, path: string) => `/api/o/${orgId}${path}`;
 
 /**
@@ -31,18 +49,35 @@ export async function signInViaUi(page: Page, email: string): Promise<void> {
 }
 
 /** Create a customer through the BFF (as the context's signed-in user) in the given organization. */
-export async function createCustomer(context: BrowserContext, orgId: string, name: string) {
+export async function createCustomer(context: BrowserContext, orgId: string, name: string, extra: Record<string, unknown> = {}) {
   const response = await context.request.post(bffUrl(orgId, "/customers"), {
-    data: { customer_type: "person", name },
+    data: { customer_type: "person", name, ...extra },
   });
   expect(response.status(), await response.text()).toBe(201);
   return (await response.json()) as { id: string; name: string };
 }
 
-/** The names the dashboard preview shows right now. */
+export async function createSupplier(context: BrowserContext, orgId: string, name: string) {
+  const response = await context.request.post(bffUrl(orgId, "/suppliers"), { data: { name } });
+  expect(response.status(), await response.text()).toBe(201);
+  return (await response.json()) as { id: string; name: string };
+}
+
+/**
+ * The names of the first customers ("000..." first) that the page can read for the organization in its address, asked
+ * from inside the page through the application's own BFF route, exactly as the page's own code would. Does not
+ * navigate, so browser history and the page's state stay as they are.
+ */
 export async function previewNames(page: Page): Promise<string[]> {
-  await expect(page.getByTestId("customer-preview")).toBeVisible();
-  return page.getByTestId("customer-preview-item").allTextContents();
+  const orgId = /\/o\/([0-9a-f-]{36})/.exec(page.url())?.[1];
+  expect(orgId, "the page is in an organization").toBeTruthy();
+  const names = await page.evaluate(async (id) => {
+    const response = await fetch(`/api/o/${id}/customers?q=000&limit=50`);
+    if (!response.ok) return null;
+    return ((await response.json()) as { name: string }[]).map((customer) => customer.name);
+  }, orgId);
+  expect(names, "the page could read its organization's customers").not.toBeNull();
+  return names ?? [];
 }
 
 export async function expectOrganization(page: Page, org: { name: string }): Promise<void> {
@@ -66,7 +101,7 @@ export const unique = (prefix: string) => `${prefix} ${randomUUID().slice(0, 8)}
 export async function createItem(
   context: BrowserContext,
   orgId: string,
-  data: { name: string; type?: "service" | "product"; unit?: string; price_ex_vat?: string; vat_rate?: string; description?: string; active?: boolean },
+  data: { name: string; type?: "service" | "product"; unit?: string; price_ex_vat?: string; vat_rate?: string; description?: string; active?: boolean; sku?: string; track_stock?: boolean },
 ) {
   const response = await context.request.post(bffUrl(orgId, "/items"), {
     data: { type: "service", unit: "hour", price_ex_vat: "10.00", vat_rate: "25", ...data },
@@ -96,7 +131,10 @@ export async function createHorse(
 
 /** Deactivate or reactivate any record through the BFF. */
 export async function setActive(context: BrowserContext, orgId: string, area: "customers" | "items" | "horses", id: string, active: boolean) {
-  const response = await context.request.patch(bffUrl(orgId, `/${area}/${id}`), { data: { active } });
+  // Items guard changes with If-Match: send the version as it is now.
+  const headers: Record<string, string> = {};
+  if (area === "items") headers["if-match"] = `"${(await (await context.request.get(bffUrl(orgId, `/items/${id}`))).json()).version}"`;
+  const response = await context.request.patch(bffUrl(orgId, `/${area}/${id}`), { data: { active }, headers });
   expect(response.status(), await response.text()).toBe(200);
 }
 
@@ -173,7 +211,12 @@ export async function editLine(context: BrowserContext, orgId: string, txId: str
 }
 
 /** The browser's own idea of today, as YYYY-MM-DD (what the create form prefills). */
-export const browserToday = (page: Page) => page.evaluate(() => new Date().toLocaleDateString("sv-SE"));
+/** The organization's own date (in its time zone) as FastAPI states it: what date fields default to. */
+export async function organizationToday(context: BrowserContext, orgId: string): Promise<string> {
+  const response = await context.request.get(bffUrl(orgId, "/organization"));
+  expect(response.status()).toBe(200);
+  return ((await response.json()) as { today: string }).today;
+}
 
 /** Run `body` while a REQUIRED custom field on transactions exists, and always disable it afterwards. */
 export async function withRequiredTransactionField(context: BrowserContext, orgId: string, body: (label: string) => Promise<void>) {
@@ -332,23 +375,43 @@ export function createWorld(options: { currency?: string | null; label?: string 
       // purpose (immutability triggers, RESTRICT keys), and this is a throwaway organization in the
       // disposable TEST database. Everything the organization can own is removed.
       const tables = [
+        "invoice_return_events",
+        "invoice_return_lines",
+        "invoice_returns",
+        "credit_note_pdfs",
+        "credit_note_vat_rows",
+        "credit_note_lines",
+        "credit_notes",
+        "invoice_payments",
         "invoice_pdfs",
         "invoice_vat_rows",
         "invoice_lines",
         "invoice_transactions",
         "invoices",
         "invoice_counters",
+        "appointment_items",
+        "appointment_subjects",
+        "appointments",
         "custom_field_values",
         "custom_field_options",
         "custom_field_definitions",
         "transaction_lines",
         "transactions",
+        "horse_documents",
+        "horse_notes",
         "horses",
+        "incoming_stock",
+        "suppliers",
+        "line_fulfillments",
+        "stock_movements",
+        "item_discounts",
         "items",
         "customers",
         "organization_creation_requests",
         "organization_invitations",
         "organization_users",
+        "audit_events",
+        "record_counters",
       ];
       const statements = [
         "set local session_replication_role = replica",
@@ -467,6 +530,14 @@ export interface Account {
 }
 
 const ORGANIZATION_TABLES = [
+  "invoice_return_events",
+  "invoice_return_lines",
+  "invoice_returns",
+  "credit_note_pdfs",
+  "credit_note_vat_rows",
+  "credit_note_lines",
+  "credit_notes",
+  "invoice_payments",
   "invoice_pdfs",
   "invoice_vat_rows",
   "invoice_lines",
@@ -478,21 +549,31 @@ const ORGANIZATION_TABLES = [
   "custom_field_definitions",
   "transaction_lines",
   "transactions",
+  "horse_documents",
+  "horse_notes",
   "horses",
+  "incoming_stock",
+  "suppliers",
+  "line_fulfillments",
+  "stock_movements",
+  "item_discounts",
   "items",
   "customers",
   "organization_invitations",
+  "record_counters",
 ];
 
 /**
- * A user of its own in the TEST database, with or without the account-level right to create organizations,
+ * A user of its own in the TEST database, with or without room to create organizations (`canCreate: true` = may
+ * create five; `false` = may create none, like an invited person; owning the organizations below never counts),
  * optionally a member of existing organizations (a world's, say). `cleanup` also removes every organization this
  * account created through the application, with everything inside them.
  */
 export function createAccount(options: { canCreate: boolean; memberships?: { orgId: string; role: RoleName }[]; label?: string }): Account {
   const id = randomUUID();
   const email = `${options.label ?? "newcomer"}-${id.slice(0, 8)}@dev.test`;
-  testRow(`insert into users (id, email, name, can_create_organizations) values (${sql(id)}, ${sql(email)}, ${sql("Newcomer")}, ${options.canCreate})`);
+  const limit = options.canCreate ? 5 : 0;
+  testRow(`insert into users (id, email, name, max_owned_organizations) values (${sql(id)}, ${sql(email)}, ${sql("Newcomer")}, ${limit})`);
   for (const membership of options.memberships ?? []) {
     testRow(`insert into organization_users (organization_id, user_id, role) values (${sql(membership.orgId)}, ${sql(id)}, ${sql(membership.role)})`);
   }
@@ -550,4 +631,11 @@ export function purgeUsersByEmail(emails: string[]): void {
       `delete from users where email in (${list})`,
     ].join("; "),
   );
+}
+
+/** The id of the signed-in user (a booking is always for a real person: by default the one who makes it). */
+export async function currentUserId(context: BrowserContext, orgId: string): Promise<string> {
+  const response = await context.request.get(bffUrl(orgId, "/me/user"));
+  expect(response.status(), await response.text()).toBe(200);
+  return ((await response.json()) as { id: string }).id;
 }

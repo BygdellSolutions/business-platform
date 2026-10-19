@@ -25,7 +25,7 @@ export default async function InvitePage() {
   }
   return (
     <main className="mx-auto flex max-w-md flex-col gap-4 p-8">
-      <h1 className="text-2xl font-semibold">Join an organization</h1>
+      <h1 className="text-[28px] leading-tight font-semibold tracking-tight">Join an organization</h1>
       <InviteFlow signedInEmail={signedInEmail} />
     </main>
   );

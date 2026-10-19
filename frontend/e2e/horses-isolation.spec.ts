@@ -1,7 +1,7 @@
 import { expect, test, type APIResponse, type Page } from "./fixtures";
 
 import { BASE_URL } from "./env";
-import { FREDRIK, MARIA, ORG_A, ORG_B, RANDOM_ORG, bffUrl, choices, createCustomer, createHorse, picker, pick, signIn, sql, testRow, unique } from "./support";
+import { FREDRIK, MARIA, ORG_A, ORG_B, RANDOM_ORG, bffUrl, choices, createCustomer, createHorse, picker, pick, signIn, sql, testRow, unique, switchOrg } from "./support";
 
 /**
  * Tenant isolation for the Horses screens and the entity picker, as the browser experiences
@@ -24,8 +24,8 @@ const ids = {
 };
 
 const horses = (orgId: string, query = "") => `/o/${orgId}/horses${query}`;
-const horseNames = (page: Page) => page.getByTestId("horse-row").locator("td:first-child").allTextContents();
-const switchTo = (page: Page, org: { name: string }) => page.getByTestId("org-switcher").getByRole("link", { name: org.name }).click();
+const horseNames = (page: Page) => page.getByTestId("horse-row").locator("td:nth-child(2)").allTextContents() // after the No. column;
+const switchTo = (page: Page, org: { name: string }) => switchOrg(page, org.name);
 const ownerId = (page: Page) => page.locator('input[type="hidden"][name="owner_customer_id"]').inputValue();
 
 async function outcome(response: APIResponse) {
@@ -177,13 +177,13 @@ test.describe("direct navigation to another organization's horse", () => {
 });
 
 test.describe("edit attempts against foreign ids cannot mutate", () => {
-  test("PATCH and DELETE on a foreign horse answer 404 exactly as for a random id, and change nothing", async ({ context }) => {
+  test("PATCH on a foreign horse answers 404 exactly as for a random id (and DELETE does not exist for horses at all), and nothing changes", async ({ context }) => {
     const before = testRow(`select name || '|' || owner_customer_id || '|' || active::text from horses where id = ${sql(ids.b.horse)}`);
 
     for (const [method, data] of [["patch", { name: "HACKED", active: false }], ["patch", { owner_customer_id: ids.a.owner }], ["delete", undefined]] as const) {
       const viaA = await outcome(await context.request[method](bffUrl(ORG_A.id, `/horses/${ids.b.horse}`), { data }));
       const random = await outcome(await context.request[method](bffUrl(ORG_A.id, `/horses/${RANDOM_ORG}`), { data }));
-      expect(viaA.status).toBe(404);
+      expect(viaA.status).toBe(method === "delete" ? 405 : 404); // a horse is only active or inactive: there is no delete route
       expect(viaA).toEqual(random);
     }
     expect(testRow(`select name || '|' || owner_customer_id || '|' || active::text from horses where id = ${sql(ids.b.horse)}`)).toBe(before);
@@ -306,7 +306,7 @@ test.describe("browser history", () => {
     await page.goto(horses(ORG_A.id, `?q=${encodeURIComponent(TAG)}`));
     await switchTo(page, ORG_B);
     await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Horses" }).click();
-    await page.getByRole("search").getByLabel("Search").fill(TAG);
+    await page.getByRole("search", { name: "Filter" }).getByLabel("Search").fill(TAG);
     await page.getByRole("button", { name: "Apply" }).click();
     await expect(page.getByTestId("org-name")).toHaveText(ORG_B.name);
     expect((await horseNames(page)).sort()).toEqual([ONLY_B_HORSE, TWIN_HORSE]);

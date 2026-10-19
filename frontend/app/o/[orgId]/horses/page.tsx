@@ -1,12 +1,20 @@
 import Link from "next/link";
 
+import { PRIMARY_LINK } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { ListFilters } from "@/components/ui/ListFilters";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { Pagination } from "@/components/ui/Pagination";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { SortHeader } from "@/components/ui/SortHeader";
 import { CustomerFilter } from "@/features/customers/CustomerFilter";
+import { readActiveRole } from "@/lib/active-role";
 import type { Customer, CustomerRef, Horse } from "@/lib/api/types";
-import { backendQuery, listHref, pageOf, parseListParams } from "@/lib/list-params";
+import { backendQuery, listHref, sortHref, pageOf, parseListParams } from "@/lib/list-params";
+import { canWriteRecords } from "@/lib/roles";
 import { serverRead, serverReadOrNull } from "@/lib/server-api";
+
+const SORTS = ["number", "name", "owner", "stable", "birth_year", "sex", "breed", "active"] as const;
 
 const REFS = ["owner_customer_id", "stable_customer_id"] as const;
 
@@ -37,7 +45,8 @@ export default async function HorsesPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { orgId } = await params;
-  const list = parseListParams(await searchParams, [], REFS);
+  const canWrite = canWriteRecords(await readActiveRole(orgId));
+  const list = parseListParams(await searchParams, [], REFS, {}, SORTS);
   const [rows, owner, stable] = await Promise.all([
     serverRead<Horse[]>(orgId, "/api/horses", backendQuery(list)),
     filterEntity(orgId, list.refs.owner_customer_id),
@@ -49,60 +58,77 @@ export default async function HorsesPage({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold">Horses</h1>
-        <Link href={`${base}/new`} className="underline" data-testid="new-horse">
-          New horse
-        </Link>
+      <PageHeader
+        title="Horses"
+        description="Every horse with its owner and stable, and its treatment journal."
+        actions={
+        canWrite && (
+          <Link href={`${base}/new`} className={PRIMARY_LINK} data-testid="new-horse">
+            New horse
+          </Link>
+        )
+        }
+      />
+
+      <div className="panel flex flex-col gap-4">
+        <ListFilters action={base} params={list}>
+          <CustomerFilter key={`owner-${list.refs.owner_customer_id ?? ""}`} name="owner_customer_id" label="Owner" initial={owner} />
+          <CustomerFilter key={`stable-${list.refs.stable_customer_id ?? ""}`} name="stable_customer_id" label="Stable" initial={stable} />
+        </ListFilters>
+
+        {horses.length === 0 ? (
+          <EmptyState
+            title={filtered ? "No horses match." : "No horses yet."}
+            hint={filtered ? "Try a different search or clear the filters." : "Add a horse with its owner to book it and keep its journal."}
+            action={!filtered && canWrite ? <Link href={`${base}/new`} className={PRIMARY_LINK}>Add your first horse</Link> : undefined}
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <table data-testid="horses-table" className="w-full max-w-5xl text-left text-sm whitespace-nowrap">
+              <thead>
+                <tr className="border-b border-zinc-300 dark:border-zinc-700">
+                  <SortHeader label="No." sortKey="number" current={list.sort} dir={list.dir} href={sortHref(base, list, "number")} align="right" />
+                  <SortHeader label="Name" sortKey="name" current={list.sort} dir={list.dir} href={sortHref(base, list, "name")} />
+                  <SortHeader label="Owner" sortKey="owner" current={list.sort} dir={list.dir} href={sortHref(base, list, "owner")} />
+                  <SortHeader label="Stable" sortKey="stable" current={list.sort} dir={list.dir} href={sortHref(base, list, "stable")} />
+                  <SortHeader label="Birth year" sortKey="birth_year" current={list.sort} dir={list.dir} href={sortHref(base, list, "birth_year")} />
+                  <SortHeader label="Sex" sortKey="sex" current={list.sort} dir={list.dir} href={sortHref(base, list, "sex")} />
+                  <SortHeader label="Breed" sortKey="breed" current={list.sort} dir={list.dir} href={sortHref(base, list, "breed")} />
+                  <SortHeader label="Status" sortKey="active" current={list.sort} dir={list.dir} href={sortHref(base, list, "active")} last />
+                </tr>
+              </thead>
+              <tbody>
+                {horses.map((horse) => (
+                  <tr key={horse.id} data-testid="horse-row" className="border-b border-zinc-200 dark:border-zinc-800">
+                    <td className="py-1 pr-4 text-right" data-testid="record-number">
+                      {horse.number}
+                    </td>
+                    <td className="py-1 pr-4">
+                      <Link href={`${base}/${horse.id}`} className="underline">
+                        {horse.name}
+                      </Link>
+                    </td>
+                    <td className="py-1 pr-4" data-testid="horse-owner">
+                      <CustomerLink orgId={orgId} customer={horse.owner} />
+                    </td>
+                    <td className="py-1 pr-4" data-testid="horse-stable">
+                      <CustomerLink orgId={orgId} customer={horse.stable} />
+                    </td>
+                    <td className="py-1 pr-4">{horse.birth_year}</td>
+                    <td className="py-1 pr-4">{horse.sex}</td>
+                    <td className="py-1 pr-4">{horse.breed}</td>
+                    <td className="py-1">
+                      <StatusBadge active={horse.active} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <Pagination page={list.page} hasNext={hasNext} hrefFor={(page) => listHref(base, list, { page })} />
       </div>
-
-      <ListFilters action={base} params={list}>
-        <CustomerFilter key={`owner-${list.refs.owner_customer_id ?? ""}`} name="owner_customer_id" label="Owner" initial={owner} />
-        <CustomerFilter key={`stable-${list.refs.stable_customer_id ?? ""}`} name="stable_customer_id" label="Stable" initial={stable} />
-      </ListFilters>
-
-      {horses.length === 0 ? (
-        <p data-testid="empty">{filtered ? "No horses match." : "No horses yet."}</p>
-      ) : (
-        <table data-testid="horses-table" className="w-full max-w-5xl text-left text-sm">
-          <thead>
-            <tr className="border-b border-zinc-300 dark:border-zinc-700">
-              <th className="py-1 pr-4">Name</th>
-              <th className="py-1 pr-4">Owner</th>
-              <th className="py-1 pr-4">Stable</th>
-              <th className="py-1 pr-4">Birth year</th>
-              <th className="py-1 pr-4">Sex</th>
-              <th className="py-1 pr-4">Breed</th>
-              <th className="py-1">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {horses.map((horse) => (
-              <tr key={horse.id} data-testid="horse-row" className="border-b border-zinc-200 dark:border-zinc-800">
-                <td className="py-1 pr-4">
-                  <Link href={`${base}/${horse.id}`} className="underline">
-                    {horse.name}
-                  </Link>
-                </td>
-                <td className="py-1 pr-4" data-testid="horse-owner">
-                  <CustomerLink orgId={orgId} customer={horse.owner} />
-                </td>
-                <td className="py-1 pr-4" data-testid="horse-stable">
-                  <CustomerLink orgId={orgId} customer={horse.stable} />
-                </td>
-                <td className="py-1 pr-4">{horse.birth_year}</td>
-                <td className="py-1 pr-4">{horse.sex}</td>
-                <td className="py-1 pr-4">{horse.breed}</td>
-                <td className="py-1">
-                  <StatusBadge active={horse.active} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-
-      <Pagination page={list.page} hasNext={hasNext} hrefFor={(page) => listHref(base, list, { page })} />
     </div>
   );
 }

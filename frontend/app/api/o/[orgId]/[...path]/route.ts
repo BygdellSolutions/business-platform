@@ -1,12 +1,26 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { apiPathFromSegments, backendFetch, isInvoicePdfPath, isUuid, parseIfMatch } from "@/lib/backend";
+import {
+  EXPORT_TIMEOUT_MS,
+  MAX_DOCUMENT_UPLOAD_BODY_BYTES,
+  apiPathFromSegments,
+  backendFetch,
+  isHorseDocumentFilePath,
+  isHorseDocumentsPath,
+  isInvoicePdfPath,
+  isOrganizationExportPath,
+  isUuid,
+  parseIfMatch,
+} from "@/lib/backend";
 import { authMode } from "@/lib/auth/config";
 import { credentialFromRequest, loginPath } from "@/lib/auth/credential";
 import { originProblem, validCsrf } from "@/lib/auth/request";
 import { isSameOrigin } from "@/lib/origin";
 import { instrument } from "@/lib/observability";
+import { BODY_REFUSAL_MESSAGE, BODY_REFUSAL_STATUS, readBodyText } from "@/lib/request-body";
 import { infrastructureFailure, isInfrastructureFailure, upstreamUnavailable } from "@/lib/upstream";
+import { documentPassThrough, unexpectedDocument } from "@/lib/document-response";
+import { exportPassThrough } from "@/lib/export-response";
 import { pdfPassThrough, unexpected } from "@/lib/pdf-response";
 
 /**
@@ -40,6 +54,8 @@ import { pdfPassThrough, unexpected } from "@/lib/pdf-response";
 type Context = { params: Promise<{ orgId: string; path: string[] }> };
 
 const MAX_BODY_BYTES = 1_000_000;
+const BODY_DEADLINE_MS = 30_000;
+const DOCUMENT_BODY_DEADLINE_MS = 120_000; // a 10 MB file over a slow phone connection
 const NO_STORE = { "cache-control": "no-store" };
 
 function failure(status: number, detail: string): NextResponse {
@@ -82,12 +98,16 @@ async function handle(request: NextRequest, context: Context): Promise<NextRespo
   const ifMatch = parseIfMatch(request.headers.get("if-match"));
   if (ifMatch === "invalid") return failure(400, "Invalid If-Match header");
 
+  // The upload of a horse's document is the one request that may carry more than the usual 1 MB (the file, as base64).
+  const isUpload = method === "POST" && isHorseDocumentsPath(apiPath);
+  const maxBody = isUpload ? MAX_DOCUMENT_UPLOAD_BODY_BYTES : MAX_BODY_BYTES;
   let body: string | undefined;
   if (method !== "GET") {
     const declared = Number.parseInt(request.headers.get("content-length") ?? "0", 10);
-    if (declared > MAX_BODY_BYTES) return failure(413, "Request body too large");
-    const text = await request.text();
-    if (text.length > MAX_BODY_BYTES) return failure(413, "Request body too large");
+    if (declared > maxBody) return failure(413, "Request body too large");
+    const read = await readBodyText(request, maxBody, isUpload ? DOCUMENT_BODY_DEADLINE_MS : BODY_DEADLINE_MS);
+    if (!read.ok) return failure(BODY_REFUSAL_STATUS[read.reason], BODY_REFUSAL_MESSAGE[read.reason]);
+    const text = read.text;
     if (text.length > 0) {
       const type = request.headers.get("content-type")?.toLowerCase() ?? "";
       if (!type.startsWith("application/json")) return failure(415, "Only JSON bodies are accepted");
@@ -99,6 +119,14 @@ async function handle(request: NextRequest, context: Context): Promise<NextRespo
   const wantsPdf = isInvoicePdfPath(apiPath);
   if (wantsPdf && (method !== "GET" || request.nextUrl.search !== "")) return failure(404, "Not found");
 
+  // The other binary resource: the complete copy of the organization's data, POST only, streamed.
+  const wantsExport = isOrganizationExportPath(apiPath);
+  if (wantsExport && method !== "POST") return failure(404, "Not found");
+
+  // The third binary resource: a file kept with a horse, GET only, no query.
+  const wantsDocument = isHorseDocumentFilePath(apiPath);
+  if (wantsDocument && (method !== "GET" || request.nextUrl.search !== "")) return failure(404, "Not found");
+
   let upstream: Response;
   try {
     upstream = await backendFetch({ credential, orgId }, apiPath, {
@@ -107,7 +135,8 @@ async function handle(request: NextRequest, context: Context): Promise<NextRespo
       body,
       ifMatch: ifMatch ?? undefined,
       csrf,
-      accept: wantsPdf ? "application/pdf, application/json;q=0.9" : undefined,
+      accept: wantsDocument ? "application/pdf, image/*, application/json;q=0.9" : wantsPdf ? "application/pdf, application/json;q=0.9" : wantsExport ? "application/zip, application/json;q=0.9" : undefined,
+      timeoutMs: wantsExport ? EXPORT_TIMEOUT_MS : undefined,
     });
   } catch (error) {
     return upstreamUnavailable(error);
@@ -119,16 +148,25 @@ async function handle(request: NextRequest, context: Context): Promise<NextRespo
 
   const upstreamType = (upstream.headers.get("content-type") ?? "").toLowerCase();
   if (wantsPdf && upstream.status === 200) return pdfPassThrough(upstream);
+  if (wantsExport && upstream.status === 200) return exportPassThrough(upstream);
+  if (wantsDocument && upstream.status === 200) return documentPassThrough(upstream);
   // Everything else is relayed as JSON text. A PDF (or any non-JSON body) that arrives anywhere but the one
   // validated path above is never passed along: it would be corrupted as text, and it is not what we asked for.
   if (upstream.status !== 204 && upstream.status !== 205 && !upstreamType.startsWith("application/json")) {
-    if (wantsPdf || upstreamType.startsWith("application/pdf")) return unexpected();
+    if (wantsDocument) return unexpectedDocument();
+    if (wantsPdf || wantsExport || upstreamType.startsWith("application/pdf") || upstreamType.startsWith("application/zip") || upstreamType.startsWith("image/")) return unexpected();
   }
 
   const bodyless = upstream.status === 204 || upstream.status === 205;
+  // A 429 keeps FastAPI's Retry-After (a plain number of seconds only), so the browser knows when to try again.
+  const wait = upstream.status === 429 ? upstream.headers.get("retry-after") : null;
   return new NextResponse(bodyless ? null : await upstream.text(), {
     status: upstream.status,
-    headers: { "content-type": upstream.headers.get("content-type") ?? "application/json", ...NO_STORE },
+    headers: {
+      "content-type": upstream.headers.get("content-type") ?? "application/json",
+      ...NO_STORE,
+      ...(wait !== null && /^[0-9]{1,5}$/.test(wait) ? { "retry-after": wait } : {}),
+    },
   });
 }
 

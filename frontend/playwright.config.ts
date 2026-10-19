@@ -44,6 +44,11 @@ export default defineConfig({
         AUTH_MODE: "dev",
         DEV_USER_EMAIL: "", // no ambient identity: only the BFF cookie identifies anyone
         CORS_ORIGINS: "[]",
+        // A browser robot drives one account at full speed, far beyond any person: it would trip the real request budgets
+        // (backend/app/core/rate_limit.py) and fail for a reason that is not the page under test. The budgets have their own tests.
+        RATE_LIMIT_USER_PER_MINUTE: "1000000",
+        RATE_LIMIT_ORG_PER_MINUTE: "1000000",
+        RATE_LIMIT_HEAVY_PER_MINUTE: "1000000",
       },
     },
     {

@@ -24,7 +24,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from app.core import clock, passwords, security_events, sessions, throttle
+from app.core import clock, mfa_service, passwords, security_events, sessions, throttle
 from app.core.config import settings
 from app.core.passwords import AuthBusy, admission
 from app.core.tokens import hash_token, looks_like_token, new_token
@@ -48,13 +48,17 @@ class PasswordProblem(Exception):
         self.message = message
 
 
+class NameRequired(Exception):
+    """A setup link for an account without a name was redeemed without one."""
+
+
 class WrongCurrentPassword(Exception):
     pass
 
 
 Throttled = throttle.Throttled
 
-__all__ = ["AuthBusy", "InvalidSetupLink", "LoginFailed", "PasswordProblem", "SessionIssued", "Throttled", "WrongCurrentPassword"]
+__all__ = ["AuthBusy", "InvalidSetupLink", "LoginFailed", "MfaRequired", "NameRequired", "PasswordProblem", "SessionIssued", "Throttled", "WrongCurrentPassword"]
 
 
 @dataclass(frozen=True)
@@ -63,6 +67,14 @@ class SessionIssued:
     csrf_token: str
     expires_at: datetime  # the absolute end; the idle limit can end it sooner
     user: User
+
+
+@dataclass(frozen=True)
+class MfaRequired:
+    """The password was right, but this person has a second factor: no session yet, only a short-lived challenge to spend with a code."""
+
+    challenge: str
+    expires_at: datetime
 
 
 def lock_user(db: Session, user_id) -> User | None:
@@ -78,9 +90,40 @@ def _housekeeping(db: Session, now: datetime) -> None:
     """A small bounded batch of expired records is removed whenever someone logs in."""
     security_events.purge_events(db, now, batch=200, max_batches=1)
     sessions.purge_records(db, now, batch=200, max_batches=1)
+    mfa_service.purge_challenges(db, now)
 
 
-def login(db: Session, *, email: str, password: str, source: str, user_agent: str | None, presented_token: str | None) -> SessionIssued:
+def _start_session(db: Session, user: User, now: datetime, *, source: str, user_agent: str | None, presented_token: str | None, ident_hash: str) -> SessionIssued:
+    """The one place a successful sign-in becomes a session (password alone, or password plus second factor)."""
+    if presented_token is not None and looks_like_token(presented_token):
+        db.execute(
+            update(sessions.AuthSession)
+            .where(sessions.AuthSession.token_hash == hash_token(presented_token), sessions.AuthSession.revoked_at.is_(None))
+            .values(revoked_at=now, revoked_reason="rotated")
+        )
+    issued = _issue(db, user, now, user_agent=user_agent, source=source)
+    security_events.record(db, "login_success", now, actor_user_id=user.id, source=source, ident_hash=ident_hash)
+    _housekeeping(db, now)
+    db.commit()
+    return issued
+
+
+def complete_login(db: Session, *, challenge: str, code: str, source: str, user_agent: str | None, presented_token: str | None) -> SessionIssued:
+    """Second step of a sign-in: spend the challenge with a code from the app (or a recovery code). Wrong in any way is one
+    generic failure; too many wrong codes is throttling."""
+    now = clock.utcnow()
+    try:
+        user = mfa_service.complete_challenge(db, challenge, code, now, source)
+    except (mfa_service.ChallengeInvalid, mfa_service.NotEnabled, mfa_service.InvalidCode):
+        raise LoginFailed()
+    locked = lock_user(db, user.id)
+    if locked is None or not locked.is_active:
+        raise LoginFailed()
+    ident_hash = security_events.identifier_hash(security_events.normalize_email(locked.email))
+    return _start_session(db, locked, now, source=source, user_agent=user_agent, presented_token=presented_token, ident_hash=ident_hash)
+
+
+def login(db: Session, *, email: str, password: str, source: str, user_agent: str | None, presented_token: str | None) -> SessionIssued | MfaRequired:
     now = clock.utcnow()
     identifier = security_events.normalize_email(email)
     ident_hash = security_events.identifier_hash(identifier)
@@ -109,17 +152,11 @@ def login(db: Session, *, email: str, password: str, source: str, user_agent: st
         else:
             if new_hash is not None:
                 db.execute(update(UserCredential).where(UserCredential.user_id == locked.id).values(password_hash=new_hash))
-            if presented_token is not None and looks_like_token(presented_token):
-                db.execute(
-                    update(sessions.AuthSession)
-                    .where(sessions.AuthSession.token_hash == hash_token(presented_token), sessions.AuthSession.revoked_at.is_(None))
-                    .values(revoked_at=now, revoked_reason="rotated")
-                )
-            issued = _issue(db, locked, now, user_agent=user_agent, source=source)
-            security_events.record(db, "login_success", now, actor_user_id=locked.id, source=source, ident_hash=ident_hash)
-            _housekeeping(db, now)
-            db.commit()
-            return issued
+            if mfa_service.is_enabled(db, locked.id):
+                token, expires_at = mfa_service.create_challenge(db, locked, now, source)
+                db.commit()
+                return MfaRequired(challenge=token, expires_at=expires_at)
+            return _start_session(db, locked, now, source=source, user_agent=user_agent, presented_token=presented_token, ident_hash=ident_hash)
 
     if decision.record_failures:  # 5
         security_events.record(db, "login_failure", now, source=source, ident_hash=ident_hash)
@@ -184,7 +221,7 @@ def _setup_failure(db: Session, now: datetime, source: str) -> InvalidSetupLink:
     return InvalidSetupLink()
 
 
-def redeem_setup(db: Session, *, token: str, password: str, source: str, user_agent: str | None) -> SessionIssued:
+def redeem_setup(db: Session, *, token: str, password: str, name: str | None = None, source: str, user_agent: str | None) -> SessionIssued:
     """Use a set-password link: sets the password, ends the user's other sessions, signs the user in.
 
     The link is consumed by one conditional UPDATE, so two simultaneous redemptions cannot both succeed.
@@ -222,6 +259,10 @@ def redeem_setup(db: Session, *, token: str, password: str, source: str, user_ag
             user = lock_user(db, user_id)
             if user is None or not user.is_active or passwords.policy_problem(password, user.email) is not None:
                 raise InvalidSetupLink()
+            if name:
+                user.name = name
+            elif not user.name:
+                raise NameRequired()  # rolls the savepoint back: the link stays usable
             credential = db.get(UserCredential, user.id)
             if credential is None:
                 db.add(UserCredential(user_id=user.id, password_hash=new_hash, password_changed_at=now))
@@ -248,16 +289,17 @@ def set_user_active(db: Session, user: User, active: bool, now: datetime) -> int
     return revoked
 
 
-def set_creation_capability(db: Session, user: User, allowed: bool, now: datetime) -> bool:
-    """Grant or revoke the account-level right to create organizations (operator action).
+def set_owned_limit(db: Session, user: User, limit: int, now: datetime) -> bool:
+    """Set how many organizations the account may own (operator action; an entitlement, not a role).
 
-    The same user-row lock that organization creation takes, so a revoke either waits for a creation in flight
-    (which then completes under the old right) or happens first (and the creation is refused). Memberships and
-    roles are never touched: this right is a property of the account, not of any membership. Returns whether
-    the value changed.
+    The same user-row lock that every path to ownership takes, so a lowered limit either waits for a grant in flight
+    or happens first and refuses it. Lowering it below what the account owns now removes nothing: it only stops the
+    account from gaining more. Returns whether the value changed.
     """
+    if limit < 0:
+        raise ValueError("the limit cannot be negative")
     locked = lock_user(db, user.id)
-    changed = locked.can_create_organizations != allowed
-    locked.can_create_organizations = allowed
-    security_events.record(db, "capability_changed", now, actor_user_id=locked.id, detail=("org_creation_granted" if allowed else "org_creation_revoked") + (":cli" if changed else ":cli:unchanged"))
+    changed = locked.max_owned_organizations != limit
+    locked.max_owned_organizations = limit
+    security_events.record(db, "capability_changed", now, actor_user_id=locked.id, detail=f"owned_limit:{limit}:cli" + ("" if changed else ":unchanged"))
     return changed

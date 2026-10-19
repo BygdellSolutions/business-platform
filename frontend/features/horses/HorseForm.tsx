@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 
 import { useOrgId } from "@/components/shell/org-context";
 import { ActiveToggle } from "@/components/ui/ActiveToggle";
-import { Button } from "@/components/ui/Button";
+import { Button, SECONDARY_LINK } from "@/components/ui/Button";
 import { EntityPicker, type PickerEntity } from "@/components/ui/EntityPicker";
 import { ErrorSummary } from "@/components/ui/ErrorSummary";
 import { CheckboxField, SelectField, TextField } from "@/components/ui/Field";
@@ -38,10 +38,10 @@ interface FormState {
   active: boolean;
 }
 
-function toState(horse?: Horse): FormState {
+function toState(horse?: Horse, initialOwner?: PickerEntity): FormState {
   return {
     name: horse?.name ?? "",
-    owner: horse ? customerEntity(horse.owner) : null,
+    owner: horse ? customerEntity(horse.owner) : (initialOwner ?? null),
     stable: horse?.stable ? customerEntity(horse.stable) : null,
     birth_year: horse?.birth_year === null || horse === undefined ? "" : String(horse.birth_year),
     sex: horse?.sex ?? "",
@@ -68,12 +68,12 @@ function wholeNumber(text: string): number | null | "invalid" {
  * inactive customer may not be NEWLY assigned, but one already assigned stays valid, so an
  * edit never sends a reference that did not change).
  */
-export function HorseForm({ horse }: { horse?: Horse }) {
+export function HorseForm({ horse, initialOwner, actions }: { horse?: Horse; initialOwner?: PickerEntity; /** Buttons shown beside "Deactivate horse" (an existing horse only). */ actions?: ReactNode }) {
   const orgId = useOrgId();
   const router = useRouter();
   const { pending, error, run } = useMutation();
   const [record, setRecord] = useState<Horse | undefined>(horse);
-  const [state, setState] = useState<FormState>(() => toState(horse));
+  const [state, setState] = useState<FormState>(() => toState(horse, initialOwner));
   const [local, setLocal] = useState<FieldErrors>({});
   const [notice, setNotice] = useState<"saved" | "unchanged" | null>(null);
 
@@ -141,16 +141,18 @@ export function HorseForm({ horse }: { horse?: Horse }) {
   }
 
   return (
-    <div className="flex max-w-xl flex-col gap-4">
+    <div className="flex flex-col gap-4">
       {record && (
         <ActiveToggle<Horse>
           path={`/horses/${record.id}`}
           active={record.active}
           noun="horse"
           onChanged={(updated) => setRecord((current) => (current ? { ...current, active: updated.active, updated_at: updated.updated_at } : updated))}
-        />
+        >
+          {actions}
+        </ActiveToggle>
       )}
-      <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4" aria-label={record ? "Edit horse" : "New horse"}>
+      <form onSubmit={onSubmit} noValidate className="panel flex flex-col gap-4" aria-label={record ? "Edit horse" : "New horse"}>
         <TextField label="Name" name="name" value={state.name} onChange={(value) => set("name", value)} error={errorsFor("name")} autoComplete="off" />
         <EntityPicker label="Owner" name="owner_customer_id" value={state.owner} onChange={(owner) => set("owner", owner)} search={search} error={errorsFor("owner_customer_id")} />
         <EntityPicker
@@ -174,7 +176,7 @@ export function HorseForm({ horse }: { horse?: Horse }) {
           <Button type="submit" disabled={pending} data-testid="submit">
             {pending ? "Saving…" : record ? "Save changes" : "Create horse"}
           </Button>
-          <Link href={`/o/${orgId}/horses`} className="text-sm underline">
+          <Link href={`/o/${orgId}/horses`} className={SECONDARY_LINK}>
             {record ? "Back to horses" : "Cancel"}
           </Link>
         </div>

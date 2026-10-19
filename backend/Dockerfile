@@ -30,9 +30,9 @@
 # unready answer, and the plain liveness probe is GET /health (no dependencies). An orchestrator that restarts unhealthy
 # containers must be pointed at /health instead, or a database outage becomes a restart storm.
 
-FROM ghcr.io/astral-sh/uv:0.12.23 AS uv
+FROM ghcr.io/astral-sh/uv:0.12.23@sha256:61d393e44e249f2e4b526b6c7ddcecce245946826e608e11c93ad4f5bba55b21 AS uv
 
-FROM python:3.13-slim AS builder
+FROM python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f AS builder
 COPY --from=uv /uv /usr/local/bin/uv
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never UV_NO_CACHE=1
 WORKDIR /app
@@ -40,7 +40,7 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
-FROM python:3.13-slim AS runtime
+FROM python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f AS runtime
 # The PostgreSQL 17 client programs (pg_dump, pg_restore) for the OPERATOR backup/restore tools (`python -m app.scripts.backup`,
 # `restore`), run as one-shot jobs from this same image. The web process never calls them. The client major version must be at
 # least the server's (backup.py refuses an older one).

@@ -2,7 +2,7 @@ import { expect, test } from "../fixtures";
 
 import { direct, E2E_PASSWORD, signInThroughPage, signInWithPassword } from "../auth-support";
 import { BACKEND_URL, BASE_URL } from "../env";
-import { FREDRIK, MARIA, ORG_A, ORG_B, createWorld, sql, testRow, type World } from "../support";
+import { FREDRIK, MARIA, ORG_A, ORG_B, createWorld, sql, testRow, type World, openUserMenu } from "../support";
 
 /**
  * A session ends in several ways (logout, revocation, expiry, a disabled user). The browser must move to the
@@ -34,7 +34,7 @@ test.describe("logout", () => {
     expect((await context.cookies()).map((c) => c.name)).not.toContain("bp_session");
     expect((await context.cookies()).map((c) => c.name)).not.toContain("bp_csrf");
     expect(await backendStatus(token)).toBe(401); // ... and after logout it is dead: revoked on the server, not just forgotten
-    await page.goto("/");
+    await page.goto("/organizations");
     await expect(page).toHaveURL(/\/login$/);
   });
 
@@ -43,6 +43,7 @@ test.describe("logout", () => {
     await page.getByRole("link", { name: ORG_A.name }).click();
     await expect(page.getByTestId("org-name")).toHaveText(ORG_A.name);
 
+    await openUserMenu(page); // inside an organization sign out is in the avatar menu (the selection page has its own button)
     await page.getByTestId("sign-out").click();
     await expect(page).toHaveURL(/\/login\?notice=signed-out$/);
     await page.goBack();

@@ -49,7 +49,15 @@ EXIT_OK, EXIT_FAILED, EXIT_REFUSED = 0, 1, 2
 # What the schema's guarantees rest on (derived from the migrations; tests/test_verify_restore.py proves this list equals what a
 # freshly migrated database really contains, so a new trigger or function cannot be forgotten).
 REQUIRED_TRIGGERS = {
+    ("audit_events", "trg_audit_events_append_only"),
+    ("credit_note_lines", "trg_credit_note_lines_append_only"),
+    ("credit_note_pdfs", "trg_credit_note_pdfs_append_only"),
+    ("credit_note_vat_rows", "trg_credit_note_vat_rows_append_only"),
+    ("credit_notes", "trg_credit_notes_append_only"),
+    ("invoice_payments", "trg_invoice_payments_append_only"),
+    ("stock_movements", "trg_stock_movements_append_only"),
     ("invoice_lines", "trg_invoice_lines_immutability"),
+    ("invoice_lines", "trg_invoice_lines_within_order"),
     ("invoice_pdfs", "trg_invoice_pdfs_guard"),
     ("invoice_transactions", "trg_invoice_transactions_immutability"),
     ("invoice_vat_rows", "trg_invoice_vat_rows_immutability"),
@@ -58,20 +66,53 @@ REQUIRED_TRIGGERS = {
     ("organization_users", "trg_organization_users_owner_required_update"),
     ("security_events", "trg_security_events_append_only"),
     ("transactions", "trg_transactions_currency_immutable"),
+    # Record numbers: handed out on insert, never changed.
+    ("appointments", "appointments_record_number"),
+    ("customers", "customers_record_number"),
+    ("horses", "horses_record_number"),
+    ("items", "items_record_number"),
+    ("suppliers", "suppliers_record_number"),
+    ("transactions", "transactions_record_number"),
+    # The horse journal: a finalized entry is frozen, a correction is written once.
+    ("horse_journal_entries", "trg_horse_journal_entries_final_immutable"),
+    ("horse_journal_entries", "horse_journal_entries_record_number"),
+    ("horse_journal_corrections", "trg_horse_journal_corrections_append_only"),
+    # The job queue (Procrastinate's vendored schema): a restored database without them would accept jobs and never run them.
+    ("procrastinate_jobs", "procrastinate_jobs_notify_queue_job_inserted_v1"),
+    ("procrastinate_jobs", "procrastinate_jobs_notify_queue_job_aborted_v1"),
+    ("procrastinate_jobs", "procrastinate_trigger_status_events_update_v1"),
+    ("procrastinate_jobs", "procrastinate_trigger_status_events_insert_v1"),
+    ("procrastinate_jobs", "procrastinate_trigger_scheduled_events_v1"),
+    ("procrastinate_jobs", "procrastinate_trigger_abort_requested_events_v1"),
+    ("procrastinate_jobs", "procrastinate_trigger_delete_jobs_v1"),
 }
 DEFERRED_CONSTRAINT_TRIGGERS = {"trg_organization_users_owner_required_delete", "trg_organization_users_owner_required_update"}
 REQUIRED_FUNCTIONS = {
+    "audit_events_append_only",
+    "credit_notes_append_only",
+    "invoice_payments_append_only",
+    "stock_movements_append_only",
     "invoice_children_immutability",
+    "invoice_lines_within_order",
     "invoice_pdfs_guard",
     "invoices_immutability",
     "organization_users_owner_required",
     "security_events_append_only",
     "transactions_currency_is_immutable",
+    "assign_record_number",
+    "horse_journal_entries_final_immutable",
+    "horse_journal_corrections_append_only",
+    "procrastinate_defer_jobs_v1", "procrastinate_defer_periodic_job_v2", "procrastinate_fetch_job_v2", "procrastinate_finish_job_v1",
+    "procrastinate_cancel_job_v1", "procrastinate_retry_job_v1", "procrastinate_retry_job_v2", "procrastinate_notify_queue_job_inserted_v1",
+    "procrastinate_notify_queue_abort_job_v1", "procrastinate_trigger_function_status_events_insert_v1",
+    "procrastinate_trigger_function_status_events_update_v1", "procrastinate_trigger_function_scheduled_events_v1",
+    "procrastinate_trigger_abort_requested_events_procedure_v1", "procrastinate_unlink_periodic_defers_v1", "procrastinate_register_worker_v1",
+    "procrastinate_unregister_worker_v1", "procrastinate_update_heartbeat_v1", "procrastinate_prune_stalled_workers_v1",
 }
 TENANT_TABLES = {
-    "custom_field_definitions", "custom_field_options", "custom_field_values", "customers", "horses", "invoice_counters", "invoice_lines",
-    "invoice_pdfs", "invoice_transactions", "invoice_vat_rows", "invoices", "items", "organization_creation_requests",
-    "organization_invitations", "organization_users", "transaction_lines", "transactions",
+    "appointment_items", "appointment_subjects", "appointments", "audit_events", "credit_note_lines", "credit_note_pdfs", "credit_note_vat_rows", "credit_notes", "custom_field_definitions", "custom_field_options", "custom_field_values", "customers", "horse_documents", "horse_journal_corrections", "horse_journal_entries", "horse_notes", "horses", "invoice_counters", "invoice_emails", "invoice_holds", "invoice_lines",
+    "invoice_payments", "invoice_pdfs", "invoice_return_events", "invoice_return_lines", "invoice_returns", "invoice_transactions", "invoice_vat_rows", "invoices", "item_discounts", "incoming_stock", "items", "line_fulfillments", "organization_creation_requests",
+    "organization_invitations", "organization_logos", "organization_users", "receipt_emails", "record_counters", "stock_movements", "suppliers", "transaction_lines", "transactions",
 }  # `security_events.organization_id` is deliberately nullable (an event may be about no organization)
 CORE_TABLES = ("organizations", "users", "organization_users")
 HEX64 = "^[0-9a-f]{64}$"

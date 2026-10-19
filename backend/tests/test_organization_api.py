@@ -52,7 +52,13 @@ def test_the_response_has_no_secrets_or_foreign_ids(client, db_session):
     assert set(body) == {
         "id", "name", "legal_name", "default_currency", "default_currency_locked",
         "default_currency_lock_reason", "address_line1", "address_line2", "postal_code", "city",
-        "country_code", "registration_number", "vat_number", "created_at", "updated_at",
+        "country_code", "registration_number", "vat_number", "timezone", "today", "created_at", "updated_at",
+        # The seller's contact and payment details (shown on documents; no secret among them).
+        "phone", "email", "registered_office", "website", "bankgiro", "plusgiro", "iban", "bic", "payment_terms_days", "approved_for_f_tax", "document_language",
+        # When the owner last downloaded a copy of the data, and whether that is recent enough to delete without saying "no copy".
+        "last_export_at", "recent_export",
+        "has_logo",  # whether there is a logo; the picture itself is a separate endpoint
+        "invoice_email_subject", "invoice_email_message",  # the pre-made text of an invoice email: the organization's own wording, no secret
     }
 
 
@@ -257,7 +263,7 @@ def test_a_transaction_locks_the_currency_whatever_its_status(client, db_session
         response, _ = patch(client, db_session, {"default_currency": "EUR"}, org=org)
         assert response.status_code == 409, status
         assert response.json()["detail"]["code"] == "currency_locked"
-        assert "Transactions" in response.json()["detail"]["message"]
+        assert "Orders already exist" in response.json()["detail"]["message"]
 
 
 def test_a_lock_is_reported_in_the_settings_with_its_reason(client, db_session):
